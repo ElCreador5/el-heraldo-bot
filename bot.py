@@ -14,6 +14,8 @@ ROLE_IDS = {
     "Hetero":       1549549503592267908,
     "Chico":        1549506512391770193,
     "Chica":        1549506426492420147,
+    "SinVerificar": 1549913794296414339,  # autorol asignado al unirse
+    "Verificado":   1510692050889085142,  # "Tentado@", otorgado por Invite Tracker
 }
 
 # Combos activos: (orientación, género) -> nombre clave en ROLE_IDS
@@ -40,6 +42,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
 
     guild = after.guild
 
+    # --- Lógica existente: combos de género + orientación ---
     orientacion_actual = next(
         (o for o in ORIENTACIONES if ROLE_IDS[o] in after_ids), None
     )
@@ -59,6 +62,16 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             await after.add_roles(combo_role)
         elif not deberia_tener and tiene_combo:
             await after.remove_roles(combo_role)
+
+    # --- Lógica nueva: remover "Sin Verificar" al completar verificación ---
+    verificado_id = ROLE_IDS["Verificado"]
+    if verificado_id in after_ids and verificado_id not in before_ids:
+        sin_verificar_role = guild.get_role(ROLE_IDS["SinVerificar"])
+        if sin_verificar_role and sin_verificar_role in after.roles:
+            await after.remove_roles(
+                sin_verificar_role,
+                reason="Verificación completada (Invite Tracker)"
+            )
 
 
 bot.run(os.environ["DISCORD_TOKEN"])
