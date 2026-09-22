@@ -41,6 +41,7 @@ EVAL_ROLE_IDS = {
     1549500856515166238,  # Chico Trans 🍓
 }
 RECOVERY_CHANNEL_ID = 1522863826545016913  # canal donde se genera el invite de recuperación
+LOG_CHANNEL_ID = 1549052747117240381  # canal donde El Heraldo reporta su actividad
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
 DM_TEXT = (
@@ -54,11 +55,27 @@ DB_PATH = "heraldo.db"
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
+intents.message_content = True  # requerido para que !heraldo check funcione
 
 bot = commands.Bot(command_prefix="!heraldo ", intents=intents)
 
 # invite_cache[guild_id][invite_code] = uses
 invite_cache: dict[int, dict[str, int]] = {}
+
+
+async def log(guild: discord.Guild | None, text: str) -> None:
+    """Reporta actividad de El Heraldo en LOG_CHANNEL_ID. Nunca debe tumbar el
+    flujo principal si falla (canal no encontrado, sin permisos, etc.)."""
+    print(text)
+    if guild is None:
+        return
+    channel = guild.get_channel(LOG_CHANNEL_ID)
+    if channel is None:
+        return
+    try:
+        await channel.send(text)
+    except discord.Forbidden:
+        print("Sin permisos para escribir en el canal de logs")
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +195,8 @@ async def on_ready() -> None:
 
 @bot.event
 async def on_member_join(member: discord.Member) -> None:
+    if member.bot:
+        return  # los bots no pasan por el flujo de verificación
     invite_code = await detect_used_invite(member.guild)
     db_upsert_join(member.id, invite_code)
 
@@ -188,6 +207,9 @@ async def on_member_join(member: discord.Member) -> None:
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
+    if after.bot:
+        return  # los bots no pasan por el flujo de verificación
+
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
 
@@ -195,6 +217,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         now = datetime.now(timezone.utc)
         db_set_tentado(after.id, now)
         asyncio.create_task(schedule_check(after.guild.id, after.id, now))
+        await log(after.guild, f"⏳ {after} recibió Tentad@ — timer de 10 min armado.")
 
 
 async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> None:
@@ -237,6 +260,7 @@ async def evaluate_member(guild_id: int, user_id: int) -> None:
     role_ids = {r.id for r in member.roles}
     if role_ids & EVAL_ROLE_IDS:
         db_clear_tentado(user_id)  # se verificó a tiempo
+        await log(guild, f"✅ {member} se verificó a tiempo.")
         return
 
     await expel(member)
@@ -253,12 +277,16 @@ async def expel(member: discord.Member) -> None:
     if not dm_sent_before:
         await send_recovery_dm(member)
         db_mark_dm_sent(member.id)
+        await log(member.guild, f"📨 DM de recuperación enviado a {member} (1ra falta).")
+    else:
+        await log(member.guild, f"🚫 {member} en 2da falta — sin DM.")
 
     db_clear_tentado(member.id)
     try:
         await member.kick(reason="No seleccionó rol de verificación en 10 min")
+        await log(member.guild, f"👢 {member} expulsado por falta de verificación.")
     except discord.Forbidden:
-        print(f"Sin permisos para expulsar a {member.id}")
+        await log(member.guild, f"⚠️ Sin permisos para expulsar a {member} — revisa jerarquía de roles.")
 
 
 async def send_recovery_dm(member: discord.Member) -> None:
@@ -271,13 +299,36 @@ async def send_recovery_dm(member: discord.Member) -> None:
             )
             invite_url = invite.url
         except discord.Forbidden:
-            print("Sin permisos para crear invite de recuperación")
+            await log(member.guild, "⚠️ Sin permisos para crear invite de recuperación.")
 
     text = DM_TEXT.format(channel_id=RECOVERY_CHANNEL_ID, invite_url=invite_url)
     try:
         await member.send(text)
     except discord.Forbidden:
-        print(f"No se pudo enviar DM a {member.id} (DMs cerrados)")
+        await log(member.guild, f"⚠️ No se pudo enviar DM a {member} (DMs cerrados).")
+
+
+# ---------------------------------------------------------------------------
+# Comando manual de prueba
+# ---------------------------------------------------------------------------
+
+@bot.command(name="check")
+@commands.has_permissions(kick_members=True)
+async def heraldo_check(ctx: commands.Context, member: discord.Member) -> None:
+    """Fuerza la evaluación inmediata de un miembro (sin esperar el timer de
+    10 min). Uso: !heraldo check @usuario"""
+    await log(ctx.guild, f"🔧 Chequeo manual solicitado por {ctx.author} sobre {member}.")
+    await evaluate_member(ctx.guild.id, member.id)
+
+
+@heraldo_check.error
+async def heraldo_check_error(ctx: commands.Context, error: commands.CommandError) -> None:
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("No tienes permiso para usar este comando.")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("No encontré a ese miembro en el servidor.")
+    else:
+        await ctx.send(f"Error: {error}")
 
 
 # ---------------------------------------------------------------------------
