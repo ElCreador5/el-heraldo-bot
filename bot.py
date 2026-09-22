@@ -18,6 +18,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 """
 
 import asyncio
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
@@ -282,4 +283,10 @@ async def send_recovery_dm(member: discord.Member) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    bot.run("TU_TOKEN_AQUI")
+    token = os.environ.get("DISCORD_TOKEN")
+    if not token:
+        raise RuntimeError(
+            "Falta la variable de entorno DISCORD_TOKEN. Configúrala en Railway "
+            "(Variables del servicio) antes de desplegar."
+        )
+    bot.run(token)
