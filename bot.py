@@ -188,8 +188,9 @@ async def on_ready() -> None:
     db_init()
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
     check_pending_verifications.start()
-    await bot.tree.sync()
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -314,7 +315,13 @@ async def send_recovery_dm(member: discord.Member) -> None:
 
 @bot.tree.command(name="heraldo_check", description="Fuerza la evaluación inmediata de un miembro (sin esperar el timer de 10 min).")
 @discord.app_commands.checks.has_permissions(kick_members=True)
-async def heraldo_check(interaction: discord.Interaction, member: discord.Member) -> None:
+async def heraldo_check(interaction: discord.Interaction, user: discord.User) -> None:
+    try:
+        member = await interaction.guild.fetch_member(user.id)
+    except discord.NotFound:
+        await interaction.response.send_message(f"{user} no está en el servidor.", ephemeral=True)
+        return
+
     await interaction.response.send_message(f"Evaluando a {member}...", ephemeral=True)
     await log(interaction.guild, f"🔧 Chequeo manual solicitado por {interaction.user} sobre {member}.")
     await evaluate_member(interaction.guild.id, member.id)
@@ -322,6 +329,34 @@ async def heraldo_check(interaction: discord.Interaction, member: discord.Member
 
 @heraldo_check.error
 async def heraldo_check_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+@bot.tree.command(name="heraldo_check_all", description="Fuerza la evaluación inmediata de TODOS los miembros que tengan Tentad@.")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+async def heraldo_check_all(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    await interaction.response.send_message("Revisando a todos los miembros con Tentad@... esto puede tardar un poco.", ephemeral=True)
+    await log(guild, f"🔍 Chequeo masivo solicitado por {interaction.user}.")
+
+    checked = 0
+    async for member in guild.fetch_members(limit=None):
+        if member.bot:
+            continue
+        if TENTADO_ROLE_ID in {r.id for r in member.roles}:
+            checked += 1
+            await evaluate_member(guild.id, member.id)
+            await asyncio.sleep(1)  # evitar ráfagas contra el rate limit de Discord
+
+    await log(guild, f"🔍 Chequeo masivo completado: {checked} miembro(s) con Tentad@ evaluados.")
+    await interaction.followup.send(f"Listo — {checked} miembro(s) con Tentad@ evaluados.", ephemeral=True)
+
+
+@heraldo_check_all.error
+async def heraldo_check_all_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
     if isinstance(error, discord.app_commands.MissingPermissions):
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
