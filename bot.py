@@ -45,9 +45,14 @@ LOG_CHANNEL_ID = 1549052747117240381  # canal donde El Heraldo reporta su activi
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
 DM_TEXT = (
-    "La verificación no te salva del todo, se expulsará a quienes no seleccionen "
-    "ningún de estos <#{channel_id}> o no den señal de ser un alma genuina (humana). "
-    "Tendrás otro chance de volver a intentar {invite_url}"
+    "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
+    "orientación. Al volver a entrar, busca en el canal de roles el embed que "
+    "dice \"Orientación\" y elige el que te represente — estos roles son "
+    "importantes: nos ayudan a confirmar que eres una persona real y son los "
+    "que te dan acceso al contenido del servidor. (El rol de verificación de "
+    "edad es algo aparte — ese solo confirma que eres mayor de edad, no "
+    "sustituye este paso). Si quieres volver a intentarlo, aquí tienes otra "
+    "oportunidad: {invite_url}"
 )
 
 DB_PATH = "heraldo.db"
@@ -302,7 +307,7 @@ async def send_recovery_dm(member: discord.Member) -> None:
         except discord.Forbidden:
             await log(member.guild, "⚠️ Sin permisos para crear invite de recuperación.")
 
-    text = DM_TEXT.format(channel_id=RECOVERY_CHANNEL_ID, invite_url=invite_url)
+    text = DM_TEXT.format(invite_url=invite_url)
     try:
         await member.send(text)
     except discord.Forbidden:
