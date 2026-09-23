@@ -55,7 +55,6 @@ DB_PATH = "heraldo.db"
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
-intents.message_content = True  # requerido para que !heraldo check funcione
 
 bot = commands.Bot(command_prefix="!heraldo ", intents=intents)
 
@@ -190,6 +189,7 @@ async def on_ready() -> None:
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
     check_pending_verifications.start()
+    await bot.tree.sync()
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -309,26 +309,23 @@ async def send_recovery_dm(member: discord.Member) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Comando manual de prueba
+# Comando manual de prueba (slash command — no requiere message_content intent)
 # ---------------------------------------------------------------------------
 
-@bot.command(name="check")
-@commands.has_permissions(kick_members=True)
-async def heraldo_check(ctx: commands.Context, member: discord.Member) -> None:
-    """Fuerza la evaluación inmediata de un miembro (sin esperar el timer de
-    10 min). Uso: !heraldo check @usuario"""
-    await log(ctx.guild, f"🔧 Chequeo manual solicitado por {ctx.author} sobre {member}.")
-    await evaluate_member(ctx.guild.id, member.id)
+@bot.tree.command(name="heraldo_check", description="Fuerza la evaluación inmediata de un miembro (sin esperar el timer de 10 min).")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+async def heraldo_check(interaction: discord.Interaction, member: discord.Member) -> None:
+    await interaction.response.send_message(f"Evaluando a {member}...", ephemeral=True)
+    await log(interaction.guild, f"🔧 Chequeo manual solicitado por {interaction.user} sobre {member}.")
+    await evaluate_member(interaction.guild.id, member.id)
 
 
 @heraldo_check.error
-async def heraldo_check_error(ctx: commands.Context, error: commands.CommandError) -> None:
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("No tienes permiso para usar este comando.")
-    elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("No encontré a ese miembro en el servidor.")
+async def heraldo_check_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
-        await ctx.send(f"Error: {error}")
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
