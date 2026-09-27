@@ -30,6 +30,8 @@ from discord.ext import commands, tasks
 # ---------------------------------------------------------------------------
 
 GUILD_ID = 0  # TODO: ID del servidor "Paraíso"
+SIN_VERIFICAR_ROLE_ID = 1549913794296414339  # rol de verificación de edad (Guardián)
+SIN_VERIFICAR_WINDOW = timedelta(seconds=300)  # respaldo: Guardián usa 299s, por si falla
 TENTADO_ROLE_ID = 1510692050889085142
 EVAL_ROLE_IDS = {
     1522877846026981396,  # Bisex-🚻
@@ -67,17 +69,28 @@ bot = commands.Bot(command_prefix="!heraldo ", intents=intents)
 invite_cache: dict[int, dict[str, int]] = {}
 
 
-async def log(guild: discord.Guild | None, text: str) -> None:
-    """Reporta actividad de El Heraldo en LOG_CHANNEL_ID. Nunca debe tumbar el
-    flujo principal si falla (canal no encontrado, sin permisos, etc.)."""
-    print(text)
+async def log_embed(
+    guild: discord.Guild | None,
+    title: str,
+    description: str,
+    color: discord.Color = discord.Color.blurple(),
+) -> None:
+    """Reporta actividad de El Heraldo en LOG_CHANNEL_ID como embed. Nunca debe
+    tumbar el flujo principal si falla (canal no encontrado, sin permisos, etc.)."""
+    print(f"{title} — {description}")
     if guild is None:
         return
     channel = guild.get_channel(LOG_CHANNEL_ID)
     if channel is None:
         return
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=color,
+        timestamp=datetime.now(timezone.utc),
+    )
     try:
-        await channel.send(text)
+        await channel.send(embed=embed)
     except discord.Forbidden:
         print("Sin permisos para escribir en el canal de logs")
 
@@ -98,6 +111,10 @@ def db_init() -> None:
         )
         """
     )
+    try:
+        conn.execute("ALTER TABLE members ADD COLUMN sin_verificado_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe (bots reiniciados sobre una DB previa)
     conn.commit()
     conn.close()
 
@@ -166,6 +183,30 @@ def db_clear_tentado(user_id: int) -> None:
     conn.close()
 
 
+def db_set_sin_verificado(user_id: int, when: datetime) -> None:
+    """Upsert: la fila puede no existir todavía si Sin Verificar se asigna
+    antes de que on_member_join termine de registrar el join."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO members (user_id, sin_verificado_at, dm_sent) VALUES (?, ?, 0)
+        ON CONFLICT(user_id) DO UPDATE SET sin_verificado_at = excluded.sin_verificado_at
+        """,
+        (user_id, when.isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_clear_sin_verificado(user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE members SET sin_verificado_at = NULL WHERE user_id = ?", (user_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
 # ---------------------------------------------------------------------------
 # Tracking de invites por usuario
 # ---------------------------------------------------------------------------
@@ -219,11 +260,64 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
 
+    if SIN_VERIFICAR_ROLE_ID in after_role_ids and SIN_VERIFICAR_ROLE_ID not in before_role_ids:
+        now = datetime.now(timezone.utc)
+        db_set_sin_verificado(after.id, now)
+        asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
+        await log_embed(
+            after.guild, "⏳ Timer de verificación (respaldo)",
+            f"{after.mention} recibió **Sin Verificar** — respaldo de 300s por si Guardián no lo expulsa.",
+            discord.Color.gold(),
+        )
+
     if TENTADO_ROLE_ID in after_role_ids and TENTADO_ROLE_ID not in before_role_ids:
         now = datetime.now(timezone.utc)
         db_set_tentado(after.id, now)
         asyncio.create_task(schedule_check(after.guild.id, after.id, now))
-        await log(after.guild, f"⏳ {after} recibió Tentad@ — timer de 10 min armado.")
+        await log_embed(
+            after.guild, "⏳ Timer iniciado",
+            f"{after.mention} recibió **Tentad@** — tiene 10 min para elegir un rol de orientación.",
+            discord.Color.gold(),
+        )
+
+
+async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: datetime) -> None:
+    delay = (marked_at + SIN_VERIFICAR_WINDOW - datetime.now(timezone.utc)).total_seconds()
+    if delay > 0:
+        await asyncio.sleep(delay)
+    await evaluate_sin_verificado(guild_id, user_id)
+
+
+async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
+    """Respaldo del Verification Timeout de Guardián (299s). Si a los 300s el
+    miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        return
+    member = guild.get_member(user_id)
+    if member is None:
+        db_clear_sin_verificado(user_id)  # Guardián (u otro) ya lo expulsó — nada que hacer
+        return
+
+    if SIN_VERIFICAR_ROLE_ID not in {r.id for r in member.roles}:
+        db_clear_sin_verificado(user_id)  # ya verificó a tiempo
+        return
+
+    db_clear_sin_verificado(user_id)
+    try:
+        await member.kick(reason="No se verificó (respaldo del timeout de Guardián)")
+        await log_embed(
+            guild, "👢 Kick — No se verificó",
+            f"{member.mention} (`{member.id}`) — no se verificó dentro del tiempo límite. "
+            f"(Respaldo: el timeout de Guardián no lo expulsó a tiempo.)",
+            discord.Color.red(),
+        )
+    except discord.Forbidden:
+        await log_embed(
+            guild, "⚠️ Error al expulsar",
+            f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
+            discord.Color.dark_red(),
+        )
 
 
 async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> None:
@@ -236,66 +330,106 @@ async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> N
 @tasks.loop(minutes=2)
 async def check_pending_verifications() -> None:
     """Red de seguridad: si el bot se reinició, retoma verificaciones pendientes
-    cuyo timer ya venció o está por vencer."""
+    cuyo timer ya venció o está por vencer (ambos flujos: Sin Verificar y Tentad@)."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT user_id, tentado_at FROM members WHERE tentado_at IS NOT NULL"
+        "SELECT user_id, tentado_at, sin_verificado_at FROM members "
+        "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL"
     ).fetchall()
     conn.close()
 
     now = datetime.now(timezone.utc)
     for row in rows:
-        tentado_at = datetime.fromisoformat(row["tentado_at"])
-        if now >= tentado_at + VERIFICATION_WINDOW:
-            for guild in bot.guilds:
-                if guild.get_member(row["user_id"]):
-                    await evaluate_member(guild.id, row["user_id"])
-                    break
+        if row["tentado_at"] is not None:
+            tentado_at = datetime.fromisoformat(row["tentado_at"])
+            if now >= tentado_at + VERIFICATION_WINDOW:
+                for guild in bot.guilds:
+                    if guild.get_member(row["user_id"]):
+                        await evaluate_member(guild.id, row["user_id"])
+                        break
+        if row["sin_verificado_at"] is not None:
+            sin_verificado_at = datetime.fromisoformat(row["sin_verificado_at"])
+            if now >= sin_verificado_at + SIN_VERIFICAR_WINDOW:
+                for guild in bot.guilds:
+                    if guild.get_member(row["user_id"]):
+                        await evaluate_sin_verificado(guild.id, row["user_id"])
+                        break
 
 
-async def evaluate_member(guild_id: int, user_id: int) -> None:
+async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
+    """Devuelve 'verificado', 'expulsado' o 'ausente'/'sin-guild'."""
     guild = bot.get_guild(guild_id)
     if guild is None:
-        return
+        return "sin-guild"
     member = guild.get_member(user_id)
     if member is None:
         db_clear_tentado(user_id)  # ya no está, nada que hacer
-        return
+        return "ausente"
 
     role_ids = {r.id for r in member.roles}
     if role_ids & EVAL_ROLE_IDS:
         db_clear_tentado(user_id)  # se verificó a tiempo
-        await log(guild, f"✅ {member} se verificó a tiempo.")
-        return
+        if report:
+            await log_embed(guild, "✅ Verificado", f"{member.mention} se verificó a tiempo.", discord.Color.green())
+        return "verificado"
 
-    await expel(member)
+    await expel(member, report=report)
+    return "expulsado"
 
 
 # ---------------------------------------------------------------------------
 # Expulsión + DM condicional
 # ---------------------------------------------------------------------------
 
-async def expel(member: discord.Member) -> None:
+async def expel(member: discord.Member, report: bool = True) -> None:
     row = db_get(member.id)
     dm_sent_before = bool(row["dm_sent"]) if row else False
+    is_first_fault = not dm_sent_before
 
-    if not dm_sent_before:
-        await send_recovery_dm(member)
+    dm_ok = None  # None = no aplica (2da falta, no se intenta DM)
+    if is_first_fault:
+        dm_ok = await send_recovery_dm(member, report=report)
         db_mark_dm_sent(member.id)
-        await log(member.guild, f"📨 DM de recuperación enviado a {member} (1ra falta).")
-    else:
-        await log(member.guild, f"🚫 {member} en 2da falta — sin DM.")
 
     db_clear_tentado(member.id)
     try:
         await member.kick(reason="No seleccionó rol de verificación en 10 min")
-        await log(member.guild, f"👢 {member} expulsado por falta de verificación.")
+        kicked = True
     except discord.Forbidden:
-        await log(member.guild, f"⚠️ Sin permisos para expulsar a {member} — revisa jerarquía de roles.")
+        kicked = False
+
+    if not report:
+        return
+
+    embed = discord.Embed(
+        title="👢 Kick — Falta de verificación",
+        color=discord.Color.red() if kicked else discord.Color.dark_red(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="Usuario", value=f"{member.mention} (`{member.id}`)", inline=False)
+    embed.add_field(
+        name="Razón",
+        value="No definió su rol dentro de los 10 min tras recibir **Tentad@**.",
+        inline=False,
+    )
+    embed.add_field(name="Falta", value="1ra — se le dio otra oportunidad" if is_first_fault else "2da — sin nueva oportunidad", inline=True)
+    if dm_ok is not None:
+        embed.add_field(name="DM de recuperación", value="✅ Enviado" if dm_ok else "⚠️ Falló (DMs cerrados)", inline=True)
+    embed.add_field(name="Resultado", value="✅ Expulsado" if kicked else "⚠️ Falló — revisa jerarquía de roles", inline=True)
+    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+
+    channel = member.guild.get_channel(LOG_CHANNEL_ID)
+    if channel is not None:
+        try:
+            await channel.send(embed=embed)
+        except discord.Forbidden:
+            print("Sin permisos para escribir en el canal de logs")
 
 
-async def send_recovery_dm(member: discord.Member) -> None:
+async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
+    """Devuelve True si el DM se envió con éxito."""
     channel = member.guild.get_channel(RECOVERY_CHANNEL_ID)
     invite_url = ""
     if channel is not None:
@@ -305,13 +439,15 @@ async def send_recovery_dm(member: discord.Member) -> None:
             )
             invite_url = invite.url
         except discord.Forbidden:
-            await log(member.guild, "⚠️ Sin permisos para crear invite de recuperación.")
+            if report:
+                await log_embed(member.guild, "⚠️ Error de invite", "Sin permisos para crear invite de recuperación.", discord.Color.dark_red())
 
     text = DM_TEXT.format(invite_url=invite_url)
     try:
         await member.send(text)
+        return True
     except discord.Forbidden:
-        await log(member.guild, f"⚠️ No se pudo enviar DM a {member} (DMs cerrados).")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +464,11 @@ async def heraldo_check(interaction: discord.Interaction, user: discord.User) ->
         return
 
     await interaction.response.send_message(f"Evaluando a {member}...", ephemeral=True)
-    await log(interaction.guild, f"🔧 Chequeo manual solicitado por {interaction.user} sobre {member}.")
+    await log_embed(
+        interaction.guild, "🔧 Chequeo manual",
+        f"Solicitado por {interaction.user.mention} sobre {member.mention}.",
+        discord.Color.blurple(),
+    )
     await evaluate_member(interaction.guild.id, member.id)
 
 
@@ -345,19 +485,78 @@ async def heraldo_check_error(interaction: discord.Interaction, error: discord.a
 async def heraldo_check_all(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     await interaction.response.send_message("Revisando a todos los miembros con Tentad@... esto puede tardar un poco.", ephemeral=True)
-    await log(guild, f"🔍 Chequeo masivo solicitado por {interaction.user}.")
+    await log_embed(guild, "🔍 Chequeo masivo iniciado", f"Solicitado por {interaction.user.mention}.", discord.Color.blurple())
 
-    checked = 0
+    verified = 0
+    expelled: list[discord.Member] = []
+    expelled_sin_verificar: list[discord.Member] = []
+
     async for member in guild.fetch_members(limit=None):
         if member.bot:
             continue
-        if TENTADO_ROLE_ID in {r.id for r in member.roles}:
-            checked += 1
-            await evaluate_member(guild.id, member.id)
+        role_ids = {r.id for r in member.roles}
+        if TENTADO_ROLE_ID in role_ids:
+            status = await evaluate_member(guild.id, member.id, report=False)
+            if status == "verificado":
+                verified += 1
+            elif status == "expulsado":
+                expelled.append(member)
             await asyncio.sleep(1)  # evitar ráfagas contra el rate limit de Discord
+        elif SIN_VERIFICAR_ROLE_ID in role_ids:
+            db_clear_sin_verificado(member.id)
+            try:
+                await member.kick(reason="No se verificó")
+                expelled_sin_verificar.append(member)
+            except discord.Forbidden:
+                await log_embed(
+                    guild, "⚠️ Error al expulsar",
+                    f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
+                    discord.Color.dark_red(),
+                )
+            await asyncio.sleep(1)
 
-    await log(guild, f"🔍 Chequeo masivo completado: {checked} miembro(s) con Tentad@ evaluados.")
-    await interaction.followup.send(f"Listo — {checked} miembro(s) con Tentad@ evaluados.", ephemeral=True)
+    embed = discord.Embed(
+        title="🔍 Chequeo masivo completado",
+        description=(
+            f"✅ **{verified}** verificado(s) a tiempo.\n"
+            f"👢 **{len(expelled)}** expulsado(s) por falta de rol de orientación.\n"
+            f"👢 **{len(expelled_sin_verificar)}** expulsado(s) por no verificarse (Sin Verificar)."
+        ),
+        color=discord.Color.blurple(),
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    def add_mention_fields(embed: discord.Embed, members: list[discord.Member], label: str) -> None:
+        if not members:
+            return
+        chunk, blocks = "", []
+        for m in members:
+            line = f"{m.mention} (`{m.id}`)\n"
+            if len(chunk) + len(line) > 1000:
+                blocks.append(chunk)
+                chunk = ""
+            chunk += line
+        if chunk:
+            blocks.append(chunk)
+        for i, block in enumerate(blocks, start=1):
+            name = label if len(blocks) == 1 else f"{label} ({i}/{len(blocks)})"
+            embed.add_field(name=name, value=block, inline=False)
+
+    add_mention_fields(embed, expelled, "Expulsados — sin rol de orientación")
+    add_mention_fields(embed, expelled_sin_verificar, "Expulsados — no se verificaron")
+
+    channel = guild.get_channel(LOG_CHANNEL_ID)
+    if channel is not None:
+        try:
+            await channel.send(embed=embed)
+        except discord.Forbidden:
+            print("Sin permisos para escribir en el canal de logs")
+
+    await interaction.followup.send(
+        f"Listo — {verified} verificado(s), {len(expelled)} expulsado(s) (orientación), "
+        f"{len(expelled_sin_verificar)} expulsado(s) (Sin Verificar).",
+        ephemeral=True,
+    )
 
 
 @heraldo_check_all.error
