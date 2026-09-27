@@ -264,21 +264,13 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         now = datetime.now(timezone.utc)
         db_set_sin_verificado(after.id, now)
         asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
-        await log_embed(
-            after.guild, "⏳ Timer de verificación (respaldo)",
-            f"{after.mention} recibió **Sin Verificar** — respaldo de 300s por si Guardián no lo expulsa.",
-            discord.Color.gold(),
-        )
+        print(f"⏳ {after} recibió Sin Verificar — respaldo de 300s armado.")
 
     if TENTADO_ROLE_ID in after_role_ids and TENTADO_ROLE_ID not in before_role_ids:
         now = datetime.now(timezone.utc)
         db_set_tentado(after.id, now)
         asyncio.create_task(schedule_check(after.guild.id, after.id, now))
-        await log_embed(
-            after.guild, "⏳ Timer iniciado",
-            f"{after.mention} recibió **Tentad@** — tiene 10 min para elegir un rol de orientación.",
-            discord.Color.gold(),
-        )
+        print(f"⏳ {after} recibió Tentad@ — timer de 10 min armado.")
 
 
 async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: datetime) -> None:
@@ -371,7 +363,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     if role_ids & EVAL_ROLE_IDS:
         db_clear_tentado(user_id)  # se verificó a tiempo
         if report:
-            await log_embed(guild, "✅ Verificado", f"{member.mention} se verificó a tiempo.", discord.Color.green())
+            await log_embed(guild, "✅ Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
         return "verificado"
 
     await expel(member, report=report)
