@@ -74,7 +74,9 @@ DM_TEXT = (
     "oportunidad: {invite_url}"
 )
 
-DB_PATH = "heraldo.db"
+# En Railway apunta al Volume (variable DB_PATH=/data/heraldo.db) para que los datos
+# sobrevivan a los deploys. Sin la variable, usa un archivo local (pruebas en PC).
+DB_PATH = os.environ.get("DB_PATH", "heraldo.db")
 
 intents = discord.Intents.default()
 intents.members = True
