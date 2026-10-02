@@ -58,7 +58,7 @@ PROFILE_MAX_ROLES = 10  # máximo de roles mostrados en la tarjeta
 
 # --- Miembro de la Semana ---
 # Mientras este ID esté en 0, la función queda desactivada. Solo anuncio, sin rol.
-MOTW_CHANNEL_ID = 1555606764278382722  # canal de anuncios
+MOTW_CHANNEL_ID = 1555606764278382722  # canal por defecto (cambiable con /motw_set_channel)
 MOTW_WEEKDAY_DEFAULT = 3  # día por defecto: 0=lunes ... 3=jueves ... 6=domingo
 MOTW_HOUR_DEFAULT = 9  # hora por defecto (hora local de STREAK_TZ)
 MOTW_WEEKDAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -329,6 +329,16 @@ def get_motw_hour() -> int:
     return int(value) if value is not None else MOTW_HOUR_DEFAULT
 
 
+def get_motw_channel_id() -> int:
+    """Canal elegido con /motw_set_channel; si no hay, el MOTW_CHANNEL_ID por defecto."""
+    value = db_meta_get("motw_channel_id")
+    return int(value) if value is not None else MOTW_CHANNEL_ID
+
+
+def set_motw_channel_id(channel_id: int) -> None:
+    db_meta_set("motw_channel_id", str(channel_id))
+
+
 def set_motw_schedule(weekday: int, hour: int) -> None:
     db_meta_set("motw_weekday", str(weekday))
     db_meta_set("motw_hour", str(hour))
@@ -364,11 +374,11 @@ async def on_ready() -> None:
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
     check_pending_verifications.start()
-    if MOTW_CHANNEL_ID:
+    if get_motw_channel_id():
         if not member_of_the_week_loop.is_running():
             member_of_the_week_loop.start()
     else:
-        print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID.")
+        print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID o usa /motw_set_channel.")
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -808,10 +818,10 @@ async def announce_member_of_the_week(reset: bool = True) -> str | None:
     toca los contadores, para poder probar sin afectar la semana en curso.
     Devuelve None si se publicó bien, o el texto del error si Discord lo rechazó
     (en ese caso NO se reinician los contadores, para no perder la semana)."""
-    channel = bot.get_channel(MOTW_CHANNEL_ID)
+    channel = bot.get_channel(get_motw_channel_id())
     if channel is None:
-        print("⚠️ Miembro de la Semana: no encontré MOTW_CHANNEL_ID.")
-        return "No encontré el canal de MOTW_CHANNEL_ID."
+        print("⚠️ Miembro de la Semana: no encontré el canal de anuncios configurado.")
+        return "No encontré el canal de anuncios configurado."
     guild = channel.guild
 
     # Top 2 entre quienes siguen en el servidor.
@@ -897,11 +907,52 @@ async def motw_set_schedule_error(interaction: discord.Interaction, error: disco
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
+@bot.tree.command(name="motw_set_channel", description="Cambiar el canal donde se anuncia el Miembro de la Semana.")
+@discord.app_commands.describe(canal="Canal de texto o de anuncios donde se publicará")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+async def motw_set_channel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+    # Validar antes de guardar: así no se configura un canal donde el bot no puede escribir.
+    perms = canal.permissions_for(canal.guild.me)
+    missing = [
+        name for name, ok in (
+            ("Ver canal", perms.view_channel),
+            ("Enviar mensajes", perms.send_messages),
+            ("Insertar enlaces", perms.embed_links),
+        ) if not ok
+    ]
+    if missing:
+        await interaction.response.send_message(
+            f"❌ No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
+            f"**{', '.join(missing)}**. Dáselos y vuelve a intentarlo.",
+            ephemeral=True,
+        )
+        return
+
+    set_motw_channel_id(canal.id)
+    await interaction.response.send_message(
+        f"✅ Miembro de la Semana se anunciará en {canal.mention}. Usa `/motw_test` para probarlo.",
+        ephemeral=True,
+    )
+    await log_embed(
+        interaction.guild, "⚙️ Canal de Miembro de la Semana actualizado",
+        f"{interaction.user.mention} lo cambió a {canal.mention}.",
+        discord.Color.blurple(),
+    )
+
+
+@motw_set_channel.error
+async def motw_set_channel_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
 @bot.tree.command(name="motw_test", description="Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
 async def motw_test(interaction: discord.Interaction) -> None:
-    if bot.get_channel(MOTW_CHANNEL_ID) is None:
-        await interaction.response.send_message("No encuentro el canal de MOTW_CHANNEL_ID (¿ID incorrecto o sin acceso del bot?).", ephemeral=True)
+    if bot.get_channel(get_motw_channel_id()) is None:
+        await interaction.response.send_message("No encuentro el canal de anuncios configurado (¿fue borrado o el bot perdió acceso?). Elige otro con /motw_set_channel.", ephemeral=True)
         return
     await interaction.response.send_message("Probando el anuncio de Miembro de la Semana (no se resetean contadores)...", ephemeral=True)
     error = await announce_member_of_the_week(reset=False)
