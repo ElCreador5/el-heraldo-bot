@@ -20,6 +20,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 import asyncio
 import os
 import sqlite3
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -54,6 +55,13 @@ EXCLUDED_ROLE_IDS: set[int] = set()
 # Zona horaria que define el "día" de la racha. República Dominicana = UTC-4, sin horario de verano.
 STREAK_TZ = timezone(timedelta(hours=-4))
 PROFILE_MAX_ROLES = 10  # máximo de roles mostrados en la tarjeta
+
+# --- Miembro de la Semana ---
+# Mientras estos dos IDs estén en 0, la función queda desactivada.
+MOTW_CHANNEL_ID = 0  # TODO: canal donde se anuncia al Miembro de la Semana
+MOTW_ROLE_ID = 0  # TODO: rol "Miembro de la Semana"
+MOTW_WEEKDAY = 3  # día del anuncio: 0=lunes ... 3=jueves ... 6=domingo
+MOTW_HOUR = 9  # hora del anuncio (hora local de STREAK_TZ)
 
 DM_TEXT = (
     "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
@@ -133,6 +141,13 @@ def db_init() -> None:
             last_active_day TEXT
         )
         """
+    )
+    try:
+        conn.execute("ALTER TABLE activity ADD COLUMN week_messages INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
     )
     conn.commit()
     conn.close()
@@ -235,8 +250,8 @@ def db_track_message(user_id: int, today: str, yesterday: str) -> None:
     ).fetchone()
     if row is None:
         conn.execute(
-            "INSERT INTO activity (user_id, messages, streak, last_active_day) "
-            "VALUES (?, 1, 1, ?)",
+            "INSERT INTO activity (user_id, messages, streak, last_active_day, week_messages) "
+            "VALUES (?, 1, 1, ?, 1)",
             (user_id, today),
         )
     else:
@@ -246,8 +261,8 @@ def db_track_message(user_id: int, today: str, yesterday: str) -> None:
             streak = streak + 1 if last_active == yesterday else 1
             last_active = today
         conn.execute(
-            "UPDATE activity SET messages = ?, streak = ?, last_active_day = ? "
-            "WHERE user_id = ?",
+            "UPDATE activity SET messages = ?, streak = ?, last_active_day = ?, "
+            "week_messages = week_messages + 1 WHERE user_id = ?",
             (messages + 1, streak, last_active, user_id),
         )
     conn.commit()
@@ -263,6 +278,43 @@ def db_get_activity(user_id: int) -> tuple[int, int, str | None]:
     ).fetchone()
     conn.close()
     return (row[0], row[1], row[2]) if row else (0, 0, None)
+
+
+def db_week_ranking() -> list[tuple[int, int]]:
+    """[(user_id, mensajes_de_la_semana)] de mayor a menor. En empate, gana el
+    user_id menor (cuenta más antigua) para que el resultado sea determinista."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT user_id, week_messages FROM activity WHERE week_messages > 0 "
+        "ORDER BY week_messages DESC, user_id ASC"
+    ).fetchall()
+    conn.close()
+    return [(r[0], r[1]) for r in rows]
+
+
+def db_reset_week() -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("UPDATE activity SET week_messages = 0")
+    conn.commit()
+    conn.close()
+
+
+def db_meta_get(key: str) -> str | None:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def db_meta_set(key: str, value: str) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +347,11 @@ async def on_ready() -> None:
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
     check_pending_verifications.start()
+    if MOTW_CHANNEL_ID and MOTW_ROLE_ID:
+        if not member_of_the_week_loop.is_running():
+            member_of_the_week_loop.start()
+    else:
+        print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID y MOTW_ROLE_ID.")
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -672,6 +729,120 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.Membe
     embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
 
     await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Miembro de la Semana
+# ---------------------------------------------------------------------------
+
+def motw_last_scheduled(now: datetime) -> datetime:
+    """Último momento programado (MOTW_WEEKDAY a las MOTW_HOUR:00, hora local)
+    que ya pasó respecto a `now`."""
+    days_back = (now.weekday() - MOTW_WEEKDAY) % 7
+    scheduled = (now - timedelta(days=days_back)).replace(
+        hour=MOTW_HOUR, minute=0, second=0, microsecond=0
+    )
+    if scheduled > now:
+        scheduled -= timedelta(days=7)
+    return scheduled
+
+
+@tasks.loop(minutes=10)
+async def member_of_the_week_loop() -> None:
+    """Revisa cada 10 min si toca el anuncio. Al comparar contra el último
+    anuncio guardado en la DB, también se recupera si el bot estaba caído a la hora."""
+    try:
+        slot = motw_last_scheduled(datetime.now(STREAK_TZ)).date().isoformat()
+        last = db_meta_get("motw_last_slot")
+        if last is None:
+            # Primer arranque: no anunciar con datos parciales, esperar al próximo turno.
+            db_meta_set("motw_last_slot", slot)
+            return
+        if last == slot:
+            return
+        db_meta_set("motw_last_slot", slot)  # se marca antes para no duplicar anuncios
+        await announce_member_of_the_week()
+    except Exception:
+        traceback.print_exc()  # que un error no detenga el loop
+
+
+async def announce_member_of_the_week() -> None:
+    channel = bot.get_channel(MOTW_CHANNEL_ID)
+    if channel is None:
+        print("⚠️ Miembro de la Semana: no encontré MOTW_CHANNEL_ID.")
+        return
+    guild = channel.guild
+    role = guild.get_role(MOTW_ROLE_ID)
+    if role is None:
+        await log_embed(guild, "⚠️ Miembro de la Semana", "No encontré el rol de MOTW_ROLE_ID; no se anunció a nadie (los contadores se conservan).", discord.Color.dark_red())
+        return
+
+    # Top 2 entre quienes siguen en el servidor.
+    ranking: list[tuple[discord.Member, int]] = []
+    for user_id, count in db_week_ranking():
+        member = guild.get_member(user_id)
+        if member is not None and not member.bot:
+            ranking.append((member, count))
+            if len(ranking) == 2:
+                break
+
+    if not ranking:
+        try:
+            await channel.send("📊 ¡No hubo actividad esta semana!")
+        except discord.HTTPException:
+            print("No se pudo escribir en el canal de Miembro de la Semana")
+        db_reset_week()
+        return
+
+    winner, winner_count = ranking[0]
+
+    # Quitar el rol a quien lo tenga (el ganador anterior) y dárselo al nuevo.
+    errors: list[str] = []
+    for holder in list(role.members):
+        if holder.id == winner.id:
+            continue
+        try:
+            await holder.remove_roles(role, reason="Ya no es el Miembro de la Semana")
+        except discord.HTTPException as e:
+            errors.append(f"Quitar el rol a {holder.mention}: `{e}`")
+    if role not in winner.roles:
+        try:
+            await winner.add_roles(role, reason="Miembro de la Semana")
+        except discord.HTTPException as e:
+            errors.append(f"Dar el rol a {winner.mention}: `{e}`")
+    if errors:
+        await log_embed(
+            guild, "⚠️ Miembro de la Semana — problemas con el rol",
+            "\n".join(errors) + "\n\nRevisa que el rol del Heraldo esté por encima del rol de Miembro de la Semana.",
+            discord.Color.dark_red(),
+        )
+
+    # Anuncio
+    description = (
+        f"¡Felicidades a {winner.mention} por ser el miembro más activo de la semana "
+        f"con **{winner_count:,} mensajes**!"
+    )
+    if len(ranking) > 1:
+        lead = winner_count - ranking[1][1]
+        if lead > 0:
+            description += f" Le sacó **{lead:,} mensaje{'s' if lead != 1 else ''}** de ventaja al segundo lugar."
+        else:
+            description += " Empató con el segundo lugar y ganó por desempate."
+
+    embed = discord.Embed(
+        title="👑 Miembro de la Semana",
+        description=description,
+        color=discord.Color.gold(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.set_thumbnail(url=winner.display_avatar.url)
+    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    try:
+        await channel.send(embed=embed)
+    except discord.HTTPException:
+        print("No se pudo escribir en el canal de Miembro de la Semana")
+
+    db_reset_week()  # contadores de la nueva semana en cero (para TODOS, no solo el top)
 
 
 # ---------------------------------------------------------------------------
