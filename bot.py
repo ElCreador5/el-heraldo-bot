@@ -803,13 +803,15 @@ async def member_of_the_week_loop() -> None:
         traceback.print_exc()  # que un error no detenga el loop
 
 
-async def announce_member_of_the_week(reset: bool = True) -> None:
+async def announce_member_of_the_week(reset: bool = True) -> str | None:
     """reset=False es para /motw_test: anuncia con los datos reales pero no
-    toca los contadores, para poder probar sin afectar la semana en curso."""
+    toca los contadores, para poder probar sin afectar la semana en curso.
+    Devuelve None si se publicó bien, o el texto del error si Discord lo rechazó
+    (en ese caso NO se reinician los contadores, para no perder la semana)."""
     channel = bot.get_channel(MOTW_CHANNEL_ID)
     if channel is None:
         print("⚠️ Miembro de la Semana: no encontré MOTW_CHANNEL_ID.")
-        return
+        return "No encontré el canal de MOTW_CHANNEL_ID."
     guild = channel.guild
 
     # Top 2 entre quienes siguen en el servidor.
@@ -824,11 +826,12 @@ async def announce_member_of_the_week(reset: bool = True) -> None:
     if not ranking:
         try:
             await channel.send("📊 ¡No hubo actividad esta semana!")
-        except discord.HTTPException:
-            print("No se pudo escribir en el canal de Miembro de la Semana")
+        except discord.HTTPException as e:
+            print(f"No se pudo escribir en el canal de Miembro de la Semana: {e}")
+            return str(e)
         if reset:
             db_reset_week()
-        return
+        return None
 
     winner, winner_count = ranking[0]
 
@@ -854,11 +857,13 @@ async def announce_member_of_the_week(reset: bool = True) -> None:
     embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
     try:
         await channel.send(embed=embed)
-    except discord.HTTPException:
-        print("No se pudo escribir en el canal de Miembro de la Semana")
+    except discord.HTTPException as e:
+        print(f"No se pudo escribir en el canal de Miembro de la Semana: {e}")
+        return str(e)
 
     if reset:
         db_reset_week()  # contadores de la nueva semana en cero (para TODOS, no solo el top)
+    return None
 
 
 @bot.tree.command(name="motw_set_schedule", description="Cambiar el día/hora del anuncio de Miembro de la Semana.")
@@ -899,7 +904,16 @@ async def motw_test(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encuentro el canal de MOTW_CHANNEL_ID (¿ID incorrecto o sin acceso del bot?).", ephemeral=True)
         return
     await interaction.response.send_message("Probando el anuncio de Miembro de la Semana (no se resetean contadores)...", ephemeral=True)
-    await announce_member_of_the_week(reset=False)
+    error = await announce_member_of_the_week(reset=False)
+    if error:
+        await interaction.followup.send(
+            f"❌ No pude publicar en el canal de anuncios: `{error}`\n"
+            "Revisa que el Heraldo tenga permisos de **Ver canal**, **Enviar mensajes** "
+            "e **Insertar enlaces** en ese canal.",
+            ephemeral=True,
+        )
+    else:
+        await interaction.followup.send("✅ Anuncio de prueba publicado.", ephemeral=True)
 
 
 @motw_test.error
