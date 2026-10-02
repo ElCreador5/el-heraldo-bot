@@ -21,6 +21,7 @@ import asyncio
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import discord
 from discord.ext import commands, tasks
@@ -45,6 +46,14 @@ EVAL_ROLE_IDS = {
 RECOVERY_CHANNEL_ID = 1522863826545016913  # canal donde se genera el invite de recuperación
 LOG_CHANNEL_ID = 1549052747117240381  # canal donde El Heraldo reporta su actividad
 VERIFICATION_WINDOW = timedelta(minutes=10)
+
+# --- Perfil (/profile): mensajes y racha diaria ---
+# Roles cuyos mensajes NO cuentan para el perfil (equivale a "excluded_roles" de MEE6).
+# Ejemplo: {123456789012345678, 987654321098765432}
+EXCLUDED_ROLE_IDS: set[int] = set()
+# Zona horaria que define el "día" de la racha. República Dominicana = UTC-4, sin horario de verano.
+STREAK_TZ = timezone(timedelta(hours=-4))
+PROFILE_MAX_ROLES = 10  # máximo de roles mostrados en la tarjeta
 
 DM_TEXT = (
     "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
@@ -115,6 +124,16 @@ def db_init() -> None:
         conn.execute("ALTER TABLE members ADD COLUMN sin_verificado_at TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe (bots reiniciados sobre una DB previa)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS activity (
+            user_id INTEGER PRIMARY KEY,
+            messages INTEGER NOT NULL DEFAULT 0,
+            streak INTEGER NOT NULL DEFAULT 0,
+            last_active_day TEXT
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -205,6 +224,45 @@ def db_clear_sin_verificado(user_id: int) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def db_track_message(user_id: int, today: str, yesterday: str) -> None:
+    """Suma 1 mensaje y actualiza la racha diaria (días en formato YYYY-MM-DD)."""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT messages, streak, last_active_day FROM activity WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        conn.execute(
+            "INSERT INTO activity (user_id, messages, streak, last_active_day) "
+            "VALUES (?, 1, 1, ?)",
+            (user_id, today),
+        )
+    else:
+        messages, streak, last_active = row
+        if last_active != today:
+            # Ayer -> la racha continúa; cualquier otra cosa -> empieza de nuevo.
+            streak = streak + 1 if last_active == yesterday else 1
+            last_active = today
+        conn.execute(
+            "UPDATE activity SET messages = ?, streak = ?, last_active_day = ? "
+            "WHERE user_id = ?",
+            (messages + 1, streak, last_active, user_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def db_get_activity(user_id: int) -> tuple[int, int, str | None]:
+    """Devuelve (mensajes, racha guardada, último día activo)."""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT messages, streak, last_active_day FROM activity WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    return (row[0], row[1], row[2]) if row else (0, 0, None)
 
 
 # ---------------------------------------------------------------------------
@@ -557,6 +615,63 @@ async def heraldo_check_all_error(interaction: discord.Interaction, error: disco
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Perfil: conteo de mensajes, racha diaria y comando /profile
+# ---------------------------------------------------------------------------
+
+# bot.listen (en vez de bot.event) para no pisar el on_message por defecto.
+@bot.listen("on_message")
+async def track_activity(message: discord.Message) -> None:
+    if message.author.bot or message.guild is None:
+        return  # bots, webhooks y DMs no cuentan
+    if not isinstance(message.author, discord.Member):
+        return
+    if EXCLUDED_ROLE_IDS and any(r.id in EXCLUDED_ROLE_IDS for r in message.author.roles):
+        return
+
+    today = datetime.now(STREAK_TZ).date()
+    yesterday = today - timedelta(days=1)
+    db_track_message(message.author.id, today.isoformat(), yesterday.isoformat())
+
+
+@bot.tree.command(name="profile", description="Muestra tu perfil o el de otro miembro.")
+@discord.app_commands.describe(user="Miembro a consultar (déjalo vacío para ver el tuyo)")
+@discord.app_commands.guild_only()
+async def profile(interaction: discord.Interaction, user: Optional[discord.Member] = None) -> None:
+    target = user or interaction.user
+    messages, streak, last_active = db_get_activity(target.id)
+
+    # La racha guardada solo es "actual" si el último día activo fue hoy o ayer;
+    # si pasó más tiempo, la racha ya se rompió aunque aún no haya escrito de nuevo.
+    today = datetime.now(STREAK_TZ).date()
+    if last_active not in (today.isoformat(), (today - timedelta(days=1)).isoformat()):
+        streak = 0
+
+    # Roles de mayor a menor jerarquía, sin @everyone.
+    roles = [r for r in reversed(target.roles) if not r.is_default()]
+    if roles:
+        roles_text = " ".join(r.mention for r in roles[:PROFILE_MAX_ROLES])
+        if len(roles) > PROFILE_MAX_ROLES:
+            roles_text += f" … +{len(roles) - PROFILE_MAX_ROLES} más"
+    else:
+        roles_text = "Sin roles"
+
+    embed = discord.Embed(
+        title=f"📋 Perfil de {target.display_name}",
+        color=discord.Color.blurple(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.add_field(name="Usuario", value=discord.utils.escape_markdown(target.name), inline=True)
+    embed.add_field(name="Nombre visible", value=discord.utils.escape_markdown(target.display_name), inline=True)
+    embed.add_field(name="💬 Mensajes", value=f"{messages:,}", inline=True)
+    embed.add_field(name="🔥 Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
+    embed.add_field(name="Roles", value=roles_text, inline=False)
+    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+
+    await interaction.response.send_message(embed=embed)
 
 
 # ---------------------------------------------------------------------------
