@@ -59,8 +59,9 @@ PROFILE_MAX_ROLES = 10  # máximo de roles mostrados en la tarjeta
 # --- Miembro de la Semana ---
 # Mientras este ID esté en 0, la función queda desactivada. Solo anuncio, sin rol.
 MOTW_CHANNEL_ID = 1555606764278382722  # canal de anuncios
-MOTW_WEEKDAY = 3  # día del anuncio: 0=lunes ... 3=jueves ... 6=domingo
-MOTW_HOUR = 9  # hora del anuncio (hora local de STREAK_TZ)
+MOTW_WEEKDAY_DEFAULT = 3  # día por defecto: 0=lunes ... 3=jueves ... 6=domingo
+MOTW_HOUR_DEFAULT = 9  # hora por defecto (hora local de STREAK_TZ)
+MOTW_WEEKDAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
 DM_TEXT = (
     "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
@@ -314,6 +315,21 @@ def db_meta_set(key: str, value: str) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def get_motw_weekday() -> int:
+    value = db_meta_get("motw_weekday")
+    return int(value) if value is not None else MOTW_WEEKDAY_DEFAULT
+
+
+def get_motw_hour() -> int:
+    value = db_meta_get("motw_hour")
+    return int(value) if value is not None else MOTW_HOUR_DEFAULT
+
+
+def set_motw_schedule(weekday: int, hour: int) -> None:
+    db_meta_set("motw_weekday", str(weekday))
+    db_meta_set("motw_hour", str(hour))
 
 
 # ---------------------------------------------------------------------------
@@ -743,11 +759,12 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
 # ---------------------------------------------------------------------------
 
 def motw_last_scheduled(now: datetime) -> datetime:
-    """Último momento programado (MOTW_WEEKDAY a las MOTW_HOUR:00, hora local)
-    que ya pasó respecto a `now`."""
-    days_back = (now.weekday() - MOTW_WEEKDAY) % 7
+    """Último momento programado (día/hora configurables, hora local) que ya
+    pasó respecto a `now`."""
+    weekday, hour = get_motw_weekday(), get_motw_hour()
+    days_back = (now.weekday() - weekday) % 7
     scheduled = (now - timedelta(days=days_back)).replace(
-        hour=MOTW_HOUR, minute=0, second=0, microsecond=0
+        hour=hour, minute=0, second=0, microsecond=0
     )
     if scheduled > now:
         scheduled -= timedelta(days=7)
@@ -773,7 +790,9 @@ async def member_of_the_week_loop() -> None:
         traceback.print_exc()  # que un error no detenga el loop
 
 
-async def announce_member_of_the_week() -> None:
+async def announce_member_of_the_week(reset: bool = True) -> None:
+    """reset=False es para /motw_test: anuncia con los datos reales pero no
+    toca los contadores, para poder probar sin afectar la semana en curso."""
     channel = bot.get_channel(MOTW_CHANNEL_ID)
     if channel is None:
         print("⚠️ Miembro de la Semana: no encontré MOTW_CHANNEL_ID.")
@@ -794,7 +813,8 @@ async def announce_member_of_the_week() -> None:
             await channel.send("📊 ¡No hubo actividad esta semana!")
         except discord.HTTPException:
             print("No se pudo escribir en el canal de Miembro de la Semana")
-        db_reset_week()
+        if reset:
+            db_reset_week()
         return
 
     winner, winner_count = ranking[0]
@@ -812,7 +832,7 @@ async def announce_member_of_the_week() -> None:
             description += " Empató con el segundo lugar y ganó por desempate."
 
     embed = discord.Embed(
-        title="👑 Miembro de la Semana",
+        title="👑 Miembro de la Semana" if reset else "🧪 Miembro de la Semana (prueba)",
         description=description,
         color=discord.Color.gold(),
         timestamp=datetime.now(timezone.utc),
@@ -824,7 +844,53 @@ async def announce_member_of_the_week() -> None:
     except discord.HTTPException:
         print("No se pudo escribir en el canal de Miembro de la Semana")
 
-    db_reset_week()  # contadores de la nueva semana en cero (para TODOS, no solo el top)
+    if reset:
+        db_reset_week()  # contadores de la nueva semana en cero (para TODOS, no solo el top)
+
+
+@bot.tree.command(name="motw_set_schedule", description="Cambiar el día/hora del anuncio de Miembro de la Semana.")
+@discord.app_commands.describe(dia="Día de la semana", hora="Hora del día (0-23, hora de RD)")
+@discord.app_commands.choices(dia=[
+    discord.app_commands.Choice(name=name, value=i) for i, name in enumerate(MOTW_WEEKDAY_NAMES)
+])
+@discord.app_commands.checks.has_permissions(kick_members=True)
+async def motw_set_schedule(interaction: discord.Interaction, dia: discord.app_commands.Choice[int], hora: discord.app_commands.Range[int, 0, 23]) -> None:
+    set_motw_schedule(dia.value, hora)
+    await interaction.response.send_message(
+        f"✅ Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).",
+        ephemeral=True,
+    )
+    await log_embed(
+        interaction.guild, "⚙️ Horario de Miembro de la Semana actualizado",
+        f"{interaction.user.mention} lo cambió a {dia.name} {hora}:00 (hora de RD).",
+        discord.Color.blurple(),
+    )
+
+
+@motw_set_schedule.error
+async def motw_set_schedule_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+@bot.tree.command(name="motw_test", description="Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+async def motw_test(interaction: discord.Interaction) -> None:
+    if not MOTW_CHANNEL_ID:
+        await interaction.response.send_message("MOTW_CHANNEL_ID no está configurado.", ephemeral=True)
+        return
+    await interaction.response.send_message("Probando el anuncio de Miembro de la Semana (no se resetean contadores)...", ephemeral=True)
+    await announce_member_of_the_week(reset=False)
+
+
+@motw_test.error
+async def motw_test_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
