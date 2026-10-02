@@ -57,9 +57,8 @@ STREAK_TZ = timezone(timedelta(hours=-4))
 PROFILE_MAX_ROLES = 10  # máximo de roles mostrados en la tarjeta
 
 # --- Miembro de la Semana ---
-# Mientras estos dos IDs estén en 0, la función queda desactivada.
-MOTW_CHANNEL_ID = 0  # TODO: canal donde se anuncia al Miembro de la Semana
-MOTW_ROLE_ID = 0  # TODO: rol "Miembro de la Semana"
+# Mientras este ID esté en 0, la función queda desactivada. Solo anuncio, sin rol.
+MOTW_CHANNEL_ID = 1555606764278382722  # canal de anuncios
 MOTW_WEEKDAY = 3  # día del anuncio: 0=lunes ... 3=jueves ... 6=domingo
 MOTW_HOUR = 9  # hora del anuncio (hora local de STREAK_TZ)
 
@@ -347,11 +346,11 @@ async def on_ready() -> None:
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
     check_pending_verifications.start()
-    if MOTW_CHANNEL_ID and MOTW_ROLE_ID:
+    if MOTW_CHANNEL_ID:
         if not member_of_the_week_loop.is_running():
             member_of_the_week_loop.start()
     else:
-        print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID y MOTW_ROLE_ID.")
+        print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID.")
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -780,10 +779,6 @@ async def announce_member_of_the_week() -> None:
         print("⚠️ Miembro de la Semana: no encontré MOTW_CHANNEL_ID.")
         return
     guild = channel.guild
-    role = guild.get_role(MOTW_ROLE_ID)
-    if role is None:
-        await log_embed(guild, "⚠️ Miembro de la Semana", "No encontré el rol de MOTW_ROLE_ID; no se anunció a nadie (los contadores se conservan).", discord.Color.dark_red())
-        return
 
     # Top 2 entre quienes siguen en el servidor.
     ranking: list[tuple[discord.Member, int]] = []
@@ -803,27 +798,6 @@ async def announce_member_of_the_week() -> None:
         return
 
     winner, winner_count = ranking[0]
-
-    # Quitar el rol a quien lo tenga (el ganador anterior) y dárselo al nuevo.
-    errors: list[str] = []
-    for holder in list(role.members):
-        if holder.id == winner.id:
-            continue
-        try:
-            await holder.remove_roles(role, reason="Ya no es el Miembro de la Semana")
-        except discord.HTTPException as e:
-            errors.append(f"Quitar el rol a {holder.mention}: `{e}`")
-    if role not in winner.roles:
-        try:
-            await winner.add_roles(role, reason="Miembro de la Semana")
-        except discord.HTTPException as e:
-            errors.append(f"Dar el rol a {winner.mention}: `{e}`")
-    if errors:
-        await log_embed(
-            guild, "⚠️ Miembro de la Semana — problemas con el rol",
-            "\n".join(errors) + "\n\nRevisa que el rol del Heraldo esté por encima del rol de Miembro de la Semana.",
-            discord.Color.dark_red(),
-        )
 
     # Anuncio
     description = (
