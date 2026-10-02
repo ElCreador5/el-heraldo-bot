@@ -39,7 +39,7 @@ EVAL_ROLE_IDS = {
     1522877558893580298,  # Curios@ 👀
     1522876908935581846,  # Chico + Hetero 🍆
     1549502828563665056,  # Chica + Hetero 🍓
-    522878005104345218,   # Chica Trans 🌶️
+    1522878005104345218,   # Chica Trans 🌶️
     1549500856515166238,  # Chico Trans 🍓
 }
 RECOVERY_CHANNEL_ID = 1522863826545016913  # canal donde se genera el invite de recuperación
