@@ -771,6 +771,17 @@ def motw_last_scheduled(now: datetime) -> datetime:
     return scheduled
 
 
+def motw_mark_current_slot(now: datetime | None = None) -> None:
+    """Llamar tras cambiar el horario: da por "ya pasado" el turno más reciente del
+    nuevo horario, para que el cambio solo afecte al PRÓXIMO anuncio y no dispare uno
+    inmediato con la semana a medias. Solo avanza el marcador, nunca lo retrocede
+    (así tampoco se duplica un anuncio ya hecho hoy)."""
+    new_slot = motw_last_scheduled(now or datetime.now(STREAK_TZ)).date().isoformat()
+    last = db_meta_get("motw_last_slot")
+    if last is None or new_slot > last:
+        db_meta_set("motw_last_slot", new_slot)
+
+
 @tasks.loop(minutes=10)
 async def member_of_the_week_loop() -> None:
     """Revisa cada 10 min si toca el anuncio. Al comparar contra el último
@@ -856,8 +867,12 @@ async def announce_member_of_the_week(reset: bool = True) -> None:
 @discord.app_commands.checks.has_permissions(kick_members=True)
 async def motw_set_schedule(interaction: discord.Interaction, dia: discord.app_commands.Choice[int], hora: discord.app_commands.Range[int, 0, 23]) -> None:
     set_motw_schedule(dia.value, hora)
+    motw_mark_current_slot()
+    now = datetime.now(STREAK_TZ)
+    next_run = motw_last_scheduled(now) + timedelta(days=7)
     await interaction.response.send_message(
-        f"✅ Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).",
+        f"✅ Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).\n"
+        f"Próximo anuncio: **{MOTW_WEEKDAY_NAMES[next_run.weekday()]} {next_run.day}/{next_run.month} a las {next_run.hour}:00**.",
         ephemeral=True,
     )
     await log_embed(
@@ -878,8 +893,8 @@ async def motw_set_schedule_error(interaction: discord.Interaction, error: disco
 @bot.tree.command(name="motw_test", description="Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
 async def motw_test(interaction: discord.Interaction) -> None:
-    if not MOTW_CHANNEL_ID:
-        await interaction.response.send_message("MOTW_CHANNEL_ID no está configurado.", ephemeral=True)
+    if bot.get_channel(MOTW_CHANNEL_ID) is None:
+        await interaction.response.send_message("No encuentro el canal de MOTW_CHANNEL_ID (¿ID incorrecto o sin acceso del bot?).", ephemeral=True)
         return
     await interaction.response.send_message("Probando el anuncio de Miembro de la Semana (no se resetean contadores)...", ephemeral=True)
     await announce_member_of_the_week(reset=False)
