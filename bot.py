@@ -1,19 +1,38 @@
 """
-El Heraldo - Bot de expulsión por falta de verificación de rol (Paraíso)
+El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
 
-Flujo:
-1. Invite Tracker otorga el rol Tentad@ (TENTADO_ROLE_ID) al entrar un miembro.
-2. El Heraldo detecta ese rol vía on_member_update y arma un timer de 10 min.
-3. Si al vencer el timer el miembro sigue sin ninguno de los EVAL_ROLE_IDS:
-   - 1ra vez (dm_sent=False): DM con explicación + invite de uso único, luego kick.
-   - 2da vez (dm_sent=True):
-       - Si el invite con el que reingresó == su invite de entrada original -> se
-         le da otra oportunidad (mismo flujo que 1ra vez).
-       - Si no -> kick directo, sin DM.
-4. El tracking de invites es por usuario (no un invite genérico), comparando el
-   contador de usos de cada invite del servidor antes/después de cada join.
+1. VERIFICACIÓN DE EDAD (respaldo de Guardián)
+   - Guardián asigna Sin Verificar al entrar y expulsa a los 299s si no verifica.
+   - El Heraldo arma un respaldo de 300s (SIN_VERIFICAR_WINDOW): si Guardián falla,
+     expulsa directo, sin DM.
 
-Persistencia: SQLite (heraldo.db) para sobrevivir reinicios del bot.
+2. VERIFICACIÓN DE ORIENTACIÓN (Tentad@ -> rol de orientación)
+   - Invite Tracker otorga Tentad@ (TENTADO_ROLE_ID) tras pasar la verificación de edad.
+   - El Heraldo arma un timer de 10 min (VERIFICATION_WINDOW). Si vence sin que el
+     miembro tenga ninguno de los EVAL_ROLE_IDS:
+       - 1ra vez (dm_sent=False): DM de recuperación + invite de uso único, luego kick.
+       - 2da vez (dm_sent=True):
+           - Si reingresó con el mismo invite de entrada original -> otra oportunidad
+             (mismo flujo que la 1ra vez).
+           - Si no -> kick directo, sin DM.
+   - El tracking de invites es por usuario (no un invite genérico), comparando el
+     contador de usos de cada invite del servidor antes/después de cada join.
+   - /heraldo_check y /heraldo_check_all fuerzan la evaluación manual (individual o
+     de todo el servidor) sin esperar los timers.
+
+3. ACTIVIDAD Y PERFIL (/profile)
+   - Cuenta mensajes y racha diaria por miembro (zona horaria STREAK_TZ, RD).
+   - /profile muestra avatar, nombre, mensajes, racha y roles del miembro.
+
+4. MIEMBRO DE LA SEMANA
+   - Ranking semanal de mensajes (week_messages); cada jueves (configurable) se
+     anuncia al más activo, sin asignar ningún rol, y se resetean los contadores
+     de TODOS los miembros.
+   - /motw_set_schedule y /motw_set_channel cambian día/hora/canal sin redeploy.
+   - /motw_test dispara el anuncio con datos reales sin resetear contadores.
+
+Toda la actividad relevante se reporta como embed en LOG_CHANNEL_ID.
+Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
 Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 """
 
@@ -31,7 +50,6 @@ from discord.ext import commands, tasks
 # Configuración
 # ---------------------------------------------------------------------------
 
-GUILD_ID = 0  # TODO: ID del servidor "Paraíso"
 SIN_VERIFICAR_ROLE_ID = 1549913794296414339  # rol de verificación de edad (Guardián)
 SIN_VERIFICAR_WINDOW = timedelta(seconds=300)  # respaldo: Guardián usa 299s, por si falla
 TENTADO_ROLE_ID = 1510692050889085142
