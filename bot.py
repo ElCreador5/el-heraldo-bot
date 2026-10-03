@@ -7,7 +7,8 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      expulsa directo, sin DM.
 
 2. VERIFICACIÓN DE ORIENTACIÓN (Tentad@ -> rol de orientación)
-   - Invite Tracker otorga Tentad@ (TENTADO_ROLE_ID) tras pasar la verificación de edad.
+   - Tentad@ (TENTADO_ROLE_ID) se otorga al pasar la verificación de edad (botón de
+     /verify; antes, Invite Tracker).
    - El Heraldo arma un timer de 10 min (VERIFICATION_WINDOW). Si vence sin que el
      miembro tenga ninguno de los EVAL_ROLE_IDS:
        - 1ra vez (dm_sent=False): DM de recuperación + invite de uso único, luego kick.
@@ -30,6 +31,15 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      de TODOS los miembros.
    - /motw_set_schedule y /motw_set_channel cambian día/hora/canal sin redeploy.
    - /motw_test dispara el anuncio con datos reales sin resetear contadores.
+
+5. VERIFICACIÓN POR BOTÓN (/verify — reemplaza la verificación de Invite Tracker)
+   - /verify publica un panel con un botón; quien lo pulsa recibe el rol de
+     verificación (por defecto Tentad@) y pierde Sin Verificar. Es una declaración
+     de mayoría de edad, no una comprobación.
+   - Con la verificación activada, quien no la complete en `timeout` segundos desde
+     que entra sufre la acción configurada (expulsar, banear o solo registrar).
+   - /verify_config (rol, timeout, acción, activar) y /verify_texts (mensaje del
+     panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
@@ -81,6 +91,30 @@ MOTW_CHANNEL_ID = 1555606764278382722  # canal por defecto (cambiable con /motw_
 MOTW_WEEKDAY_DEFAULT = 3  # día por defecto: 0=lunes ... 3=jueves ... 6=domingo
 MOTW_HOUR_DEFAULT = 9  # hora por defecto (hora local de STREAK_TZ)
 MOTW_WEEKDAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+# --- Verificación por botón (/verify): reemplaza la verificación de Invite Tracker ---
+# Rol, timeout, acción, textos y activación se guardan en la DB y se cambian con
+# /verify_config y /verify_texts; estos son solo los valores por defecto.
+VERIFY_BUTTON_ID = "heraldo_verify"
+VERIFY_TIMEOUT_DEFAULT = 299  # segundos desde que entra (igual que Invite Tracker)
+VERIFY_ACTION_DEFAULT = "kick"
+VERIFY_ACTION_LABELS = {"kick": "Expulsar", "ban": "Banear", "none": "Solo registrar (sin acción)"}
+VERIFY_PANEL_TEXT_DEFAULT = "✅ Pulsa el botón de abajo para confirmar que eres mayor de edad y obtener acceso al servidor."
+VERIFY_BUTTON_LABEL_DEFAULT = "Verificar"
+VERIFY_SUCCESS_TEXT_DEFAULT = "✅ ¡Verificado! Ya tienes acceso al servidor."
+# Permisos que un rol de verificación NO puede tener: lo otorga un botón que pulsa cualquiera.
+VERIFY_DANGEROUS_PERMS = (
+    ("administrator", "Administrador"),
+    ("manage_guild", "Gestionar servidor"),
+    ("manage_roles", "Gestionar roles"),
+    ("manage_channels", "Gestionar canales"),
+    ("manage_webhooks", "Gestionar webhooks"),
+    ("kick_members", "Expulsar miembros"),
+    ("ban_members", "Banear miembros"),
+    ("moderate_members", "Aislar miembros"),
+    ("manage_messages", "Gestionar mensajes"),
+    ("mention_everyone", "Mencionar a todos"),
+)
 
 DM_TEXT = (
     "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
@@ -153,6 +187,10 @@ def db_init() -> None:
         conn.execute("ALTER TABLE members ADD COLUMN sin_verificado_at TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe (bots reiniciados sobre una DB previa)
+    try:
+        conn.execute("ALTER TABLE members ADD COLUMN verify_pending_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS activity (
@@ -257,6 +295,29 @@ def db_clear_sin_verificado(user_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "UPDATE members SET sin_verificado_at = NULL WHERE user_id = ?", (user_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_set_verify_pending(user_id: int, when: datetime) -> None:
+    """Upsert: marca desde cuándo corre el timeout de verificación del miembro."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO members (user_id, verify_pending_at, dm_sent) VALUES (?, ?, 0)
+        ON CONFLICT(user_id) DO UPDATE SET verify_pending_at = excluded.verify_pending_at
+        """,
+        (user_id, when.isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_clear_verify_pending(user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE members SET verify_pending_at = NULL WHERE user_id = ?", (user_id,)
     )
     conn.commit()
     conn.close()
@@ -373,6 +434,37 @@ def set_log_channel_id(channel_id: int) -> None:
     db_meta_set("log_channel_id", str(channel_id))
 
 
+def verify_enabled() -> bool:
+    return db_meta_get("verify_enabled") == "1"
+
+
+def get_verify_role_id() -> int:
+    value = db_meta_get("verify_role_id")
+    return int(value) if value is not None else TENTADO_ROLE_ID
+
+
+def get_verify_timeout() -> int:
+    value = db_meta_get("verify_timeout")
+    return int(value) if value is not None else VERIFY_TIMEOUT_DEFAULT
+
+
+def get_verify_action() -> str:
+    value = db_meta_get("verify_action")
+    return value if value in VERIFY_ACTION_LABELS else VERIFY_ACTION_DEFAULT
+
+
+def get_verify_panel_text() -> str:
+    return db_meta_get("verify_panel_text") or VERIFY_PANEL_TEXT_DEFAULT
+
+
+def get_verify_button_label() -> str:
+    return db_meta_get("verify_button_label") or VERIFY_BUTTON_LABEL_DEFAULT
+
+
+def get_verify_success_text() -> str:
+    return db_meta_get("verify_success_text") or VERIFY_SUCCESS_TEXT_DEFAULT
+
+
 # ---------------------------------------------------------------------------
 # Tracking de invites por usuario
 # ---------------------------------------------------------------------------
@@ -398,6 +490,8 @@ async def detect_used_invite(guild: discord.Guild) -> str | None:
 @bot.event
 async def on_ready() -> None:
     db_init()
+    if not bot.persistent_views:
+        bot.add_view(VerifyView())  # el botón de /verify sigue respondiendo tras reinicios
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         bot.tree.copy_global_to(guild=guild)
@@ -423,6 +517,10 @@ async def on_ready() -> None:
 async def on_member_join(member: discord.Member) -> None:
     if member.bot:
         return  # los bots no pasan por el flujo de verificación
+    if verify_enabled():
+        now = datetime.now(timezone.utc)
+        db_set_verify_pending(member.id, now)
+        asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
     invite_code = await detect_used_invite(member.guild)
     db_upsert_join(member.id, invite_code)
 
@@ -505,12 +603,14 @@ async def check_pending_verifications() -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT user_id, tentado_at, sin_verificado_at FROM members "
-        "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL"
+        "SELECT user_id, tentado_at, sin_verificado_at, verify_pending_at FROM members "
+        "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL "
+        "OR verify_pending_at IS NOT NULL"
     ).fetchall()
     conn.close()
 
     now = datetime.now(timezone.utc)
+    verify_window = timedelta(seconds=get_verify_timeout())
     for row in rows:
         if row["tentado_at"] is not None:
             tentado_at = datetime.fromisoformat(row["tentado_at"])
@@ -526,6 +626,15 @@ async def check_pending_verifications() -> None:
                     if guild.get_member(row["user_id"]):
                         await evaluate_sin_verificado(guild.id, row["user_id"])
                         break
+        if row["verify_pending_at"] is not None:
+            verify_pending_at = datetime.fromisoformat(row["verify_pending_at"])
+            if now >= verify_pending_at + verify_window:
+                for guild in bot.guilds:
+                    if guild.get_member(row["user_id"]):
+                        await evaluate_verify_timeout(guild.id, row["user_id"])
+                        break
+                else:
+                    db_clear_verify_pending(row["user_id"])  # ya no está en ningún servidor
 
 
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
@@ -779,6 +888,419 @@ async def heraldo_log_channel_error(interaction: discord.Interaction, error: dis
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Verificación por botón (/verify) — reemplaza la verificación de Invite Tracker
+# ---------------------------------------------------------------------------
+
+def verify_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
+    """Motivo por el que NO conviene usar este rol como rol de verificación, o None
+    si está bien. El botón lo puede pulsar cualquiera: el rol no puede dar poderes de
+    moderación, y el Heraldo tiene que poder asignarlo."""
+    if role.is_default():
+        return "es @everyone"
+    if role.managed:
+        return "es un rol gestionado por una integración o un bot"
+    if role >= guild.me.top_role:
+        return "está al mismo nivel o por encima del rol más alto del Heraldo"
+    risky = [label for attr, label in VERIFY_DANGEROUS_PERMS if getattr(role.permissions, attr)]
+    if risky:
+        return "da permisos que no deben salir de un botón público (" + ", ".join(risky) + ")"
+    return None
+
+
+class VerifyView(discord.ui.View):
+    """Vista persistente: el botón sigue funcionando tras reinicios (se registra en on_ready)."""
+
+    def __init__(self, label: str | None = None) -> None:
+        super().__init__(timeout=None)
+        button = discord.ui.Button(
+            label=label or get_verify_button_label(),
+            style=discord.ButtonStyle.success,
+            custom_id=VERIFY_BUTTON_ID,
+        )
+        button.callback = handle_verify_click
+        self.add_item(button)
+
+
+async def handle_verify_click(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    member = interaction.user
+    if guild is None or not isinstance(member, discord.Member):
+        await interaction.response.send_message("Esto solo funciona dentro del servidor.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+
+    role = guild.get_role(get_verify_role_id())
+    if role is None:
+        await interaction.followup.send("⚠️ La verificación no está configurada todavía. Avisa a un administrador.", ephemeral=True)
+        await log_embed(
+            guild, "⚠️ Verificación sin configurar",
+            f"{member.mention} pulsó el botón pero el rol de verificación no existe.",
+            discord.Color.dark_red(),
+        )
+        return
+
+    role_ids = {r.id for r in member.roles}
+    if role.id in role_ids or role_ids & EVAL_ROLE_IDS:
+        await interaction.followup.send("✅ ¡Ya estás verificado!", ephemeral=True)
+        return
+
+    problem = verify_role_problem(role, guild)
+    if problem:
+        await interaction.followup.send("⚠️ La verificación está mal configurada. Avisa a un administrador.", ephemeral=True)
+        await log_embed(
+            guild, "⚠️ Verificación bloqueada",
+            f"{member.mention} pulsó el botón, pero el rol {role.mention} {problem}. No se le dio.",
+            discord.Color.dark_red(),
+        )
+        return
+
+    try:
+        await member.add_roles(role, reason="Verificación de edad (botón de El Heraldo)")
+    except discord.HTTPException as e:  # incluye Forbidden (jerarquía o permisos)
+        await interaction.followup.send("❌ No pude darte el rol. Avisa a un administrador.", ephemeral=True)
+        await log_embed(
+            guild, "⚠️ Error al verificar",
+            f"No pude darle {role.mention} a {member.mention}: `{e}`. Revisa jerarquía de roles y permisos.",
+            discord.Color.dark_red(),
+        )
+        return
+
+    db_clear_verify_pending(member.id)
+    # Quien se verifica deja de estar "Sin Verificar" (si no, el respaldo de 300 s lo expulsaría).
+    sin_role = guild.get_role(SIN_VERIFICAR_ROLE_ID)
+    if sin_role is not None and sin_role in member.roles:
+        try:
+            await member.remove_roles(sin_role, reason="Verificación de edad (botón de El Heraldo)")
+            db_clear_sin_verificado(member.id)
+        except discord.HTTPException as e:
+            await log_embed(
+                guild, "⚠️ No pude quitar Sin Verificar",
+                f"{member.mention} se verificó pero no pude quitarle {sin_role.mention}: `{e}`.",
+                discord.Color.dark_red(),
+            )
+
+    await interaction.followup.send(get_verify_success_text(), ephemeral=True)
+    await log_embed(
+        guild, "✅ Verificación de edad",
+        f"{member.mention} (`{member.id}`) pulsó el botón y recibió {role.mention}.",
+        discord.Color.green(),
+    )
+
+
+async def schedule_verify_timeout(guild_id: int, user_id: int, pending_at: datetime) -> None:
+    delay = (pending_at + timedelta(seconds=get_verify_timeout()) - datetime.now(timezone.utc)).total_seconds()
+    if delay > 0:
+        await asyncio.sleep(delay)
+    await evaluate_verify_timeout(guild_id, user_id)
+
+
+async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
+    """Aplica la acción configurada si el miembro no se verificó dentro del timeout.
+    Lee siempre la configuración actual: si el timeout se alargó mientras esperaba, no
+    actúa todavía (check_pending_verifications lo retoma al vencer el nuevo plazo)."""
+    row = db_get(user_id)
+    if row is None or row["verify_pending_at"] is None:
+        return  # ya verificado, ya evaluado o nunca estuvo pendiente
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        return
+    member = guild.get_member(user_id)
+    if member is None or not verify_enabled():
+        db_clear_verify_pending(user_id)  # se fue, o la verificación se desactivó
+        return
+
+    timeout = get_verify_timeout()
+    deadline = datetime.fromisoformat(row["verify_pending_at"]) + timedelta(seconds=timeout)
+    if datetime.now(timezone.utc) + timedelta(seconds=1) < deadline:
+        return
+
+    role_ids = {r.id for r in member.roles}
+    db_clear_verify_pending(user_id)
+    if get_verify_role_id() in role_ids or role_ids & EVAL_ROLE_IDS:
+        return  # se verificó a tiempo (o un admin le dio un rol de orientación)
+
+    action = get_verify_action()
+    if action == "none":
+        await log_embed(
+            guild, "⏰ Verificación vencida",
+            f"{member.mention} (`{member.id}`) no se verificó en {timeout} s. "
+            f"Acción configurada: solo registrar.",
+            discord.Color.orange(),
+        )
+        return
+    try:
+        if action == "ban":
+            await member.ban(reason="No se verificó dentro del tiempo límite", delete_message_seconds=0)
+        else:
+            await member.kick(reason="No se verificó dentro del tiempo límite")
+    except discord.HTTPException as e:  # incluye Forbidden (jerarquía de roles)
+        await log_embed(
+            guild, "⚠️ Error al aplicar el timeout de verificación",
+            f"No pude {'banear' if action == 'ban' else 'expulsar'} a {member.mention}: `{e}`. "
+            f"Revisa la jerarquía de roles.",
+            discord.Color.dark_red(),
+        )
+        return
+    await log_embed(
+        guild, "🔨 Ban — No se verificó" if action == "ban" else "👢 Kick — No se verificó",
+        f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
+        discord.Color.red(),
+    )
+
+
+async def update_verify_panel(guild: discord.Guild) -> str:
+    """Edita el panel ya publicado con los textos actuales. Devuelve una nota para el admin."""
+    ref = db_meta_get("verify_panel_ref")
+    if not ref:
+        return "Aún no hay panel publicado: usa /verify para publicarlo."
+    try:
+        channel_id, message_id = (int(x) for x in ref.split(":"))
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            return "⚠️ No encontré el canal del panel; publícalo de nuevo con /verify."
+        message = await channel.fetch_message(message_id)
+        await message.edit(
+            content=get_verify_panel_text(),
+            view=VerifyView(),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return "El panel publicado ya muestra los textos nuevos."
+    except discord.NotFound:
+        return "⚠️ El panel ya no existe (¿lo borraron?); publícalo de nuevo con /verify."
+    except (discord.HTTPException, ValueError) as e:
+        return f"⚠️ No pude actualizar el panel publicado: `{e}`. Publícalo de nuevo con /verify."
+
+
+def verify_config_summary(guild: discord.Guild) -> str:
+    role_id = get_verify_role_id()
+    role = guild.get_role(role_id)
+    role_text = role.mention if role else f"⚠️ no encontrado (`{role_id}`)"
+    ref = db_meta_get("verify_panel_ref")
+    if ref and ref.count(":") == 1:
+        channel_id, message_id = ref.split(":")
+        panel_text = f"[ir al panel](https://discord.com/channels/{guild.id}/{channel_id}/{message_id})"
+    elif ref:
+        panel_text = "⚠️ referencia dañada: publícalo de nuevo con /verify"
+    else:
+        panel_text = "sin publicar (usa /verify)"
+    return (
+        f"**Verificación:** {'✅ activada' if verify_enabled() else '⏸️ desactivada'}\n"
+        f"**Rol de verificación:** {role_text}\n"
+        f"**Timeout:** {get_verify_timeout()} s\n"
+        f"**Acción al agotarse:** {VERIFY_ACTION_LABELS[get_verify_action()]}\n"
+        f"**Panel:** {panel_text}"
+    )
+
+
+class VerifyTextsModal(discord.ui.Modal):
+    """Formulario de textos; se abre con los valores actuales."""
+
+    def __init__(self) -> None:
+        super().__init__(title="Textos de la verificación")
+        self.panel = discord.ui.TextInput(
+            label="Mensaje del panel (sobre el botón)",
+            style=discord.TextStyle.paragraph,
+            default=get_verify_panel_text(),
+            max_length=2000,
+        )
+        self.button_label = discord.ui.TextInput(
+            label="Texto del botón",
+            default=get_verify_button_label(),
+            max_length=80,
+        )
+        self.success = discord.ui.TextInput(
+            label="Mensaje tras pulsar el botón",
+            style=discord.TextStyle.paragraph,
+            default=get_verify_success_text(),
+            max_length=1000,
+        )
+        self.add_item(self.panel)
+        self.add_item(self.button_label)
+        self.add_item(self.success)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        panel = self.panel.value.strip()
+        label = self.button_label.value.strip()
+        success = self.success.value.strip()
+        if not (panel and label and success):
+            await interaction.response.send_message("❌ Ningún texto puede quedar vacío; no guardé nada.", ephemeral=True)
+            return
+        db_meta_set("verify_panel_text", panel)
+        db_meta_set("verify_button_label", label)
+        db_meta_set("verify_success_text", success)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        note = await update_verify_panel(interaction.guild)
+        await interaction.followup.send(f"✅ Textos guardados. {note}", ephemeral=True)
+        await log_embed(
+            interaction.guild, "⚙️ Textos de verificación actualizados",
+            f"{interaction.user.mention} editó el mensaje del panel, el botón o el mensaje de éxito.",
+            discord.Color.blurple(),
+        )
+
+
+@bot.tree.command(name="verify", description="Publicar el panel de verificación (botón) en un canal.")
+@discord.app_commands.describe(canal="Canal donde publicarlo (por defecto, este)")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def verify(interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None) -> None:
+    guild = interaction.guild
+    target = canal or interaction.channel
+    if not isinstance(target, discord.TextChannel):
+        await interaction.response.send_message("Úsalo en un canal de texto o elige uno con la opción `canal`.", ephemeral=True)
+        return
+    role = guild.get_role(get_verify_role_id())
+    if role is None:
+        await interaction.response.send_message("❌ El rol de verificación no existe. Elige uno con `/verify_config`.", ephemeral=True)
+        return
+    problem = verify_role_problem(role, guild)
+    if problem:
+        await interaction.response.send_message(
+            f"❌ No publiqué el panel: el rol {role.mention} {problem}. Elige otro con `/verify_config`.",
+            ephemeral=True,
+        )
+        return
+    perms = target.permissions_for(guild.me)
+    if not (perms.view_channel and perms.send_messages):
+        await interaction.response.send_message(
+            f"❌ El Heraldo no puede escribir en {target.mention} (necesita Ver canal y Enviar mensajes).",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    try:
+        message = await target.send(
+            content=get_verify_panel_text(),
+            view=VerifyView(),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"❌ No pude publicar el panel: `{e}`", ephemeral=True)
+        return
+    db_meta_set("verify_panel_ref", f"{target.id}:{message.id}")
+    await interaction.followup.send(
+        f"✅ Panel publicado en {target.mention}. Cuando quieras que el timeout empiece a aplicarse, "
+        f"usa `/verify_config activado:True`.",
+        ephemeral=True,
+    )
+    await log_embed(
+        guild, "⚙️ Panel de verificación publicado",
+        f"{interaction.user.mention} lo publicó en {target.mention}.",
+        discord.Color.blurple(),
+    )
+
+
+@bot.tree.command(name="verify_texts", description="Editar el mensaje del panel, el texto del botón y el mensaje tras verificarse.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def verify_texts(interaction: discord.Interaction) -> None:
+    await interaction.response.send_modal(VerifyTextsModal())
+
+
+@bot.tree.command(name="verify_config", description="Ver o cambiar la configuración de la verificación por botón.")
+@discord.app_commands.describe(
+    rol="Rol que se otorga al verificarse",
+    timeout="Segundos para verificarse desde que entra (30-3600)",
+    accion="Qué hacer con quien no se verifica a tiempo",
+    activado="Activar o desactivar el timeout automático",
+)
+@discord.app_commands.choices(accion=[
+    discord.app_commands.Choice(name="Expulsar", value="kick"),
+    discord.app_commands.Choice(name="Banear (permanente)", value="ban"),
+    discord.app_commands.Choice(name="Solo registrar (sin acción)", value="none"),
+])
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def verify_config(
+    interaction: discord.Interaction,
+    rol: Optional[discord.Role] = None,
+    timeout: Optional[discord.app_commands.Range[int, 30, 3600]] = None,
+    accion: Optional[discord.app_commands.Choice[str]] = None,
+    activado: Optional[bool] = None,
+) -> None:
+    guild = interaction.guild
+    if rol is None and timeout is None and accion is None and activado is None:
+        await interaction.response.send_message(verify_config_summary(guild), ephemeral=True)
+        return
+
+    # 1) Validar todo antes de guardar nada.
+    if rol is not None:
+        problem = verify_role_problem(rol, guild)
+        if problem:
+            await interaction.response.send_message(f"❌ No guardé nada: {rol.mention} {problem}.", ephemeral=True)
+            return
+    if activado:
+        effective_role = rol or guild.get_role(get_verify_role_id())
+        if effective_role is None:
+            await interaction.response.send_message(
+                "❌ No activé la verificación: el rol de verificación no existe. Elige uno con `rol`.",
+                ephemeral=True,
+            )
+            return
+        problem = verify_role_problem(effective_role, guild)
+        if problem:
+            await interaction.response.send_message(
+                f"❌ No activé la verificación: {effective_role.mention} {problem}.", ephemeral=True
+            )
+            return
+        if not db_meta_get("verify_panel_ref"):
+            await interaction.response.send_message(
+                "❌ No activé la verificación: aún no hay panel publicado. Usa `/verify` primero; "
+                "si no, nadie podría verificarse y todos los que entren serían sancionados.",
+                ephemeral=True,
+            )
+            return
+
+    # 2) Guardar.
+    changes: list[str] = []
+    if rol is not None:
+        db_meta_set("verify_role_id", str(rol.id))
+        changes.append(f"rol → {rol.mention}")
+    if timeout is not None:
+        db_meta_set("verify_timeout", str(timeout))
+        changes.append(f"timeout → {timeout} s")
+    if accion is not None:
+        db_meta_set("verify_action", accion.value)
+        changes.append(f"acción → {accion.name}")
+    if activado is not None:
+        db_meta_set("verify_enabled", "1" if activado else "0")
+        changes.append("activada" if activado else "desactivada")
+
+    warnings: list[str] = []
+    if get_verify_timeout() > SIN_VERIFICAR_WINDOW.total_seconds():
+        warnings.append("⚠️ El respaldo de Sin Verificar sigue en 300 s: quien tenga ese rol será expulsado antes que este timeout.")
+    if get_verify_role_id() != TENTADO_ROLE_ID:
+        warnings.append("⚠️ El timer de orientación (10 min) solo se arma con Tentad@; con otro rol no se activará.")
+
+    await interaction.response.send_message(
+        "✅ Guardado: " + "; ".join(changes) + "\n\n" + verify_config_summary(guild)
+        + ("\n\n" + "\n".join(warnings) if warnings else ""),
+        ephemeral=True,
+    )
+    await log_embed(
+        guild, "⚙️ Verificación actualizada",
+        f"{interaction.user.mention}: " + "; ".join(changes),
+        discord.Color.blurple(),
+    )
+
+
+async def verify_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        text = "No tienes permiso para usar este comando."
+    else:
+        text = f"Error: {error}"
+    if interaction.response.is_done():
+        await interaction.followup.send(text, ephemeral=True)
+    else:
+        await interaction.response.send_message(text, ephemeral=True)
+
+
+verify.error(verify_command_error)
+verify_texts.error(verify_command_error)
+verify_config.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
