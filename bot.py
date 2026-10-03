@@ -31,7 +31,8 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /motw_set_schedule y /motw_set_channel cambian día/hora/canal sin redeploy.
    - /motw_test dispara el anuncio con datos reales sin resetear contadores.
 
-Toda la actividad relevante se reporta como embed en LOG_CHANNEL_ID.
+Toda la actividad relevante se reporta como embed en el canal de logs
+(LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
 Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
 Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 """
@@ -63,7 +64,7 @@ EVAL_ROLE_IDS = {
     1549500856515166238,  # Chico Trans 🍓
 }
 RECOVERY_CHANNEL_ID = 1522863826545016913  # canal donde se genera el invite de recuperación
-LOG_CHANNEL_ID = 1549052747117240381  # canal donde El Heraldo reporta su actividad
+LOG_CHANNEL_ID = 1549052747117240381  # canal de logs por defecto (cambiable con /heraldo_log_channel)
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
 # --- Perfil (/profile): mensajes y racha diaria ---
@@ -112,12 +113,12 @@ async def log_embed(
     description: str,
     color: discord.Color = discord.Color.blurple(),
 ) -> None:
-    """Reporta actividad de El Heraldo en LOG_CHANNEL_ID como embed. Nunca debe
+    """Reporta actividad de El Heraldo en el canal de logs como embed. Nunca debe
     tumbar el flujo principal si falla (canal no encontrado, sin permisos, etc.)."""
     print(f"{title} — {description}")
     if guild is None:
         return
-    channel = guild.get_channel(LOG_CHANNEL_ID)
+    channel = guild.get_channel(get_log_channel_id())
     if channel is None:
         return
     embed = discord.Embed(
@@ -362,6 +363,16 @@ def set_motw_schedule(weekday: int, hour: int) -> None:
     db_meta_set("motw_hour", str(hour))
 
 
+def get_log_channel_id() -> int:
+    """Canal elegido con /heraldo_log_channel; si no hay, el LOG_CHANNEL_ID por defecto."""
+    value = db_meta_get("log_channel_id")
+    return int(value) if value is not None else LOG_CHANNEL_ID
+
+
+def set_log_channel_id(channel_id: int) -> None:
+    db_meta_set("log_channel_id", str(channel_id))
+
+
 # ---------------------------------------------------------------------------
 # Tracking de invites por usuario
 # ---------------------------------------------------------------------------
@@ -580,7 +591,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     embed.add_field(name="Resultado", value="✅ Expulsado" if kicked else "⚠️ Falló — revisa jerarquía de roles", inline=True)
     embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
 
-    channel = member.guild.get_channel(LOG_CHANNEL_ID)
+    channel = member.guild.get_channel(get_log_channel_id())
     if channel is not None:
         try:
             await channel.send(embed=embed)
@@ -705,7 +716,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
     add_mention_fields(embed, expelled, "Expulsados — sin rol de orientación")
     add_mention_fields(embed, expelled_sin_verificar, "Expulsados — no se verificaron")
 
-    channel = guild.get_channel(LOG_CHANNEL_ID)
+    channel = guild.get_channel(get_log_channel_id())
     if channel is not None:
         try:
             await channel.send(embed=embed)
@@ -721,6 +732,49 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
 
 @heraldo_check_all.error
 async def heraldo_check_all_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+@bot.tree.command(name="heraldo_log_channel", description="Cambiar el canal donde El Heraldo reporta su actividad (logs).")
+@discord.app_commands.describe(canal="Canal de texto donde se publicarán los logs")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
+async def heraldo_log_channel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+    # Validar antes de guardar: así no se configura un canal donde el bot no puede escribir.
+    perms = canal.permissions_for(canal.guild.me)
+    missing = [
+        name for name, ok in (
+            ("Ver canal", perms.view_channel),
+            ("Enviar mensajes", perms.send_messages),
+            ("Insertar enlaces", perms.embed_links),
+        ) if not ok
+    ]
+    if missing:
+        await interaction.response.send_message(
+            f"❌ No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
+            f"**{', '.join(missing)}**. Dáselos y vuelve a intentarlo.",
+            ephemeral=True,
+        )
+        return
+
+    set_log_channel_id(canal.id)
+    await interaction.response.send_message(
+        f"✅ Los logs de El Heraldo ahora se publicarán en {canal.mention}.",
+        ephemeral=True,
+    )
+    # Ya apunta al canal nuevo: este embed sirve además de prueba de que escribe bien.
+    await log_embed(
+        interaction.guild, "⚙️ Canal de logs actualizado",
+        f"{interaction.user.mention} lo cambió a {canal.mention}.",
+        discord.Color.blurple(),
+    )
+
+
+@heraldo_log_channel.error
+async def heraldo_log_channel_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
     if isinstance(error, discord.app_commands.MissingPermissions):
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
