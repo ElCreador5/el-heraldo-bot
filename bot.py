@@ -391,6 +391,14 @@ async def on_ready() -> None:
         await refresh_invite_cache(guild)
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
+    # Los comandos se publican solo por guild: cualquier comando global es un
+    # huérfano de versiones anteriores (aparece duplicado en el selector). Se borra.
+    try:
+        for cmd in await bot.tree.fetch_commands():
+            await cmd.delete()
+            print(f"🧹 Comando global huérfano eliminado: /{cmd.name}")
+    except discord.HTTPException as e:
+        print(f"No se pudo limpiar comandos globales: {e}")
     check_pending_verifications.start()
     if get_motw_channel_id():
         if not member_of_the_week_loop.is_running():
