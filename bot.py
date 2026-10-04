@@ -1675,7 +1675,16 @@ async def template_sync(interaction: discord.Interaction) -> None:
     if error:
         await interaction.followup.send(f"❌ {error}", ephemeral=True)
         return
-    await interaction.followup.send(embed=template_report_embed(template, was_dirty, "manual"), ephemeral=True)
+    embed = template_report_embed(template, was_dirty, "manual")
+    try:
+        await interaction.user.send(embed=embed)  # el enlace va a tus mensajes privados
+        await interaction.followup.send("✅ Plantilla sincronizada. Te envié el enlace por mensaje privado.", ephemeral=True)
+    except discord.HTTPException:
+        # DMs cerrados: se muestra aquí, solo visible para ti, para no perder el enlace.
+        await interaction.followup.send(
+            "⚠️ No pude enviarte el mensaje privado (¿tienes los DMs cerrados?). Aquí tienes el enlace:",
+            embed=embed, ephemeral=True,
+        )
     await log_embed(
         interaction.guild, "🛡️ Plantilla sincronizada manualmente",
         f"{interaction.user.mention} sincronizó la plantilla del servidor.",
