@@ -71,6 +71,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -413,6 +414,13 @@ def db_week_ranking() -> list[tuple[int, int]]:
     return [(r[0], r[1]) for r in rows]
 
 
+def db_zero_week_messages(user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("UPDATE activity SET week_messages = 0 WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
 def db_reset_week() -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.execute("UPDATE activity SET week_messages = 0")
@@ -534,8 +542,14 @@ async def on_ready() -> None:
         bot.add_view(VerifyView())  # el botón de /verify sigue respondiendo tras reinicios
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
-        bot.tree.copy_global_to(guild=guild)
-        await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
+        # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
+        # arranquen la verificación, el Miembro de la Semana ni la copia de la plantilla.
+        try:
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
+        except Exception:
+            print(f"⚠️ No se pudieron sincronizar los comandos en {guild.name}:")
+            traceback.print_exc()
     # Los comandos se publican solo por guild: cualquier comando global es un
     # huérfano de versiones anteriores (aparece duplicado en el selector). Se borra.
     try:
@@ -1687,6 +1701,11 @@ async def track_activity(message: discord.Message) -> None:
         return
     if EXCLUDED_ROLE_IDS and any(r.id in EXCLUDED_ROLE_IDS for r in message.author.roles):
         return
+    if message.channel.id in hp_trap_ids():
+        return  # lo escrito en un canal trampa no cuenta como actividad
+    punish_id = hp_punish_role_id()
+    if punish_id and any(r.id == punish_id for r in message.author.roles):
+        return  # los castigados por el honeypot no suman
 
     today = datetime.now(STREAK_TZ).date()
     yesterday = today - timedelta(days=1)
@@ -1801,6 +1820,9 @@ async def announce_member_of_the_week(reset: bool = True) -> str | None:
     ranking: list[tuple[discord.Member, int]] = []
     for user_id, count in db_week_ranking():
         member = guild.get_member(user_id)
+        punish_id = hp_punish_role_id()
+        if punish_id and member is not None and any(r.id == punish_id for r in member.roles):
+            continue  # castigado por el honeypot: no puede ganar
         if member is not None and not member.bot:
             ranking.append((member, count))
             if len(ranking) == 2:
@@ -1961,6 +1983,7 @@ HONEYPOT_ACTION_LABELS = {
     "log": "Solo registrar",
     "timeout": "Aislar (timeout)",
 }
+HONEYPOT_RETENTION_DEFAULT_MINUTES = 30 * 24 * 60  # el historial (y el texto guardado) se borra a los 30 días
 HONEYPOT_PURGE_DEFAULT = ("time", 24 * 60)  # por defecto: mensajes de las últimas 24 h (sin tope máximo)
 HONEYPOT_TIMEOUT_MINUTES_DEFAULT = 24 * 60  # duración del timeout (1 min a 28 días)
 HONEYPOT_TIMEOUT_MIN_MINUTES = 1
@@ -2004,6 +2027,30 @@ def honeypot_db_init() -> None:
     )
     conn.commit()
     conn.close()
+    hp_prune_history()
+
+
+_hp_meta_cache: dict[str, str | None] = {}
+_hp_trap_cache: set[int] | None = None
+
+
+def hp_meta_get(key: str) -> str | None:
+    """Lectura de configuración con caché en memoria (el listener corre en cada mensaje)."""
+    if key not in _hp_meta_cache:
+        _hp_meta_cache[key] = db_meta_get(key)
+    return _hp_meta_cache[key]
+
+
+def hp_meta_set(key: str, value: str) -> None:
+    db_meta_set(key, value)
+    _hp_meta_cache.pop(key, None)
+
+
+def hp_trap_ids() -> set[int]:
+    global _hp_trap_cache
+    if _hp_trap_cache is None:
+        _hp_trap_cache = set(hp_traps())
+    return _hp_trap_cache
 
 
 def hp_traps() -> dict[int, int | None]:
@@ -2018,6 +2065,8 @@ def hp_add_trap(channel_id: int) -> None:
     conn.execute("INSERT OR IGNORE INTO honeypot_channels (channel_id) VALUES (?)", (channel_id,))
     conn.commit()
     conn.close()
+    global _hp_trap_cache
+    _hp_trap_cache = None
 
 
 def hp_remove_trap(channel_id: int) -> None:
@@ -2025,6 +2074,8 @@ def hp_remove_trap(channel_id: int) -> None:
     conn.execute("DELETE FROM honeypot_channels WHERE channel_id = ?", (channel_id,))
     conn.commit()
     conn.close()
+    global _hp_trap_cache
+    _hp_trap_cache = None
 
 
 def hp_set_warning_message(channel_id: int, message_id: int | None) -> None:
@@ -2096,6 +2147,21 @@ def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action
     )
     conn.commit()
     conn.close()
+    hp_prune_history()
+
+
+def hp_retention_minutes() -> int:
+    v = hp_meta_get("honeypot_retention_minutes")
+    return int(v) if v else HONEYPOT_RETENTION_DEFAULT_MINUTES
+
+
+def hp_prune_history() -> None:
+    """Borra capturas (con el texto de los mensajes) más antiguas que la retención."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=hp_retention_minutes())
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM honeypot_triggers WHERE triggered_at < ?", (cutoff.isoformat(),))
+    conn.commit()
+    conn.close()
 
 
 def hp_recent_triggers(limit: int = 10) -> list[sqlite3.Row]:
@@ -2116,23 +2182,41 @@ def hp_total_triggers() -> int:
 # --- Configuración (guardada en meta) ---------------------------------------
 
 def honeypot_enabled() -> bool:
-    return db_meta_get("honeypot_enabled") == "1"
+    return hp_meta_get("honeypot_enabled") == "1"
 
 
 def honeypot_paused() -> bool:
-    return db_meta_get("honeypot_paused") == "1"
+    return hp_meta_get("honeypot_paused") == "1"
 
 
 def hp_action() -> str:
-    v = db_meta_get("honeypot_action")
+    v = hp_meta_get("honeypot_action")
     if v in (None, "", "kick", "ban"):  # kick/ban ya no existen: el valor por defecto es el rol de castigo
         return "role"
     return v
 
 
 def hp_punish_role_id() -> int:
-    v = db_meta_get("honeypot_punish_role")
+    v = hp_meta_get("honeypot_punish_role")
     return int(v) if v else 0
+
+
+def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None:
+    """Canales del propio Heraldo que nunca deben ser una trampa."""
+    if channel.id == get_log_channel_id():
+        return "es el canal de logs del Heraldo"
+    if channel.id == get_motw_channel_id():
+        return "es el canal del Miembro de la Semana"
+    if channel.id == RECOVERY_CHANNEL_ID:
+        return "es el canal de recuperación"
+    ref = db_meta_get("verify_panel_ref")
+    if ref:
+        try:
+            if int(ref.split(":")[0]) == channel.id:
+                return "es el canal del panel de verificación"
+        except ValueError:
+            pass
+    return None
 
 
 def hp_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
@@ -2186,37 +2270,37 @@ def format_duration(minutes: int) -> str:
 
 def hp_purge_spec() -> tuple[str, int]:
     """(tipo, valor): none | all | count (N mensajes) | time (minutos hacia atrás)."""
-    v = db_meta_get("honeypot_purge_spec")
+    v = hp_meta_get("honeypot_purge_spec")
     if v:
         kind, _, val = v.partition(":")
         return kind, int(val or 0)
-    old = db_meta_get("honeypot_purge_minutes")  # compatibilidad con versiones anteriores
+    old = hp_meta_get("honeypot_purge_minutes")  # compatibilidad con versiones anteriores
     if old is not None:
         return ("time", int(old)) if int(old) > 0 else ("none", 0)
-    old = db_meta_get("honeypot_purge_hours")
+    old = hp_meta_get("honeypot_purge_hours")
     if old is not None:
         return ("time", int(old) * 60) if int(old) > 0 else ("none", 0)
     return HONEYPOT_PURGE_DEFAULT
 
 
 def hp_timeout_minutes() -> int:
-    v = db_meta_get("honeypot_timeout_minutes")
+    v = hp_meta_get("honeypot_timeout_minutes")
     if v is not None:
         return int(v)
-    old = db_meta_get("honeypot_timeout_hours")
+    old = hp_meta_get("honeypot_timeout_hours")
     return int(old) * 60 if old is not None else HONEYPOT_TIMEOUT_MINUTES_DEFAULT
 
 
 def hp_warning_enabled() -> bool:
-    return db_meta_get("honeypot_warning_enabled") != "0"  # activado por defecto
+    return hp_meta_get("honeypot_warning_enabled") != "0"  # activado por defecto
 
 
 def hp_warning_text() -> str:
-    return db_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
+    return hp_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
 
 
 def hp_ping_role_id() -> int:
-    v = db_meta_get("honeypot_ping_role")
+    v = hp_meta_get("honeypot_ping_role")
     return int(v) if v else 0
 
 
@@ -2225,8 +2309,9 @@ def hp_is_exempt(member: discord.Member) -> bool:
     if member.guild.owner_id == member.id:
         return True
     perms = member.guild_permissions
-    if perms.administrator or perms.manage_guild:
-        return True
+    if (perms.administrator or perms.manage_guild or perms.manage_messages
+            or perms.kick_members or perms.ban_members or perms.moderate_members):
+        return True  # el equipo de moderación nunca cae en la trampa
     if member.id in hp_exempt_ids("member"):
         return True
     exempt_roles = hp_exempt_ids("role")
@@ -2248,11 +2333,11 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Purga al castigado:** {format_purge_spec(*hp_purge_spec())}",
         f"**Duración del timeout:** {format_duration(hp_timeout_minutes())}",
         f"**Aviso fijado:** {'sí' if hp_warning_enabled() else 'no'}"
-        + (" (texto personalizado)" if db_meta_get("honeypot_warning_text") else " (texto por defecto)"),
+        + (" (texto personalizado)" if hp_meta_get("honeypot_warning_text") else " (texto por defecto)"),
         f"**Rol a mencionar en reportes:** {ping}",
         f"**Roles exentos:** {', '.join(f'<@&{i}>' for i in hp_exempt_ids('role')) or '—'}",
         f"**Miembros exentos:** {', '.join(f'<@{i}>' for i in hp_exempt_ids('member')) or '—'}",
-        f"**Atrapados hasta ahora:** {hp_total_triggers()}",
+        f"**Capturas en el historial:** {hp_total_triggers()} (se guardan {format_duration(hp_retention_minutes())})",
     ]
     return "\n".join(lines)
 
@@ -2366,13 +2451,15 @@ def format_purge_spec(kind: str, value: int) -> str:
     return f"mensajes de los últimos {format_duration(value)}"
 
 
-async def purge_targets(guild: discord.Guild, only=None) -> list:
+async def purge_targets(guild: discord.Guild, only=None, after: datetime | None = None) -> list:
     """Canales y hilos donde buscar mensajes (incluye hilos activos y archivados públicos)."""
     if only is not None:
         if isinstance(only, discord.ForumChannel):
             threads = list(only.threads)
             try:
                 async for t in only.archived_threads(limit=None):
+                    if after is not None and t.archive_timestamp < after:
+                        break  # vienen del más reciente al más antiguo
                     threads.append(t)
             except discord.HTTPException:
                 pass
@@ -2384,6 +2471,8 @@ async def purge_targets(guild: discord.Guild, only=None) -> list:
     for parent in [*guild.text_channels, *guild.forums]:
         try:
             async for t in parent.archived_threads(limit=None):
+                if after is not None and t.archive_timestamp < after:
+                    break  # archivado antes del corte: no puede tener mensajes más nuevos
                 targets[t.id] = t
         except discord.HTTPException:
             continue  # sin permiso para ver hilos archivados de ese canal
@@ -2455,7 +2544,7 @@ async def purge_user_messages(
     - limit -> sus N mensajes más recientes (dentro del rango, si lo hay)
     `progress(hechos, total, borrados)` se llama a medida que avanza."""
     result = PurgeResult()
-    targets = await purge_targets(guild, channel)
+    targets = await purge_targets(guild, channel, after)
     sem = asyncio.Semaphore(4)  # 4 canales a la vez; discord.py gestiona el rate limit
     collected: list[tuple[object, list[int]]] = []
     done = 0
@@ -2595,7 +2684,8 @@ async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
             if purge_note:
                 notes.append(purge_note)
             verify_id = get_verify_role_id()
-            removed = [r for r in member.roles if r.is_assignable() and r.id not in (verify_id, punish_role.id)]
+            keep_ids = (verify_id, SIN_VERIFICAR_ROLE_ID, punish_role.id)  # Sin Verificar se conserva: así el respaldo de 300 s lo expulsa
+            removed = [r for r in member.roles if r.is_assignable() and r.id not in keep_ids]
             removed_ids = {r.id for r in removed}
             kept = [
                 r for r in member.roles
@@ -2611,6 +2701,9 @@ async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
             hp_save_punished(member.id, [r.id for r in removed])
             notes.append(f"{len(removed)} rol(es) quitado(s)")
             notes.append(f"rol {punish_role.mention} aplicado")
+            if any(r.id == SIN_VERIFICAR_ROLE_ID for r in member.roles):
+                notes.append("sigue sin verificar: el respaldo de verificación lo expulsará")
+            db_zero_week_messages(member.id)  # un castigado no puede ganar el Miembro de la Semana
             return True, "; ".join(notes)
     except discord.Forbidden:
         return False, "Faltan permisos (Moderar miembros / Gestionar roles)"
@@ -2675,7 +2768,7 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
         _hp_veteran_hits.append((now, member.id))
     _hp_veteran_hits[:] = [(t, u) for t, u in _hp_veteran_hits if now - t <= HONEYPOT_MISFIRE_WINDOW]
     if len({u for _, u in _hp_veteran_hits}) >= HONEYPOT_MISFIRE_THRESHOLD:
-        db_meta_set("honeypot_paused", "1")
+        hp_meta_set("honeypot_paused", "1")
         _hp_veteran_hits.clear()
         await log_embed(
             guild, "⏸️ Honeypot pausado (protección contra fallos)",
@@ -2698,7 +2791,7 @@ async def honeypot_listener(message: discord.Message) -> None:
         return  # DMs, webhooks y otros bots se ignoran (tus integraciones están a salvo)
     if not honeypot_enabled() or honeypot_paused():
         return
-    if message.channel.id not in hp_traps():
+    if message.channel.id not in hp_trap_ids():
         return
     member = message.author
     if not isinstance(member, discord.Member) or hp_is_exempt(member):
@@ -2740,7 +2833,18 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
 
 # --- Comandos /honeypot -----------------------------------------------------
 
-honeypot_group = discord.app_commands.Group(
+class HoneypotGroup(discord.app_commands.Group):
+    """Además de default_permissions (que un admin puede ampliar en Integraciones), el código
+    exige Gestionar servidor en cada subcomando."""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if perms is None or not perms.manage_guild:
+            raise discord.app_commands.MissingPermissions(["manage_guild"])
+        return True
+
+
+honeypot_group = HoneypotGroup(
     name="honeypot",
     description="Canales trampa que atrapan bots de spam.",
     guild_only=True,
@@ -2750,7 +2854,7 @@ honeypot_group = discord.app_commands.Group(
 
 class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
     text = discord.ui.TextInput(
-        label="Aviso (déjalo vacío para volver al texto por defecto)",
+        label="Aviso (vacío = texto por defecto)",
         style=discord.TextStyle.paragraph,
         required=False,
         max_length=1500,
@@ -2759,14 +2863,14 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
 
     def __init__(self) -> None:
         super().__init__()
-        self.text.default = db_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
+        self.text.default = hp_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.text).strip()
         if value and value != HONEYPOT_WARNING_TEXT_DEFAULT:
-            db_meta_set("honeypot_warning_text", value)
+            hp_meta_set("honeypot_warning_text", value)
         else:
-            db_meta_set("honeypot_warning_text", "")
+            hp_meta_set("honeypot_warning_text", "")
         await interaction.response.defer(ephemeral=True)
         errors = await hp_sync_all_warnings(interaction.guild)
         await interaction.followup.send(
@@ -2780,10 +2884,11 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
     activado="Activar o desactivar el honeypot",
     accion="Qué hacer con quien caiga en la trampa",
     rol_castigo="Rol que se le pone al castigado (se le quitan los demás, menos el de verificación)",
-    purga="Qué borrar del castigado: todo, una cantidad (200 mensajes) o un rango hacia atrás (30m, 12h, 2d…); 0 = nada",
+    purga="Qué borrar: todo, una cantidad (200 mensajes) o un rango (30m, 2d…); 0 = nada",
     timeout="Duración del timeout si la acción es Aislar: 30m, 12h, 2d… (1m a 28d)",
     aviso="Publicar un aviso fijado en cada canal trampa",
     ping_rol="Rol a mencionar en cada reporte",
+    retencion="Cuánto guardar el historial y los textos capturados: 12h, 7d, 30d… (por defecto 30d)",
 )
 @discord.app_commands.choices(accion=[
     discord.app_commands.Choice(name="Purgar y aplicar rol de castigo", value="role"),
@@ -2799,9 +2904,10 @@ async def honeypot_config(
     timeout: Optional[str] = None,
     aviso: Optional[bool] = None,
     ping_rol: Optional[discord.Role] = None,
+    retencion: Optional[str] = None,
 ) -> None:
     guild = interaction.guild
-    if all(v is None for v in (activado, accion, rol_castigo, purga, timeout, aviso, ping_rol)):
+    if all(v is None for v in (activado, accion, rol_castigo, purga, timeout, aviso, ping_rol, retencion)):
         await interaction.response.send_message(hp_config_summary(guild), ephemeral=True)
         return
     if activado and not hp_traps():
@@ -2828,38 +2934,45 @@ async def honeypot_config(
     # Validar duraciones antes de guardar nada.
     purga_spec = None
     timeout_min = None
+    retencion_min = None
     try:
         if purga is not None:
             purga_spec = parse_purge_spec(purga)
         if timeout is not None:
             timeout_min = parse_duration(timeout, HONEYPOT_TIMEOUT_MIN_MINUTES, HONEYPOT_TIMEOUT_MAX_MINUTES)
+        if retencion is not None:
+            retencion_min = parse_duration(retencion, 1, PURGE_MAX_MINUTES)
     except ValueError as e:
         await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
         return
 
     changes: list[str] = []
     if activado is not None:
-        db_meta_set("honeypot_enabled", "1" if activado else "0")
+        hp_meta_set("honeypot_enabled", "1" if activado else "0")
         if activado:
-            db_meta_set("honeypot_paused", "0")
+            hp_meta_set("honeypot_paused", "0")
         changes.append("activado" if activado else "desactivado")
     if accion is not None:
-        db_meta_set("honeypot_action", accion.value)
+        hp_meta_set("honeypot_action", accion.value)
         changes.append(f"acción → {accion.name}")
     if rol_castigo is not None:
-        db_meta_set("honeypot_punish_role", str(rol_castigo.id))
+        hp_meta_set("honeypot_punish_role", str(rol_castigo.id))
         changes.append(f"rol de castigo → {rol_castigo.mention}")
     if purga_spec is not None:
-        db_meta_set("honeypot_purge_spec", f"{purga_spec[0]}:{purga_spec[1]}")
+        hp_meta_set("honeypot_purge_spec", f"{purga_spec[0]}:{purga_spec[1]}")
         changes.append(f"purga → {format_purge_spec(*purga_spec)}")
     if timeout_min is not None:
-        db_meta_set("honeypot_timeout_minutes", str(timeout_min))
+        hp_meta_set("honeypot_timeout_minutes", str(timeout_min))
         changes.append(f"timeout → {format_duration(timeout_min)}")
+    if retencion_min is not None:
+        hp_meta_set("honeypot_retention_minutes", str(retencion_min))
+        hp_prune_history()
+        changes.append(f"retención → {format_duration(retencion_min)}")
     if ping_rol is not None:
-        db_meta_set("honeypot_ping_role", str(ping_rol.id))
+        hp_meta_set("honeypot_ping_role", str(ping_rol.id))
         changes.append(f"ping → {ping_rol.mention}")
     if aviso is not None:
-        db_meta_set("honeypot_warning_enabled", "1" if aviso else "0")
+        hp_meta_set("honeypot_warning_enabled", "1" if aviso else "0")
         changes.append("aviso fijado activado" if aviso else "aviso fijado desactivado")
 
     await interaction.response.defer(ephemeral=True)
@@ -2878,6 +2991,13 @@ async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChan
     guild = interaction.guild
     if canal.id in hp_traps():
         await interaction.response.send_message(f"{canal.mention} ya es un canal trampa.", ephemeral=True)
+        return
+    reason = hp_protected_channel_reason(canal)
+    if reason:
+        await interaction.response.send_message(
+            f"❌ No puedo usar {canal.mention} como trampa: {reason}. Elige un canal que nadie use de verdad.",
+            ephemeral=True,
+        )
         return
     perms = canal.permissions_for(guild.me)
     if not (perms.view_channel and perms.send_messages and perms.manage_messages):
@@ -2948,7 +3068,7 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
     hp_remove_trap(canal.id)
     extra = ""
     if not hp_traps() and honeypot_enabled():
-        db_meta_set("honeypot_enabled", "0")
+        hp_meta_set("honeypot_enabled", "0")
         extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
     await interaction.followup.send(f"✅ {canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
     await log_embed(interaction.guild, "🍯 Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
@@ -2998,9 +3118,9 @@ async def honeypot_exempt_remove(
 
 
 @honeypot_group.command(name="history", description="Ver los últimos miembros atrapados.")
-@discord.app_commands.describe(cantidad="Cuántos mostrar (1-20)")
+@discord.app_commands.describe(cantidad="Cuántos mostrar (1-10)")
 async def honeypot_history(
-    interaction: discord.Interaction, cantidad: discord.app_commands.Range[int, 1, 20] = 10
+    interaction: discord.Interaction, cantidad: discord.app_commands.Range[int, 1, 10] = 10
 ) -> None:
     rows = hp_recent_triggers(cantidad)
     if not rows:
@@ -3031,7 +3151,7 @@ async def honeypot_resume(interaction: discord.Interaction) -> None:
     if not honeypot_paused():
         await interaction.response.send_message("El honeypot no está pausado.", ephemeral=True)
         return
-    db_meta_set("honeypot_paused", "0")
+    hp_meta_set("honeypot_paused", "0")
     await interaction.response.send_message("✅ Honeypot reanudado.", ephemeral=True)
     await log_embed(interaction.guild, "▶️ Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
 
@@ -3127,6 +3247,13 @@ async def purge_command(
                           discord.Thread, discord.ForumChannel]] = None,
 ) -> None:
     guild = interaction.guild
+    if todos and not interaction.user.guild_permissions.manage_guild:
+        await interaction.response.send_message(
+            "❌ Borrar **todos** los mensajes de alguien requiere el permiso Gestionar servidor. "
+            "Con Gestionar mensajes puedes usar `cantidad` o un rango.",
+            ephemeral=True,
+        )
+        return
     has_scope = cantidad is not None or desde is not None or hasta is not None
     if todos and has_scope:
         await interaction.response.send_message("❌ Con `todos` no uses `cantidad`, `desde` ni `hasta`.", ephemeral=True)
@@ -3223,4 +3350,14 @@ if __name__ == "__main__":
             "Falta la variable de entorno DISCORD_TOKEN. Configúrala en Railway "
             "(Variables del servicio) antes de desplegar."
         )
-    bot.run(token)
+    try:
+        bot.run(token)
+    except discord.PrivilegedIntentsRequired:
+        if os.environ.get("MESSAGE_CONTENT_INTENT") != "1":
+            raise
+        # MESSAGE_CONTENT_INTENT=1 sin activar el intent en el portal: en vez de quedarse
+        # sin conectar, el bot se reinicia sin él (el log del honeypot no mostrará el texto).
+        print("⚠️ El intent Message Content no está activado en el portal de desarrolladores: "
+              "reiniciando sin él. Actívalo en el portal o quita MESSAGE_CONTENT_INTENT.")
+        os.environ["MESSAGE_CONTENT_INTENT"] = "0"
+        os.execv(sys.executable, [sys.executable, *sys.argv])
