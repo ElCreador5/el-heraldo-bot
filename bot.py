@@ -3350,7 +3350,418 @@ async def honeypot_group_error(interaction: discord.Interaction, error: discord.
 bot.tree.add_command(honeypot_group)
 
 # ---------------------------------------------------------------------------
-# 8. /purge — limpieza individual de mensajes de un usuario
+# 8. /fusionar_canales — migración segura de mensajes entre canales
+# ---------------------------------------------------------------------------
+
+FUSION_MAX_MESSAGES = 10000
+
+
+def fusion_channel_label(channel: discord.TextChannel) -> str:
+    return f"{channel.mention} (`#{channel.name}`)"
+
+
+def fusion_final_name(
+    origen: discord.TextChannel,
+    destino: discord.TextChannel,
+    nombre: str,
+    personalizado: Optional[str],
+) -> str:
+    if nombre == "origen":
+        return origen.name
+    if nombre == "personalizado":
+        return (personalizado or destino.name).strip().lower().replace(" ", "-")[:100]
+    return destino.name
+
+
+def fusion_clean_name(name: str) -> str:
+    # Discord acepta letras, números, guiones y guiones bajos en nombres de texto.
+    name = re.sub(r"[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]+", "-", name.strip())
+    name = re.sub(r"-+", "-", name).strip("-")
+    return name[:100] or "canal-fusionado"
+
+
+class FusionChannelsView(discord.ui.View):
+    def __init__(
+        self,
+        executor_id: int,
+        origen: discord.TextChannel,
+        destino: discord.TextChannel,
+        final_name: str,
+        eliminar_origen: bool,
+        message_count: int,
+    ) -> None:
+        super().__init__(timeout=120)
+        self.executor_id = executor_id
+        self.origen = origen
+        self.destino = destino
+        self.final_name = final_name
+        self.eliminar_origen = eliminar_origen
+        self.message_count = message_count
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.executor_id:
+            await interaction.response.send_message(
+                "❌ Solo quien inició esta fusión puede confirmarla.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar fusión", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(
+            content="⏳ Fusión confirmada. Estoy migrando los mensajes; el canal origen no se tocará hasta terminar correctamente.",
+            view=self,
+        )
+        asyncio.create_task(
+            execute_channel_merge(
+                interaction,
+                self.origen,
+                self.destino,
+                self.final_name,
+                self.eliminar_origen,
+                self.message_count,
+            )
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(content="Fusión cancelada. No se modificó ningún canal.", view=self)
+
+
+async def collect_fusion_messages(channel: discord.TextChannel) -> list[discord.Message]:
+    messages: list[discord.Message] = []
+    async for message in channel.history(limit=FUSION_MAX_MESSAGES, oldest_first=True):
+        messages.append(message)
+    return messages
+
+
+async def send_migrated_message(
+    destino: discord.TextChannel,
+    message: discord.Message,
+    index: int,
+    total: int,
+) -> None:
+    """Recrea un mensaje como embed de migración, conservando autor, fecha y contenido.
+    Los adjuntos se dejan como enlaces para no depender de descargas temporales."""
+    description = message.content or "*(sin texto)*"
+    if len(description) > 3900:
+        description = description[:3890] + "…"
+
+    embed = discord.Embed(
+        description=description,
+        color=discord.Color.blurple(),
+        timestamp=message.created_at,
+    )
+    embed.set_author(
+        name=str(message.author),
+        icon_url=message.author.display_avatar.url,
+    )
+
+    if message.attachments:
+        links = "\n".join(f"📎 [{a.filename}]({a.url})" for a in message.attachments)
+        if len(links) <= 1000:
+            embed.add_field(name="Adjuntos", value=links, inline=False)
+        else:
+            embed.add_field(name="Adjuntos", value=links[:990] + "…", inline=False)
+
+    if message.reference and message.reference.message_id:
+        embed.add_field(
+            name="Respuesta",
+            value=f"Mensaje original: `{message.reference.message_id}`",
+            inline=False,
+        )
+
+    embed.set_footer(text=f"Migrado por El Heraldo 🪽 · {index}/{total} · ID {message.id}")
+    await destino.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+
+async def execute_channel_merge(
+    interaction: discord.Interaction,
+    origen: discord.TextChannel,
+    destino: discord.TextChannel,
+    final_name: str,
+    eliminar_origen: bool,
+    expected_count: int,
+) -> None:
+    guild = interaction.guild
+    if guild is None:
+        return
+
+    # Volver a validar antes de tocar nada: el estado/permisos pueden haber cambiado
+    # mientras el administrador tenía abierta la confirmación.
+    if origen.id == destino.id:
+        await interaction.followup.send("❌ La fusión fue cancelada: origen y destino son el mismo canal.", ephemeral=True)
+        return
+
+    me = guild.me
+    if me is None:
+        await interaction.followup.send("❌ No pude identificar al Heraldo en el servidor.", ephemeral=True)
+        return
+
+    dest_perms = destino.permissions_for(me)
+    src_perms = origen.permissions_for(me)
+    if not (src_perms.view_channel and src_perms.read_message_history):
+        await interaction.followup.send("❌ No tengo permisos para leer el canal origen.", ephemeral=True)
+        return
+    if not (dest_perms.view_channel and dest_perms.send_messages and dest_perms.embed_links):
+        await interaction.followup.send("❌ No tengo permisos suficientes para escribir embeds en el canal destino.", ephemeral=True)
+        return
+
+    try:
+        messages = await collect_fusion_messages(origen)
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"❌ No pude leer los mensajes del canal origen: `{e}`", ephemeral=True)
+        return
+
+    if not messages:
+        await interaction.followup.send("⚠️ El canal origen no contiene mensajes migrables. No hice cambios.", ephemeral=True)
+        return
+
+    if len(messages) >= FUSION_MAX_MESSAGES:
+        await interaction.followup.send(
+            f"❌ La fusión fue detenida porque el origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
+            "Para evitar una migración incompleta, primero divide el trabajo en una migración por partes.",
+            ephemeral=True,
+        )
+        return
+
+    final_name = fusion_clean_name(final_name)
+    if final_name != destino.name:
+        try:
+            await destino.edit(name=final_name, reason=f"Fusión de canales solicitada por {interaction.user}")
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ No pude cambiar el nombre del canal destino. Revisa Gestionar canales y la jerarquía del bot.",
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ No pude cambiar el nombre del canal destino: `{e}`", ephemeral=True)
+            return
+
+    migrated = 0
+    failed = 0
+    progress_message = None
+    try:
+        progress_message = await interaction.followup.send(
+            f"⏳ Migrando **{len(messages):,}** mensajes de {origen.mention} → {destino.mention}…\n"
+            "Esto puede tardar si el canal es grande.",
+            ephemeral=True,
+            wait=True,
+        )
+    except discord.HTTPException:
+        pass
+
+    for message in messages:
+        try:
+            await send_migrated_message(destino, message, migrated + 1, len(messages))
+            migrated += 1
+        except discord.HTTPException:
+            failed += 1
+        # Mantener una cadencia conservadora para no golpear los rate limits.
+        await asyncio.sleep(0.35)
+        if progress_message is not None and (migrated + failed) % 25 == 0:
+            try:
+                await progress_message.edit(
+                    content=(
+                        f"⏳ Migrando canales… **{migrated + failed:,}/{len(messages):,}** procesados. "
+                        f"Correctos: {migrated:,} · Fallidos: {failed:,}."
+                    )
+                )
+            except discord.HTTPException:
+                pass
+
+    # Nunca borrar el origen si hubo errores de migración.
+    deleted_source = False
+    if failed == 0 and eliminar_origen:
+        src_perms = origen.permissions_for(me)
+        if not src_perms.manage_channels:
+            await interaction.followup.send(
+                f"⚠️ Migración completada ({migrated:,}/{len(messages):,}), pero no pude eliminar {origen.mention}: "
+                "al Heraldo le falta Gestionar canales.",
+                ephemeral=True,
+            )
+        else:
+            try:
+                await origen.delete(reason=f"Canal fusionado con #{destino.name} por {interaction.user}")
+                deleted_source = True
+            except discord.HTTPException:
+                await interaction.followup.send(
+                    f"⚠️ Migración completada, pero no pude eliminar {origen.mention}.", ephemeral=True
+                )
+
+    if failed:
+        result = (
+            f"⚠️ Fusión parcial: **{migrated:,}/{len(messages):,}** mensajes migrados; "
+            f"**{failed:,}** fallaron. El canal origen se conservó por seguridad."
+        )
+        color = discord.Color.orange()
+    else:
+        result = (
+            f"✅ Fusión completada: **{migrated:,}** mensajes migrados a {destino.mention}. "
+            + ("El canal origen fue eliminado." if deleted_source else "El canal origen se conservó.")
+        )
+        color = discord.Color.green()
+
+    if progress_message is not None:
+        try:
+            await progress_message.edit(content=result)
+        except discord.HTTPException:
+            pass
+    else:
+        await interaction.followup.send(result, ephemeral=True)
+
+    await log_embed(
+        guild,
+        "🔀 Fusión de canales completada" if not failed else "⚠️ Fusión de canales parcial",
+        (
+            f"{interaction.user.mention} fusionó {origen.mention} → {destino.mention}.\n"
+            f"Mensajes: {migrated}/{len(messages)} · Fallidos: {failed}.\n"
+            f"Nombre final: `#{destino.name}` · Origen eliminado: {'sí' if deleted_source else 'no'}."
+        ),
+        color,
+    )
+
+
+@bot.tree.command(name="fusionar_canales", description="Fusionar dos canales de texto mediante una migración segura de mensajes.")
+@discord.app_commands.describe(
+    origen="Canal que contiene los mensajes que quieres migrar",
+    destino="Canal que conservará los mensajes migrados",
+    nombre="Qué nombre conservará el canal destino",
+    nombre_personalizado="Nombre final si elegiste 'Personalizado'",
+    eliminar_origen="Eliminar el canal origen solo si TODOS los mensajes se migran correctamente",
+)
+@discord.app_commands.choices(nombre=[
+    discord.app_commands.Choice(name="Conservar nombre del destino", value="destino"),
+    discord.app_commands.Choice(name="Conservar nombre del origen", value="origen"),
+    discord.app_commands.Choice(name="Usar nombre personalizado", value="personalizado"),
+])
+@discord.app_commands.checks.has_permissions(manage_channels=True)
+@discord.app_commands.guild_only()
+async def fusionar_canales(
+    interaction: discord.Interaction,
+    origen: discord.TextChannel,
+    destino: discord.TextChannel,
+    nombre: discord.app_commands.Choice[str],
+    nombre_personalizado: Optional[str] = None,
+    eliminar_origen: bool = False,
+) -> None:
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("❌ Este comando solo funciona dentro de un servidor.", ephemeral=True)
+        return
+    if origen.id == destino.id:
+        await interaction.response.send_message("❌ El canal origen y el destino deben ser diferentes.", ephemeral=True)
+        return
+    if origen.guild.id != guild.id or destino.guild.id != guild.id:
+        await interaction.response.send_message("❌ Ambos canales deben pertenecer a este servidor.", ephemeral=True)
+        return
+    if nombre.value == "personalizado" and not (nombre_personalizado or "").strip():
+        await interaction.response.send_message(
+            "❌ Si eliges `Usar nombre personalizado`, debes indicar `nombre_personalizado`.",
+            ephemeral=True,
+        )
+        return
+    if nombre.value != "personalizado" and nombre_personalizado:
+        await interaction.response.send_message(
+            "❌ `nombre_personalizado` solo se usa cuando `nombre` es `Usar nombre personalizado`.",
+            ephemeral=True,
+        )
+        return
+
+    me = guild.me
+    if me is None:
+        await interaction.response.send_message("❌ No pude identificar al Heraldo en el servidor.", ephemeral=True)
+        return
+    src_perms = origen.permissions_for(me)
+    dst_perms = destino.permissions_for(me)
+    missing = []
+    if not src_perms.view_channel:
+        missing.append("Ver canal (origen)")
+    if not src_perms.read_message_history:
+        missing.append("Leer historial (origen)")
+    if not dst_perms.view_channel:
+        missing.append("Ver canal (destino)")
+    if not dst_perms.send_messages:
+        missing.append("Enviar mensajes (destino)")
+    if not dst_perms.embed_links:
+        missing.append("Insertar enlaces (destino)")
+    if missing:
+        await interaction.response.send_message(
+            "❌ No puedo preparar la fusión porque me faltan: **" + ", ".join(missing) + "**.",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    try:
+        messages = await collect_fusion_messages(origen)
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"❌ No pude leer el canal origen: `{e}`", ephemeral=True)
+        return
+
+    if len(messages) >= FUSION_MAX_MESSAGES:
+        await interaction.followup.send(
+            f"❌ El canal origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
+            "La herramienta se detiene antes de iniciar para evitar una migración incompleta.",
+            ephemeral=True,
+        )
+        return
+    if not messages:
+        await interaction.followup.send("⚠️ El canal origen está vacío. No hay nada que fusionar.", ephemeral=True)
+        return
+
+    final_name = fusion_final_name(origen, destino, nombre.value, nombre_personalizado)
+    final_name = fusion_clean_name(final_name)
+    embed = discord.Embed(
+        title="🔀 Vista previa de fusión de canales",
+        description=(
+            "Revisa cuidadosamente esta operación. **Los mensajes se recrearán en el destino; Discord no permite moverlos directamente.**\n\n"
+            "El canal origen solo se eliminará si activaste esa opción y **todos** los mensajes se migran correctamente."
+        ),
+        color=discord.Color.orange(),
+    )
+    embed.add_field(name="Origen", value=fusion_channel_label(origen), inline=True)
+    embed.add_field(name="Destino", value=fusion_channel_label(destino), inline=True)
+    embed.add_field(name="Mensajes", value=f"**{len(messages):,}**", inline=True)
+    embed.add_field(name="Nombre final", value=f"`#{final_name}`", inline=True)
+    embed.add_field(name="Canal origen", value="🗑️ Se eliminará si todo sale bien" if eliminar_origen else "📌 Se conservará", inline=True)
+    embed.add_field(name="Seguridad", value="No se toca el origen hasta terminar la migración.", inline=True)
+    embed.set_footer(text="La confirmación solo puede hacerla quien ejecutó el comando.")
+
+    await interaction.followup.send(
+        embed=embed,
+        view=FusionChannelsView(
+            interaction.user.id,
+            origen,
+            destino,
+            final_name,
+            eliminar_origen,
+            len(messages),
+        ),
+        ephemeral=True,
+    )
+
+
+@fusionar_canales.error
+async def fusionar_canales_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("❌ Necesitas el permiso **Gestionar canales** para usar este comando.", ephemeral=True)
+    else:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"❌ Error: {error}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ Error: {error}", ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# 9. /purge — limpieza individual de mensajes de un usuario
 # ---------------------------------------------------------------------------
 
 class PurgeConfirmView(discord.ui.View):
