@@ -41,6 +41,13 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /verify_config (rol, timeout, acción, activar) y /verify_texts (mensaje del
      panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
+6. COPIA DE SEGURIDAD DE LA PLANTILLA (/template_config, /template_sync)
+   - Sincroniza la plantilla del servidor (roles, canales y permisos) con su estado
+     actual, como una copia de seguridad: cada día, semana o mes, o cada N horas, con
+     día y hora a elección. Tras cada copia manda el enlace por mensaje privado (si no
+     puede, deja constancia en el canal de logs, sin el enlace).
+   - /template_sync la hace al momento y muestra el enlace.
+
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
 Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
@@ -115,6 +122,20 @@ VERIFY_DANGEROUS_PERMS = (
     ("manage_messages", "Gestionar mensajes"),
     ("mention_everyone", "Mencionar a todos"),
 )
+
+# --- Copia de seguridad de la plantilla del servidor (/template_config) ---
+# Valores por defecto; la configuración real se guarda en la DB. Hora local de STREAK_TZ.
+TEMPLATE_MODE_LABELS = {
+    "off": "Desactivada",
+    "daily": "Cada día",
+    "weekly": "Cada semana",
+    "monthly": "Cada mes",
+    "interval": "Cada X horas",
+}
+TEMPLATE_HOUR_DEFAULT = 4  # madrugada
+TEMPLATE_WEEKDAY_DEFAULT = 6  # domingo
+TEMPLATE_MONTHDAY_DEFAULT = 1
+TEMPLATE_INTERVAL_DEFAULT = 24  # horas
 
 DM_TEXT = (
     "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
@@ -510,6 +531,8 @@ async def on_ready() -> None:
             member_of_the_week_loop.start()
     else:
         print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID o usa /motw_set_channel.")
+    if not template_backup_loop.is_running():
+        template_backup_loop.start()
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -1301,6 +1324,330 @@ async def verify_command_error(interaction: discord.Interaction, error: discord.
 verify.error(verify_command_error)
 verify_texts.error(verify_command_error)
 verify_config.error(verify_command_error)
+
+
+# ---------------------------------------------------------------------------
+# Copia de seguridad de la plantilla del servidor (/template_config, /template_sync)
+# ---------------------------------------------------------------------------
+
+def _meta_int(key: str, default: int) -> int:
+    value = db_meta_get(key)
+    return int(value) if value is not None else default
+
+
+def get_template_mode() -> str:
+    value = db_meta_get("template_mode")
+    return value if value in TEMPLATE_MODE_LABELS else "off"
+
+
+def get_template_hour() -> int:
+    return _meta_int("template_hour", TEMPLATE_HOUR_DEFAULT)
+
+
+def get_template_weekday() -> int:
+    return _meta_int("template_weekday", TEMPLATE_WEEKDAY_DEFAULT)
+
+
+def get_template_monthday() -> int:
+    return _meta_int("template_monthday", TEMPLATE_MONTHDAY_DEFAULT)
+
+
+def get_template_interval() -> int:
+    return _meta_int("template_interval_hours", TEMPLATE_INTERVAL_DEFAULT)
+
+
+def template_schedule_text() -> str:
+    mode = get_template_mode()
+    hour = f"{get_template_hour()}:00 (hora de RD)"
+    if mode == "off":
+        return "Desactivada"
+    if mode == "daily":
+        return f"Cada día a las {hour}"
+    if mode == "weekly":
+        return f"Cada semana, {MOTW_WEEKDAY_NAMES[get_template_weekday()]} a las {hour}"
+    if mode == "monthly":
+        return f"Cada mes, el día {get_template_monthday()} a las {hour}"
+    return f"Cada {get_template_interval()} h"
+
+
+def template_last_slot(mode: str, now: datetime) -> datetime | None:
+    """Último turno programado (hora local de STREAK_TZ) que ya pasó respecto a `now`.
+    Solo para los modos de calendario (diario, semanal, mensual)."""
+    hour = get_template_hour()
+    if mode == "daily":
+        slot = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if slot > now:
+            slot -= timedelta(days=1)
+        return slot
+    if mode == "weekly":
+        days_back = (now.weekday() - get_template_weekday()) % 7
+        slot = (now - timedelta(days=days_back)).replace(hour=hour, minute=0, second=0, microsecond=0)
+        if slot > now:
+            slot -= timedelta(days=7)
+        return slot
+    if mode == "monthly":
+        day = get_template_monthday()  # 1-28: existe en todos los meses
+        slot = now.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
+        if slot > now:
+            last_of_previous = now.replace(day=1) - timedelta(days=1)
+            slot = last_of_previous.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
+        return slot
+    return None
+
+
+def template_next_run(now_utc: datetime) -> datetime | None:
+    """Próxima copia programada, en hora local de STREAK_TZ (None si está desactivada)."""
+    mode = get_template_mode()
+    if mode == "off":
+        return None
+    if mode == "interval":
+        last = db_meta_get("template_last_run")
+        base = datetime.fromisoformat(last) if last else now_utc
+        return (base + timedelta(hours=get_template_interval())).astimezone(STREAK_TZ)
+    slot = template_last_slot(mode, now_utc.astimezone(STREAK_TZ))
+    if mode == "daily":
+        return slot + timedelta(days=1)
+    if mode == "weekly":
+        return slot + timedelta(days=7)
+    first_of_next = (slot.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return first_of_next.replace(day=get_template_monthday())
+
+
+def template_due(now_utc: datetime) -> bool:
+    """¿Toca la copia? En el primer arranque (o tras activarla) solo arranca el reloj:
+    no hace una copia con la configuración recién cambiada."""
+    mode = get_template_mode()
+    if mode == "off":
+        return False
+    if mode == "interval":
+        last = db_meta_get("template_last_run")
+        if last is None:
+            db_meta_set("template_last_run", now_utc.isoformat())
+            return False
+        return now_utc >= datetime.fromisoformat(last) + timedelta(hours=get_template_interval())
+    slot = template_last_slot(mode, now_utc.astimezone(STREAK_TZ))
+    handled = db_meta_get("template_last_slot")
+    if handled is None:
+        db_meta_set("template_last_slot", slot.isoformat())
+        return False
+    return slot > datetime.fromisoformat(handled)
+
+
+def template_mark_done(now_utc: datetime) -> None:
+    """Da el turno actual por hecho (se llama ANTES de la copia, para no duplicarla)."""
+    db_meta_set("template_last_run", now_utc.isoformat())
+    mode = get_template_mode()
+    if mode in ("daily", "weekly", "monthly"):
+        db_meta_set("template_last_slot", template_last_slot(mode, now_utc.astimezone(STREAK_TZ)).isoformat())
+
+
+async def sync_server_template(guild: discord.Guild) -> tuple[discord.Template | None, bool | None, str | None]:
+    """Sincroniza la plantilla. Devuelve (plantilla, tenía_cambios_pendientes, error)."""
+    try:
+        templates = await guild.templates()
+    except discord.HTTPException as e:
+        return None, None, f"No pude leer las plantillas del servidor: `{e}`"
+    if not templates:
+        return None, None, "El servidor no tiene plantilla. Créala en Ajustes del servidor → Plantilla de servidor."
+    template = templates[0]
+    was_dirty = template.is_dirty
+    try:
+        template = await template.sync()
+    except discord.HTTPException as e:
+        return None, was_dirty, f"No pude sincronizar la plantilla: `{e}`"
+    return template, was_dirty, None
+
+
+def template_report_embed(template: discord.Template, was_dirty: bool | None, trigger: str) -> discord.Embed:
+    if was_dirty is True:
+        state = "✅ Había cambios pendientes y ya están sincronizados."
+    elif was_dirty is False:
+        state = "✅ Sin cambios pendientes: la plantilla ya estaba al día."
+    else:
+        state = "✅ Sincronizada (Discord no indicó si había cambios)."
+    embed = discord.Embed(
+        title="🛡️ Copia de seguridad de la plantilla",
+        description=state,
+        color=discord.Color.green(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.add_field(name="Enlace", value=template.url, inline=False)
+    synced_at = template.updated_at or datetime.now(timezone.utc)
+    embed.add_field(name="Última sincronización", value=discord.utils.format_dt(synced_at, "f"), inline=True)
+    embed.add_field(name="Usos", value=str(template.uses), inline=True)
+    embed.add_field(name="Disparada por", value=trigger, inline=True)
+    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    return embed
+
+
+async def run_scheduled_template_backup() -> None:
+    guild = bot.get_guild(_meta_int("template_guild_id", 0))
+    if guild is None:
+        print("⚠️ Copia de plantilla: no encontré el servidor configurado.")
+        return
+    template, was_dirty, error = await sync_server_template(guild)
+    if error:
+        embed = discord.Embed(
+            title="⚠️ Falló la copia de seguridad de la plantilla",
+            description=error,
+            color=discord.Color.dark_red(),
+            timestamp=datetime.now(timezone.utc),
+        )
+    else:
+        embed = template_report_embed(template, was_dirty, "programada")
+
+    sent = False
+    try:
+        user = await bot.fetch_user(_meta_int("template_user_id", 0))
+        await user.send(embed=embed)
+        sent = True
+    except discord.HTTPException:
+        pass  # incluye Forbidden (mensajes privados cerrados)
+    # El enlace nunca va al canal de logs: ahí solo queda constancia del fallo o del envío fallido.
+    if error:
+        await log_embed(guild, "⚠️ Falló la copia de seguridad de la plantilla", error, discord.Color.dark_red())
+    elif not sent:
+        await log_embed(
+            guild, "🛡️ Plantilla sincronizada (mensaje privado no enviado)",
+            "La copia se hizo, pero no pude mandarte el enlace por mensaje privado. Usa /template_sync para verlo.",
+            discord.Color.orange(),
+        )
+
+
+@tasks.loop(minutes=10)
+async def template_backup_loop() -> None:
+    """Revisa cada 10 min si toca la copia. Al comparar contra el último turno guardado en
+    la DB, también se recupera si el bot estaba caído a la hora."""
+    try:
+        now = datetime.now(timezone.utc)
+        if template_due(now):
+            template_mark_done(now)  # se marca antes; si falla, se reintenta en el próximo turno
+            await run_scheduled_template_backup()
+    except Exception:
+        traceback.print_exc()  # que un error no detenga el loop
+
+
+def template_config_summary(now_utc: datetime) -> str:
+    next_run = template_next_run(now_utc)
+    next_text = (
+        f"{discord.utils.format_dt(next_run, 'F')} ({discord.utils.format_dt(next_run, 'R')})"
+        if next_run else "—"
+    )
+    last = db_meta_get("template_last_run")
+    last_text = discord.utils.format_dt(datetime.fromisoformat(last), "f") if last and get_template_mode() != "off" else "ninguna todavía"
+    user_id = db_meta_get("template_user_id")
+    return (
+        f"**Frecuencia:** {template_schedule_text()}\n"
+        f"**Próxima copia:** {next_text}\n"
+        f"**Última copia programada:** {last_text}\n"
+        f"**Enlace por mensaje privado a:** {f'<@{user_id}>' if user_id else 'quien configure (aún sin definir)'}"
+    )
+
+
+@bot.tree.command(name="template_config", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
+@discord.app_commands.describe(
+    frecuencia="Cada cuánto se hace la copia",
+    hora="Hora del día (0-23, hora de RD)",
+    dia_semana="Día de la semana (frecuencia semanal)",
+    dia_mes="Día del mes, 1-28 (frecuencia mensual)",
+    cada_horas="Cada cuántas horas, 1-720 (frecuencia por intervalo)",
+    enviar_a="Quién recibe el enlace por mensaje privado (por defecto, tú)",
+)
+@discord.app_commands.choices(
+    frecuencia=[
+        discord.app_commands.Choice(name=label, value=value) for value, label in TEMPLATE_MODE_LABELS.items()
+    ],
+    dia_semana=[
+        discord.app_commands.Choice(name=name, value=i) for i, name in enumerate(MOTW_WEEKDAY_NAMES)
+    ],
+)
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def template_config(
+    interaction: discord.Interaction,
+    frecuencia: Optional[discord.app_commands.Choice[str]] = None,
+    hora: Optional[discord.app_commands.Range[int, 0, 23]] = None,
+    dia_semana: Optional[discord.app_commands.Choice[int]] = None,
+    dia_mes: Optional[discord.app_commands.Range[int, 1, 28]] = None,
+    cada_horas: Optional[discord.app_commands.Range[int, 1, 720]] = None,
+    enviar_a: Optional[discord.User] = None,
+) -> None:
+    guild = interaction.guild
+    now = datetime.now(timezone.utc)
+    if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, cada_horas, enviar_a)):
+        await interaction.response.send_message(template_config_summary(now), ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+
+    changes: list[str] = []
+    if frecuencia is not None:
+        db_meta_set("template_mode", frecuencia.value)
+        changes.append(f"frecuencia → {frecuencia.name}")
+    if hora is not None:
+        db_meta_set("template_hour", str(hora))
+        changes.append(f"hora → {hora}:00")
+    if dia_semana is not None:
+        db_meta_set("template_weekday", str(dia_semana.value))
+        changes.append(f"día de la semana → {dia_semana.name}")
+    if dia_mes is not None:
+        db_meta_set("template_monthday", str(dia_mes))
+        changes.append(f"día del mes → {dia_mes}")
+    if cada_horas is not None:
+        db_meta_set("template_interval_hours", str(cada_horas))
+        changes.append(f"intervalo → {cada_horas} h")
+    db_meta_set("template_guild_id", str(guild.id))
+    if enviar_a is not None:
+        db_meta_set("template_user_id", str(enviar_a.id))
+        changes.append(f"enviar a → {enviar_a.mention}")
+    elif db_meta_get("template_user_id") is None:
+        db_meta_set("template_user_id", str(interaction.user.id))
+
+    # Un cambio de horario solo afecta a la PRÓXIMA copia: da por hecho el turno actual
+    # (o reinicia el reloj del intervalo) para que no dispare una copia inmediata.
+    if get_template_mode() == "interval":
+        db_meta_set("template_last_run", now.isoformat())
+    elif get_template_mode() in ("daily", "weekly", "monthly"):
+        db_meta_set("template_last_slot", template_last_slot(get_template_mode(), now.astimezone(STREAK_TZ)).isoformat())
+
+    note = ""
+    if get_template_mode() != "off":
+        try:
+            if not await guild.templates():
+                note = "\n\n⚠️ El servidor aún no tiene plantilla: créala en Ajustes del servidor → Plantilla de servidor, o la copia fallará."
+        except discord.HTTPException as e:
+            note = f"\n\n⚠️ No pude comprobar si hay plantilla: `{e}`"
+
+    await interaction.followup.send(
+        "✅ Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(now) + note,
+        ephemeral=True,
+    )
+    await log_embed(
+        guild, "⚙️ Copia de seguridad de la plantilla actualizada",
+        f"{interaction.user.mention}: " + "; ".join(changes),
+        discord.Color.blurple(),
+    )
+
+
+@bot.tree.command(name="template_sync", description="Sincronizar ahora la plantilla del servidor y ver su enlace.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def template_sync(interaction: discord.Interaction) -> None:
+    await interaction.response.defer(ephemeral=True)
+    template, was_dirty, error = await sync_server_template(interaction.guild)
+    if error:
+        await interaction.followup.send(f"❌ {error}", ephemeral=True)
+        return
+    await interaction.followup.send(embed=template_report_embed(template, was_dirty, "manual"), ephemeral=True)
+    await log_embed(
+        interaction.guild, "🛡️ Plantilla sincronizada manualmente",
+        f"{interaction.user.mention} sincronizó la plantilla del servidor.",
+        discord.Color.blurple(),
+    )
+
+
+# Manejador genérico (permisos / errores), el mismo de los comandos de verificación.
+template_config.error(verify_command_error)
+template_sync.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
