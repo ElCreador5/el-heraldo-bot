@@ -61,6 +61,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 
 import asyncio
 import os
+import re
 import sqlite3
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -1947,8 +1948,11 @@ HONEYPOT_ACTION_LABELS = {
     "ban": "Banear",
     "timeout": "Aislar (timeout)",
 }
-HONEYPOT_PURGE_HOURS_DEFAULT = 24     # 0-168: borra mensajes recientes del castigado
-HONEYPOT_TIMEOUT_HOURS_DEFAULT = 24   # 1-672
+HONEYPOT_PURGE_MINUTES_DEFAULT = 24 * 60    # borra mensajes recientes del castigado (0 a 7 días)
+HONEYPOT_PURGE_MAX_MINUTES = 7 * 24 * 60    # límite de Discord para borrar historial al banear
+HONEYPOT_TIMEOUT_MINUTES_DEFAULT = 24 * 60  # duración del timeout (1 min a 28 días)
+HONEYPOT_TIMEOUT_MIN_MINUTES = 1
+HONEYPOT_TIMEOUT_MAX_MINUTES = 28 * 24 * 60  # límite de Discord para timeouts
 HONEYPOT_WARNING_TEXT_DEFAULT = (
     "Este canal es un **honeypot**: una trampa que atrapa bots de spam y que todos los "
     "bots ven. **Cualquier mensaje enviado aquí activa un castigo automático.** "
@@ -2081,14 +2085,58 @@ def hp_action() -> str:
     return db_meta_get("honeypot_action") or "kick"
 
 
-def hp_purge_hours() -> int:
-    v = db_meta_get("honeypot_purge_hours")
-    return int(v) if v is not None else HONEYPOT_PURGE_HOURS_DEFAULT
+_DURATION_RE = re.compile(r"(\d+)\s*(d(?:[ií]as?)?|h(?:oras?)?|m(?:in(?:utos?)?)?)(?![a-záéíóú])", re.IGNORECASE)
 
 
-def hp_timeout_hours() -> int:
-    v = db_meta_get("honeypot_timeout_hours")
-    return int(v) if v is not None else HONEYPOT_TIMEOUT_HOURS_DEFAULT
+def parse_duration(text: str, min_minutes: int, max_minutes: int) -> int:
+    """Convierte '30m', '12h', '2d' o '1d 12h 30m' (también 'días/horas/minutos') en minutos.
+    '0' significa sin duración (solo válido si min_minutes es 0). Lanza ValueError con
+    un mensaje listo para mostrar al usuario."""
+    raw = text.strip().lower()
+    example = "Usa d (días), h (horas) y m (minutos), por ejemplo `30m`, `12h`, `2d` o `1d 12h 30m`."
+    if raw == "0":
+        if min_minutes > 0:
+            raise ValueError(f"El mínimo es {format_duration(min_minutes)}. {example}")
+        return 0
+    matches = list(_DURATION_RE.finditer(raw))
+    leftover = _DURATION_RE.sub("", raw).replace(",", "").replace(" y ", "").strip()
+    if not matches or leftover:
+        raise ValueError(f"No entendí `{text}`. {example}")
+    total = 0
+    for m in matches:
+        unit = m.group(2)[0]
+        total += int(m.group(1)) * {"d": 1440, "h": 60, "m": 1}[unit]
+    if total < min_minutes or total > max_minutes:
+        raise ValueError(
+            f"`{text}` queda fuera del rango permitido "
+            f"({format_duration(min_minutes)} – {format_duration(max_minutes)})."
+        )
+    return total
+
+
+def format_duration(minutes: int) -> str:
+    if minutes <= 0:
+        return "0 min"
+    d, rest = divmod(minutes, 1440)
+    h, m = divmod(rest, 60)
+    parts = [f"{d} d" if d else "", f"{h} h" if h else "", f"{m} min" if m else ""]
+    return " ".join(p for p in parts if p)
+
+
+def hp_purge_minutes() -> int:
+    v = db_meta_get("honeypot_purge_minutes")
+    if v is not None:
+        return int(v)
+    old = db_meta_get("honeypot_purge_hours")  # compatibilidad con la versión en horas
+    return int(old) * 60 if old is not None else HONEYPOT_PURGE_MINUTES_DEFAULT
+
+
+def hp_timeout_minutes() -> int:
+    v = db_meta_get("honeypot_timeout_minutes")
+    if v is not None:
+        return int(v)
+    old = db_meta_get("honeypot_timeout_hours")
+    return int(old) * 60 if old is not None else HONEYPOT_TIMEOUT_MINUTES_DEFAULT
 
 
 def hp_warning_enabled() -> bool:
@@ -2128,8 +2176,8 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Estado:** {estado}",
         f"**Canales trampa:** {trap_text}",
         f"**Acción:** {HONEYPOT_ACTION_LABELS.get(hp_action(), hp_action())}",
-        f"**Borrar historial:** {hp_purge_hours()} h",
-        f"**Duración del timeout:** {hp_timeout_hours()} h",
+        f"**Borrar historial:** {format_duration(hp_purge_minutes())}",
+        f"**Duración del timeout:** {format_duration(hp_timeout_minutes())}",
         f"**Aviso fijado:** {'sí' if hp_warning_enabled() else 'no'}"
         + (" (texto personalizado)" if db_meta_get("honeypot_warning_text") else " (texto por defecto)"),
         f"**Rol a mencionar en reportes:** {ping}",
@@ -2202,9 +2250,9 @@ async def hp_sync_all_warnings(guild: discord.Guild) -> list[str]:
 
 # --- Castigo ----------------------------------------------------------------
 
-async def hp_purge_messages(guild: discord.Guild, member: discord.Member, hours: int) -> None:
+async def hp_purge_messages(guild: discord.Guild, member: discord.Member, minutes: int) -> None:
     """Borra los mensajes recientes de un miembro (usado con timeout, que no purga solo)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     for ch in guild.text_channels:
         perms = ch.permissions_for(guild.me)
         if not (perms.read_message_history and perms.manage_messages):
@@ -2219,32 +2267,33 @@ async def hp_purge_messages(guild: discord.Guild, member: discord.Member, hours:
 async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
     guild = member.guild
     reason = "Honeypot: escribió en un canal trampa"
-    purge_h = hp_purge_hours()
+    purge_m = hp_purge_minutes()
+    purge_txt = format_duration(purge_m)
     if action == "log":
         return True, "Solo registrado (sin castigo)"
     if member.top_role >= guild.me.top_role:
         return False, "Su rol es igual o superior al del bot (jerarquía de roles)"
     try:
         if action == "kick":
-            if purge_h > 0:
+            if purge_m > 0:
                 # Ban + unban = expulsión que además borra el historial reciente.
-                await guild.ban(member, delete_message_seconds=purge_h * 3600, reason=reason)
+                await guild.ban(member, delete_message_seconds=purge_m * 60, reason=reason)
                 try:
                     await guild.unban(member, reason="Honeypot: expulsar y purgar")
                 except discord.HTTPException as e:
                     return True, f"Baneado, pero no pude quitar el ban (`{e}`)"
-                return True, f"Expulsado; mensajes de las últimas {purge_h} h borrados"
+                return True, f"Expulsado; mensajes de los últimos {purge_txt} borrados"
             await member.kick(reason=reason)
             return True, "Expulsado"
         if action == "ban":
-            await guild.ban(member, delete_message_seconds=purge_h * 3600, reason=reason)
-            return True, f"Baneado; mensajes de las últimas {purge_h} h borrados" if purge_h else "Baneado"
+            await guild.ban(member, delete_message_seconds=purge_m * 60, reason=reason)
+            return True, f"Baneado; mensajes de los últimos {purge_txt} borrados" if purge_m else "Baneado"
         if action == "timeout":
-            hours = hp_timeout_hours()
-            await member.timeout(timedelta(hours=hours), reason=reason)
-            if purge_h > 0:
-                asyncio.create_task(hp_purge_messages(guild, member, purge_h))
-            return True, f"Aislado {hours} h" + (f"; borrando mensajes de las últimas {purge_h} h" if purge_h else "")
+            minutes = hp_timeout_minutes()
+            await member.timeout(timedelta(minutes=minutes), reason=reason)
+            if purge_m > 0:
+                asyncio.create_task(hp_purge_messages(guild, member, purge_m))
+            return True, f"Aislado {format_duration(minutes)}" + (f"; borrando mensajes de los últimos {purge_txt}" if purge_m else "")
     except discord.Forbidden:
         return False, "Faltan permisos (Banear / Expulsar / Moderar miembros)"
     except discord.HTTPException as e:
@@ -2405,8 +2454,8 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
 @discord.app_commands.describe(
     activado="Activar o desactivar el honeypot",
     accion="Qué hacer con quien caiga en la trampa",
-    purga_horas="Borrar los mensajes de las últimas N horas del castigado (0-168)",
-    timeout_horas="Duración del timeout si la acción es Aislar (1-672)",
+    purga="Borrar mensajes recientes del castigado: 30m, 12h, 2d, 1d 12h… (0 = no borrar; máx. 7d)",
+    timeout="Duración del timeout si la acción es Aislar: 30m, 12h, 2d… (1m a 28d)",
     aviso="Publicar un aviso fijado en cada canal trampa",
     ping_rol="Rol a mencionar en cada reporte",
 )
@@ -2420,13 +2469,13 @@ async def honeypot_config(
     interaction: discord.Interaction,
     activado: Optional[bool] = None,
     accion: Optional[discord.app_commands.Choice[str]] = None,
-    purga_horas: Optional[discord.app_commands.Range[int, 0, 168]] = None,
-    timeout_horas: Optional[discord.app_commands.Range[int, 1, 672]] = None,
+    purga: Optional[str] = None,
+    timeout: Optional[str] = None,
     aviso: Optional[bool] = None,
     ping_rol: Optional[discord.Role] = None,
 ) -> None:
     guild = interaction.guild
-    if all(v is None for v in (activado, accion, purga_horas, timeout_horas, aviso, ping_rol)):
+    if all(v is None for v in (activado, accion, purga, timeout, aviso, ping_rol)):
         await interaction.response.send_message(hp_config_summary(guild), ephemeral=True)
         return
     if activado and not hp_traps():
@@ -2434,6 +2483,17 @@ async def honeypot_config(
             "❌ No lo activé: añade al menos un canal trampa con `/honeypot add` o `/honeypot create`.",
             ephemeral=True,
         )
+        return
+
+    # Validar duraciones antes de guardar nada.
+    purga_min = timeout_min = None
+    try:
+        if purga is not None:
+            purga_min = parse_duration(purga, 0, HONEYPOT_PURGE_MAX_MINUTES)
+        if timeout is not None:
+            timeout_min = parse_duration(timeout, HONEYPOT_TIMEOUT_MIN_MINUTES, HONEYPOT_TIMEOUT_MAX_MINUTES)
+    except ValueError as e:
+        await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
         return
 
     changes: list[str] = []
@@ -2445,12 +2505,12 @@ async def honeypot_config(
     if accion is not None:
         db_meta_set("honeypot_action", accion.value)
         changes.append(f"acción → {accion.name}")
-    if purga_horas is not None:
-        db_meta_set("honeypot_purge_hours", str(purga_horas))
-        changes.append(f"purga → {purga_horas} h")
-    if timeout_horas is not None:
-        db_meta_set("honeypot_timeout_hours", str(timeout_horas))
-        changes.append(f"timeout → {timeout_horas} h")
+    if purga_min is not None:
+        db_meta_set("honeypot_purge_minutes", str(purga_min))
+        changes.append(f"purga → {format_duration(purga_min)}")
+    if timeout_min is not None:
+        db_meta_set("honeypot_timeout_minutes", str(timeout_min))
+        changes.append(f"timeout → {format_duration(timeout_min)}")
     if ping_rol is not None:
         db_meta_set("honeypot_ping_role", str(ping_rol.id))
         changes.append(f"ping → {ping_rol.mention}")
