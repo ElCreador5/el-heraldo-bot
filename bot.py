@@ -49,9 +49,16 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /template_sync la hace al momento y muestra el enlace.
 
 7. HONEYPOT (/honeypot)
-   - Canales trampa visibles para todos; quien escriba (y no esté exento) sufre expulsar+purgar,
-     banear, timeout o solo registrar. Aviso fijado automático, exenciones, protección contra
-     fallos (pausa si caen varios miembros antiguos) e historial de capturas.
+   - Canales trampa visibles para todos; quien escriba (y no esté exento) sufre, en orden:
+     se le quitan todos los roles menos el de verificación y se le pone el rol de castigo
+     (elegible), mientras sus mensajes se purgan en segundo plano (todos, una cantidad o un
+     rango de tiempo, sin tope). También hay timeout o solo registrar.
+     /honeypot release devuelve sus roles. Aviso fijado automático, exenciones, protección
+     contra fallos (pausa si caen varios miembros antiguos) e historial de capturas.
+
+8. PURGA (/purge)
+   - Borra mensajes de un usuario sin límites: todos, sus N más recientes o un rango de tiempo
+     (desde/hasta), en todo el servidor o en un canal/hilo. "Todos" pide confirmación.
 
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
@@ -60,12 +67,14 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 """
 
 import asyncio
+import json
 import os
 import re
 import sqlite3
 import traceback
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Union
 
 import discord
 from discord.ext import commands, tasks
@@ -671,7 +680,7 @@ async def check_pending_verifications() -> None:
 
 
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
-    """Devuelve 'verificado', 'expulsado' o 'ausente'/'sin-guild'."""
+    """Devuelve 'verificado', 'expulsado', 'castigado' o 'ausente'/'sin-guild'."""
     guild = bot.get_guild(guild_id)
     if guild is None:
         return "sin-guild"
@@ -679,6 +688,11 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     if member is None:
         db_clear_tentado(user_id)  # ya no está, nada que hacer
         return "ausente"
+
+    punish_id = hp_punish_role_id()
+    if punish_id and any(r.id == punish_id for r in member.roles):
+        db_clear_tentado(user_id)  # castigado por el honeypot: no se expulsa por falta de orientación
+        return "castigado"
 
     role_ids = {r.id for r in member.roles}
     if role_ids & EVAL_ROLE_IDS:
@@ -1943,13 +1957,11 @@ async def motw_test_error(interaction: discord.Interaction, error: discord.app_c
 # exempt_add, exempt_remove, history, resume); los valores de abajo son por defecto.
 
 HONEYPOT_ACTION_LABELS = {
-    "kick": "Expulsar y purgar",
+    "role": "Purgar y aplicar rol de castigo",
     "log": "Solo registrar",
-    "ban": "Banear",
     "timeout": "Aislar (timeout)",
 }
-HONEYPOT_PURGE_MINUTES_DEFAULT = 24 * 60    # borra mensajes recientes del castigado (0 a 7 días)
-HONEYPOT_PURGE_MAX_MINUTES = 7 * 24 * 60    # límite de Discord para borrar historial al banear
+HONEYPOT_PURGE_DEFAULT = ("time", 24 * 60)  # por defecto: mensajes de las últimas 24 h (sin tope máximo)
 HONEYPOT_TIMEOUT_MINUTES_DEFAULT = 24 * 60  # duración del timeout (1 min a 28 días)
 HONEYPOT_TIMEOUT_MIN_MINUTES = 1
 HONEYPOT_TIMEOUT_MAX_MINUTES = 28 * 24 * 60  # límite de Discord para timeouts
@@ -1979,6 +1991,10 @@ def honeypot_db_init() -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS honeypot_exempt ("
         "kind TEXT NOT NULL, target_id INTEGER NOT NULL, PRIMARY KEY (kind, target_id))"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS honeypot_punished ("
+        "user_id INTEGER PRIMARY KEY, role_ids TEXT NOT NULL, punished_at TEXT NOT NULL)"
     )
     conn.execute(
         "CREATE TABLE IF NOT EXISTS honeypot_triggers ("
@@ -2039,6 +2055,32 @@ def hp_exempt_remove(kind: str, target_id: int) -> None:
     conn.close()
 
 
+def hp_save_punished(user_id: int, role_ids: list[int]) -> None:
+    """Guarda los roles quitados para poder devolverlos con /honeypot release."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO honeypot_punished (user_id, role_ids, punished_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET role_ids = excluded.role_ids, punished_at = excluded.punished_at",
+        (user_id, json.dumps(role_ids), datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_get_punished(user_id: int) -> list[int] | None:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT role_ids FROM honeypot_punished WHERE user_id = ?", (user_id,)).fetchone()
+    conn.close()
+    return json.loads(row[0]) if row else None
+
+
+def hp_clear_punished(user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM honeypot_punished WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
 def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
                    success: bool, note: str) -> None:
     conn = sqlite3.connect(DB_PATH)
@@ -2082,7 +2124,26 @@ def honeypot_paused() -> bool:
 
 
 def hp_action() -> str:
-    return db_meta_get("honeypot_action") or "kick"
+    v = db_meta_get("honeypot_action")
+    if v in (None, "", "kick", "ban"):  # kick/ban ya no existen: el valor por defecto es el rol de castigo
+        return "role"
+    return v
+
+
+def hp_punish_role_id() -> int:
+    v = db_meta_get("honeypot_punish_role")
+    return int(v) if v else 0
+
+
+def hp_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
+    """Motivo por el que el Heraldo no puede usar este rol como rol de castigo, o None."""
+    if role.is_default():
+        return "es @everyone"
+    if role.managed:
+        return "es un rol gestionado por una integración o un bot"
+    if role >= guild.me.top_role:
+        return "está al mismo nivel o por encima del rol más alto del Heraldo"
+    return None
 
 
 _DURATION_RE = re.compile(r"(\d+)\s*(d(?:[ií]as?)?|h(?:oras?)?|m(?:in(?:utos?)?)?)(?![a-záéíóú])", re.IGNORECASE)
@@ -2123,12 +2184,19 @@ def format_duration(minutes: int) -> str:
     return " ".join(p for p in parts if p)
 
 
-def hp_purge_minutes() -> int:
-    v = db_meta_get("honeypot_purge_minutes")
-    if v is not None:
-        return int(v)
-    old = db_meta_get("honeypot_purge_hours")  # compatibilidad con la versión en horas
-    return int(old) * 60 if old is not None else HONEYPOT_PURGE_MINUTES_DEFAULT
+def hp_purge_spec() -> tuple[str, int]:
+    """(tipo, valor): none | all | count (N mensajes) | time (minutos hacia atrás)."""
+    v = db_meta_get("honeypot_purge_spec")
+    if v:
+        kind, _, val = v.partition(":")
+        return kind, int(val or 0)
+    old = db_meta_get("honeypot_purge_minutes")  # compatibilidad con versiones anteriores
+    if old is not None:
+        return ("time", int(old)) if int(old) > 0 else ("none", 0)
+    old = db_meta_get("honeypot_purge_hours")
+    if old is not None:
+        return ("time", int(old) * 60) if int(old) > 0 else ("none", 0)
+    return HONEYPOT_PURGE_DEFAULT
 
 
 def hp_timeout_minutes() -> int:
@@ -2176,7 +2244,8 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Estado:** {estado}",
         f"**Canales trampa:** {trap_text}",
         f"**Acción:** {HONEYPOT_ACTION_LABELS.get(hp_action(), hp_action())}",
-        f"**Borrar historial:** {format_duration(hp_purge_minutes())}",
+        f"**Rol de castigo:** {f'<@&{hp_punish_role_id()}>' if hp_punish_role_id() else '—'}",
+        f"**Purga al castigado:** {format_purge_spec(*hp_purge_spec())}",
         f"**Duración del timeout:** {format_duration(hp_timeout_minutes())}",
         f"**Aviso fijado:** {'sí' if hp_warning_enabled() else 'no'}"
         + (" (texto personalizado)" if db_meta_get("honeypot_warning_text") else " (texto por defecto)"),
@@ -2250,52 +2319,301 @@ async def hp_sync_all_warnings(guild: discord.Guild) -> list[str]:
 
 # --- Castigo ----------------------------------------------------------------
 
-async def hp_purge_messages(guild: discord.Guild, member: discord.Member, minutes: int) -> None:
-    """Borra los mensajes recientes de un miembro (usado con timeout, que no purga solo)."""
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    for ch in guild.text_channels:
-        perms = ch.permissions_for(guild.me)
-        if not (perms.read_message_history and perms.manage_messages):
+# --- Motor de purga (sin límites): lo usan el honeypot y /purge ----------------
+
+PURGE_MAX_MINUTES = 100 * 365 * 24 * 60  # 100 años: en la práctica, sin tope
+_purge_running: set[tuple[int, int]] = set()  # (guild_id, user_id) con una purga en curso
+
+
+@dataclass
+class PurgeResult:
+    deleted: int = 0
+    failed: int = 0
+    channels_scanned: int = 0
+    channels_skipped: int = 0
+
+
+def parse_purge_spec(text: str) -> tuple[str, int]:
+    """'todo' | '200 mensajes' | '30m' / '12h' / '2d' / '1d 12h' | '0' -> (tipo, valor).
+    Tipos: none, all, count (N mensajes), time (minutos hacia atrás)."""
+    raw = text.strip().lower()
+    if raw in ("0", "ninguno", "nada", "no"):
+        return "none", 0
+    if raw in ("todo", "todos", "all", "siempre"):
+        return "all", 0
+    m = re.fullmatch(r"(\d+)\s*(?:msgs?|mensajes?)", raw)
+    if m:
+        n = int(m.group(1))
+        if n < 1:
+            raise ValueError("La cantidad de mensajes debe ser al menos 1.")
+        return "count", n
+    try:
+        return "time", parse_duration(raw, 1, PURGE_MAX_MINUTES)
+    except ValueError:
+        raise ValueError(
+            f"No entendí `{text}`. Usa `todo`, una cantidad (`200 mensajes`), un tiempo hacia atrás "
+            f"(`30m`, `12h`, `2d`, `1d 12h 30m`) o `0` para no borrar."
+        )
+
+
+def format_purge_spec(kind: str, value: int) -> str:
+    if kind == "none":
+        return "no borrar"
+    if kind == "all":
+        return "todos sus mensajes"
+    if kind == "count":
+        return f"sus últimos {value} mensajes"
+    return f"mensajes de los últimos {format_duration(value)}"
+
+
+async def purge_targets(guild: discord.Guild, only=None) -> list:
+    """Canales y hilos donde buscar mensajes (incluye hilos activos y archivados públicos)."""
+    if only is not None:
+        if isinstance(only, discord.ForumChannel):
+            threads = list(only.threads)
+            try:
+                async for t in only.archived_threads(limit=None):
+                    threads.append(t)
+            except discord.HTTPException:
+                pass
+            return threads
+        return [only]
+    targets: dict[int, object] = {}
+    for ch in [*guild.text_channels, *guild.voice_channels, *guild.stage_channels, *guild.threads]:
+        targets[ch.id] = ch
+    for parent in [*guild.text_channels, *guild.forums]:
+        try:
+            async for t in parent.archived_threads(limit=None):
+                targets[t.id] = t
+        except discord.HTTPException:
+            continue  # sin permiso para ver hilos archivados de ese canal
+    for forum in guild.forums:
+        for t in forum.threads:
+            targets[t.id] = t
+    return list(targets.values())
+
+
+async def _collect_user_messages(ch, user_id: int, after, before, limit: int | None) -> list[int]:
+    ids: list[int] = []
+    kwargs = {"limit": None, "after": after, "before": before}
+    if limit is not None:
+        kwargs["oldest_first"] = False  # para quedarnos con los más recientes
+    async for m in ch.history(**kwargs):
+        if m.author.id == user_id:
+            ids.append(m.id)
+            if limit is not None and len(ids) >= limit:
+                break
+    return ids
+
+
+async def _delete_ids(ch, ids: list[int]) -> tuple[int, int]:
+    """Borra mensajes por id: en bloques de 100 los de menos de 14 días, uno a uno los antiguos."""
+    bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=14) + timedelta(minutes=10)
+    recent = [i for i in ids if discord.utils.snowflake_time(i) > bulk_cutoff]
+    old = [i for i in ids if discord.utils.snowflake_time(i) <= bulk_cutoff]
+    deleted = failed = 0
+
+    async def delete_one(message_id: int) -> None:
+        nonlocal deleted, failed
+        try:
+            await ch.get_partial_message(message_id).delete()
+            deleted += 1
+        except discord.NotFound:
+            pass  # ya no existe
+        except discord.HTTPException:
+            failed += 1
+
+    for start in range(0, len(recent), 100):
+        chunk = recent[start:start + 100]
+        if len(chunk) == 1:
+            await delete_one(chunk[0])
             continue
         try:
-            await ch.purge(limit=500, after=cutoff, check=lambda m: m.author.id == member.id, bulk=True)
+            await ch.delete_messages([discord.Object(i) for i in chunk])
+            deleted += len(chunk)
         except discord.HTTPException:
-            continue
-        await asyncio.sleep(0.5)
+            for message_id in chunk:  # un id inválido tumba el bloque: reintento uno a uno
+                await delete_one(message_id)
+    for message_id in old:
+        await delete_one(message_id)
+    return deleted, failed
+
+
+async def purge_user_messages(
+    guild: discord.Guild,
+    user_id: int,
+    *,
+    channel=None,
+    after: datetime | None = None,
+    before: datetime | None = None,
+    limit: int | None = None,
+    progress=None,
+) -> PurgeResult:
+    """Borra mensajes de un usuario (aunque ya no esté en el servidor), sin tope propio:
+    - sin after/before/limit -> TODOS sus mensajes
+    - after/before -> los de ese rango de tiempo
+    - limit -> sus N mensajes más recientes (dentro del rango, si lo hay)
+    `progress(hechos, total, borrados)` se llama a medida que avanza."""
+    result = PurgeResult()
+    targets = await purge_targets(guild, channel)
+    sem = asyncio.Semaphore(4)  # 4 canales a la vez; discord.py gestiona el rate limit
+    collected: list[tuple[object, list[int]]] = []
+    done = 0
+
+    async def work(ch) -> None:
+        nonlocal done
+        perms = ch.permissions_for(guild.me)
+        if not (perms.view_channel and perms.read_message_history and perms.manage_messages):
+            result.channels_skipped += 1
+            return
+        async with sem:
+            try:
+                ids = await _collect_user_messages(ch, user_id, after, before, limit)
+                result.channels_scanned += 1
+                if limit is None and ids:  # sin tope global: se borra canal a canal
+                    d, f = await _delete_ids(ch, ids)
+                    result.deleted += d
+                    result.failed += f
+                elif ids:
+                    collected.append((ch, ids))
+            except discord.HTTPException:
+                result.channels_skipped += 1
+        done += 1
+        if progress:
+            try:
+                await progress(done, len(targets), result.deleted)
+            except Exception:
+                pass
+
+    await asyncio.gather(*(work(ch) for ch in targets))
+
+    if limit is not None and collected:
+        # Los N más recientes entre todos los canales (el id de un mensaje crece con el tiempo).
+        pairs = sorted(((i, ch) for ch, ids in collected for i in ids), key=lambda p: p[0], reverse=True)[:limit]
+        by_channel: dict[int, tuple[object, list[int]]] = {}
+        for message_id, ch in pairs:
+            by_channel.setdefault(ch.id, (ch, []))[1].append(message_id)
+        for ch, ids in by_channel.values():
+            d, f = await _delete_ids(ch, ids)
+            result.deleted += d
+            result.failed += f
+    return result
+
+
+def purge_result_text(result: PurgeResult) -> str:
+    text = f"**{result.deleted}** mensaje(s) borrado(s) en {result.channels_scanned} canal(es)/hilo(s)"
+    if result.failed:
+        text += f"; {result.failed} no se pudieron borrar"
+    if result.channels_skipped:
+        text += f"; {result.channels_skipped} omitido(s) por falta de permisos"
+    return text
+
+
+async def run_purge_job(
+    guild: discord.Guild,
+    user: discord.abc.User,
+    *,
+    scope_text: str,
+    requested_by: str,
+    channel=None,
+    after: datetime | None = None,
+    before: datetime | None = None,
+    limit: int | None = None,
+    progress=None,
+    title: str = "🧹 Purga completada",
+) -> PurgeResult | None:
+    """Ejecuta una purga con control de duplicados y reporta el resultado en el log."""
+    key = (guild.id, user.id)
+    if key in _purge_running:
+        return None
+    _purge_running.add(key)
+    try:
+        result = await purge_user_messages(
+            guild, user.id, channel=channel, after=after, before=before, limit=limit, progress=progress
+        )
+    except Exception:
+        traceback.print_exc()
+        await log_embed(
+            guild, "⚠️ Purga fallida",
+            f"{requested_by} · {user.mention} · {scope_text}\nOcurrió un error; revisa los logs del bot.",
+            discord.Color.red(),
+        )
+        raise
+    finally:
+        _purge_running.discard(key)
+    await log_embed(
+        guild, title,
+        f"{requested_by} · {user.mention} (`{user.id}`)\nAlcance: {scope_text}\n{purge_result_text(result)}",
+        discord.Color.green(),
+    )
+    return result
+
+
+def hp_start_purge(member: discord.Member) -> str | None:
+    """Lanza la purga del honeypot en segundo plano (sin tope: puede tardar). Devuelve un texto
+    para el reporte, o None si la purga está desactivada."""
+    kind, value = hp_purge_spec()
+    if kind == "none":
+        return None
+    after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
+    limit = value if kind == "count" else None
+    scope = format_purge_spec(kind, value)
+    asyncio.create_task(
+        run_purge_job(
+            member.guild, member, scope_text=scope, requested_by="🍯 Honeypot",
+            after=after, limit=limit, title="🍯 Purga del honeypot completada",
+        )
+    )
+    return f"purga en segundo plano ({scope})"
 
 
 async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
     guild = member.guild
     reason = "Honeypot: escribió en un canal trampa"
-    purge_m = hp_purge_minutes()
-    purge_txt = format_duration(purge_m)
     if action == "log":
         return True, "Solo registrado (sin castigo)"
     if member.top_role >= guild.me.top_role:
         return False, "Su rol es igual o superior al del bot (jerarquía de roles)"
     try:
-        if action == "kick":
-            if purge_m > 0:
-                # Ban + unban = expulsión que además borra el historial reciente.
-                await guild.ban(member, delete_message_seconds=purge_m * 60, reason=reason)
-                try:
-                    await guild.unban(member, reason="Honeypot: expulsar y purgar")
-                except discord.HTTPException as e:
-                    return True, f"Baneado, pero no pude quitar el ban (`{e}`)"
-                return True, f"Expulsado; mensajes de los últimos {purge_txt} borrados"
-            await member.kick(reason=reason)
-            return True, "Expulsado"
-        if action == "ban":
-            await guild.ban(member, delete_message_seconds=purge_m * 60, reason=reason)
-            return True, f"Baneado; mensajes de los últimos {purge_txt} borrados" if purge_m else "Baneado"
         if action == "timeout":
             minutes = hp_timeout_minutes()
             await member.timeout(timedelta(minutes=minutes), reason=reason)
-            if purge_m > 0:
-                asyncio.create_task(hp_purge_messages(guild, member, purge_m))
-            return True, f"Aislado {format_duration(minutes)}" + (f"; borrando mensajes de los últimos {purge_txt}" if purge_m else "")
+            purge_note = hp_start_purge(member)
+            return True, f"Aislado {format_duration(minutes)}" + (f"; {purge_note}" if purge_note else "")
+        if action == "role":
+            punish_role = guild.get_role(hp_punish_role_id())
+            if punish_role is None:
+                return False, "No hay rol de castigo configurado (usa /honeypot config rol_castigo)"
+            problem = hp_role_problem(punish_role, guild)
+            if problem:
+                return False, f"El rol de castigo {problem}"
+
+            # La purga no tiene tope y puede tardar: arranca en segundo plano a la vez que los
+            # roles, para que el castigado quede neutralizado de inmediato.
+            notes: list[str] = []
+            purge_note = hp_start_purge(member)
+            if purge_note:
+                notes.append(purge_note)
+            verify_id = get_verify_role_id()
+            removed = [r for r in member.roles if r.is_assignable() and r.id not in (verify_id, punish_role.id)]
+            removed_ids = {r.id for r in removed}
+            kept = [
+                r for r in member.roles
+                if not r.is_default() and r.id not in removed_ids and r.id != punish_role.id
+            ]
+            # Un solo edit cambia el set completo de roles: sin estado intermedio sin castigo.
+            try:
+                await member.edit(roles=kept + [punish_role], reason=reason)
+            except discord.Forbidden:
+                return False, "; ".join(notes + ["faltan permisos para cambiar roles (Gestionar roles)"])
+            except discord.HTTPException as e:
+                return False, "; ".join(notes + [f"error al cambiar roles: `{e}`"])
+            hp_save_punished(member.id, [r.id for r in removed])
+            notes.append(f"{len(removed)} rol(es) quitado(s)")
+            notes.append(f"rol {punish_role.mention} aplicado")
+            return True, "; ".join(notes)
     except discord.Forbidden:
-        return False, "Faltan permisos (Banear / Expulsar / Moderar miembros)"
+        return False, "Faltan permisos (Moderar miembros / Gestionar roles)"
     except discord.HTTPException as e:
         return False, f"Error de Discord: `{e}`"
     return False, f"Acción desconocida: {action}"
@@ -2385,6 +2703,13 @@ async def honeypot_listener(message: discord.Message) -> None:
     member = message.author
     if not isinstance(member, discord.Member) or hp_is_exempt(member):
         return
+    punish_id = hp_punish_role_id()
+    if punish_id and any(r.id == punish_id for r in member.roles):
+        try:
+            await message.delete()  # ya está castigado: solo se borra lo que siga escribiendo
+        except discord.HTTPException:
+            pass
+        return
     if member.id in _hp_busy:
         try:
             await message.delete()
@@ -2454,28 +2779,29 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
 @discord.app_commands.describe(
     activado="Activar o desactivar el honeypot",
     accion="Qué hacer con quien caiga en la trampa",
-    purga="Borrar mensajes recientes del castigado: 30m, 12h, 2d, 1d 12h… (0 = no borrar; máx. 7d)",
+    rol_castigo="Rol que se le pone al castigado (se le quitan los demás, menos el de verificación)",
+    purga="Qué borrar del castigado: todo, una cantidad (200 mensajes) o un rango hacia atrás (30m, 12h, 2d…); 0 = nada",
     timeout="Duración del timeout si la acción es Aislar: 30m, 12h, 2d… (1m a 28d)",
     aviso="Publicar un aviso fijado en cada canal trampa",
     ping_rol="Rol a mencionar en cada reporte",
 )
 @discord.app_commands.choices(accion=[
-    discord.app_commands.Choice(name="Expulsar y purgar", value="kick"),
+    discord.app_commands.Choice(name="Purgar y aplicar rol de castigo", value="role"),
     discord.app_commands.Choice(name="Solo registrar (prueba segura)", value="log"),
-    discord.app_commands.Choice(name="Banear", value="ban"),
     discord.app_commands.Choice(name="Aislar (timeout)", value="timeout"),
 ])
 async def honeypot_config(
     interaction: discord.Interaction,
     activado: Optional[bool] = None,
     accion: Optional[discord.app_commands.Choice[str]] = None,
+    rol_castigo: Optional[discord.Role] = None,
     purga: Optional[str] = None,
     timeout: Optional[str] = None,
     aviso: Optional[bool] = None,
     ping_rol: Optional[discord.Role] = None,
 ) -> None:
     guild = interaction.guild
-    if all(v is None for v in (activado, accion, purga, timeout, aviso, ping_rol)):
+    if all(v is None for v in (activado, accion, rol_castigo, purga, timeout, aviso, ping_rol)):
         await interaction.response.send_message(hp_config_summary(guild), ephemeral=True)
         return
     if activado and not hp_traps():
@@ -2485,11 +2811,26 @@ async def honeypot_config(
         )
         return
 
+    if rol_castigo is not None:
+        problem = hp_role_problem(rol_castigo, guild)
+        if problem:
+            await interaction.response.send_message(f"❌ No guardé nada: {rol_castigo.mention} {problem}.", ephemeral=True)
+            return
+    effective_action = accion.value if accion is not None else hp_action()
+    effective_role_id = rol_castigo.id if rol_castigo is not None else hp_punish_role_id()
+    if effective_action == "role" and guild.get_role(effective_role_id) is None and (activado or accion is not None):
+        await interaction.response.send_message(
+            "❌ No guardé nada: la acción «rol de castigo» necesita un rol. Elígelo con `rol_castigo`.",
+            ephemeral=True,
+        )
+        return
+
     # Validar duraciones antes de guardar nada.
-    purga_min = timeout_min = None
+    purga_spec = None
+    timeout_min = None
     try:
         if purga is not None:
-            purga_min = parse_duration(purga, 0, HONEYPOT_PURGE_MAX_MINUTES)
+            purga_spec = parse_purge_spec(purga)
         if timeout is not None:
             timeout_min = parse_duration(timeout, HONEYPOT_TIMEOUT_MIN_MINUTES, HONEYPOT_TIMEOUT_MAX_MINUTES)
     except ValueError as e:
@@ -2505,9 +2846,12 @@ async def honeypot_config(
     if accion is not None:
         db_meta_set("honeypot_action", accion.value)
         changes.append(f"acción → {accion.name}")
-    if purga_min is not None:
-        db_meta_set("honeypot_purge_minutes", str(purga_min))
-        changes.append(f"purga → {format_duration(purga_min)}")
+    if rol_castigo is not None:
+        db_meta_set("honeypot_punish_role", str(rol_castigo.id))
+        changes.append(f"rol de castigo → {rol_castigo.mention}")
+    if purga_spec is not None:
+        db_meta_set("honeypot_purge_spec", f"{purga_spec[0]}:{purga_spec[1]}")
+        changes.append(f"purga → {format_purge_spec(*purga_spec)}")
     if timeout_min is not None:
         db_meta_set("honeypot_timeout_minutes", str(timeout_min))
         changes.append(f"timeout → {format_duration(timeout_min)}")
@@ -2692,12 +3036,182 @@ async def honeypot_resume(interaction: discord.Interaction) -> None:
     await log_embed(interaction.guild, "▶️ Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
 
 
+@honeypot_group.command(name="release", description="Liberar a un castigado: devuelve sus roles y quita el rol de castigo.")
+@discord.app_commands.describe(miembro="Miembro castigado por el honeypot")
+async def honeypot_release(interaction: discord.Interaction, miembro: discord.Member) -> None:
+    guild = interaction.guild
+    punish_role = guild.get_role(hp_punish_role_id())
+    saved = hp_get_punished(miembro.id)
+    if saved is None and not (punish_role and punish_role in miembro.roles):
+        await interaction.response.send_message("Ese miembro no está castigado por el honeypot.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    restore: list[discord.Role] = []
+    lost = 0
+    for rid in saved or []:
+        role = guild.get_role(rid)
+        if role is not None and role.is_assignable():
+            restore.append(role)
+        else:
+            lost += 1  # el rol se borró o el bot ya no puede asignarlo
+    current = [
+        r for r in miembro.roles
+        if not r.is_default() and (punish_role is None or r.id != punish_role.id)
+    ]
+    new_roles = list({r.id: r for r in current + restore}.values())
+    try:
+        await miembro.edit(roles=new_roles, reason=f"Honeypot: liberado por {interaction.user}")
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"❌ No pude cambiar sus roles: `{e}`", ephemeral=True)
+        return
+    hp_clear_punished(miembro.id)
+    text = f"✅ {miembro.mention} liberado: {len(restore)} rol(es) devuelto(s)" + (
+        f", {lost} no se pudieron devolver (borrados o fuera de alcance)." if lost else "."
+    )
+    await interaction.followup.send(text, ephemeral=True)
+    await log_embed(guild, "🍯 Miembro liberado", f"{interaction.user.mention} liberó a {miembro.mention}. {text}")
+
+
 @honeypot_group.error
 async def honeypot_group_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
     await verify_command_error(interaction, error)
 
 
 bot.tree.add_command(honeypot_group)
+
+# ---------------------------------------------------------------------------
+# 8. /purge — limpieza individual de mensajes de un usuario
+# ---------------------------------------------------------------------------
+
+class PurgeConfirmView(discord.ui.View):
+    def __init__(self, user_id: int) -> None:
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.value: bool | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.user_id
+
+    @discord.ui.button(label="Sí, borrar todo", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.value = True
+        await interaction.response.edit_message(content="⏳ Iniciando purga…", view=None)
+        self.stop()
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.value = False
+        await interaction.response.edit_message(content="Purga cancelada.", view=None)
+        self.stop()
+
+
+@bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
+@discord.app_commands.describe(
+    usuario="Usuario cuyos mensajes borrar (puede haber salido del servidor)",
+    todos="Borrar TODOS sus mensajes (no se combina con cantidad ni rango)",
+    cantidad="Borrar solo sus N mensajes más recientes",
+    desde="Inicio del rango: hace cuánto (30m, 12h, 2d, 1d 12h…)",
+    hasta="Fin del rango: hace cuánto (por defecto, ahora)",
+    canal="Limitar a un canal o hilo (por defecto, todo el servidor)",
+)
+@discord.app_commands.checks.has_permissions(manage_messages=True)
+@discord.app_commands.guild_only()
+async def purge_command(
+    interaction: discord.Interaction,
+    usuario: discord.User,
+    todos: Optional[bool] = None,
+    cantidad: Optional[discord.app_commands.Range[int, 1]] = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    canal: Optional[Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel,
+                          discord.Thread, discord.ForumChannel]] = None,
+) -> None:
+    guild = interaction.guild
+    has_scope = cantidad is not None or desde is not None or hasta is not None
+    if todos and has_scope:
+        await interaction.response.send_message("❌ Con `todos` no uses `cantidad`, `desde` ni `hasta`.", ephemeral=True)
+        return
+    if not todos and not has_scope:
+        await interaction.response.send_message(
+            "❌ Indica qué borrar: `todos:True`, una `cantidad`, o un rango con `desde` / `hasta` "
+            "(también puedes combinar cantidad con rango).",
+            ephemeral=True,
+        )
+        return
+    if (guild.id, usuario.id) in _purge_running:
+        await interaction.response.send_message("⏳ Ya hay una purga en curso para ese usuario.", ephemeral=True)
+        return
+
+    now = datetime.now(timezone.utc)
+    after = before = None
+    try:
+        if desde is not None:
+            after = now - timedelta(minutes=parse_duration(desde, 1, PURGE_MAX_MINUTES))
+        if hasta is not None:
+            before = now - timedelta(minutes=parse_duration(hasta, 1, PURGE_MAX_MINUTES))
+    except ValueError as e:
+        await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+        return
+    if after is not None and before is not None and after >= before:
+        await interaction.response.send_message(
+            "❌ `desde` debe ser más antiguo que `hasta` (por ejemplo desde `3d` hasta `1d`).", ephemeral=True
+        )
+        return
+
+    parts: list[str] = []
+    if todos:
+        parts.append("**todos** sus mensajes")
+    if cantidad is not None:
+        parts.append(f"sus **{cantidad}** mensajes más recientes")
+    if desde is not None or hasta is not None:
+        parts.append(f"rango: desde hace {desde or '—'} hasta hace {hasta or '0'}")
+    where = canal.mention if canal is not None else "todo el servidor"
+    scope_text = " · ".join(parts) + f" · en {where}"
+
+    if todos:
+        view = PurgeConfirmView(interaction.user.id)
+        await interaction.response.send_message(
+            f"⚠️ Vas a borrar **todos** los mensajes de {usuario.mention} en {where}. No se puede deshacer.",
+            view=view,
+            ephemeral=True,
+        )
+        await view.wait()
+        if view.value is None:
+            await interaction.edit_original_response(content="Tiempo agotado: no se borró nada.", view=None)
+            return
+        if not view.value:
+            return
+    else:
+        await interaction.response.send_message("⏳ Iniciando purga…", ephemeral=True)
+
+    last_edit = [0.0]
+
+    async def progress(done: int, total: int, deleted: int) -> None:
+        if asyncio.get_event_loop().time() - last_edit[0] < 3:
+            return
+        last_edit[0] = asyncio.get_event_loop().time()
+        await interaction.edit_original_response(content=f"⏳ Purgando… {done}/{total} canales revisados, {deleted} borrados.")
+
+    async def job() -> None:
+        try:
+            result = await run_purge_job(
+                guild, usuario, scope_text=scope_text, requested_by=interaction.user.mention,
+                channel=canal, after=after, before=before, limit=cantidad, progress=progress,
+            )
+        except Exception:
+            text = "❌ La purga falló a mitad de camino; revisa el canal de logs."
+        else:
+            text = "⏳ Ya había una purga en curso para ese usuario." if result is None else f"✅ {purge_result_text(result)}."
+        try:
+            await interaction.edit_original_response(content=text)
+        except discord.HTTPException:
+            pass  # el token de la interacción dura 15 min; el resultado ya quedó en el canal de logs
+
+    asyncio.create_task(job())
+
+
+purge_command.error(verify_command_error)
+
 
 
 # ---------------------------------------------------------------------------
