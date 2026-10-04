@@ -48,6 +48,11 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      puede, deja constancia en el canal de logs, sin el enlace).
    - /template_sync la hace al momento y muestra el enlace.
 
+7. HONEYPOT (/honeypot)
+   - Canales trampa visibles para todos; quien escriba (y no esté exento) sufre expulsar+purgar,
+     banear, timeout o solo registrar. Aviso fijado automático, exenciones, protección contra
+     fallos (pausa si caen varios miembros antiguos) e historial de capturas.
+
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
 Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
@@ -155,6 +160,9 @@ DB_PATH = os.environ.get("DB_PATH", "heraldo.db")
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
+# Opcional: permite guardar el texto del mensaje como evidencia del honeypot.
+# Requiere activar "Message Content Intent" en el portal de desarrolladores.
+intents.message_content = os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
 
 bot = commands.Bot(command_prefix="!heraldo ", intents=intents)
 
@@ -511,6 +519,7 @@ async def detect_used_invite(guild: discord.Guild) -> str | None:
 @bot.event
 async def on_ready() -> None:
     db_init()
+    honeypot_db_init()
     if not bot.persistent_views:
         bot.add_view(VerifyView())  # el botón de /verify sigue respondiendo tras reinicios
     for guild in bot.guilds:
@@ -1922,6 +1931,713 @@ async def motw_test_error(interaction: discord.Interaction, error: discord.app_c
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# 7. HONEYPOT (canales trampa para bots de spam)
+# ---------------------------------------------------------------------------
+# Un canal visible para todos donde ningún miembro real escribiría. Quien postee
+# en él (y no esté exento) recibe el castigo configurado en segundos.
+# Todo se configura con /honeypot (config, add, remove, create, warning_text,
+# exempt_add, exempt_remove, history, resume); los valores de abajo son por defecto.
+
+HONEYPOT_ACTION_LABELS = {
+    "kick": "Expulsar y purgar",
+    "log": "Solo registrar",
+    "ban": "Banear",
+    "timeout": "Aislar (timeout)",
+}
+HONEYPOT_PURGE_HOURS_DEFAULT = 24     # 0-168: borra mensajes recientes del castigado
+HONEYPOT_TIMEOUT_HOURS_DEFAULT = 24   # 1-672
+HONEYPOT_WARNING_TEXT_DEFAULT = (
+    "Este canal es un **honeypot**: una trampa que atrapa bots de spam y que todos los "
+    "bots ven. **Cualquier mensaje enviado aquí activa un castigo automático.** "
+    "Si puedes leer esto, no envíes mensajes en este canal."
+)
+# Protección contra fallos: si varios miembros ANTIGUOS postean en la trampa en pocos
+# minutos, la trampa apunta casi seguro a un canal que tu comunidad usa de verdad.
+HONEYPOT_MISFIRE_MEMBER_AGE = timedelta(days=30)
+HONEYPOT_MISFIRE_WINDOW = timedelta(minutes=5)
+HONEYPOT_MISFIRE_THRESHOLD = 3
+
+_hp_busy: set[int] = set()  # usuarios en pleno castigo (evita doble castigo si postea en varias trampas)
+_hp_veteran_hits: list[tuple[datetime, int]] = []
+
+
+# --- Persistencia -----------------------------------------------------------
+
+def honeypot_db_init() -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS honeypot_channels ("
+        "channel_id INTEGER PRIMARY KEY, warning_message_id INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS honeypot_exempt ("
+        "kind TEXT NOT NULL, target_id INTEGER NOT NULL, PRIMARY KEY (kind, target_id))"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS honeypot_triggers ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, "
+        "channel_id INTEGER, content TEXT, action TEXT, success INTEGER, note TEXT, "
+        "account_created TEXT, joined_at TEXT, triggered_at TEXT)"
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_traps() -> dict[int, int | None]:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT channel_id, warning_message_id FROM honeypot_channels").fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
+
+
+def hp_add_trap(channel_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("INSERT OR IGNORE INTO honeypot_channels (channel_id) VALUES (?)", (channel_id,))
+    conn.commit()
+    conn.close()
+
+
+def hp_remove_trap(channel_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM honeypot_channels WHERE channel_id = ?", (channel_id,))
+    conn.commit()
+    conn.close()
+
+
+def hp_set_warning_message(channel_id: int, message_id: int | None) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("UPDATE honeypot_channels SET warning_message_id = ? WHERE channel_id = ?", (message_id, channel_id))
+    conn.commit()
+    conn.close()
+
+
+def hp_exempt_ids(kind: str) -> set[int]:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT target_id FROM honeypot_exempt WHERE kind = ?", (kind,)).fetchall()
+    conn.close()
+    return {r[0] for r in rows}
+
+
+def hp_exempt_add(kind: str, target_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("INSERT OR IGNORE INTO honeypot_exempt (kind, target_id) VALUES (?, ?)", (kind, target_id))
+    conn.commit()
+    conn.close()
+
+
+def hp_exempt_remove(kind: str, target_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM honeypot_exempt WHERE kind = ? AND target_id = ?", (kind, target_id))
+    conn.commit()
+    conn.close()
+
+
+def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
+                   success: bool, note: str) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO honeypot_triggers (user_id, username, channel_id, content, action, success, note, "
+        "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            member.id, str(member), channel_id, content[:1500], action, int(success), note,
+            member.created_at.isoformat(),
+            member.joined_at.isoformat() if member.joined_at else None,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_recent_triggers(limit: int = 10) -> list[sqlite3.Row]:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM honeypot_triggers ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    conn.close()
+    return rows
+
+
+def hp_total_triggers() -> int:
+    conn = sqlite3.connect(DB_PATH)
+    total = conn.execute("SELECT COUNT(*) FROM honeypot_triggers WHERE success = 1").fetchone()[0]
+    conn.close()
+    return total
+
+
+# --- Configuración (guardada en meta) ---------------------------------------
+
+def honeypot_enabled() -> bool:
+    return db_meta_get("honeypot_enabled") == "1"
+
+
+def honeypot_paused() -> bool:
+    return db_meta_get("honeypot_paused") == "1"
+
+
+def hp_action() -> str:
+    return db_meta_get("honeypot_action") or "kick"
+
+
+def hp_purge_hours() -> int:
+    v = db_meta_get("honeypot_purge_hours")
+    return int(v) if v is not None else HONEYPOT_PURGE_HOURS_DEFAULT
+
+
+def hp_timeout_hours() -> int:
+    v = db_meta_get("honeypot_timeout_hours")
+    return int(v) if v is not None else HONEYPOT_TIMEOUT_HOURS_DEFAULT
+
+
+def hp_warning_enabled() -> bool:
+    return db_meta_get("honeypot_warning_enabled") != "0"  # activado por defecto
+
+
+def hp_warning_text() -> str:
+    return db_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
+
+
+def hp_ping_role_id() -> int:
+    v = db_meta_get("honeypot_ping_role")
+    return int(v) if v else 0
+
+
+def hp_is_exempt(member: discord.Member) -> bool:
+    """Dueño, administradores y quien tenga Gestionar servidor siempre están exentos."""
+    if member.guild.owner_id == member.id:
+        return True
+    perms = member.guild_permissions
+    if perms.administrator or perms.manage_guild:
+        return True
+    if member.id in hp_exempt_ids("member"):
+        return True
+    exempt_roles = hp_exempt_ids("role")
+    return any(r.id in exempt_roles for r in member.roles)
+
+
+def hp_config_summary(guild: discord.Guild) -> str:
+    traps = hp_traps()
+    trap_text = ", ".join(f"<#{cid}>" for cid in traps) or "—"
+    ping = f"<@&{hp_ping_role_id()}>" if hp_ping_role_id() else "—"
+    estado = "✅ Activado" if honeypot_enabled() else "❌ Desactivado"
+    if honeypot_paused():
+        estado += " · ⏸️ **PAUSADO** por protección contra fallos (`/honeypot resume`)"
+    lines = [
+        f"**Estado:** {estado}",
+        f"**Canales trampa:** {trap_text}",
+        f"**Acción:** {HONEYPOT_ACTION_LABELS.get(hp_action(), hp_action())}",
+        f"**Borrar historial:** {hp_purge_hours()} h",
+        f"**Duración del timeout:** {hp_timeout_hours()} h",
+        f"**Aviso fijado:** {'sí' if hp_warning_enabled() else 'no'}"
+        + (" (texto personalizado)" if db_meta_get("honeypot_warning_text") else " (texto por defecto)"),
+        f"**Rol a mencionar en reportes:** {ping}",
+        f"**Roles exentos:** {', '.join(f'<@&{i}>' for i in hp_exempt_ids('role')) or '—'}",
+        f"**Miembros exentos:** {', '.join(f'<@{i}>' for i in hp_exempt_ids('member')) or '—'}",
+        f"**Atrapados hasta ahora:** {hp_total_triggers()}",
+    ]
+    return "\n".join(lines)
+
+
+# --- Aviso fijado -----------------------------------------------------------
+
+def hp_warning_embed() -> discord.Embed:
+    return discord.Embed(
+        title="⚠️ No escribas en este canal",
+        description=hp_warning_text(),
+        color=discord.Color.gold(),
+    )
+
+
+async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
+    """Publica/actualiza (o borra) el aviso fijado de un canal trampa. Devuelve un
+    texto de error o None si todo fue bien."""
+    msg_id = hp_traps().get(channel.id)
+    existing: discord.Message | None = None
+    if msg_id:
+        try:
+            existing = await channel.fetch_message(msg_id)
+        except discord.NotFound:
+            existing = None
+        except discord.HTTPException as e:
+            return f"{channel.mention}: no pude leer el aviso (`{e}`)"
+
+    try:
+        if not hp_warning_enabled():
+            if existing:
+                await existing.delete()
+            hp_set_warning_message(channel.id, None)
+            return None
+        if existing:
+            await existing.edit(embed=hp_warning_embed())
+            if not existing.pinned:
+                await existing.pin()
+            return None
+        message = await channel.send(embed=hp_warning_embed())
+        await message.pin()
+        hp_set_warning_message(channel.id, message.id)
+        # Quita el mensaje de sistema "X ha fijado un mensaje".
+        async for m in channel.history(limit=5):
+            if m.type == discord.MessageType.pins_add:
+                await m.delete()
+                break
+    except discord.Forbidden:
+        return f"{channel.mention}: faltan permisos (Enviar mensajes y Gestionar mensajes)"
+    except discord.HTTPException as e:
+        return f"{channel.mention}: error al publicar el aviso (`{e}`)"
+    return None
+
+
+async def hp_sync_all_warnings(guild: discord.Guild) -> list[str]:
+    errors: list[str] = []
+    for channel_id in list(hp_traps()):
+        channel = guild.get_channel(channel_id)
+        if isinstance(channel, discord.TextChannel):
+            err = await hp_sync_warning(channel)
+            if err:
+                errors.append(err)
+    return errors
+
+
+# --- Castigo ----------------------------------------------------------------
+
+async def hp_purge_messages(guild: discord.Guild, member: discord.Member, hours: int) -> None:
+    """Borra los mensajes recientes de un miembro (usado con timeout, que no purga solo)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    for ch in guild.text_channels:
+        perms = ch.permissions_for(guild.me)
+        if not (perms.read_message_history and perms.manage_messages):
+            continue
+        try:
+            await ch.purge(limit=500, after=cutoff, check=lambda m: m.author.id == member.id, bulk=True)
+        except discord.HTTPException:
+            continue
+        await asyncio.sleep(0.5)
+
+
+async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
+    guild = member.guild
+    reason = "Honeypot: escribió en un canal trampa"
+    purge_h = hp_purge_hours()
+    if action == "log":
+        return True, "Solo registrado (sin castigo)"
+    if member.top_role >= guild.me.top_role:
+        return False, "Su rol es igual o superior al del bot (jerarquía de roles)"
+    try:
+        if action == "kick":
+            if purge_h > 0:
+                # Ban + unban = expulsión que además borra el historial reciente.
+                await guild.ban(member, delete_message_seconds=purge_h * 3600, reason=reason)
+                try:
+                    await guild.unban(member, reason="Honeypot: expulsar y purgar")
+                except discord.HTTPException as e:
+                    return True, f"Baneado, pero no pude quitar el ban (`{e}`)"
+                return True, f"Expulsado; mensajes de las últimas {purge_h} h borrados"
+            await member.kick(reason=reason)
+            return True, "Expulsado"
+        if action == "ban":
+            await guild.ban(member, delete_message_seconds=purge_h * 3600, reason=reason)
+            return True, f"Baneado; mensajes de las últimas {purge_h} h borrados" if purge_h else "Baneado"
+        if action == "timeout":
+            hours = hp_timeout_hours()
+            await member.timeout(timedelta(hours=hours), reason=reason)
+            if purge_h > 0:
+                asyncio.create_task(hp_purge_messages(guild, member, purge_h))
+            return True, f"Aislado {hours} h" + (f"; borrando mensajes de las últimas {purge_h} h" if purge_h else "")
+    except discord.Forbidden:
+        return False, "Faltan permisos (Banear / Expulsar / Moderar miembros)"
+    except discord.HTTPException as e:
+        return False, f"Error de Discord: `{e}`"
+    return False, f"Acción desconocida: {action}"
+
+
+async def hp_report(guild: discord.Guild, member: discord.Member, channel: discord.abc.GuildChannel,
+                    content: str, attachments: int, action: str, success: bool, note: str) -> None:
+    log_channel = guild.get_channel(get_log_channel_id())
+    if log_channel is None:
+        return
+    evidence = content.replace("`", "'")[:900] if content else ""
+    if not evidence:
+        evidence = ("(sin texto)" if attachments or os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
+                    else "(no disponible: activa MESSAGE_CONTENT_INTENT=1 y el intent en el portal)")
+    if attachments:
+        evidence += f"\n📎 {attachments} adjunto(s)"
+    embed = discord.Embed(
+        title="🍯 Honeypot: miembro atrapado" if success else "🍯 Honeypot: castigo FALLIDO",
+        color=discord.Color.orange() if success else discord.Color.red(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.add_field(name="Usuario", value=f"{member.mention} (`{member}` · {member.id})", inline=False)
+    embed.add_field(name="Cuenta creada", value=discord.utils.format_dt(member.created_at, "R"), inline=True)
+    embed.add_field(
+        name="Se unió",
+        value=discord.utils.format_dt(member.joined_at, "R") if member.joined_at else "—",
+        inline=True,
+    )
+    embed.add_field(name="Canal", value=channel.mention, inline=True)
+    embed.add_field(name="Acción", value=f"{HONEYPOT_ACTION_LABELS.get(action, action)} — {note}", inline=False)
+    embed.add_field(name="Mensaje", value=f"```{evidence}```", inline=False)
+    embed.set_thumbnail(url=member.display_avatar.url)
+    role_id = hp_ping_role_id()
+    try:
+        await log_channel.send(
+            content=f"<@&{role_id}>" if role_id else None,
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(roles=True, users=False, everyone=False),
+        )
+    except discord.HTTPException as e:
+        print(f"Honeypot: no pude reportar en el canal de logs: {e}")
+
+
+async def hp_handle_trigger(message: discord.Message, member: discord.Member) -> None:
+    guild = member.guild
+    content = message.content or ""
+    attachments = len(message.attachments)
+    action = hp_action()
+
+    # Borra el mensaje trampa (si el castigo no lo purga ya).
+    try:
+        await message.delete()
+    except discord.HTTPException:
+        pass
+
+    # Protección contra fallos: varios miembros veteranos atrapados en pocos minutos.
+    now = datetime.now(timezone.utc)
+    if member.joined_at and now - member.joined_at > HONEYPOT_MISFIRE_MEMBER_AGE:
+        _hp_veteran_hits.append((now, member.id))
+    _hp_veteran_hits[:] = [(t, u) for t, u in _hp_veteran_hits if now - t <= HONEYPOT_MISFIRE_WINDOW]
+    if len({u for _, u in _hp_veteran_hits}) >= HONEYPOT_MISFIRE_THRESHOLD:
+        db_meta_set("honeypot_paused", "1")
+        _hp_veteran_hits.clear()
+        await log_embed(
+            guild, "⏸️ Honeypot pausado (protección contra fallos)",
+            f"{HONEYPOT_MISFIRE_THRESHOLD}+ miembros con más de 30 días en el servidor escribieron en la trampa en "
+            f"pocos minutos: probablemente apunta a un canal que tu comunidad usa de verdad.\n"
+            f"Revisa los canales trampa con `/honeypot config` y reactiva con `/honeypot resume`. "
+            f"Este último mensaje ({member.mention}) **no** fue castigado.",
+            discord.Color.red(),
+        )
+        return
+
+    success, note = await hp_punish(member, action)
+    hp_log_trigger(member, message.channel.id, content, action, success, note)
+    await hp_report(guild, member, message.channel, content, attachments, action, success, note)
+
+
+@bot.listen("on_message")
+async def honeypot_listener(message: discord.Message) -> None:
+    if message.guild is None or message.webhook_id is not None or message.author.bot:
+        return  # DMs, webhooks y otros bots se ignoran (tus integraciones están a salvo)
+    if not honeypot_enabled() or honeypot_paused():
+        return
+    if message.channel.id not in hp_traps():
+        return
+    member = message.author
+    if not isinstance(member, discord.Member) or hp_is_exempt(member):
+        return
+    if member.id in _hp_busy:
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            pass
+        return
+    _hp_busy.add(member.id)
+    try:
+        await hp_handle_trigger(message, member)
+    except Exception:
+        traceback.print_exc()
+    finally:
+        _hp_busy.discard(member.id)
+
+
+@bot.listen("on_guild_channel_delete")
+async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
+    if channel.id not in hp_traps():
+        return
+    hp_remove_trap(channel.id)
+    await log_embed(
+        channel.guild, "🍯 Canal trampa eliminado",
+        f"Se borró `#{channel.name}` en Discord y se quitó del honeypot automáticamente. "
+        f"Quedan {len(hp_traps())} canal(es) trampa.",
+        discord.Color.orange(),
+    )
+
+
+# --- Comandos /honeypot -----------------------------------------------------
+
+honeypot_group = discord.app_commands.Group(
+    name="honeypot",
+    description="Canales trampa que atrapan bots de spam.",
+    guild_only=True,
+    default_permissions=discord.Permissions(manage_guild=True),
+)
+
+
+class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
+    text = discord.ui.TextInput(
+        label="Aviso (déjalo vacío para volver al texto por defecto)",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=1500,
+        default="",
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.text.default = db_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        value = str(self.text).strip()
+        if value and value != HONEYPOT_WARNING_TEXT_DEFAULT:
+            db_meta_set("honeypot_warning_text", value)
+        else:
+            db_meta_set("honeypot_warning_text", "")
+        await interaction.response.defer(ephemeral=True)
+        errors = await hp_sync_all_warnings(interaction.guild)
+        await interaction.followup.send(
+            "✅ Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
+            ephemeral=True,
+        )
+
+
+@honeypot_group.command(name="config", description="Ver o cambiar la configuración del honeypot.")
+@discord.app_commands.describe(
+    activado="Activar o desactivar el honeypot",
+    accion="Qué hacer con quien caiga en la trampa",
+    purga_horas="Borrar los mensajes de las últimas N horas del castigado (0-168)",
+    timeout_horas="Duración del timeout si la acción es Aislar (1-672)",
+    aviso="Publicar un aviso fijado en cada canal trampa",
+    ping_rol="Rol a mencionar en cada reporte",
+)
+@discord.app_commands.choices(accion=[
+    discord.app_commands.Choice(name="Expulsar y purgar", value="kick"),
+    discord.app_commands.Choice(name="Solo registrar (prueba segura)", value="log"),
+    discord.app_commands.Choice(name="Banear", value="ban"),
+    discord.app_commands.Choice(name="Aislar (timeout)", value="timeout"),
+])
+async def honeypot_config(
+    interaction: discord.Interaction,
+    activado: Optional[bool] = None,
+    accion: Optional[discord.app_commands.Choice[str]] = None,
+    purga_horas: Optional[discord.app_commands.Range[int, 0, 168]] = None,
+    timeout_horas: Optional[discord.app_commands.Range[int, 1, 672]] = None,
+    aviso: Optional[bool] = None,
+    ping_rol: Optional[discord.Role] = None,
+) -> None:
+    guild = interaction.guild
+    if all(v is None for v in (activado, accion, purga_horas, timeout_horas, aviso, ping_rol)):
+        await interaction.response.send_message(hp_config_summary(guild), ephemeral=True)
+        return
+    if activado and not hp_traps():
+        await interaction.response.send_message(
+            "❌ No lo activé: añade al menos un canal trampa con `/honeypot add` o `/honeypot create`.",
+            ephemeral=True,
+        )
+        return
+
+    changes: list[str] = []
+    if activado is not None:
+        db_meta_set("honeypot_enabled", "1" if activado else "0")
+        if activado:
+            db_meta_set("honeypot_paused", "0")
+        changes.append("activado" if activado else "desactivado")
+    if accion is not None:
+        db_meta_set("honeypot_action", accion.value)
+        changes.append(f"acción → {accion.name}")
+    if purga_horas is not None:
+        db_meta_set("honeypot_purge_hours", str(purga_horas))
+        changes.append(f"purga → {purga_horas} h")
+    if timeout_horas is not None:
+        db_meta_set("honeypot_timeout_hours", str(timeout_horas))
+        changes.append(f"timeout → {timeout_horas} h")
+    if ping_rol is not None:
+        db_meta_set("honeypot_ping_role", str(ping_rol.id))
+        changes.append(f"ping → {ping_rol.mention}")
+    if aviso is not None:
+        db_meta_set("honeypot_warning_enabled", "1" if aviso else "0")
+        changes.append("aviso fijado activado" if aviso else "aviso fijado desactivado")
+
+    await interaction.response.defer(ephemeral=True)
+    errors = await hp_sync_all_warnings(guild) if aviso is not None else []
+    await interaction.followup.send(
+        "✅ Guardado: " + "; ".join(changes) + "\n\n" + hp_config_summary(guild)
+        + ("\n\n⚠️ " + "\n".join(errors) if errors else ""),
+        ephemeral=True,
+    )
+    await log_embed(guild, "⚙️ Honeypot actualizado", f"{interaction.user.mention}: " + "; ".join(changes))
+
+
+@honeypot_group.command(name="add", description="Convertir un canal de texto existente en canal trampa.")
+@discord.app_commands.describe(canal="Canal de texto que todos puedan ver y en el que puedan escribir")
+async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+    guild = interaction.guild
+    if canal.id in hp_traps():
+        await interaction.response.send_message(f"{canal.mention} ya es un canal trampa.", ephemeral=True)
+        return
+    perms = canal.permissions_for(guild.me)
+    if not (perms.view_channel and perms.send_messages and perms.manage_messages):
+        await interaction.response.send_message(
+            f"❌ El Heraldo necesita Ver canal, Enviar mensajes y Gestionar mensajes en {canal.mention}.",
+            ephemeral=True,
+        )
+        return
+    everyone = canal.permissions_for(guild.default_role)
+    hp_add_trap(canal.id)
+    await interaction.response.defer(ephemeral=True)
+    err = await hp_sync_warning(canal)
+    notes: list[str] = []
+    if not (everyone.view_channel and everyone.send_messages):
+        notes.append("⚠️ @everyone no puede ver o escribir ahí: los bots que entren no lo verán y no atrapará nada.")
+    if err:
+        notes.append("⚠️ " + err)
+    await interaction.followup.send(
+        f"✅ {canal.mention} añadido como canal trampa." + ("\n" + "\n".join(notes) if notes else ""),
+        ephemeral=True,
+    )
+    await log_embed(guild, "🍯 Canal trampa añadido", f"{interaction.user.mention} añadió {canal.mention}.")
+
+
+@honeypot_group.command(name="create", description="Crear #honeypot ya configurado (visible, con aviso fijado).")
+async def honeypot_create(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    await interaction.response.defer(ephemeral=True)
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            create_public_threads=False,
+            create_private_threads=False,
+            send_messages_in_threads=False,
+        )
+    }
+    try:
+        channel = await guild.create_text_channel(
+            "honeypot", overwrites=overwrites, reason=f"Honeypot creado por {interaction.user}"
+        )
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"❌ No pude crear el canal: `{e}`", ephemeral=True)
+        return
+    hp_add_trap(channel.id)
+    err = await hp_sync_warning(channel)
+    await interaction.followup.send(
+        f"✅ Creé {channel.mention} y lo añadí como trampa." + (f"\n⚠️ {err}" if err else "")
+        + "\nActívalo con `/honeypot config activado:True` (empieza con `accion: Solo registrar` si quieres probar).",
+        ephemeral=True,
+    )
+    await log_embed(guild, "🍯 Canal trampa creado", f"{interaction.user.mention} creó {channel.mention}.")
+
+
+@honeypot_group.command(name="remove", description="Quitar un canal del honeypot (no lo borra).")
+async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+    traps = hp_traps()
+    if canal.id not in traps:
+        await interaction.response.send_message(f"{canal.mention} no es un canal trampa.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    msg_id = traps[canal.id]
+    if msg_id:
+        try:
+            await (await canal.fetch_message(msg_id)).delete()
+        except discord.HTTPException:
+            pass
+    hp_remove_trap(canal.id)
+    extra = ""
+    if not hp_traps() and honeypot_enabled():
+        db_meta_set("honeypot_enabled", "0")
+        extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
+    await interaction.followup.send(f"✅ {canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
+    await log_embed(interaction.guild, "🍯 Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
+
+
+@honeypot_group.command(name="warning_text", description="Editar el texto del aviso fijado en los canales trampa.")
+async def honeypot_warning_text_cmd(interaction: discord.Interaction) -> None:
+    await interaction.response.send_modal(HoneypotWarningModal())
+
+
+@honeypot_group.command(name="exempt_add", description="Eximir a un rol o miembro de la trampa.")
+@discord.app_commands.describe(rol="Rol a eximir", miembro="Miembro a eximir")
+async def honeypot_exempt_add(
+    interaction: discord.Interaction,
+    rol: Optional[discord.Role] = None,
+    miembro: Optional[discord.Member] = None,
+) -> None:
+    if (rol is None) == (miembro is None):
+        await interaction.response.send_message("Elige **uno**: `rol` o `miembro`.", ephemeral=True)
+        return
+    if rol is not None:
+        hp_exempt_add("role", rol.id)
+        text = f"rol {rol.mention}"
+    else:
+        hp_exempt_add("member", miembro.id)
+        text = f"miembro {miembro.mention}"
+    await interaction.response.send_message(f"✅ Eximido: {text}.", ephemeral=True)
+
+
+@honeypot_group.command(name="exempt_remove", description="Quitar la exención de un rol o miembro.")
+@discord.app_commands.describe(rol="Rol", miembro="Miembro")
+async def honeypot_exempt_remove(
+    interaction: discord.Interaction,
+    rol: Optional[discord.Role] = None,
+    miembro: Optional[discord.Member] = None,
+) -> None:
+    if (rol is None) == (miembro is None):
+        await interaction.response.send_message("Elige **uno**: `rol` o `miembro`.", ephemeral=True)
+        return
+    if rol is not None:
+        hp_exempt_remove("role", rol.id)
+        text = f"rol {rol.mention}"
+    else:
+        hp_exempt_remove("member", miembro.id)
+        text = f"miembro {miembro.mention}"
+    await interaction.response.send_message(f"✅ Exención quitada: {text}.", ephemeral=True)
+
+
+@honeypot_group.command(name="history", description="Ver los últimos miembros atrapados.")
+@discord.app_commands.describe(cantidad="Cuántos mostrar (1-20)")
+async def honeypot_history(
+    interaction: discord.Interaction, cantidad: discord.app_commands.Range[int, 1, 20] = 10
+) -> None:
+    rows = hp_recent_triggers(cantidad)
+    if not rows:
+        await interaction.response.send_message("Aún no ha caído nadie en la trampa.", ephemeral=True)
+        return
+    embed = discord.Embed(
+        title="🍯 Historial del honeypot",
+        description=f"**{hp_total_triggers()}** miembros atrapados en total.",
+        color=discord.Color.orange(),
+    )
+    for r in rows:
+        when = discord.utils.format_dt(datetime.fromisoformat(r["triggered_at"]), "R")
+        content = (r["content"] or "(sin texto)").replace("`", "'")[:150]
+        embed.add_field(
+            name=f"{'✅' if r['success'] else '❌'} {r['username']} · {when}",
+            value=(
+                f"<#{r['channel_id']}> · {HONEYPOT_ACTION_LABELS.get(r['action'], r['action'])}\n"
+                f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}\n"
+                f"```{content}```"
+            ),
+            inline=False,
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@honeypot_group.command(name="resume", description="Reanudar el honeypot tras una pausa por protección contra fallos.")
+async def honeypot_resume(interaction: discord.Interaction) -> None:
+    if not honeypot_paused():
+        await interaction.response.send_message("El honeypot no está pausado.", ephemeral=True)
+        return
+    db_meta_set("honeypot_paused", "0")
+    await interaction.response.send_message("✅ Honeypot reanudado.", ephemeral=True)
+    await log_embed(interaction.guild, "▶️ Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
+
+
+@honeypot_group.error
+async def honeypot_group_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    await verify_command_error(interaction, error)
+
+
+bot.tree.add_command(honeypot_group)
 
 
 # ---------------------------------------------------------------------------
