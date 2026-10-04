@@ -36,14 +36,15 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /verify publica un panel con un botón; quien lo pulsa recibe el rol de
      verificación (por defecto Tentad@) y pierde Sin Verificar. Es una declaración
      de mayoría de edad, no una comprobación.
-   - Con la verificación activada, quien no la complete en `timeout` segundos desde
-     que entra sufre la acción configurada (expulsar, banear o solo registrar).
+   - Con la verificación activada, quien no la complete dentro de `timeout` (configurable
+     en días/horas/minutos) desde que entra sufre la acción configurada.
    - /verify_config (rol, timeout, acción, activar) y /verify_texts (mensaje del
      panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
 6. COPIA DE SEGURIDAD DE LA PLANTILLA (/template_config, /template_sync)
    - Sincroniza la plantilla del servidor (roles, canales y permisos) con su estado
-     actual, como una copia de seguridad: cada día, semana o mes, o cada N horas, con
+     actual, como una copia de seguridad: cada día, semana o mes, o cada intervalo
+     configurable en días/horas/minutos, con
      día y hora a elección. Tras cada copia manda el enlace por mensaje privado (si no
      puede, deja constancia en el canal de logs, sin el enlace).
    - /template_sync la hace al momento y muestra el enlace.
@@ -491,6 +492,8 @@ def get_verify_role_id() -> int:
 
 
 def get_verify_timeout() -> int:
+    """Devuelve el timeout en segundos. Las configuraciones antiguas siguen guardadas en segundos;
+    las nuevas se guardan como duración d/h/m convertida a segundos."""
     value = db_meta_get("verify_timeout")
     return int(value) if value is not None else VERIFY_TIMEOUT_DEFAULT
 
@@ -1150,7 +1153,7 @@ def verify_config_summary(guild: discord.Guild) -> str:
     return (
         f"**Verificación:** {'✅ activada' if verify_enabled() else '⏸️ desactivada'}\n"
         f"**Rol de verificación:** {role_text}\n"
-        f"**Timeout:** {get_verify_timeout()} s\n"
+        f"**Timeout:** {format_duration((get_verify_timeout() + 59) // 60)}\n"
         f"**Acción al agotarse:** {VERIFY_ACTION_LABELS[get_verify_action()]}\n"
         f"**Panel:** {panel_text}"
     )
@@ -1264,7 +1267,7 @@ async def verify_texts(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="verify_config", description="Ver o cambiar la configuración de la verificación por botón.")
 @discord.app_commands.describe(
     rol="Rol que se otorga al verificarse",
-    timeout="Segundos para verificarse desde que entra (30-3600)",
+    timeout="Tiempo para verificarse desde que entra (usa d, h y m; por ejemplo 5m, 1h o 1d)",
     accion="Qué hacer con quien no se verifica a tiempo",
     activado="Activar o desactivar el timeout automático",
 )
@@ -1278,7 +1281,7 @@ async def verify_texts(interaction: discord.Interaction) -> None:
 async def verify_config(
     interaction: discord.Interaction,
     rol: Optional[discord.Role] = None,
-    timeout: Optional[discord.app_commands.Range[int, 30, 3600]] = None,
+    timeout: Optional[str] = None,
     accion: Optional[discord.app_commands.Choice[str]] = None,
     activado: Optional[bool] = None,
 ) -> None:
@@ -1288,6 +1291,14 @@ async def verify_config(
         return
 
     # 1) Validar todo antes de guardar nada.
+    timeout_seconds = None
+    if timeout is not None:
+        try:
+            timeout_minutes = parse_duration(timeout, 1, 28 * 24 * 60)
+            timeout_seconds = timeout_minutes * 60
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
+            return
     if rol is not None:
         problem = verify_role_problem(rol, guild)
         if problem:
@@ -1320,9 +1331,9 @@ async def verify_config(
     if rol is not None:
         db_meta_set("verify_role_id", str(rol.id))
         changes.append(f"rol → {rol.mention}")
-    if timeout is not None:
-        db_meta_set("verify_timeout", str(timeout))
-        changes.append(f"timeout → {timeout} s")
+    if timeout_seconds is not None:
+        db_meta_set("verify_timeout", str(timeout_seconds))
+        changes.append(f"timeout → {format_duration(timeout_seconds // 60)}")
     if accion is not None:
         db_meta_set("verify_action", accion.value)
         changes.append(f"acción → {accion.name}")
@@ -1390,8 +1401,15 @@ def get_template_monthday() -> int:
     return _meta_int("template_monthday", TEMPLATE_MONTHDAY_DEFAULT)
 
 
-def get_template_interval() -> int:
-    return _meta_int("template_interval_hours", TEMPLATE_INTERVAL_DEFAULT)
+def get_template_interval_minutes() -> int:
+    """Intervalo en minutos. Las versiones antiguas guardaban horas; se leen como compatibilidad."""
+    value = db_meta_get("template_interval_minutes")
+    if value is not None:
+        return int(value)
+    old = db_meta_get("template_interval_hours")
+    if old is not None:
+        return int(old) * 60
+    return TEMPLATE_INTERVAL_DEFAULT * 60
 
 
 def template_schedule_text() -> str:
@@ -1405,7 +1423,7 @@ def template_schedule_text() -> str:
         return f"Cada semana, {MOTW_WEEKDAY_NAMES[get_template_weekday()]} a las {hour}"
     if mode == "monthly":
         return f"Cada mes, el día {get_template_monthday()} a las {hour}"
-    return f"Cada {get_template_interval()} h"
+    return f"Cada {format_duration(get_template_interval_minutes())}"
 
 
 def template_last_slot(mode: str, now: datetime) -> datetime | None:
@@ -1441,7 +1459,7 @@ def template_next_run(now_utc: datetime) -> datetime | None:
     if mode == "interval":
         last = db_meta_get("template_last_run")
         base = datetime.fromisoformat(last) if last else now_utc
-        return (base + timedelta(hours=get_template_interval())).astimezone(STREAK_TZ)
+        return (base + timedelta(minutes=get_template_interval_minutes())).astimezone(STREAK_TZ)
     slot = template_last_slot(mode, now_utc.astimezone(STREAK_TZ))
     if mode == "daily":
         return slot + timedelta(days=1)
@@ -1462,7 +1480,7 @@ def template_due(now_utc: datetime) -> bool:
         if last is None:
             db_meta_set("template_last_run", now_utc.isoformat())
             return False
-        return now_utc >= datetime.fromisoformat(last) + timedelta(hours=get_template_interval())
+        return now_utc >= datetime.fromisoformat(last) + timedelta(minutes=get_template_interval_minutes())
     slot = template_last_slot(mode, now_utc.astimezone(STREAK_TZ))
     handled = db_meta_get("template_last_slot")
     if handled is None:
@@ -1588,7 +1606,7 @@ def template_config_summary(now_utc: datetime) -> str:
     hora="Hora del día (0-23, hora de RD)",
     dia_semana="Día de la semana (frecuencia semanal)",
     dia_mes="Día del mes, 1-28 (frecuencia mensual)",
-    cada_horas="Cada cuántas horas, 1-720 (frecuencia por intervalo)",
+    intervalo="Intervalo entre copias cuando la frecuencia es por intervalo (usa d, h y m; por ejemplo 30m, 6h o 1d)",
     enviar_a="Quién recibe el enlace por mensaje privado (por defecto, tú)",
 )
 @discord.app_commands.choices(
@@ -1607,15 +1625,24 @@ async def template_config(
     hora: Optional[discord.app_commands.Range[int, 0, 23]] = None,
     dia_semana: Optional[discord.app_commands.Choice[int]] = None,
     dia_mes: Optional[discord.app_commands.Range[int, 1, 28]] = None,
-    cada_horas: Optional[discord.app_commands.Range[int, 1, 720]] = None,
+    intervalo: Optional[str] = None,
     enviar_a: Optional[discord.User] = None,
 ) -> None:
     guild = interaction.guild
     now = datetime.now(timezone.utc)
-    if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, cada_horas, enviar_a)):
+    if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, intervalo, enviar_a)):
         await interaction.response.send_message(template_config_summary(now), ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
+
+    # Validar el intervalo antes de guardar cualquier cambio.
+    intervalo_minutes = None
+    if intervalo is not None:
+        try:
+            intervalo_minutes = parse_duration(intervalo, 1, 30 * 24 * 60)
+        except ValueError as e:
+            await interaction.followup.send(f"❌ No guardé nada: {e}", ephemeral=True)
+            return
 
     changes: list[str] = []
     if frecuencia is not None:
@@ -1630,9 +1657,9 @@ async def template_config(
     if dia_mes is not None:
         db_meta_set("template_monthday", str(dia_mes))
         changes.append(f"día del mes → {dia_mes}")
-    if cada_horas is not None:
-        db_meta_set("template_interval_hours", str(cada_horas))
-        changes.append(f"intervalo → {cada_horas} h")
+    if intervalo_minutes is not None:
+        db_meta_set("template_interval_minutes", str(intervalo_minutes))
+        changes.append(f"intervalo → {format_duration(intervalo_minutes)}")
     db_meta_set("template_guild_id", str(guild.id))
     if enviar_a is not None:
         db_meta_set("template_user_id", str(enviar_a.id))
@@ -2304,8 +2331,24 @@ def hp_warning_enabled() -> bool:
     return hp_meta_get("honeypot_warning_enabled") != "0"  # activado por defecto
 
 
+def hp_warning_style() -> str:
+    value = hp_meta_get("honeypot_warning_style")
+    return value if value in ("text", "custom") else "text"
+
+
 def hp_warning_text() -> str:
     return hp_meta_get("honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
+
+
+def hp_warning_custom() -> dict[str, str]:
+    return {
+        "title": hp_meta_get("honeypot_warning_title") or "⚠️ No escribas en este canal",
+        "description": hp_meta_get("honeypot_warning_description") or HONEYPOT_WARNING_TEXT_DEFAULT,
+        "color": hp_meta_get("honeypot_warning_color") or "F1C40F",
+        "image": hp_meta_get("honeypot_warning_image") or "",
+        "thumbnail": hp_meta_get("honeypot_warning_thumbnail") or "",
+        "footer": hp_meta_get("honeypot_warning_footer") or "",
+    }
 
 
 def hp_ping_role_id() -> int:
@@ -2354,6 +2397,20 @@ def hp_config_summary(guild: discord.Guild) -> str:
 # --- Aviso fijado -----------------------------------------------------------
 
 def hp_warning_embed() -> discord.Embed:
+    if hp_warning_style() == "custom":
+        cfg = hp_warning_custom()
+        try:
+            color = discord.Color(int(cfg["color"].lstrip("#"), 16))
+        except ValueError:
+            color = discord.Color.gold()
+        embed = discord.Embed(title=cfg["title"], description=cfg["description"], color=color)
+        if cfg["image"]:
+            embed.set_image(url=cfg["image"])
+        if cfg["thumbnail"]:
+            embed.set_thumbnail(url=cfg["thumbnail"])
+        if cfg["footer"]:
+            embed.set_footer(text=cfg["footer"])
+        return embed
     return discord.Embed(
         title="⚠️ No escribas en este canal",
         description=hp_warning_text(),
@@ -2880,6 +2937,7 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
             hp_meta_set("honeypot_warning_text", value)
         else:
             hp_meta_set("honeypot_warning_text", "")
+        hp_meta_set("honeypot_warning_style", "text")
         await interaction.response.defer(ephemeral=True)
         errors = await hp_sync_all_warnings(interaction.guild)
         await interaction.followup.send(
@@ -3081,6 +3139,89 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
         extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
     await interaction.followup.send(f"✅ {canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
     await log_embed(interaction.guild, "🍯 Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
+
+
+class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del aviso"):
+    title_input = discord.ui.TextInput(
+        label="Título",
+        required=False,
+        max_length=256,
+    )
+    description_input = discord.ui.TextInput(
+        label="Descripción",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=4000,
+    )
+    color_input = discord.ui.TextInput(
+        label="Color HEX (ej. F1C40F o #F1C40F)",
+        required=True,
+        max_length=7,
+    )
+    image_input = discord.ui.TextInput(
+        label="Imagen URL (opcional)",
+        required=False,
+        max_length=2000,
+    )
+    footer_input = discord.ui.TextInput(
+        label="Pie del embed (opcional)",
+        required=False,
+        max_length=2048,
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        cfg = hp_warning_custom()
+        self.title_input.default = cfg["title"]
+        self.description_input.default = cfg["description"]
+        self.color_input.default = cfg["color"]
+        self.image_input.default = cfg["image"]
+        self.footer_input.default = cfg["footer"]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        title = str(self.title_input).strip()
+        description = str(self.description_input).strip()
+        color = str(self.color_input).strip().lstrip("#")
+        image = str(self.image_input).strip()
+        footer = str(self.footer_input).strip()
+
+        if not description:
+            await interaction.response.send_message("❌ La descripción no puede quedar vacía.", ephemeral=True)
+            return
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message("❌ El color debe ser HEX de 6 dígitos, por ejemplo `F1C40F`.", ephemeral=True)
+            return
+        for label, url in (("imagen", image),):
+            if url and not re.match(r"^https?://", url, re.IGNORECASE):
+                await interaction.response.send_message(f"❌ La URL de {label} debe empezar por `http://` o `https://`.", ephemeral=True)
+                return
+
+        hp_meta_set("honeypot_warning_title", title)
+        hp_meta_set("honeypot_warning_description", description)
+        hp_meta_set("honeypot_warning_color", color.upper())
+        hp_meta_set("honeypot_warning_image", image)
+        hp_meta_set("honeypot_warning_thumbnail", "")
+        hp_meta_set("honeypot_warning_footer", footer)
+        hp_meta_set("honeypot_warning_style", "custom")
+
+        await interaction.response.defer(ephemeral=True)
+        errors = await hp_sync_all_warnings(interaction.guild)
+        await interaction.followup.send(
+            "✅ Embed personalizado guardado y aplicado a los avisos fijados."
+            + ("\n" + "\n".join(errors) if errors else ""),
+            ephemeral=True,
+        )
+        await log_embed(
+            interaction.guild,
+            "⚙️ Embed del honeypot actualizado",
+            f"{interaction.user.mention} personalizó título, descripción, color, imagen y pie del aviso.",
+            discord.Color.blurple(),
+        )
+
+
+@honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
+async def honeypot_warning_embed_cmd(interaction: discord.Interaction) -> None:
+    await interaction.response.send_modal(HoneypotWarningEmbedModal())
 
 
 @honeypot_group.command(name="warning_text", description="Editar el texto del aviso fijado en los canales trampa.")
