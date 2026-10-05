@@ -2978,6 +2978,7 @@ def hp_start_purge(member: discord.Member) -> str | None:
 
 
 _condemn_sync_busy: set[int] = set()
+_condemn_inflight: set[int] = set()
 
 
 def condemnation_protection_reason(member: discord.Member) -> str | None:
@@ -3015,6 +3016,7 @@ async def condemnation_send_dm(
 async def condemnation_announce(
     guild: discord.Guild, member: discord.Member, reason: str,
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
+    *, source_message_url: str | None = None, removed_role_ids: list[int] | None = None,
 ) -> None:
     channel = guild.get_channel(condemnation_channel_id())
     if not isinstance(channel, discord.TextChannel):
@@ -3029,9 +3031,17 @@ async def condemnation_announce(
     embed.add_field(name="Duración", value=format_duration(duration_minutes) if duration_minutes else "Indefinida", inline=True)
     embed.add_field(name="Origen", value=condemnation_origin_label(origin), inline=True)
     embed.add_field(name="Aplicó", value=applied_by.mention if applied_by else "Sistema / Heraldo", inline=True)
+    if source_message_url:
+        embed.add_field(name="Mensaje que originó la condena", value=f"[🔗 Ir al mensaje condenado]({source_message_url})", inline=False)
+    role_mentions = []
+    for rid in removed_role_ids or []:
+        role = guild.get_role(rid)
+        if role is not None:
+            role_mentions.append(role.mention)
+    embed.add_field(name="Roles retirados", value=" ".join(role_mentions)[:1024] if role_mentions else "Ninguno (o no asignable)", inline=False)
     embed.add_field(name="Desde", value=discord.utils.format_dt(datetime.now(timezone.utc), "F"), inline=False)
     try:
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+        await channel.send(content=" ".join(role_mentions) or None, embed=embed, allowed_mentions=discord.AllowedMentions(users=True, roles=True, everyone=False))
     except discord.HTTPException:
         pass
 
@@ -3090,16 +3100,20 @@ async def condemn_member(
     origin: str,
     applied_by: discord.abc.User | None,
     preserve_role_ids: list[int] | None = None,
+    source_message_url: str | None = None,
     send_dm: bool = True,
     announce: bool = True,
 ) -> tuple[bool, str]:
     """Motor único de condena. Lo usan honeypot, comando, reacción, rol manual y raid protection."""
     if member.bot:
         return False, "Los bots no se condenan."
+    if member.id in _condemn_inflight:
+        return False, "Ya hay una condena en proceso para este miembro."
     protection = condemnation_protection_reason(member)
     if protection:
         return False, f"No se puede condenar: {protection}."
 
+    _condemn_inflight.add(member.id)
     existing = condemnation_get(member.id)
     active_role_id = condemnation_role_id(existing)
     snapshot = preserve_role_ids
@@ -3116,7 +3130,15 @@ async def condemn_member(
     finally:
         _condemn_sync_busy.discard(member.id)
     if not ok:
+        _condemn_inflight.discard(member.id)
         return False, role_note
+    removed_role_ids = [
+        rid for rid in (snapshot or [])
+        if rid != active_role_id
+        and (member.guild.get_role(rid) is not None)
+        and member.guild.get_role(rid).is_assignable()
+        and not member.guild.get_role(rid).managed
+    ]
 
     if existing is None:
         condemnation_save(member.id, member.guild.id, active_role_id, saved_ids, reason[:1000], duration_minutes, origin,
@@ -3144,7 +3166,10 @@ async def condemn_member(
 
     dm_ok = await condemnation_send_dm(member, reason, duration_minutes, origin) if send_dm else None
     if announce:
-        await condemnation_announce(member.guild, member, reason, duration_minutes, origin, applied_by)
+        await condemnation_announce(
+            member.guild, member, reason, duration_minutes, origin, applied_by,
+            source_message_url=source_message_url, removed_role_ids=removed_role_ids,
+        )
     await log_embed(
         member.guild, "☠️ Condena aplicada",
         f"{member.mention} (`{member.id}`)\n"
@@ -3156,6 +3181,7 @@ async def condemn_member(
         f"DM: {'✅ enviado' if dm_ok else '⚠️ no enviado' if dm_ok is not None else '—'}",
         discord.Color.dark_red(),
     )
+    _condemn_inflight.discard(member.id)
     return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
 
 
@@ -3564,6 +3590,7 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
         purge_spec=HONEYPOT_PURGE_DEFAULT,
         origin="reaction",
         applied_by=actor,
+        source_message_url=message.jump_url,
     )
     if not ok:
         await log_embed(guild, "⚠️ Condena por reacción rechazada", f"{actor.mention} reaccionó con ☠️ a {message.jump_url}: {note}", discord.Color.orange())
