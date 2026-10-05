@@ -1,14 +1,14 @@
 """
 El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
 
-1. VERIFICACIÓN DE EDAD (respaldo de Guardián)
-   - Guardián asigna Sin Verificar al entrar y expulsa a los 299s si no verifica.
-   - El Heraldo arma un respaldo de 300s (SIN_VERIFICAR_WINDOW): si Guardián falla,
-     expulsa directo, sin DM.
+1. VERIFICACIÓN DE EDAD (rol Sin Verificar)
+   - Quien entra recibe el rol Sin Verificar y debe verificarse en 299s o es expulsado.
+   - El Heraldo arma un respaldo de 300s (SIN_VERIFICAR_WINDOW): si esa expulsión no
+     ocurre, expulsa directo, sin DM.
 
 2. VERIFICACIÓN DE ORIENTACIÓN (Tentad@ -> rol de orientación)
    - Tentad@ (TENTADO_ROLE_ID) se otorga al pasar la verificación de edad (botón de
-     /verify; antes, Invite Tracker).
+     /verify).
    - El Heraldo arma un timer de 10 min (VERIFICATION_WINDOW). Si vence sin que el
      miembro tenga ninguno de los EVAL_ROLE_IDS:
        - 1ra vez (dm_sent=False): DM de recuperación + invite de uso único, luego kick.
@@ -32,7 +32,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /motw_set_schedule y /motw_set_channel cambian día/hora/canal sin redeploy.
    - /motw_test dispara el anuncio con datos reales sin resetear contadores.
 
-5. VERIFICACIÓN POR BOTÓN (/verify — reemplaza la verificación de Invite Tracker)
+5. VERIFICACIÓN POR BOTÓN (/verify)
    - /verify publica un panel con un botón; quien lo pulsa recibe el rol de
      verificación (por defecto Tentad@) y pierde Sin Verificar. Es una declaración
      de mayoría de edad, no una comprobación.
@@ -87,8 +87,8 @@ from discord.ext import commands, tasks
 # Configuración
 # ---------------------------------------------------------------------------
 
-SIN_VERIFICAR_ROLE_ID = 1549913794296414339  # rol de verificación de edad (Guardián)
-SIN_VERIFICAR_WINDOW = timedelta(seconds=300)  # respaldo: Guardián usa 299s, por si falla
+SIN_VERIFICAR_ROLE_ID = 1549913794296414339  # rol Sin Verificar: verificación de edad pendiente
+SIN_VERIFICAR_WINDOW = timedelta(seconds=300)  # respaldo: expulsa a los 300s a quien siga con Sin Verificar
 TENTADO_ROLE_ID = 1510692050889085142
 EVAL_ROLE_IDS = {
     1522877846026981396,  # Bisex-🚻
@@ -104,7 +104,7 @@ LOG_CHANNEL_ID = 1549052747117240381  # canal de logs por defecto (cambiable con
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
 # --- Perfil (/profile): mensajes y racha diaria ---
-# Roles cuyos mensajes NO cuentan para el perfil (equivale a "excluded_roles" de MEE6).
+# Roles cuyos mensajes NO cuentan para el perfil.
 # Ejemplo: {123456789012345678, 987654321098765432}
 EXCLUDED_ROLE_IDS: set[int] = set()
 # Zona horaria que define el "día" de la racha. República Dominicana = UTC-4, sin horario de verano.
@@ -112,17 +112,18 @@ STREAK_TZ = timezone(timedelta(hours=-4))
 PROFILE_MAX_ROLES = 10  # máximo de roles mostrados en la tarjeta
 
 # --- Miembro de la Semana ---
-# Mientras este ID esté en 0, la función queda desactivada. Solo anuncio, sin rol.
+# Solo anuncio, sin rol. Canal, día y hora se cambian con /motw_set_channel y /motw_set_schedule;
+# con este ID en 0 y sin canal elegido, la función queda desactivada.
 MOTW_CHANNEL_ID = 1555606764278382722  # canal por defecto (cambiable con /motw_set_channel)
 MOTW_WEEKDAY_DEFAULT = 3  # día por defecto: 0=lunes ... 3=jueves ... 6=domingo
 MOTW_HOUR_DEFAULT = 9  # hora por defecto (hora local de STREAK_TZ)
 MOTW_WEEKDAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
-# --- Verificación por botón (/verify): reemplaza la verificación de Invite Tracker ---
+# --- Verificación por botón (/verify) ---
 # Rol, timeout, acción, textos y activación se guardan en la DB y se cambian con
 # /verify_config y /verify_texts; estos son solo los valores por defecto.
 VERIFY_BUTTON_ID = "heraldo_verify"
-VERIFY_TIMEOUT_DEFAULT = 299  # segundos desde que entra (igual que Invite Tracker)
+VERIFY_TIMEOUT_DEFAULT = 299  # segundos desde que entra
 VERIFY_ACTION_DEFAULT = "kick"
 VERIFY_ACTION_LABELS = {"kick": "Expulsar", "ban": "Banear", "none": "Solo registrar (sin acción)"}
 VERIFY_PANEL_TEXT_DEFAULT = "✅ Pulsa el botón de abajo para confirmar que eres mayor de edad y obtener acceso al servidor."
@@ -619,14 +620,14 @@ async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: 
 
 
 async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
-    """Respaldo del Verification Timeout de Guardián (299s). Si a los 300s el
+    """Respaldo del timeout de Sin Verificar (299s). Si a los 300s el
     miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
     guild = bot.get_guild(guild_id)
     if guild is None:
         return
     member = guild.get_member(user_id)
     if member is None:
-        db_clear_sin_verificado(user_id)  # Guardián (u otro) ya lo expulsó — nada que hacer
+        db_clear_sin_verificado(user_id)  # ya lo expulsaron — nada que hacer
         return
 
     if SIN_VERIFICAR_ROLE_ID not in {r.id for r in member.roles}:
@@ -635,11 +636,11 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
 
     db_clear_sin_verificado(user_id)
     try:
-        await member.kick(reason="No se verificó (respaldo del timeout de Guardián)")
+        await member.kick(reason="No se verificó (respaldo del timeout)")
         await log_embed(
             guild, "👢 Kick — No se verificó",
             f"{member.mention} (`{member.id}`) — no se verificó dentro del tiempo límite. "
-            f"(Respaldo: el timeout de Guardián no lo expulsó a tiempo.)",
+            f"(Respaldo: no fue expulsado antes por el timeout.)",
             discord.Color.red(),
         )
     except discord.Forbidden:
@@ -957,7 +958,7 @@ async def heraldo_log_channel_error(interaction: discord.Interaction, error: dis
 
 
 # ---------------------------------------------------------------------------
-# Verificación por botón (/verify) — reemplaza la verificación de Invite Tracker
+# Verificación por botón (/verify)
 # ---------------------------------------------------------------------------
 
 def verify_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
@@ -1608,7 +1609,7 @@ def template_config_summary(now_utc: datetime) -> str:
     hora="Hora del día (0-23, hora de RD)",
     dia_semana="Día de la semana (frecuencia semanal)",
     dia_mes="Día del mes, 1-28 (frecuencia mensual)",
-    intervalo="Intervalo entre copias cuando la frecuencia es por intervalo (usa d, h y m; por ejemplo 30m, 6h o 1d)",
+    intervalo="Intervalo entre copias (frecuencia por intervalo): usa d, h y m, por ejemplo 30m, 6h o 1d",
     enviar_a="Quién recibe el enlace por mensaje privado (por defecto, tú)",
 )
 @discord.app_commands.choices(
