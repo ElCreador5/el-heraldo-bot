@@ -49,13 +49,16 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      puede, deja constancia en el canal de logs, sin el enlace).
    - /template_sync la hace al momento y muestra el enlace.
 
-7. HONEYPOT (/honeypot)
-   - Canales trampa visibles para todos; quien escriba (y no esté exento) sufre, en orden:
-     se le quitan todos los roles menos el de verificación y se le pone el rol de castigo
-     (elegible), mientras sus mensajes se purgan en segundo plano (todos, una cantidad o un
-     rango de tiempo, sin tope). También hay timeout o solo registrar.
-     /honeypot release devuelve sus roles. Aviso fijado automático, exenciones, protección
-     contra fallos (pausa si caen varios miembros antiguos) e historial de capturas.
+7. CONDENAS / HONEYPOT
+   - El rol Condenado es la fuente de verdad. /condenar, el honeypot, una reacción ☠️ de un
+     administrador o la asignación manual del rol activan el mismo proceso: se guardan los
+     roles, se quitan los roles asignables (incluidos Tentad@ y Sin Verificar), se aplica Condenado,
+     se pausa la evaluación de verificación y se excluye actividad/Miembro de la Semana.
+   - /liberar devuelve los roles guardados; /condenados muestra motivo, origen, inicio y caducidad.
+   - Las condenas tienen duración opcional, sobreviven reinicios y sobreviven a una salida/reentrada.
+   - /honeypot release deja de existir para evitar dos motores de liberación distintos.
+   - La reacción ☠️ solo la procesan administradores.
+   - Aviso privado al condenado y anuncio opcional en el canal configurado con /condenar_config.
 
 8. PURGA (/purge)
    - Borra mensajes de un usuario sin límites: todos, sus N más recientes o un rango de tiempo
@@ -101,6 +104,9 @@ EVAL_ROLE_IDS = {
 }
 RECOVERY_CHANNEL_ID = 1522863826545016913  # canal donde se genera el invite de recuperación
 LOG_CHANNEL_ID = 1549052747117240381  # canal de logs por defecto (cambiable con /heraldo_log_channel)
+CONDEMNED_CHANNEL_ID = 0  # configurable con /condenar_config; 0 = sin canal de avisos
+CONDEMNED_EMOJI = "☠️"
+CONDEMNATION_MAX_MINUTES = 10 * 365 * 24 * 60
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
 # --- Perfil (/profile): mensajes y racha diaria ---
@@ -564,6 +570,8 @@ async def on_ready() -> None:
             print(f"🧹 Comando global huérfano eliminado: /{cmd.name}")
     except discord.HTTPException as e:
         print(f"No se pudo limpiar comandos globales: {e}")
+    if not condemnation_expiry_loop.is_running():
+        condemnation_expiry_loop.start()
     check_pending_verifications.start()
     if get_motw_channel_id():
         if not member_of_the_week_loop.is_running():
@@ -579,12 +587,31 @@ async def on_ready() -> None:
 async def on_member_join(member: discord.Member) -> None:
     if member.bot:
         return  # los bots no pasan por el flujo de verificación
+
+    invite_code = await detect_used_invite(member.guild)
+    db_upsert_join(member.id, invite_code)
+
+    # Una condena activa tiene prioridad absoluta sobre los flujos de verificación.
+    # El miembro puede salir y volver: la condena persiste en SQLite.
+    condemnation = condemnation_get(member.id)
+    if condemnation is not None:
+        db_clear_verify_pending(member.id)
+        try:
+            await condemnation_sync_roles(member, save_snapshot=False, reason="Reingreso con condena activa", role_id=condemnation_role_id(condemnation))
+            await log_embed(
+                member.guild, "☠️ Condena restaurada al reingresar",
+                f"{member.mention} (`{member.id}`) volvió al servidor con una condena activa. "
+                "Se restauró el rol Condenado y se evitó la evaluación de verificación.",
+                discord.Color.dark_red(),
+            )
+        except Exception:
+            traceback.print_exc()
+        return
+
     if verify_enabled():
         now = datetime.now(timezone.utc)
         db_set_verify_pending(member.id, now)
         asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
-    invite_code = await detect_used_invite(member.guild)
-    db_upsert_join(member.id, invite_code)
 
 
 # ---------------------------------------------------------------------------
@@ -595,10 +622,84 @@ async def on_member_join(member: discord.Member) -> None:
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
     if after.bot:
         return  # los bots no pasan por el flujo de verificación
+    if after.id in _condemn_sync_busy:
+        return
 
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
+    active_condemnation = condemnation_get(after.id)
+    condemned_id = condemnation_role_id(active_condemnation)
+    had_condemned = bool(condemned_id and condemned_id in before_role_ids)
+    has_condemned = bool(condemned_id and condemned_id in after_role_ids)
 
+    # El rol Condenado es la fuente de verdad: si se quita por cualquier medio, se libera.
+    if had_condemned and not has_condemned and active_condemnation is not None:
+        _condemn_sync_busy.add(after.id)
+        try:
+            await release_condemned_member(after, automatic=False)
+        finally:
+            _condemn_sync_busy.discard(after.id)
+        return
+
+    # Si alguien asigna Condenado a mano, se ejecuta exactamente el mismo proceso.
+    if has_condemned and not had_condemned and active_condemnation is None:
+        actor = None
+        try:
+            async for entry in after.guild.audit_logs(limit=8, action=discord.AuditLogAction.member_role_update):
+                if entry.target and entry.target.id == after.id and (datetime.now(timezone.utc) - entry.created_at).total_seconds() < 20:
+                    actor = entry.user
+                    break
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+        _condemn_sync_busy.add(after.id)
+        try:
+            protection = condemnation_protection_reason(after)
+            if protection:
+                role = after.guild.get_role(condemned_id)
+                if role is not None and role in after.roles and role.is_assignable():
+                    await after.remove_roles(role, reason=f"Condena no permitida: {protection}")
+                await log_embed(after.guild, "⚠️ Condena rechazada", f"{after.mention}: {protection}.", discord.Color.orange())
+            else:
+                await condemn_member(
+                    after,
+                    reason="El rol Condenado fue otorgado manualmente.",
+                    duration_minutes=None,
+                    purge_spec=hp_purge_spec(),
+                    origin="role",
+                    applied_by=actor,
+                    preserve_role_ids=list(before_role_ids),
+                )
+        finally:
+            _condemn_sync_busy.discard(after.id)
+        return
+
+    # Si ya estaba condenado y otro moderador/bot añade roles, se vuelven a quitar.
+    if active_condemnation is not None and has_condemned:
+        added_assignable = any(
+            r.id not in before_role_ids and r.id != condemned_id and r.is_assignable() and not r.managed
+            for r in after.roles
+        )
+        if added_assignable:
+            _condemn_sync_busy.add(after.id)
+            try:
+                await condemn_member(
+                    after,
+                    reason=active_condemnation["reason"],
+                    duration_minutes=active_condemnation["duration_minutes"],
+                    purge_spec=None,
+                    origin=active_condemnation["origin"],
+                    applied_by=None,
+                    send_dm=False,
+                    announce=False,
+                )
+            finally:
+                _condemn_sync_busy.discard(after.id)
+        db_clear_tentado(after.id)
+        db_clear_sin_verificado(after.id)
+        db_clear_verify_pending(after.id)
+        return
+
+    # Flujos normales de verificación; una condena activa ya salió por arriba.
     if SIN_VERIFICAR_ROLE_ID in after_role_ids and SIN_VERIFICAR_ROLE_ID not in before_role_ids:
         now = datetime.now(timezone.utc)
         db_set_sin_verificado(after.id, now)
@@ -622,6 +723,9 @@ async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: 
 async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
     """Respaldo del timeout de Sin Verificar (299s). Si a los 300s el
     miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
+    if condemnation_get(user_id) is not None:
+        db_clear_sin_verificado(user_id)
+        return
     guild = bot.get_guild(guild_id)
     if guild is None:
         return
@@ -701,6 +805,9 @@ async def check_pending_verifications() -> None:
 
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
     """Devuelve 'verificado', 'expulsado', 'castigado' o 'ausente'/'sin-guild'."""
+    if condemnation_get(user_id) is not None:
+        db_clear_tentado(user_id)
+        return "castigado"
     guild = bot.get_guild(guild_id)
     if guild is None:
         return "sin-guild"
@@ -1068,6 +1175,9 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
     """Aplica la acción configurada si el miembro no se verificó dentro del timeout.
     Lee siempre la configuración actual: si el timeout se alargó mientras esperaba, no
     actúa todavía (check_pending_verifications lo retoma al vencer el nuevo plazo)."""
+    if condemnation_get(user_id) is not None:
+        db_clear_verify_pending(user_id)
+        return
     row = db_get(user_id)
     if row is None or row["verify_pending_at"] is None:
         return  # ya verificado, ya evaluado o nunca estuvo pendiente
@@ -1743,8 +1853,8 @@ async def track_activity(message: discord.Message) -> None:
     if message.channel.id in hp_trap_ids():
         return  # lo escrito en un canal trampa no cuenta como actividad
     punish_id = hp_punish_role_id()
-    if punish_id and any(r.id == punish_id for r in message.author.roles):
-        return  # los castigados por el honeypot no suman
+    if (punish_id and any(r.id == punish_id for r in message.author.roles)) or condemnation_get(message.author.id) is not None:
+        return  # los condenados no suman actividad
 
     today = datetime.now(STREAK_TZ).date()
     yesterday = today - timedelta(days=1)
@@ -2064,6 +2174,28 @@ def honeypot_db_init() -> None:
         "channel_id INTEGER, content TEXT, action TEXT, success INTEGER, note TEXT, "
         "account_created TEXT, joined_at TEXT, triggered_at TEXT)"
     )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS condemnations ("
+        "user_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, role_id INTEGER NOT NULL DEFAULT 0, role_ids TEXT NOT NULL, "
+        "reason TEXT NOT NULL, duration_minutes INTEGER, condemned_at TEXT NOT NULL, "
+        "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1)"
+    )
+    try:
+        conn.execute("ALTER TABLE condemnations ADD COLUMN role_id INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    # Migración de la tabla histórica del honeypot: lo ya castigado pasa a ser una
+    # condena activa indefinida, sin perder los roles que había guardado.
+    legacy = conn.execute(
+        "SELECT user_id, role_ids, punished_at FROM honeypot_punished"
+    ).fetchall()
+    for user_id, role_ids, punished_at in legacy:
+        conn.execute(
+            "INSERT OR IGNORE INTO condemnations "
+            "(user_id, guild_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active) "
+            "VALUES (?, 0, ?, ?, NULL, ?, NULL, 'honeypot', NULL, 1)",
+            (user_id, role_ids, "Condena heredada del honeypot", punished_at),
+        )
     conn.commit()
     conn.close()
     hp_prune_history()
@@ -2169,6 +2301,92 @@ def hp_clear_punished(user_id: int) -> None:
     conn.execute("DELETE FROM honeypot_punished WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
+
+
+def condemnation_get(user_id: int, active_only: bool = True) -> sqlite3.Row | None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    query = "SELECT * FROM condemnations WHERE user_id = ?"
+    if active_only:
+        query += " AND active = 1"
+    row = conn.execute(query, (user_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def condemnation_save(
+    user_id: int, guild_id: int, role_id: int, role_ids: list[int], reason: str,
+    duration_minutes: int | None, origin: str, applied_by: int | None,
+    condemned_at: datetime | None = None,
+) -> None:
+    when = condemned_at or datetime.now(timezone.utc)
+    expires = when + timedelta(minutes=duration_minutes) if duration_minutes else None
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO condemnations "
+        "(user_id, guild_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) "
+        "ON CONFLICT(user_id) DO UPDATE SET guild_id=excluded.guild_id, role_ids=excluded.role_ids, "
+        "role_id=excluded.role_id, reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
+        "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1",
+        (user_id, guild_id, role_id, json.dumps(role_ids), reason, duration_minutes, when.isoformat(),
+         expires.isoformat() if expires else None, origin, applied_by),
+    )
+    conn.commit()
+    conn.close()
+
+
+def condemnation_deactivate(user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("UPDATE condemnations SET active = 0 WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    hp_clear_punished(user_id)
+
+
+def condemnation_list(guild_id: int) -> list[sqlite3.Row]:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM condemnations WHERE active = 1 AND (guild_id = ? OR guild_id = 0) "
+        "AND (expires_at IS NULL OR expires_at > ?) ORDER BY condemned_at DESC",
+        (guild_id, datetime.now(timezone.utc).isoformat()),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def condemnation_channel_id() -> int:
+    value = db_meta_get("condemned_channel_id")
+    return int(value) if value else CONDEMNED_CHANNEL_ID
+
+
+def set_condemnation_channel_id(channel_id: int) -> None:
+    db_meta_set("condemned_channel_id", str(channel_id))
+
+
+def condemnation_duration_text(row: sqlite3.Row) -> str:
+    if row["expires_at"] is None:
+        return "Indefinida"
+    expires = datetime.fromisoformat(row["expires_at"])
+    return f"hasta {discord.utils.format_dt(expires, 'R')} ({discord.utils.format_dt(expires, 'f')})"
+
+
+def condemnation_origin_label(origin: str) -> str:
+    return {
+        "honeypot": "🍯 Honeypot",
+        "command": "⌨️ Comando",
+        "reaction": "☠️ Reacción",
+        "role": "🎭 Rol otorgado a mano",
+        "raid": "🛡️ Raid Protection",
+    }.get(origin, origin)
+
+
+def condemnation_parse_role_ids(value: str) -> list[int]:
+    try:
+        return [int(x) for x in json.loads(value)]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
 
 
 def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
@@ -2759,6 +2977,275 @@ def hp_start_purge(member: discord.Member) -> str | None:
     return f"purga en segundo plano ({scope})"
 
 
+_condemn_sync_busy: set[int] = set()
+
+
+def condemnation_protection_reason(member: discord.Member) -> str | None:
+    """Motivo por el que no se puede condenar a este miembro."""
+    guild = member.guild
+    if member.id == guild.owner_id:
+        return "es el dueño del servidor"
+    if member.guild_permissions.administrator:
+        return "tiene el permiso Administrador y está exento"
+    if member.top_role >= guild.me.top_role:
+        return "su rol más alto es igual o superior al del Heraldo"
+    return None
+
+
+async def condemnation_send_dm(
+    member: discord.Member, reason: str, duration_minutes: int | None, origin: str
+) -> bool:
+    duration_text = format_duration(duration_minutes) if duration_minutes else "indefinida"
+    text = (
+        "☠️ **Has sido condenado en el servidor.**\n\n"
+        f"**Motivo:** {reason}\n"
+        f"**Duración:** {duration_text}\n"
+        f"**Origen:** {condemnation_origin_label(origin)}\n\n"
+        "Mientras la condena esté activa no participas en la evaluación de verificación, "
+        "ni en la actividad o el Miembro de la Semana. Si la condena termina o un administrador te libera, "
+        "tus roles guardados serán restaurados en la medida en que sigan existiendo y sean asignables."
+    )
+    try:
+        await member.send(text)
+        return True
+    except discord.HTTPException:
+        return False
+
+
+async def condemnation_announce(
+    guild: discord.Guild, member: discord.Member, reason: str,
+    duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
+) -> None:
+    channel = guild.get_channel(condemnation_channel_id())
+    if not isinstance(channel, discord.TextChannel):
+        return
+    embed = discord.Embed(
+        title="☠️ Nueva condena",
+        description=f"{member.mention} ha sido condenado.",
+        color=discord.Color.dark_red(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.add_field(name="Motivo", value=reason[:1024], inline=False)
+    embed.add_field(name="Duración", value=format_duration(duration_minutes) if duration_minutes else "Indefinida", inline=True)
+    embed.add_field(name="Origen", value=condemnation_origin_label(origin), inline=True)
+    embed.add_field(name="Aplicó", value=applied_by.mention if applied_by else "Sistema / Heraldo", inline=True)
+    embed.add_field(name="Desde", value=discord.utils.format_dt(datetime.now(timezone.utc), "F"), inline=False)
+    try:
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+    except discord.HTTPException:
+        pass
+
+
+def condemnation_role_id(row: sqlite3.Row | None = None) -> int:
+    if row is not None and row["role_id"]:
+        return int(row["role_id"])
+    return hp_punish_role_id()
+
+
+async def condemnation_sync_roles(
+    member: discord.Member,
+    *,
+    preserve_role_ids: list[int] | None = None,
+    save_snapshot: bool = False,
+    reason: str = "Condena de El Heraldo",
+    role_id: int | None = None,
+) -> tuple[bool, list[int], str]:
+    """Deja solo el rol de condenado entre los roles asignables y conserva roles gestionados."""
+    guild = member.guild
+    punish_role = guild.get_role(role_id or hp_punish_role_id())
+    if punish_role is None:
+        return False, [], "No hay rol Condenado configurado; usa `/honeypot config rol_castigo` para elegirlo."
+    problem = hp_role_problem(punish_role, guild)
+    if problem:
+        return False, [], f"El rol Condenado {problem}."
+
+    source = preserve_role_ids if preserve_role_ids is not None else [r.id for r in member.roles]
+    excluded = {punish_role.id}
+    saved_ids = [rid for rid in source if rid not in excluded]
+
+    removed = [
+        r for r in member.roles
+        if r.id not in excluded and r.is_assignable() and not r.managed
+    ]
+    managed = [r for r in member.roles if r.managed and not r.is_default()]
+    try:
+        await member.edit(roles=managed + [punish_role], reason=reason)
+    except discord.Forbidden:
+        return False, [], "Faltan permisos para cambiar roles o la jerarquía del Heraldo no alcanza al usuario."
+    except discord.HTTPException as e:
+        return False, [], f"Error al cambiar roles: `{e}`"
+
+    if save_snapshot:
+        # Solo se guardan roles que realmente estaban antes de la condena y que el bot puede restaurar.
+        hp_save_punished(member.id, saved_ids)
+    return True, saved_ids, f"{len(removed)} rol(es) asignable(s) retirado(s); Tentad@ y Sin Verificar retirados."
+
+
+async def condemn_member(
+    member: discord.Member,
+    *,
+    reason: str,
+    duration_minutes: int | None,
+    purge_spec: tuple[str, int] | None,
+    origin: str,
+    applied_by: discord.abc.User | None,
+    preserve_role_ids: list[int] | None = None,
+    send_dm: bool = True,
+    announce: bool = True,
+) -> tuple[bool, str]:
+    """Motor único de condena. Lo usan honeypot, comando, reacción, rol manual y raid protection."""
+    if member.bot:
+        return False, "Los bots no se condenan."
+    protection = condemnation_protection_reason(member)
+    if protection:
+        return False, f"No se puede condenar: {protection}."
+
+    existing = condemnation_get(member.id)
+    active_role_id = condemnation_role_id(existing)
+    snapshot = preserve_role_ids
+    if snapshot is None and existing is None:
+        snapshot = [r.id for r in member.roles]
+
+    _condemn_sync_busy.add(member.id)
+    try:
+        ok, saved_ids, role_note = await condemnation_sync_roles(
+            member, preserve_role_ids=snapshot, save_snapshot=(existing is None),
+            reason=f"{reason[:400]} — {condemnation_origin_label(origin)}",
+            role_id=active_role_id,
+        )
+    finally:
+        _condemn_sync_busy.discard(member.id)
+    if not ok:
+        return False, role_note
+
+    if existing is None:
+        condemnation_save(member.id, member.guild.id, active_role_id, saved_ids, reason[:1000], duration_minutes, origin,
+                           applied_by.id if applied_by else None)
+    else:
+        # Una nueva orden sobre una condena activa actualiza motivo/duración/origen, pero NO pisa la fotografía original de roles.
+        condemnation_save(member.id, member.guild.id, active_role_id, condemnation_parse_role_ids(existing["role_ids"]),
+                           reason[:1000], duration_minutes, origin, applied_by.id if applied_by else None,
+                           condemned_at=datetime.fromisoformat(existing["condemned_at"]))
+
+    db_clear_tentado(member.id)
+    db_clear_sin_verificado(member.id)
+    db_clear_verify_pending(member.id)
+    db_zero_week_messages(member.id)
+
+    if purge_spec and purge_spec[0] != "none":
+        kind, value = purge_spec
+        after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
+        limit = value if kind == "count" else None
+        asyncio.create_task(run_purge_job(
+            member.guild, member, scope_text=format_purge_spec(kind, value),
+            requested_by=f"☠️ Condena ({condemnation_origin_label(origin)})",
+            after=after, limit=limit, title="☠️ Purga de condena completada",
+        ))
+
+    dm_ok = await condemnation_send_dm(member, reason, duration_minutes, origin) if send_dm else None
+    if announce:
+        await condemnation_announce(member.guild, member, reason, duration_minutes, origin, applied_by)
+    await log_embed(
+        member.guild, "☠️ Condena aplicada",
+        f"{member.mention} (`{member.id}`)\n"
+        f"Motivo: {reason}\n"
+        f"Duración: {format_duration(duration_minutes) if duration_minutes else 'Indefinida'}\n"
+        f"Origen: {condemnation_origin_label(origin)}\n"
+        f"Aplicó: {applied_by.mention if applied_by else 'El Heraldo'}\n"
+        f"{role_note}\n"
+        f"DM: {'✅ enviado' if dm_ok else '⚠️ no enviado' if dm_ok is not None else '—'}",
+        discord.Color.dark_red(),
+    )
+    return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
+
+
+async def release_condemned_member(
+    member: discord.Member, *, released_by: discord.abc.User | None = None, automatic: bool = False
+) -> tuple[bool, str]:
+    row = condemnation_get(member.id)
+    punish_role = member.guild.get_role(condemnation_role_id(row))
+    if row is None and not (punish_role and punish_role in member.roles):
+        return False, "Ese miembro no tiene una condena activa."
+
+    saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.id) or [])
+    restore: list[discord.Role] = []
+    lost = 0
+    for rid in saved:
+        role = member.guild.get_role(rid)
+        if role is not None and role.is_assignable() and not role.managed:
+            restore.append(role)
+        else:
+            lost += 1
+
+    current = [
+        r for r in member.roles
+        if not r.is_default() and (punish_role is None or r.id != punish_role.id)
+    ]
+    new_roles = list({r.id: r for r in current + restore}.values())
+    _condemn_sync_busy.add(member.id)
+    try:
+        await member.edit(roles=new_roles, reason=("Condena expirada" if automatic else f"Liberado por {released_by}"))
+    except discord.HTTPException as e:
+        return False, f"No pude cambiar sus roles: `{e}`"
+    finally:
+        _condemn_sync_busy.discard(member.id)
+
+    condemnation_deactivate(member.id)
+    db_clear_tentado(member.id)
+    db_clear_sin_verificado(member.id)
+    db_clear_verify_pending(member.id)
+
+    # Si entre los roles originales estaban los de verificación, vuelven a su flujo normal
+    # desde cero; mientras la condena estuvo activa nunca corrió ninguna evaluación.
+    restored_ids = {r.id for r in restore}
+    if TENTADO_ROLE_ID in restored_ids:
+        now = datetime.now(timezone.utc)
+        db_set_tentado(member.id, now)
+        asyncio.create_task(schedule_check(member.guild.id, member.id, now))
+    if SIN_VERIFICAR_ROLE_ID in restored_ids:
+        now = datetime.now(timezone.utc)
+        db_set_sin_verificado(member.id, now)
+        asyncio.create_task(schedule_sin_verificado_check(member.guild.id, member.id, now))
+
+    text = f"{len(restore)} rol(es) restaurado(s)" + (f"; {lost} no se pudieron restaurar" if lost else "")
+    await log_embed(
+        member.guild, "🕊️ Condena levantada",
+        f"{member.mention} (`{member.id}`) — {text}. "
+        f"Por: {released_by.mention if released_by else 'El Heraldo'}.",
+        discord.Color.green(),
+    )
+    return True, text
+
+
+async def check_expired_condemnations() -> None:
+    now = datetime.now(timezone.utc)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM condemnations WHERE active = 1 AND expires_at IS NOT NULL AND expires_at <= ?",
+        (now.isoformat(),),
+    ).fetchall()
+    conn.close()
+    for row in rows:
+        guild = bot.get_guild(row["guild_id"]) if row["guild_id"] else None
+        if guild is None:
+            condemnation_deactivate(row["user_id"])
+            continue
+        member = guild.get_member(row["user_id"])
+        if member is not None:
+            await release_condemned_member(member, automatic=True)
+        else:
+            condemnation_deactivate(row["user_id"])
+
+
+@tasks.loop(minutes=1)
+async def condemnation_expiry_loop() -> None:
+    try:
+        await check_expired_condemnations()
+    except Exception:
+        traceback.print_exc()
+
+
 async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
     guild = member.guild
     reason = "Honeypot: escribió en un canal trampa"
@@ -2773,41 +3260,17 @@ async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
             purge_note = hp_start_purge(member)
             return True, f"Aislado {format_duration(minutes)}" + (f"; {purge_note}" if purge_note else "")
         if action == "role":
-            punish_role = guild.get_role(hp_punish_role_id())
-            if punish_role is None:
-                return False, "No hay rol de castigo configurado (usa /honeypot config rol_castigo)"
-            problem = hp_role_problem(punish_role, guild)
-            if problem:
-                return False, f"El rol de castigo {problem}"
-
-            # La purga no tiene tope y puede tardar: arranca en segundo plano a la vez que los
-            # roles, para que el castigado quede neutralizado de inmediato.
-            notes: list[str] = []
-            purge_note = hp_start_purge(member)
-            if purge_note:
-                notes.append(purge_note)
-            verify_id = get_verify_role_id()
-            keep_ids = (verify_id, SIN_VERIFICAR_ROLE_ID, punish_role.id)  # Sin Verificar se conserva: así el respaldo de 300 s lo expulsa
-            removed = [r for r in member.roles if r.is_assignable() and r.id not in keep_ids]
-            removed_ids = {r.id for r in removed}
-            kept = [
-                r for r in member.roles
-                if not r.is_default() and r.id not in removed_ids and r.id != punish_role.id
-            ]
-            # Un solo edit cambia el set completo de roles: sin estado intermedio sin castigo.
-            try:
-                await member.edit(roles=kept + [punish_role], reason=reason)
-            except discord.Forbidden:
-                return False, "; ".join(notes + ["faltan permisos para cambiar roles (Gestionar roles)"])
-            except discord.HTTPException as e:
-                return False, "; ".join(notes + [f"error al cambiar roles: `{e}`"])
-            hp_save_punished(member.id, [r.id for r in removed])
-            notes.append(f"{len(removed)} rol(es) quitado(s)")
-            notes.append(f"rol {punish_role.mention} aplicado")
-            if any(r.id == SIN_VERIFICAR_ROLE_ID for r in member.roles):
-                notes.append("sigue sin verificar: el respaldo de verificación lo expulsará")
-            db_zero_week_messages(member.id)  # un castigado no puede ganar el Miembro de la Semana
-            return True, "; ".join(notes)
+            purge_spec = hp_purge_spec()
+            return await condemn_member(
+                member,
+                reason="Honeypot: escribió en un canal trampa",
+                duration_minutes=None,
+                purge_spec=purge_spec,
+                origin="honeypot",
+                applied_by=None,
+                send_dm=True,
+                announce=True,
+            )
     except discord.Forbidden:
         return False, "Faltan permisos (Moderar miembros / Gestionar roles)"
     except discord.HTTPException as e:
@@ -2932,6 +3395,178 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
         f"Quedan {len(hp_traps())} canal(es) trampa.",
         discord.Color.orange(),
     )
+
+
+
+# ---------------------------------------------------------------------------
+# CONDENAS — fuente de verdad compartida por comando, rol, reacción y honeypot
+# ---------------------------------------------------------------------------
+
+@bot.tree.command(name="condenar", description="Condenar a un miembro: guarda sus roles, los retira y aplica Condenado.")
+@discord.app_commands.describe(
+    miembro="Miembro que será condenado",
+    motivo="Motivo de la condena",
+    duracion="Duración: 30m, 12h, 2d…; vacío = indefinida",
+    purga="Qué borrar del condenado; vacío = últimas 24h, 0 = no borrar",
+)
+@discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
+async def condenar(
+    interaction: discord.Interaction,
+    miembro: discord.Member,
+    motivo: Optional[str] = None,
+    duracion: Optional[str] = None,
+    purga: Optional[str] = None,
+) -> None:
+    guild = interaction.guild
+    reason = (motivo or "Condena manual").strip()[:1000]
+    duration_minutes: int | None = None
+    try:
+        if duracion and duracion.strip() != "0":
+            duration_minutes = parse_duration(duracion, 1, CONDEMNATION_MAX_MINUTES)
+        purge_spec = parse_purge_spec(purga) if purga else HONEYPOT_PURGE_DEFAULT
+    except ValueError as e:
+        await interaction.response.send_message(f"❌ No se pudo condenar: {e}", ephemeral=True)
+        return
+
+    if miembro.id == interaction.user.id:
+        # No es una protección de seguridad; evita una equivocación especialmente fácil con el comando.
+        await interaction.response.send_message("❌ No puedes condenarte a ti mismo con este comando.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    ok, note = await condemn_member(
+        miembro,
+        reason=reason,
+        duration_minutes=duration_minutes,
+        purge_spec=purge_spec,
+        origin="command",
+        applied_by=interaction.user,
+    )
+    if not ok:
+        await interaction.followup.send(f"❌ No se aplicó la condena: {note}", ephemeral=True)
+        return
+    await interaction.followup.send(
+        f"☠️ {miembro.mention} condenado. **Duración:** {format_duration(duration_minutes) if duration_minutes else 'indefinida'} · "
+        f"**Purga:** {format_purge_spec(*purge_spec)}.", ephemeral=True,
+    )
+
+
+@condenar.error
+async def condenar_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+@bot.tree.command(name="liberar", description="Levantar una condena y devolver los roles guardados.")
+@discord.app_commands.describe(miembro="Miembro condenado que será liberado")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
+async def liberar(interaction: discord.Interaction, miembro: discord.Member) -> None:
+    await interaction.response.defer(ephemeral=True)
+    ok, text = await release_condemned_member(miembro, released_by=interaction.user)
+    await interaction.followup.send(("✅ " if ok else "❌ ") + text, ephemeral=True)
+
+
+@liberar.error
+async def liberar_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+@bot.tree.command(name="condenados", description="Listar las condenas activas con motivo, origen y caducidad.")
+@discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
+async def condenados(interaction: discord.Interaction) -> None:
+    rows = condemnation_list(interaction.guild.id)
+    if not rows:
+        await interaction.response.send_message("No hay condenas activas.", ephemeral=True)
+        return
+    embed = discord.Embed(
+        title="☠️ Condenados activos",
+        description=f"**{len(rows)}** condena(s) activa(s).",
+        color=discord.Color.dark_red(),
+    )
+    for row in rows[:25]:
+        member = interaction.guild.get_member(row["user_id"])
+        mention = member.mention if member else f"`{row['user_id']}`"
+        when = discord.utils.format_dt(datetime.fromisoformat(row["condemned_at"]), "R")
+        value = (
+            f"**Motivo:** {row['reason'][:500]}\n"
+            f"**Desde:** {when}\n"
+            f"**Caduca:** {condemnation_duration_text(row)}\n"
+            f"**Origen:** {condemnation_origin_label(row['origin'])}"
+        )
+        embed.add_field(name=mention, value=value, inline=False)
+    if len(rows) > 25:
+        embed.set_footer(text=f"Mostrando 25 de {len(rows)} condenas activas.")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@bot.tree.command(name="condenar_config", description="Configurar el canal donde se anuncian las nuevas condenas.")
+@discord.app_commands.describe(canal="Canal de texto para los avisos de condena; vacío = ver configuración")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def condenar_config(interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None) -> None:
+    if canal is None:
+        current = interaction.guild.get_channel(condemnation_channel_id())
+        await interaction.response.send_message(
+            f"**Canal de condenas:** {current.mention if current else 'no configurado'}",
+            ephemeral=True,
+        )
+        return
+    perms = canal.permissions_for(interaction.guild.me)
+    missing = [name for name, ok in (("Ver canal", perms.view_channel), ("Enviar mensajes", perms.send_messages), ("Insertar enlaces", perms.embed_links)) if not ok]
+    if missing:
+        await interaction.response.send_message(
+            f"❌ No guardé el cambio: faltan **{', '.join(missing)}** en {canal.mention}.", ephemeral=True
+        )
+        return
+    set_condemnation_channel_id(canal.id)
+    await interaction.response.send_message(f"✅ Los avisos de condena se publicarán en {canal.mention}.", ephemeral=True)
+    await log_embed(interaction.guild, "⚙️ Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
+
+
+@bot.listen("on_raw_reaction_add")
+async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None:
+    if payload.guild_id is None or str(payload.emoji) != CONDEMNED_EMOJI:
+        return
+    guild = bot.get_guild(payload.guild_id)
+    if guild is None or payload.user_id == bot.user.id:
+        return
+    actor = guild.get_member(payload.user_id)
+    if actor is None:
+        try:
+            actor = await guild.fetch_member(payload.user_id)
+        except discord.HTTPException:
+            return
+    if not actor.guild_permissions.administrator:
+        return
+    try:
+        message = await guild.get_channel(payload.channel_id).fetch_message(payload.message_id)
+    except (AttributeError, discord.NotFound, discord.Forbidden, discord.HTTPException):
+        return
+    target = message.author
+    if not isinstance(target, discord.Member) or target.bot:
+        return
+    if target.id == actor.id:
+        return
+    if condemnation_get(target.id) is not None:
+        return
+    ok, note = await condemn_member(
+        target,
+        reason=f"Condena por reacción ☠️ al mensaje {message.jump_url}",
+        duration_minutes=None,
+        purge_spec=HONEYPOT_PURGE_DEFAULT,
+        origin="reaction",
+        applied_by=actor,
+    )
+    if not ok:
+        await log_embed(guild, "⚠️ Condena por reacción rechazada", f"{actor.mention} reaccionó con ☠️ a {message.jump_url}: {note}", discord.Color.orange())
 
 
 # --- Comandos /honeypot -----------------------------------------------------
@@ -3341,42 +3976,6 @@ async def honeypot_resume(interaction: discord.Interaction) -> None:
     hp_meta_set("honeypot_paused", "0")
     await interaction.response.send_message("✅ Honeypot reanudado.", ephemeral=True)
     await log_embed(interaction.guild, "▶️ Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
-
-
-@honeypot_group.command(name="release", description="Liberar a un castigado: devuelve sus roles y quita el rol de castigo.")
-@discord.app_commands.describe(miembro="Miembro castigado por el honeypot")
-async def honeypot_release(interaction: discord.Interaction, miembro: discord.Member) -> None:
-    guild = interaction.guild
-    punish_role = guild.get_role(hp_punish_role_id())
-    saved = hp_get_punished(miembro.id)
-    if saved is None and not (punish_role and punish_role in miembro.roles):
-        await interaction.response.send_message("Ese miembro no está castigado por el honeypot.", ephemeral=True)
-        return
-    await interaction.response.defer(ephemeral=True)
-    restore: list[discord.Role] = []
-    lost = 0
-    for rid in saved or []:
-        role = guild.get_role(rid)
-        if role is not None and role.is_assignable():
-            restore.append(role)
-        else:
-            lost += 1  # el rol se borró o el bot ya no puede asignarlo
-    current = [
-        r for r in miembro.roles
-        if not r.is_default() and (punish_role is None or r.id != punish_role.id)
-    ]
-    new_roles = list({r.id: r for r in current + restore}.values())
-    try:
-        await miembro.edit(roles=new_roles, reason=f"Honeypot: liberado por {interaction.user}")
-    except discord.HTTPException as e:
-        await interaction.followup.send(f"❌ No pude cambiar sus roles: `{e}`", ephemeral=True)
-        return
-    hp_clear_punished(miembro.id)
-    text = f"✅ {miembro.mention} liberado: {len(restore)} rol(es) devuelto(s)" + (
-        f", {lost} no se pudieron devolver (borrados o fuera de alcance)." if lost else "."
-    )
-    await interaction.followup.send(text, ephemeral=True)
-    await log_embed(guild, "🍯 Miembro liberado", f"{interaction.user.mention} liberó a {miembro.mention}. {text}")
 
 
 @honeypot_group.error
