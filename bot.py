@@ -1510,68 +1510,95 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     )
 
 
-class VerifyWelcomeDMModal(discord.ui.Modal):
-    """Editor del embed de bienvenida que se envía por DM tras la primera verificación."""
-
-    def __init__(self) -> None:
-        super().__init__(title="DM de bienvenida — El Heraldo")
-        self.title_input = discord.ui.TextInput(
-            label="Título", default=get_verify_dm_title(), max_length=256
-        )
-        self.field_name = discord.ui.TextInput(
-            label="Nombre del campo", default=get_verify_dm_field_name(), max_length=256
-        )
-        self.body = discord.ui.TextInput(
-            label="Mensaje", style=discord.TextStyle.paragraph,
-            default=get_verify_dm_body(), max_length=4000
-        )
-        self.footer = discord.ui.TextInput(
-            label="Footer", default=get_verify_dm_footer(), max_length=2048
-        )
-        self.color = discord.ui.TextInput(
-            label="Color HEX (ej. 4F5BDC)", default=get_verify_dm_color(), max_length=7
-        )
-        self.add_item(self.title_input)
-        self.add_item(self.field_name)
-        self.add_item(self.body)
-        self.add_item(self.footer)
-        self.add_item(self.color)
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        color = self.color.value.strip().lstrip("#")
-        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
-            await interaction.response.send_message(
-                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.", ephemeral=True
-            )
-            return
-        values = {
-            "verify_dm_title": self.title_input.value.strip(),
-            "verify_dm_field_name": self.field_name.value.strip(),
-            "verify_dm_body": self.body.value.strip(),
-            "verify_dm_footer": self.footer.value.strip(),
-            "verify_dm_color": color.upper(),
-        }
-        if not all(values.values()):
-            await interaction.response.send_message("❌ Ningún campo puede quedar vacío.", ephemeral=True)
-            return
-        for key, value in values.items():
-            db_meta_set(key, value)
-        await interaction.response.send_message(
-            "✅ Plantilla del DM de bienvenida actualizada. Los próximos usuarios que se verifiquen por primera vez recibirán este embed.",
-            ephemeral=True,
-        )
-        await log_embed(
-            interaction.guild, "⚙️ DM de bienvenida actualizado",
-            f"{interaction.user.mention} modificó la plantilla del DM de primera verificación.",
-            discord.Color.blurple(),
-        )
-
-
-@bot.tree.command(name="verify_dm_texts", description="Modificar el embed que reciben por DM al verificarse por primera vez.")
+@bot.tree.command(
+    name="verify_dm_texts",
+    description="Editar el DM de bienvenida, parte por parte y en orden.",
+)
+@discord.app_commands.describe(
+    titulo="1/6 · Título principal del embed (máx. 256 caracteres).",
+    campo="2/6 · Nombre del campo del embed (máx. 256 caracteres).",
+    mensaje="3/6 · Contenido del mensaje; puedes usar Markdown y menciones de canales.",
+    footer="4/6 · Texto del pie del embed (máx. 2048 caracteres).",
+    color="5/6 · Color HEX de 6 caracteres, por ejemplo 4F5BDC.",
+    icono_footer="6/6 · URL de la imagen pequeña que aparece junto al footer.",
+)
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
-async def verify_dm_texts(interaction: discord.Interaction) -> None:
-    await interaction.response.send_modal(VerifyWelcomeDMModal())
+async def verify_dm_texts(
+    interaction: discord.Interaction,
+    titulo: str,
+    campo: str,
+    mensaje: str,
+    footer: str,
+    color: str,
+    icono_footer: str,
+) -> None:
+    """Editor directo del DM: Discord muestra las 6 partes en este mismo orden."""
+    titulo = titulo.strip()
+    campo = campo.strip()
+    mensaje = mensaje.strip()
+    footer = footer.strip()
+    color = color.strip().lstrip("#")
+    icono_footer = icono_footer.strip()
+
+    if not titulo or not campo or not mensaje or not footer or not color or not icono_footer:
+        await interaction.response.send_message(
+            "❌ No guardé nada: todas las partes del embed son obligatorias.",
+            ephemeral=True,
+        )
+        return
+
+    if len(titulo) > 256:
+        await interaction.response.send_message("❌ El título no puede superar 256 caracteres.", ephemeral=True)
+        return
+    if len(campo) > 256:
+        await interaction.response.send_message("❌ El nombre del campo no puede superar 256 caracteres.", ephemeral=True)
+        return
+    if len(mensaje) > 4000:
+        await interaction.response.send_message("❌ El mensaje no puede superar 4000 caracteres.", ephemeral=True)
+        return
+    if len(footer) > 2048:
+        await interaction.response.send_message("❌ El footer no puede superar 2048 caracteres.", ephemeral=True)
+        return
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+        await interaction.response.send_message(
+            "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC` o `#4F5BDC`.",
+            ephemeral=True,
+        )
+        return
+    if len(icono_footer) > 500:
+        await interaction.response.send_message("❌ La URL del icono del footer es demasiado larga.", ephemeral=True)
+        return
+    if not re.match(r"^https?://", icono_footer, re.IGNORECASE):
+        await interaction.response.send_message(
+            "❌ El icono del footer debe ser una URL válida que empiece por `https://` o `http://`.",
+            ephemeral=True,
+        )
+        return
+
+    values = {
+        "verify_dm_title": titulo,
+        "verify_dm_field_name": campo,
+        "verify_dm_body": mensaje,
+        "verify_dm_footer": footer,
+        "verify_dm_color": color.upper(),
+        "verify_dm_footer_icon": icono_footer,
+    }
+    for key, value in values.items():
+        db_meta_set(key, value)
+
+    await interaction.response.send_message(
+        "✅ **DM de bienvenida actualizado correctamente.**\n"
+        "Las próximas primeras verificaciones recibirán esta nueva versión.\n\n"
+        "Usa `/verify_dm_preview` para verla en el canal de logs.",
+        ephemeral=True,
+    )
+    await log_embed(
+        interaction.guild,
+        "⚙️ DM de bienvenida actualizado",
+        f"{interaction.user.mention} actualizó las 6 partes del embed de primera verificación.",
+        discord.Color.blurple(),
+    )
 
 
 @bot.tree.command(name="verify_dm_preview", description="Mostrar en el canal de logs una vista previa del DM de bienvenida.")
