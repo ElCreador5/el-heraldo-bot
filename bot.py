@@ -233,7 +233,8 @@ def db_init() -> None:
             user_id INTEGER PRIMARY KEY,
             entry_invite TEXT,
             tentado_at TEXT,
-            dm_sent INTEGER DEFAULT 0
+            dm_sent INTEGER DEFAULT 0,
+            verification_dm_sent INTEGER DEFAULT 0
         )
         """
     )
@@ -243,6 +244,10 @@ def db_init() -> None:
         pass  # la columna ya existe (bots reiniciados sobre una DB previa)
     try:
         conn.execute("ALTER TABLE members ADD COLUMN verify_pending_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    try:
+        conn.execute("ALTER TABLE members ADD COLUMN verification_dm_sent INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
     conn.execute(
@@ -316,6 +321,20 @@ def db_mark_dm_sent(user_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "UPDATE members SET dm_sent = 1 WHERE user_id = ?", (user_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_verification_dm_sent(user_id: int) -> bool:
+    row = db_get(user_id)
+    return bool(row and row["verification_dm_sent"])
+
+
+def db_mark_verification_dm_sent(user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE members SET verification_dm_sent = 1 WHERE user_id = ?", (user_id,)
     )
     conn.commit()
     conn.close()
@@ -526,6 +545,64 @@ def get_verify_button_label() -> str:
 
 def get_verify_success_text() -> str:
     return db_meta_get("verify_success_text") or VERIFY_SUCCESS_TEXT_DEFAULT
+
+
+VERIFY_DM_TITLE_DEFAULT = "HAS CRUZADO EL UMBRAL"
+VERIFY_DM_BODY_DEFAULT = (
+    "Pero antes de que puedas perderte entre las puertas del paraíso, hay dos pasos que separan a los curiosos de los que realmente pertenecen:\n\n"
+    "🔒 **Verifícate** en <#1547500809015660585> — sin esto, sigues del otro lado del portón.\n\n"
+    "🎭 Luego, en <#1522863826545016913>, elige quién eres cuando nadie está mirando: Hetero, Curios@, Bi, Gay o Trans.\n\n"
+    "Cada rol abre una puerta distinta. Elige bien.\n\n"
+    "¿Dudas? <#1543412172158271560> te está esperando."
+)
+VERIFY_DM_FIELD_NAME_DEFAULT = "Este no es un lugar cualquiera"
+VERIFY_DM_FOOTER_DEFAULT = "© Paraíso Morboso 🍑🍆🥛"
+VERIFY_DM_COLOR_DEFAULT = "4F5BDC"
+VERIFY_DM_FOOTER_ICON_DEFAULT = "https://media.discordapp.net/attachments/1548766637866360852/1548771260476162189/39d74668-f12d-4979-bcc3-9b6826f2e8d5.png?ex=6ac49d63&is=6ac34be3&hm=b939835c020aeea2d422d7057213117b1744d4f95d37d180e8f"
+
+def get_verify_dm_title() -> str:
+    return db_meta_get("verify_dm_title") or VERIFY_DM_TITLE_DEFAULT
+
+def get_verify_dm_body() -> str:
+    return db_meta_get("verify_dm_body") or VERIFY_DM_BODY_DEFAULT
+
+def get_verify_dm_field_name() -> str:
+    return db_meta_get("verify_dm_field_name") or VERIFY_DM_FIELD_NAME_DEFAULT
+
+def get_verify_dm_footer() -> str:
+    return db_meta_get("verify_dm_footer") or VERIFY_DM_FOOTER_DEFAULT
+
+def get_verify_dm_color() -> str:
+    return db_meta_get("verify_dm_color") or VERIFY_DM_COLOR_DEFAULT
+
+def get_verify_dm_footer_icon() -> str:
+    return db_meta_get("verify_dm_footer_icon") or VERIFY_DM_FOOTER_ICON_DEFAULT
+
+
+def build_verification_welcome_embed() -> discord.Embed:
+    color_text = get_verify_dm_color().strip().lstrip("#")
+    try:
+        color_value = int(color_text, 16)
+        if not 0 <= color_value <= 0xFFFFFF:
+            raise ValueError
+    except ValueError:
+        color_value = int(VERIFY_DM_COLOR_DEFAULT, 16)
+
+    embed = discord.Embed(
+        title=get_verify_dm_title(),
+        color=discord.Color(color_value),
+    )
+    embed.add_field(
+        name=get_verify_dm_field_name(),
+        value=get_verify_dm_body(),
+        inline=False,
+    )
+    footer_icon = get_verify_dm_footer_icon().strip()
+    if footer_icon:
+        embed.set_footer(text=get_verify_dm_footer(), icon_url=footer_icon)
+    else:
+        embed.set_footer(text=get_verify_dm_footer())
+    return embed
 
 
 # ---------------------------------------------------------------------------
@@ -1132,6 +1209,20 @@ class VerifyView(discord.ui.View):
         self.add_item(button)
 
 
+async def send_verification_welcome_dm(member: discord.Member) -> bool:
+    """Envía el DM de bienvenida una sola vez, cuando el miembro se verifica por primera vez."""
+    if db_verification_dm_sent(member.id):
+        return True
+
+    embed = build_verification_welcome_embed()
+    try:
+        await member.send(embed=embed)
+        db_mark_verification_dm_sent(member.id)
+        return True
+    except discord.HTTPException:
+        return False
+
+
 async def handle_verify_click(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     member = interaction.user
@@ -1196,6 +1287,16 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
             )
 
     await interaction.followup.send(get_verify_success_text(), ephemeral=True)
+
+    # DM de bienvenida: solo la primera vez que este usuario obtiene el rol de verificación.
+    dm_welcome_ok = await send_verification_welcome_dm(member)
+    if not dm_welcome_ok:
+        await log_embed(
+            guild, "⚠️ No pude enviar el DM de bienvenida",
+            f"{member.mention} se verificó, pero tiene los DMs cerrados o Discord rechazó el mensaje.",
+            discord.Color.orange(),
+        )
+
     await log_embed(
         guild, "✅ Verificación de edad",
         f"{member.mention} (`{member.id}`) pulsó el botón y recibió {role.mention}.",
@@ -1409,6 +1510,104 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     )
 
 
+class VerifyWelcomeDMModal(discord.ui.Modal):
+    """Editor del embed de bienvenida que se envía por DM tras la primera verificación."""
+
+    def __init__(self) -> None:
+        super().__init__(title="DM de bienvenida — El Heraldo")
+        self.title_input = discord.ui.TextInput(
+            label="Título", default=get_verify_dm_title(), max_length=256
+        )
+        self.field_name = discord.ui.TextInput(
+            label="Nombre del campo", default=get_verify_dm_field_name(), max_length=256
+        )
+        self.body = discord.ui.TextInput(
+            label="Mensaje", style=discord.TextStyle.paragraph,
+            default=get_verify_dm_body(), max_length=4000
+        )
+        self.footer = discord.ui.TextInput(
+            label="Footer", default=get_verify_dm_footer(), max_length=2048
+        )
+        self.color = discord.ui.TextInput(
+            label="Color HEX (ej. 4F5BDC)", default=get_verify_dm_color(), max_length=7
+        )
+        self.add_item(self.title_input)
+        self.add_item(self.field_name)
+        self.add_item(self.body)
+        self.add_item(self.footer)
+        self.add_item(self.color)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color = self.color.value.strip().lstrip("#")
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message(
+                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.", ephemeral=True
+            )
+            return
+        values = {
+            "verify_dm_title": self.title_input.value.strip(),
+            "verify_dm_field_name": self.field_name.value.strip(),
+            "verify_dm_body": self.body.value.strip(),
+            "verify_dm_footer": self.footer.value.strip(),
+            "verify_dm_color": color.upper(),
+        }
+        if not all(values.values()):
+            await interaction.response.send_message("❌ Ningún campo puede quedar vacío.", ephemeral=True)
+            return
+        for key, value in values.items():
+            db_meta_set(key, value)
+        await interaction.response.send_message(
+            "✅ Plantilla del DM de bienvenida actualizada. Los próximos usuarios que se verifiquen por primera vez recibirán este embed.",
+            ephemeral=True,
+        )
+        await log_embed(
+            interaction.guild, "⚙️ DM de bienvenida actualizado",
+            f"{interaction.user.mention} modificó la plantilla del DM de primera verificación.",
+            discord.Color.blurple(),
+        )
+
+
+@bot.tree.command(name="verify_dm_texts", description="Modificar el embed que reciben por DM al verificarse por primera vez.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def verify_dm_texts(interaction: discord.Interaction) -> None:
+    await interaction.response.send_modal(VerifyWelcomeDMModal())
+
+
+@bot.tree.command(name="verify_dm_preview", description="Mostrar en el canal de logs una vista previa del DM de bienvenida.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def verify_dm_preview(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    log_channel = guild.get_channel(get_log_channel_id())
+    if log_channel is None:
+        await interaction.response.send_message(
+            "❌ No encontré el canal de logs configurado. Configúralo con `/heraldo_log_channel`.",
+            ephemeral=True,
+        )
+        return
+    perms = log_channel.permissions_for(guild.me)
+    if not (perms.view_channel and perms.send_messages and perms.embed_links):
+        await interaction.response.send_message(
+            f"❌ No puedo publicar la vista previa en {log_channel.mention}: necesito Ver canal, Enviar mensajes y Insertar enlaces.",
+            ephemeral=True,
+        )
+        return
+    try:
+        embed = build_verification_welcome_embed()
+        await log_channel.send(
+            content=f"🔎 **Vista previa del DM de bienvenida** — solicitada por {interaction.user.mention}",
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except discord.HTTPException as e:
+        await interaction.response.send_message(f"❌ No pude publicar la vista previa: `{e}`", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"✅ Vista previa publicada en {log_channel.mention}.", ephemeral=True
+    )
+
+
 @bot.tree.command(name="verify_texts", description="Editar el mensaje del panel, el texto del botón y el mensaje tras verificarse.")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
@@ -1525,6 +1724,8 @@ async def verify_command_error(interaction: discord.Interaction, error: discord.
 verify.error(verify_command_error)
 verify_texts.error(verify_command_error)
 verify_config.error(verify_command_error)
+verify_dm_texts.error(verify_command_error)
+verify_dm_preview.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
