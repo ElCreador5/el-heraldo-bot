@@ -74,7 +74,6 @@ import re
 import sqlite3
 import sys
 import traceback
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
@@ -2549,13 +2548,44 @@ async def purge_targets(guild: discord.Guild, only=None, after: datetime | None 
     return list(targets.values())
 
 
-async def _collect_user_messages(ch, user_id: int, after, before, limit: int | None) -> list[int]:
+_PURGE_URL_RE = re.compile(r"https?://[^\s<>]+|(?:www\.)[^\s<>]+", re.IGNORECASE)
+
+
+def _purge_message_matches(message: discord.Message, content_type: str) -> bool:
+    """Determina si un mensaje entra en el filtro multimedia solicitado por /purge."""
+    if content_type == "all":
+        return True
+
+    content = (message.content or "").strip()
+    if content_type == "links":
+        return bool(_PURGE_URL_RE.search(content))
+
+    if content_type == "text":
+        if not content:
+            return False
+        # Texto acompañado de una imagen o vídeo NO cuenta como texto puro.
+        has_image_or_video = any(
+            (a.content_type or "").lower().startswith(("image/", "video/"))
+            or Path(a.filename).suffix.lower() in {
+                ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff",
+                ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".mpeg", ".mpg",
+            }
+            for a in message.attachments
+        )
+        return not has_image_or_video
+
+    return True
+
+
+async def _collect_user_messages(
+    ch, user_id: int, after, before, limit: int | None, content_type: str = "all"
+) -> list[int]:
     ids: list[int] = []
     kwargs = {"limit": None, "after": after, "before": before}
     if limit is not None:
         kwargs["oldest_first"] = False  # para quedarnos con los más recientes
     async for m in ch.history(**kwargs):
-        if m.author.id == user_id:
+        if m.author.id == user_id and _purge_message_matches(m, content_type):
             ids.append(m.id)
             if limit is not None and len(ids) >= limit:
                 break
@@ -2604,6 +2634,7 @@ async def purge_user_messages(
     before: datetime | None = None,
     limit: int | None = None,
     progress=None,
+    content_type: str = "all",
 ) -> PurgeResult:
     """Borra mensajes de un usuario (aunque ya no esté en el servidor), sin tope propio:
     - sin after/before/limit -> TODOS sus mensajes
@@ -2624,7 +2655,7 @@ async def purge_user_messages(
             return
         async with sem:
             try:
-                ids = await _collect_user_messages(ch, user_id, after, before, limit)
+                ids = await _collect_user_messages(ch, user_id, after, before, limit, content_type)
                 result.channels_scanned += 1
                 if limit is None and ids:  # sin tope global: se borra canal a canal
                     d, f = await _delete_ids(ch, ids)
@@ -2676,6 +2707,7 @@ async def run_purge_job(
     before: datetime | None = None,
     limit: int | None = None,
     progress=None,
+    content_type: str = "all",
     title: str = "🧹 Purga completada",
 ) -> PurgeResult | None:
     """Ejecuta una purga con control de duplicados y reporta el resultado en el log."""
@@ -2685,7 +2717,8 @@ async def run_purge_job(
     _purge_running.add(key)
     try:
         result = await purge_user_messages(
-            guild, user.id, channel=channel, after=after, before=before, limit=limit, progress=progress
+            guild, user.id, channel=channel, after=after, before=before, limit=limit,
+            progress=progress, content_type=content_type
         )
     except Exception:
         traceback.print_exc()
@@ -3447,13 +3480,9 @@ async def send_migrated_message(
     message: discord.Message,
     index: int,
     total: int,
-) -> tuple[int, list[str]]:
-    """Recrea un mensaje conservando autor/fecha y re-subiendo sus adjuntos.
-
-    Devuelve (cantidad_de_adjuntos_migrados, respaldos) donde respaldos contiene
-    enlaces de adjuntos que no pudieron volver a subirse. Los archivos se
-    descargan a un directorio temporal y se eliminan al terminar.
-    """
+) -> None:
+    """Recrea un mensaje como embed de migración, conservando autor, fecha y contenido.
+    Los adjuntos se dejan como enlaces para no depender de descargas temporales."""
     description = message.content or "*(sin texto)*"
     if len(description) > 3900:
         description = description[:3890] + "…"
@@ -3468,6 +3497,13 @@ async def send_migrated_message(
         icon_url=message.author.display_avatar.url,
     )
 
+    if message.attachments:
+        links = "\n".join(f"📎 [{a.filename}]({a.url})" for a in message.attachments)
+        if len(links) <= 1000:
+            embed.add_field(name="Adjuntos", value=links, inline=False)
+        else:
+            embed.add_field(name="Adjuntos", value=links[:990] + "…", inline=False)
+
     if message.reference and message.reference.message_id:
         embed.add_field(
             name="Respuesta",
@@ -3475,144 +3511,8 @@ async def send_migrated_message(
             inline=False,
         )
 
-    # Discord tiene un límite de tamaño por archivo que depende del servidor.
-    filesize_limit = getattr(destino.guild, "filesize_limit", 10 * 1024 * 1024)
-
-    files: list[discord.File] = []
-    temp_paths: list[str] = []
-    fallback_links: list[str] = []
-
-    try:
-        for attachment in message.attachments:
-            # Si ya sabemos que el archivo no cabe en el destino, no intentamos
-            # descargarlo: dejamos el enlace original como respaldo.
-            if attachment.size > filesize_limit:
-                fallback_links.append(
-                    f"📎 [{attachment.filename}]({attachment.url}) — "
-                    f"supera el límite de {filesize_limit / (1024 * 1024):.1f} MB"
-                )
-                continue
-
-            suffix = os.path.splitext(attachment.filename)[1]
-            temp_path = None
-
-            try:
-                with tempfile.NamedTemporaryFile(
-                    prefix="heraldo_fusion_",
-                    suffix=suffix,
-                    delete=False,
-                ) as temp:
-                    temp_path = temp.name
-
-                await attachment.save(temp_path, use_cached=False)
-
-                # Discord puede devolver un archivo distinto al tamaño anunciado;
-                # verificamos antes de construir discord.File.
-                actual_size = os.path.getsize(temp_path)
-                if actual_size > filesize_limit:
-                    fallback_links.append(
-                        f"📎 [{attachment.filename}]({attachment.url}) — "
-                        f"supera el límite de {filesize_limit / (1024 * 1024):.1f} MB"
-                    )
-                    os.remove(temp_path)
-                    temp_path = None
-                    continue
-
-                files.append(
-                    discord.File(
-                        temp_path,
-                        filename=attachment.filename,
-                        spoiler=attachment.is_spoiler(),
-                    )
-                )
-                temp_paths.append(temp_path)
-
-            except (discord.HTTPException, discord.NotFound, OSError) as e:
-                print(
-                    f"⚠️ No se pudo descargar el adjunto {attachment.filename} "
-                    f"del mensaje {message.id}: {e}"
-                )
-                fallback_links.append(
-                    f"📎 [{attachment.filename}]({attachment.url}) — no se pudo migrar"
-                )
-                if temp_path and os.path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except OSError:
-                        pass
-
-        if fallback_links:
-            fallback_text = "\n".join(fallback_links)
-            if len(fallback_text) > 1000:
-                fallback_text = fallback_text[:990] + "…"
-            embed.add_field(
-                name="Adjuntos no migrados — respaldo",
-                value=fallback_text,
-                inline=False,
-            )
-
-        if files:
-            try:
-                await destino.send(
-                    embed=embed,
-                    files=files,
-                    allowed_mentions=discord.AllowedMentions.none(),
-                )
-            except (discord.HTTPException, discord.Forbidden) as e:
-                # No repetimos el envío con los archivos: el primer request puede
-                # haber llegado a Discord aunque haya devuelto un error. Para evitar
-                # duplicados, dejamos todos esos adjuntos como enlaces de respaldo.
-                print(
-                    f"⚠️ Falló la subida de adjuntos del mensaje {message.id}: {e}"
-                )
-                for attachment in message.attachments:
-                    link = f"📎 [{attachment.filename}]({attachment.url}) — no se pudo migrar"
-                    if not any(attachment.filename in existing for existing in fallback_links):
-                        fallback_links.append(link)
-
-                # Reemplazar el campo de respaldo con la lista completa.
-                for field in list(embed.fields):
-                    if field.name == "Adjuntos no migrados — respaldo":
-                        embed.remove_field(embed.fields.index(field))
-                        break
-
-                fallback_text = "\n".join(fallback_links)
-                if len(fallback_text) > 1000:
-                    fallback_text = fallback_text[:990] + "…"
-                embed.add_field(
-                    name="Adjuntos no migrados — respaldo",
-                    value=fallback_text,
-                    inline=False,
-                )
-
-                await destino.send(
-                    embed=embed,
-                    allowed_mentions=discord.AllowedMentions.none(),
-                )
-                files = []
-        else:
-            await destino.send(
-                embed=embed,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-
-    finally:
-        # discord.File mantiene abierto el archivo durante el send; después de
-        # terminar el envío podemos eliminar los temporales.
-        for file in files:
-            try:
-                file.close()
-            except Exception:
-                pass
-        for path in temp_paths:
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError:
-                pass
-
-    migrated_attachments = len(message.attachments) - len(fallback_links)
-    return max(0, migrated_attachments), fallback_links
+    embed.set_footer(text=f"Migrado por El Heraldo 🪽 · {index}/{total} · ID {message.id}")
+    await destino.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
 
 async def execute_channel_merge(
@@ -3681,8 +3581,6 @@ async def execute_channel_merge(
 
     migrated = 0
     failed = 0
-    attachment_failures = 0
-    failed_attachment_links: list[str] = []
     progress_message = None
     try:
         progress_message = await interaction.followup.send(
@@ -3696,39 +3594,26 @@ async def execute_channel_merge(
 
     for message in messages:
         try:
-            _, fallback_links = await send_migrated_message(
-                destino, message, migrated + 1, len(messages)
-            )
+            await send_migrated_message(destino, message, migrated + 1, len(messages))
             migrated += 1
-
-            if fallback_links:
-                attachment_failures += len(fallback_links)
-                failed_attachment_links.extend(fallback_links)
         except discord.HTTPException:
             failed += 1
-        except Exception as e:
-            # Un error inesperado en un mensaje no debe detener toda la fusión.
-            print(f"⚠️ Error inesperado migrando el mensaje {message.id}: {e}")
-            traceback.print_exc()
-            failed += 1
-
         # Mantener una cadencia conservadora para no golpear los rate limits.
         await asyncio.sleep(0.35)
         if progress_message is not None and (migrated + failed) % 25 == 0:
             try:
-                progress_text = (
-                    f"⏳ Migrando canales… **{migrated + failed:,}/{len(messages):,}** procesados. "
-                    f"Correctos: {migrated:,} · Fallidos: {failed:,}."
+                await progress_message.edit(
+                    content=(
+                        f"⏳ Migrando canales… **{migrated + failed:,}/{len(messages):,}** procesados. "
+                        f"Correctos: {migrated:,} · Fallidos: {failed:,}."
+                    )
                 )
-                if attachment_failures:
-                    progress_text += f" · Adjuntos no migrados: {attachment_failures:,}."
-                await progress_message.edit(content=progress_text)
             except discord.HTTPException:
                 pass
 
     # Nunca borrar el origen si hubo errores de migración.
     deleted_source = False
-    if failed == 0 and attachment_failures == 0 and eliminar_origen:
+    if failed == 0 and eliminar_origen:
         src_perms = origen.permissions_for(me)
         if not src_perms.manage_channels:
             await interaction.followup.send(
@@ -3745,16 +3630,10 @@ async def execute_channel_merge(
                     f"⚠️ Migración completada, pero no pude eliminar {origen.mention}.", ephemeral=True
                 )
 
-    if failed or attachment_failures:
-        details = []
-        if failed:
-            details.append(f"**{failed:,}** mensaje(s) fallaron")
-        if attachment_failures:
-            details.append(f"**{attachment_failures:,}** adjunto(s) no pudieron migrarse")
+    if failed:
         result = (
             f"⚠️ Fusión parcial: **{migrated:,}/{len(messages):,}** mensajes migrados; "
-            + " y ".join(details)
-            + ". El canal origen se conservó por seguridad."
+            f"**{failed:,}** fallaron. El canal origen se conservó por seguridad."
         )
         color = discord.Color.orange()
     else:
@@ -3778,7 +3657,6 @@ async def execute_channel_merge(
         (
             f"{interaction.user.mention} fusionó {origen.mention} → {destino.mention}.\n"
             f"Mensajes: {migrated}/{len(messages)} · Fallidos: {failed}.\n"
-            f"Adjuntos no migrados: {attachment_failures}.\n"
             f"Nombre final: `#{destino.name}` · Origen eliminado: {'sí' if deleted_source else 'no'}."
         ),
         color,
@@ -3945,17 +3823,24 @@ class PurgeConfirmView(discord.ui.View):
 @bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
 @discord.app_commands.describe(
     usuario="Usuario cuyos mensajes borrar (puede haber salido del servidor)",
+    tipo="Qué tipo de contenido borrar: todo, links o solo texto",
     todos="Borrar TODOS sus mensajes (no se combina con cantidad ni rango)",
     cantidad="Borrar solo sus N mensajes más recientes",
     desde="Inicio del rango: hace cuánto (30m, 12h, 2d, 1d 12h…)",
     hasta="Fin del rango: hace cuánto (por defecto, ahora)",
     canal="Limitar a un canal o hilo (por defecto, todo el servidor)",
 )
+@discord.app_commands.choices(tipo=[
+    discord.app_commands.Choice(name="Todo — cualquier mensaje", value="all"),
+    discord.app_commands.Choice(name="Links — mensajes con enlaces", value="links"),
+    discord.app_commands.Choice(name="Texto — sin imagen ni vídeo", value="text"),
+])
 @discord.app_commands.checks.has_permissions(manage_messages=True)
 @discord.app_commands.guild_only()
 async def purge_command(
     interaction: discord.Interaction,
     usuario: discord.User,
+    tipo: discord.app_commands.Choice[str],
     todos: Optional[bool] = None,
     cantidad: Optional[discord.app_commands.Range[int, 1]] = None,
     desde: Optional[str] = None,
@@ -4002,6 +3887,13 @@ async def purge_command(
         )
         return
 
+    content_type = tipo.value
+    content_labels = {
+        "all": "todo tipo de contenido",
+        "links": "solo mensajes con links",
+        "text": "solo mensajes de texto sin imagen ni vídeo",
+    }
+
     parts: list[str] = []
     if todos:
         parts.append("**todos** sus mensajes")
@@ -4010,12 +3902,13 @@ async def purge_command(
     if desde is not None or hasta is not None:
         parts.append(f"rango: desde hace {desde or '—'} hasta hace {hasta or '0'}")
     where = canal.mention if canal is not None else "todo el servidor"
+    parts.append(content_labels[content_type])
     scope_text = " · ".join(parts) + f" · en {where}"
 
     if todos:
         view = PurgeConfirmView(interaction.user.id)
         await interaction.response.send_message(
-            f"⚠️ Vas a borrar **todos** los mensajes de {usuario.mention} en {where}. No se puede deshacer.",
+            f"⚠️ Vas a borrar **todos** los mensajes de {usuario.mention} que coincidan con **{content_labels[content_type]}** en {where}. No se puede deshacer.",
             view=view,
             ephemeral=True,
         )
@@ -4041,6 +3934,7 @@ async def purge_command(
             result = await run_purge_job(
                 guild, usuario, scope_text=scope_text, requested_by=interaction.user.mention,
                 channel=canal, after=after, before=before, limit=cantidad, progress=progress,
+                content_type=content_type,
             )
         except Exception:
             text = "❌ La purga falló a mitad de camino; revisa el canal de logs."
