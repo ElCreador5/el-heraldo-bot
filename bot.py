@@ -704,8 +704,10 @@ async def on_ready() -> None:
         await suggestions_startup()
     except Exception:
         traceback.print_exc()
-    if not bot.persistent_views:
-        bot.add_view(VerifyView())  # el botón de /verify sigue respondiendo tras reinicios
+    if not any(isinstance(view, VerifyView) for view in bot.persistent_views):
+        bot.add_view(VerifyView())
+    if not any(isinstance(view, CondemnationPardonView) for view in bot.persistent_views):
+        bot.add_view(CondemnationPardonView())
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
@@ -2538,12 +2540,22 @@ def honeypot_db_init() -> None:
         "CREATE TABLE IF NOT EXISTS condemnations ("
         "user_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, role_id INTEGER NOT NULL DEFAULT 0, role_ids TEXT NOT NULL, "
         "reason TEXT NOT NULL, duration_minutes INTEGER, condemned_at TEXT NOT NULL, "
-        "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1)"
+        "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1, "
+        "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT)"
     )
     try:
         conn.execute("ALTER TABLE condemnations ADD COLUMN role_id INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+    for column_sql in (
+        "ALTER TABLE condemnations ADD COLUMN pardoned_by INTEGER",
+        "ALTER TABLE condemnations ADD COLUMN pardoned_at TEXT",
+        "ALTER TABLE condemnations ADD COLUMN resolution TEXT",
+    ):
+        try:
+            conn.execute(column_sql)
+        except sqlite3.OperationalError:
+            pass
     # Migración de la tabla histórica del honeypot: lo ya castigado pasa a ser una
     # condena activa indefinida, sin perder los roles que había guardado.
     legacy = conn.execute(
@@ -2684,11 +2696,12 @@ def condemnation_save(
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT INTO condemnations "
-        "(user_id, guild_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) "
+        "(user_id, guild_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active, pardoned_by, pardoned_at, resolution) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL) "
         "ON CONFLICT(user_id) DO UPDATE SET guild_id=excluded.guild_id, role_ids=excluded.role_ids, "
         "role_id=excluded.role_id, reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
-        "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1",
+        "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1, "
+        "pardoned_by=NULL, pardoned_at=NULL, resolution=NULL",
         (user_id, guild_id, role_id, json.dumps(role_ids), reason, duration_minutes, when.isoformat(),
          expires.isoformat() if expires else None, origin, applied_by),
     )
@@ -2696,9 +2709,19 @@ def condemnation_save(
     conn.close()
 
 
-def condemnation_deactivate(user_id: int) -> None:
+def condemnation_deactivate(
+    user_id: int, *, resolution: str | None = None, resolved_by: int | None = None
+) -> None:
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE condemnations SET active = 0 WHERE user_id = ?", (user_id,))
+    if resolution == "pardoned":
+        conn.execute(
+            "UPDATE condemnations SET active = 0, pardoned_by = ?, pardoned_at = ?, resolution = 'pardoned' WHERE user_id = ?",
+            (resolved_by, datetime.now(timezone.utc).isoformat(), user_id),
+        )
+    elif resolution:
+        conn.execute("UPDATE condemnations SET active = 0, resolution = ? WHERE user_id = ?", (resolution, user_id))
+    else:
+        conn.execute("UPDATE condemnations SET active = 0 WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
     hp_clear_punished(user_id)
@@ -3423,11 +3446,49 @@ def condemnation_protection_reason(member: discord.Member) -> str | None:
     return None
 
 
+async def condemnation_send_pardon_dm(
+    member: discord.Member,
+    row: sqlite3.Row,
+    pardoned_by: discord.abc.User,
+    restored_count: int,
+    lost_count: int,
+) -> bool:
+    condemned_at = datetime.fromisoformat(row["condemned_at"])
+    pardoned_at = datetime.now(timezone.utc)
+    case_id = condemnation_case_id(member, condemned_at)
+    embed = discord.Embed(
+        title="🕊️ CONDENA PERDONADA",
+        description=(
+            f"Tu condena del expediente **{case_id}** ha sido levantada. "
+            "Tus roles guardados fueron restaurados en la medida permitida por la jerarquía del servidor."
+        ),
+        color=discord.Color.green(),
+        timestamp=pardoned_at,
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="Expediente", value=case_id, inline=True)
+    embed.add_field(name="Condenado", value=f"{member.mention}\n{member}", inline=True)
+    embed.add_field(name="Motivo original", value=str(row["reason"])[:1024], inline=False)
+    embed.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
+    embed.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
+    embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
+    embed.add_field(name="Resultado", value=(f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; ⚠️ **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
+    embed.add_field(name="Origen", value=condemnation_origin_label(row["origin"]), inline=True)
+    embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
+    embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽")
+    try:
+        await member.send(embed=embed)
+        return True
+    except discord.HTTPException:
+        return False
+
+
 def _build_condemnation_embed(
     guild: discord.Guild, member: discord.Member, reason: str,
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
+    include_pardon_button: bool = False,
 ) -> tuple[discord.Embed, discord.ui.View | None]:
     """Construye la MISMA tarjeta que se usa tanto en el canal de castigo como en el DM."""
     when = when or datetime.now(timezone.utc)
@@ -3478,13 +3539,51 @@ def _build_condemnation_embed(
     button_label = render(condemnation_template_get("button_label")).strip()[:80]
     view = None
     if button_url and re.match(r"^https?://", button_url, re.IGNORECASE):
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label=button_label or "Ver información del caso",
-            style=discord.ButtonStyle.link,
-            url=button_url,
-        ))
+        view = discord.ui.View(timeout=None)
+        view.add_item(discord.ui.Button(label=button_label or "Ver información del caso", style=discord.ButtonStyle.link, url=button_url))
+    if include_pardon_button:
+        if view is None:
+            view = discord.ui.View(timeout=None)
+        view.add_item(discord.ui.Button(label="🕊️ Perdonar", style=discord.ButtonStyle.success, custom_id="heraldo:condemnation:pardon"))
     return embed, view
+
+
+class CondemnationPardonView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+        button = discord.ui.Button(label="🕊️ Perdonar", style=discord.ButtonStyle.success, custom_id="heraldo:condemnation:pardon")
+        button.callback = self.pardon_callback
+        self.add_item(button)
+
+    async def pardon_callback(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None or interaction.message is None:
+            await interaction.response.send_message("❌ Este botón solo funciona dentro del servidor.", ephemeral=True)
+            return
+        mentions = interaction.message.mentions
+        if not mentions:
+            await interaction.response.send_message("❌ No pude identificar al condenado asociado a este expediente.", ephemeral=True)
+            return
+        member = interaction.guild.get_member(mentions[0].id)
+        if member is None:
+            try:
+                member = await interaction.guild.fetch_member(mentions[0].id)
+            except discord.HTTPException:
+                member = None
+        if member is None:
+            await interaction.response.send_message("❌ Ese miembro ya no está disponible en el servidor.", ephemeral=True)
+            return
+        row = condemnation_get(member.id)
+        if row is None:
+            await interaction.response.send_message("ℹ️ Este expediente ya no tiene una condena activa.", ephemeral=True)
+            return
+        is_admin = bool(getattr(interaction.user.guild_permissions, "administrator", False))
+        is_condemner = row["applied_by"] is not None and int(row["applied_by"]) == interaction.user.id
+        if not (is_admin or is_condemner):
+            await interaction.response.send_message("⛔ No puedes perdonar esta condena. Solo puede hacerlo quien la aplicó o un administrador.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        ok, note = await release_condemned_member(member, released_by=interaction.user, pardon=True)
+        await interaction.followup.send(("🕊️ " if ok else "❌ ") + note, ephemeral=True)
 
 
 async def condemnation_send_dm(
@@ -3498,6 +3597,7 @@ async def condemnation_send_dm(
         member.guild, member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
         removed_role_ids=removed_role_ids, when=when, case_id=case_id,
+        include_pardon_button=False,
     )
     try:
         await member.send(embed=embed, view=view)
@@ -3574,6 +3674,7 @@ async def condemnation_announce(
         guild, member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
         removed_role_ids=removed_role_ids, when=when, case_id=case_id,
+        include_pardon_button=True,
     )
     try:
         await channel.send(
@@ -3652,6 +3753,15 @@ async def condemn_member(
     """Motor único de condena. Lo usan honeypot, comando, reacción, rol manual y raid protection."""
     if member.bot:
         return False, "Los bots no se condenan."
+    reason = (reason or "").strip()
+    if not reason:
+        automatic_reasons = {
+            "raid": "🛡️ Protección RAID: ingreso detectado durante un patrón de incursión masiva.",
+            "honeypot": "🍯 Honeypot: el miembro activó un canal trampa de seguridad.",
+            "role": "🎭 El rol Condenado fue otorgado manualmente y activó el motor de condenas.",
+            "reaction": "☠️ Condena aplicada mediante la reacción de moderación.",
+        }
+        reason = automatic_reasons.get(origin, "⚠️ Condena automática de seguridad de El Heraldo.")
     if member.id in _condemn_inflight:
         return False, "Ya hay una condena en proceso para este miembro."
     protection = condemnation_protection_reason(member)
@@ -3761,7 +3871,8 @@ async def _condemn_member_inner(
 
 
 async def release_condemned_member(
-    member: discord.Member, *, released_by: discord.abc.User | None = None, automatic: bool = False
+    member: discord.Member, *, released_by: discord.abc.User | None = None,
+    automatic: bool = False, pardon: bool = False
 ) -> tuple[bool, str]:
     row = condemnation_get(member.id)
     punish_role = member.guild.get_role(condemnation_role_id(row))
@@ -3791,7 +3902,10 @@ async def release_condemned_member(
     finally:
         _condemn_sync_busy.discard(member.id)
 
-    condemnation_deactivate(member.id)
+    if pardon and row is not None and released_by is not None:
+        condemnation_deactivate(member.id, resolution="pardoned", resolved_by=released_by.id)
+    else:
+        condemnation_deactivate(member.id, resolution="expired" if automatic else None)
     db_clear_tentado(member.id)
     db_clear_sin_verificado(member.id)
     db_clear_verify_pending(member.id)
@@ -3809,12 +3923,13 @@ async def release_condemned_member(
         asyncio.create_task(schedule_sin_verificado_check(member.guild.id, member.id, now))
 
     text = f"{len(restore)} rol(es) restaurado(s)" + (f"; {lost} no se pudieron restaurar" if lost else "")
-    await log_embed(
-        member.guild, "🕊️ Condena levantada",
-        f"{member.mention} (`{member.id}`) — {text}. "
-        f"Por: {released_by.mention if released_by else 'El Heraldo'}.",
-        discord.Color.green(),
-    )
+    if pardon and row is not None and released_by is not None:
+        condemned_at = datetime.fromisoformat(row["condemned_at"])
+        case_id = condemnation_case_id(member, condemned_at)
+        dm_ok = await condemnation_send_pardon_dm(member, row, released_by, len(restore), lost)
+        await log_embed(member.guild, "🕊️ Condena perdonada", f"Expediente: {case_id}\nUsuario: {member.mention} ({member.id})\nMotivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\nPerdonó: {released_by.mention}\nRoles: {text}\nDM: {'✅ enviado' if dm_ok else '⚠️ no enviado'}", discord.Color.green())
+        return True, text + ("; DM de perdón enviado" if dm_ok else "; DM de perdón no disponible")
+    await log_embed(member.guild, "🕊️ Condena levantada", f"{member.mention} — {text}. Por: {released_by.mention if released_by else 'El Heraldo'}.", discord.Color.green())
     return True, text
 
 
@@ -4050,12 +4165,15 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
 async def condenar(
     interaction: discord.Interaction,
     miembro: discord.Member,
-    motivo: Optional[str] = None,
+    motivo: str,
     duracion: Optional[str] = None,
     purga: Optional[str] = None,
 ) -> None:
     guild = interaction.guild
-    reason = (motivo or "Condena manual").strip()[:1000]
+    reason = (motivo or "").strip()[:1000]
+    if not reason:
+        await interaction.response.send_message("❌ El motivo de la condena es obligatorio.", ephemeral=True)
+        return
     duration_minutes: int | None = condemnation_default_duration_minutes()
     try:
         if duracion is not None:
