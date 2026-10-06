@@ -3446,6 +3446,43 @@ def condemnation_protection_reason(member: discord.Member) -> str | None:
     return None
 
 
+async def condemnation_send_pardon_dm(
+    member: discord.Member,
+    row: sqlite3.Row,
+    pardoned_by: discord.abc.User,
+    restored_count: int,
+    lost_count: int,
+) -> bool:
+    condemned_at = datetime.fromisoformat(row["condemned_at"])
+    pardoned_at = datetime.now(timezone.utc)
+    case_id = condemnation_case_id(member, condemned_at)
+    embed = discord.Embed(
+        title="🕊️ CONDENA PERDONADA",
+        description=(
+            f"Tu condena del expediente **{case_id}** ha sido levantada. "
+            "Tus roles guardados fueron restaurados en la medida permitida por la jerarquía del servidor."
+        ),
+        color=discord.Color.green(),
+        timestamp=pardoned_at,
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="Expediente", value=case_id, inline=True)
+    embed.add_field(name="Condenado", value=f"{member.mention}\n{member}", inline=True)
+    embed.add_field(name="Motivo original", value=str(row["reason"])[:1024], inline=False)
+    embed.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
+    embed.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
+    embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
+    embed.add_field(name="Resultado", value=(f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; ⚠️ **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
+    embed.add_field(name="Origen", value=condemnation_origin_label(row["origin"]), inline=True)
+    embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
+    embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽")
+    try:
+        await member.send(embed=embed)
+        return True
+    except discord.HTTPException:
+        return False
+
+
 def _build_condemnation_embed(
     guild: discord.Guild, member: discord.Member, reason: str,
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
