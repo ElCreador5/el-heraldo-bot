@@ -148,6 +148,28 @@ CONDEMNED_EMOJI = "☠️"
 CONDEMNATION_MAX_MINUTES = 10 * 365 * 24 * 60
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
+# --- Tarjeta de condena ----------------------------------------------------
+# Todo el contenido está persistido en `meta`, por lo que se puede cambiar sin redeploy.
+CONDEMNATION_TEMPLATE_DEFAULTS = {
+    "title": "☠️ RESOLUCIÓN DE CONDENA",
+    "description": "Se ha aplicado una condena a {usuario}. A continuación se detalla el caso registrado.",
+    "color": "8B0000",
+    "footer": "El Heraldo 🪽 · {servidor}",
+    "label_case": "Expediente",
+    "label_message": "Evidencia / mensaje",
+    "label_user": "Condenado",
+    "label_by": "Condenó",
+    "label_reason": "Qué hizo / Motivo",
+    "label_when": "Cuándo",
+    "label_where": "Dónde ocurrió",
+    "label_duration": "Duración",
+    "label_origin": "Origen",
+    "label_roles": "Roles retirados",
+    "button_label": "🔎 Ver información del caso",
+    "button_url": "",
+}
+
+
 # --- Perfil (/profile): mensajes y racha diaria ---
 # Roles cuyos mensajes NO cuentan para el perfil.
 # Ejemplo: {123456789012345678, 987654321098765432}
@@ -3386,55 +3408,163 @@ def condemnation_protection_reason(member: discord.Member) -> str | None:
     return None
 
 
-async def condemnation_send_dm(
-    member: discord.Member, reason: str, duration_minutes: int | None, origin: str
-) -> bool:
-    duration_text = format_duration(duration_minutes) if duration_minutes else "indefinida"
-    text = (
-        "☠️ **Has sido condenado en el servidor.**\n\n"
-        f"**Motivo:** {reason}\n"
-        f"**Duración:** {duration_text}\n"
-        f"**Origen:** {condemnation_origin_label(origin)}\n\n"
-        "Mientras la condena esté activa no participas en la evaluación de verificación, "
-        "ni en la actividad o el Miembro de la Semana. Si la condena termina o un administrador te libera, "
-        "tus roles guardados serán restaurados en la medida en que sigan existiendo y sean asignables."
-    )
-    try:
-        await member.send(text)
-        return True
-    except discord.HTTPException:
-        return False
-
-
-async def condemnation_announce(
+def _build_condemnation_embed(
     guild: discord.Guild, member: discord.Member, reason: str,
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
-    *, source_message_url: str | None = None, removed_role_ids: list[int] | None = None,
-) -> None:
-    channel = guild.get_channel(condemnation_channel_id())
-    if not isinstance(channel, discord.TextChannel):
-        return
-    embed = discord.Embed(
-        title="☠️ Nueva condena",
-        description=f"{member.mention} ha sido condenado.",
-        color=discord.Color.dark_red(),
-        timestamp=datetime.now(timezone.utc),
+    *, source_message_url: str | None = None, source_channel_id: int | None = None,
+    removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
+) -> tuple[discord.Embed, discord.ui.View | None]:
+    """Construye la MISMA tarjeta que se usa tanto en el canal de castigo como en el DM."""
+    when = when or datetime.now(timezone.utc)
+    case_id = case_id or condemnation_case_id(member, when)
+    source_channel = guild.get_channel(source_channel_id) if source_channel_id else None
+
+    render = lambda value: _condemnation_render_template(
+        value, member=member, guild=guild, case_id=case_id, applied_by=applied_by,
+        reason=reason, when=when, source_channel=source_channel,
+        duration_minutes=duration_minutes, origin=origin, source_message_url=source_message_url,
     )
-    embed.add_field(name="Motivo", value=reason[:1024], inline=False)
-    embed.add_field(name="Duración", value=format_duration(duration_minutes) if duration_minutes else "Indefinida", inline=True)
-    embed.add_field(name="Origen", value=condemnation_origin_label(origin), inline=True)
-    embed.add_field(name="Aplicó", value=applied_by.mention if applied_by else "Sistema / Heraldo", inline=True)
-    if source_message_url:
-        embed.add_field(name="Mensaje que originó la condena", value=f"[🔗 Ir al mensaje condenado]({source_message_url})", inline=False)
+
+    embed = discord.Embed(
+        title=render(condemnation_template_get("title"))[:256],
+        description=render(condemnation_template_get("description"))[:4096],
+        color=condemnation_template_color(),
+        timestamp=when,
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+
+    def field(label_key: str, value: str, inline: bool = True) -> None:
+        embed.add_field(name=condemnation_template_get(label_key)[:256], value=value[:1024] or "—", inline=inline)
+
+    field("label_case", f"`{case_id}`", True)
+    field("label_user", f"{member.mention}\n`{member}`", True)
+    field("label_by", applied_by.mention if applied_by else "🤖 El Heraldo", True)
+    field("label_reason", reason, False)
+    field("label_when", f"{discord.utils.format_dt(when, 'F')}\n{discord.utils.format_dt(when, 'R')}", True)
+
+    where = source_channel.mention if source_channel else ("Canal del mensaje original" if source_message_url else "No registrado")
+    field("label_where", where, True)
+    field("label_duration", format_duration(duration_minutes) if duration_minutes else "Indefinida", True)
+    field("label_origin", condemnation_origin_label(origin), True)
+
     role_mentions = []
     for rid in removed_role_ids or []:
         role = guild.get_role(rid)
         if role is not None:
             role_mentions.append(f"`{role.name}`")
-    embed.add_field(name="Roles retirados", value=" ".join(role_mentions)[:1024] if role_mentions else "Ninguno (o no asignable)", inline=False)
-    embed.add_field(name="Desde", value=discord.utils.format_dt(datetime.now(timezone.utc), "F"), inline=False)
+    field("label_roles", ", ".join(role_mentions) if role_mentions else "Ninguno (o no asignable)", False)
+
+    if source_message_url:
+        field("label_message", f"[🔗 Abrir mensaje que originó la condena]({source_message_url})", False)
+
+    embed.set_footer(text=render(condemnation_template_get("footer"))[:2048])
+
+    button_url = condemnation_template_get("button_url").strip()
+    button_label = render(condemnation_template_get("button_label")).strip()[:80]
+    view = None
+    if button_url and re.match(r"^https?://", button_url, re.IGNORECASE):
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            label=button_label or "Ver información del caso",
+            style=discord.ButtonStyle.link,
+            url=button_url,
+        ))
+    return embed, view
+
+
+async def condemnation_send_dm(
+    member: discord.Member, reason: str, duration_minutes: int | None, origin: str,
+    applied_by: discord.abc.User | None = None,
+    *, source_message_url: str | None = None, source_channel_id: int | None = None,
+    removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
+) -> bool:
+    """Envía por DM la misma tarjeta de condena, incluido el botón configurable."""
+    embed, view = _build_condemnation_embed(
+        member.guild, member, reason, duration_minutes, origin, applied_by,
+        source_message_url=source_message_url, source_channel_id=source_channel_id,
+        removed_role_ids=removed_role_ids, when=when, case_id=case_id,
+    )
     try:
-        await channel.send(content=member.mention, embed=embed, allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False))
+        await member.send(embed=embed, view=view)
+        return True
+    except discord.HTTPException:
+        return False
+
+
+def condemnation_template_get(key: str) -> str:
+    return db_meta_get(f"condemnation_template_{key}") or CONDEMNATION_TEMPLATE_DEFAULTS[key]
+
+
+def condemnation_template_set(key: str, value: str) -> None:
+    db_meta_set(f"condemnation_template_{key}", value[:1024])
+
+
+def condemnation_template_reset() -> None:
+    for key in CONDEMNATION_TEMPLATE_DEFAULTS:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("DELETE FROM meta WHERE key = ?", (f"condemnation_template_{key}",))
+        conn.commit()
+        conn.close()
+
+
+def condemnation_template_color() -> discord.Color:
+    raw = condemnation_template_get("color").strip().lstrip("#")
+    try:
+        value = int(raw, 16)
+        if not 0 <= value <= 0xFFFFFF:
+            raise ValueError
+        return discord.Color(value)
+    except ValueError:
+        return discord.Color.dark_red()
+
+
+def condemnation_case_id(member: discord.Member, when: datetime) -> str:
+    # Identificador legible y estable para referirse al expediente sin exponer datos extra.
+    return f"C-{when.astimezone(STREAK_TZ):%Y%m%d}-{member.id % 100000:05d}"
+
+
+def _condemnation_render_template(text: str, *, member: discord.Member, guild: discord.Guild,
+                                  case_id: str, applied_by: discord.abc.User | None,
+                                  reason: str, when: datetime, source_channel: discord.abc.GuildChannel | None,
+                                  duration_minutes: int | None, origin: str,
+                                  source_message_url: str | None) -> str:
+    values = {
+        "{usuario}": member.mention,
+        "{servidor}": guild.name,
+        "{caso}": case_id,
+        "{moderador}": applied_by.mention if applied_by else "El Heraldo",
+        "{motivo}": reason,
+        "{fecha}": discord.utils.format_dt(when, "F"),
+        "{fecha_relativa}": discord.utils.format_dt(when, "R"),
+        "{canal}": source_channel.mention if source_channel else "No registrado",
+        "{duracion}": format_duration(duration_minutes) if duration_minutes else "Indefinida",
+        "{origen}": condemnation_origin_label(origin),
+        "{mensaje}": f"[Abrir mensaje]({source_message_url})" if source_message_url else "No disponible",
+    }
+    for key, value in values.items():
+        text = text.replace(key, value)
+    return text
+
+
+async def condemnation_announce(
+    guild: discord.Guild, member: discord.Member, reason: str,
+    duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
+    *, source_message_url: str | None = None, source_channel_id: int | None = None,
+    removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
+) -> None:
+    channel = guild.get_channel(condemnation_channel_id())
+    if not isinstance(channel, discord.TextChannel):
+        return
+    embed, view = _build_condemnation_embed(
+        guild, member, reason, duration_minutes, origin, applied_by,
+        source_message_url=source_message_url, source_channel_id=source_channel_id,
+        removed_role_ids=removed_role_ids, when=when, case_id=case_id,
+    )
+    try:
+        await channel.send(
+            content=member.mention, embed=embed, view=view,
+            allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False),
+        )
     except discord.HTTPException:
         pass
 
@@ -3500,6 +3630,7 @@ async def condemn_member(
     applied_by: discord.abc.User | None,
     preserve_role_ids: list[int] | None = None,
     source_message_url: str | None = None,
+    source_channel_id: int | None = None,
     send_dm: bool = True,
     announce: bool = True,
 ) -> tuple[bool, str]:
@@ -3517,7 +3648,7 @@ async def condemn_member(
         return await _condemn_member_inner(
             member, reason=reason, duration_minutes=duration_minutes, purge_spec=purge_spec,
             origin=origin, applied_by=applied_by, preserve_role_ids=preserve_role_ids,
-            source_message_url=source_message_url, send_dm=send_dm, announce=announce,
+            source_message_url=source_message_url, source_channel_id=source_channel_id, send_dm=send_dm, announce=announce,
         )
     finally:
         _condemn_inflight.discard(member.id)
@@ -3533,6 +3664,7 @@ async def _condemn_member_inner(
     applied_by: discord.abc.User | None,
     preserve_role_ids: list[int] | None,
     source_message_url: str | None,
+    source_channel_id: int | None,
     send_dm: bool,
     announce: bool,
 ) -> tuple[bool, str]:
@@ -3585,11 +3717,19 @@ async def _condemn_member_inner(
             after=after, limit=limit, title="☠️ Purga de condena completada",
         ))
 
-    dm_ok = await condemnation_send_dm(member, reason, duration_minutes, origin) if send_dm else None
+    # Ambos destinos reciben la misma resolución: mismo expediente, fecha y datos.
+    condemnation_when = datetime.now(timezone.utc)
+    condemnation_case = condemnation_case_id(member, condemnation_when)
+    dm_ok = await condemnation_send_dm(
+        member, reason, duration_minutes, origin, applied_by,
+        source_message_url=source_message_url, source_channel_id=source_channel_id,
+        removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
+    ) if send_dm else None
     if announce:
         await condemnation_announce(
             member.guild, member, reason, duration_minutes, origin, applied_by,
-            source_message_url=source_message_url, removed_role_ids=removed_role_ids,
+            source_message_url=source_message_url, source_channel_id=source_channel_id,
+            removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
         )
     await log_embed(
         member.guild, "☠️ Condena aplicada",
@@ -3726,7 +3866,7 @@ async def condemnation_expiry_loop() -> None:
         traceback.print_exc()
 
 
-async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
+async def hp_punish(member: discord.Member, action: str, source_channel_id: int | None = None) -> tuple[bool, str]:
     guild = member.guild
     reason = "Honeypot: escribió en un canal trampa"
     if action == "log":
@@ -3748,6 +3888,7 @@ async def hp_punish(member: discord.Member, action: str) -> tuple[bool, str]:
                 purge_spec=purge_spec,
                 origin="honeypot",
                 applied_by=None,
+                source_channel_id=source_channel_id,
                 send_dm=True,
                 announce=True,
             )
@@ -3826,7 +3967,7 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
         )
         return
 
-    success, note = await hp_punish(member, action)
+    success, note = await hp_punish(member, action, message.channel.id)
     hp_log_trigger(member, message.channel.id, content, action, success, note)
     await hp_report(guild, member, message.channel, content, attachments, action, success, note)
 
@@ -4011,6 +4152,90 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
     await log_embed(interaction.guild, "⚙️ Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
 
 
+@bot.tree.command(name="condenar_template", description="Modificar la tarjeta pública de condena y su botón.")
+@discord.app_commands.describe(
+    campo="Elemento de la plantilla que quieres cambiar",
+    valor="Nuevo valor. Para limpiar un campo usa '-'",
+)
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def condenar_template(interaction: discord.Interaction, campo: str, valor: Optional[str] = None) -> None:
+    choices = {
+        "titulo": "title",
+        "descripcion": "description",
+        "color": "color",
+        "pie": "footer",
+        "expediente": "label_case",
+        "condenado": "label_user",
+        "condeno": "label_by",
+        "motivo": "label_reason",
+        "cuando": "label_when",
+        "donde": "label_where",
+        "duracion": "label_duration",
+        "origen": "label_origin",
+        "roles": "label_roles",
+        "evidencia": "label_message",
+        "boton_label": "button_label",
+        "boton_link": "button_url",
+        "reset": "__reset__",
+        "ver": "__show__",
+    }
+    key = choices.get(campo.lower().strip())
+    if key is None:
+        await interaction.response.send_message(
+            "❌ Campo no válido. Usa: " + ", ".join(choices.keys()), ephemeral=True
+        )
+        return
+
+    if key == "__show__":
+        lines = [f"**{k}:** `{condemnation_template_get(k)[:180]}`" for k in CONDEMNATION_TEMPLATE_DEFAULTS]
+        embed = discord.Embed(title="⚙️ Plantilla de condena", description="\n".join(lines), color=condemnation_template_color())
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    if key == "__reset__":
+        condemnation_template_reset()
+        await interaction.response.send_message("✅ La plantilla de condena volvió a sus valores predeterminados.", ephemeral=True)
+        return
+
+    if valor is None:
+        await interaction.response.send_message(
+            f"**{campo}** = `{condemnation_template_get(key)}`", ephemeral=True
+        )
+        return
+
+    value = "" if valor == "-" else valor.strip()
+    if key == "color":
+        try:
+            int(value.lstrip("#"), 16)
+            if len(value.lstrip("#")) != 6:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message("❌ El color debe ser hexadecimal, por ejemplo `8B0000`.", ephemeral=True)
+            return
+    if key == "button_url" and value and not re.match(r"^https?://", value, re.IGNORECASE):
+        await interaction.response.send_message("❌ El enlace del botón debe comenzar por `https://` o `http://`.", ephemeral=True)
+        return
+
+    condemnation_template_set(key, value)
+    await interaction.response.send_message(
+        f"✅ Plantilla actualizada: **{campo}** → `{value or '(vacío)'}`", ephemeral=True
+    )
+
+
+@condenar_template.autocomplete("campo")
+async def condenar_template_autocomplete(interaction: discord.Interaction, current: str):
+    names = [
+        "titulo", "descripcion", "color", "pie", "expediente", "condenado", "condeno",
+        "motivo", "cuando", "donde", "duracion", "origen", "roles", "evidencia",
+        "boton_label", "boton_link", "reset", "ver"
+    ]
+    return [
+        discord.app_commands.Choice(name=name, value=name)
+        for name in names if current.lower() in name.lower()
+    ][:25]
+
+
 @bot.listen("on_raw_reaction_add")
 async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None:
     # Con o sin selector de variación (U+FE0F) el cráneo es el mismo emoji.
@@ -4049,6 +4274,7 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
         origin="reaction",
         applied_by=actor,
         source_message_url=message.jump_url,
+        source_channel_id=message.channel.id,
     )
     if not ok:
         await log_embed(guild, "⚠️ Condena por reacción rechazada", f"{actor.mention} reaccionó con ☠️ a {message.jump_url}: {note}", discord.Color.orange())
