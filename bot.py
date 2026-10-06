@@ -677,6 +677,11 @@ async def on_ready() -> None:
     _startup_done = True
     db_init()
     honeypot_db_init()
+    # Sistema de sugerencias: registra las vistas persistentes y recupera el panel/revisiones pendientes.
+    try:
+        await suggestions_startup()
+    except Exception:
+        traceback.print_exc()
     if not bot.persistent_views:
         bot.add_view(VerifyView())  # el botón de /verify sigue respondiendo tras reinicios
     for guild in bot.guilds:
@@ -770,6 +775,15 @@ async def on_member_join(member: discord.Member) -> None:
 # ---------------------------------------------------------------------------
 # Detección del rol Tentad@ y verificación a los 10 min
 # ---------------------------------------------------------------------------
+
+@bot.event
+async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
+    # Si alguien borra el panel de sugerencias, el Heraldo lo vuelve a publicar y fijar.
+    try:
+        await suggestion_panel_deleted(payload.guild_id, payload.message_id)
+    except Exception:
+        traceback.print_exc()
+
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
@@ -6713,6 +6727,624 @@ async def embed_group_error(interaction: discord.Interaction, error: discord.app
 
 bot.tree.add_command(embed_group)
 
+
+# ---------------------------------------------------------------------------
+# 14. SISTEMA DE SUGERENCIAS — panel fijo + formulario + revisión por DM
+# ---------------------------------------------------------------------------
+
+SUGGESTION_PANEL_BUTTON_ID = "heraldo_suggestion_create"
+SUGGESTION_REVIEW_PREFIX = "heraldo_suggestion_review"
+SUGGESTION_STATUS_PENDING = "pending"
+SUGGESTION_STATUS_ACCEPTED = "accepted"
+SUGGESTION_STATUS_REJECTED = "rejected"
+
+
+def suggestion_db_init() -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS suggestions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            decided_by INTEGER,
+            rejection_reason TEXT,
+            created_at TEXT NOT NULL,
+            decided_at TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS suggestion_reviewers (
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            PRIMARY KEY (guild_id, user_id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS suggestion_review_messages (
+            suggestion_id INTEGER NOT NULL,
+            reviewer_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            message_id INTEGER NOT NULL,
+            PRIMARY KEY (suggestion_id, reviewer_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def suggestion_meta_key(guild_id: int, suffix: str) -> str:
+    return f"suggestions:{guild_id}:{suffix}"
+
+
+def suggestion_get_channel_id(guild_id: int) -> int:
+    return int(db_meta_get(suggestion_meta_key(guild_id, "channel")) or 0)
+
+
+def suggestion_set_channel_id(guild_id: int, channel_id: int) -> None:
+    db_meta_set(suggestion_meta_key(guild_id, "channel"), str(channel_id))
+
+
+def suggestion_get_panel_message_id(guild_id: int) -> int:
+    return int(db_meta_get(suggestion_meta_key(guild_id, "panel")) or 0)
+
+
+def suggestion_set_panel_message_id(guild_id: int, message_id: int) -> None:
+    db_meta_set(suggestion_meta_key(guild_id, "panel"), str(message_id))
+
+
+def suggestion_owner_enabled(guild_id: int) -> bool:
+    value = db_meta_get(suggestion_meta_key(guild_id, "owner"))
+    return value != "0"  # por defecto: el creador/owner recibe las sugerencias
+
+
+def suggestion_set_owner_enabled(guild_id: int, enabled: bool) -> None:
+    db_meta_set(suggestion_meta_key(guild_id, "owner"), "1" if enabled else "0")
+
+
+def suggestion_reviewer_ids(guild_id: int) -> list[int]:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT user_id FROM suggestion_reviewers WHERE guild_id = ? ORDER BY user_id",
+        (guild_id,),
+    ).fetchall()
+    conn.close()
+    return [int(row[0]) for row in rows]
+
+
+def suggestion_add_reviewer(guild_id: int, user_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT OR IGNORE INTO suggestion_reviewers (guild_id, user_id) VALUES (?, ?)",
+        (guild_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def suggestion_remove_reviewer(guild_id: int, user_id: int) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        "DELETE FROM suggestion_reviewers WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def suggestion_get(suggestion_id: int) -> sqlite3.Row | None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def suggestion_create(guild_id: int, user_id: int, title: str, content: str) -> int:
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        "INSERT INTO suggestions (guild_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (guild_id, user_id, title, content, SUGGESTION_STATUS_PENDING, datetime.now(timezone.utc).isoformat()),
+    )
+    suggestion_id = int(cur.lastrowid)
+    conn.commit()
+    conn.close()
+    return suggestion_id
+
+
+def suggestion_set_review_message(suggestion_id: int, reviewer_id: int, channel_id: int, message_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT OR REPLACE INTO suggestion_review_messages "
+        "(suggestion_id, reviewer_id, channel_id, message_id) VALUES (?, ?, ?, ?)",
+        (suggestion_id, reviewer_id, channel_id, message_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def suggestion_review_messages(suggestion_id: int) -> list[sqlite3.Row]:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM suggestion_review_messages WHERE suggestion_id = ?",
+        (suggestion_id,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def suggestion_decide(
+    suggestion_id: int,
+    status: str,
+    decided_by: int,
+    rejection_reason: str | None = None,
+) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        """UPDATE suggestions
+           SET status = ?, decided_by = ?, rejection_reason = ?, decided_at = ?
+           WHERE id = ? AND status = 'pending'""",
+        (status, decided_by, rejection_reason, datetime.now(timezone.utc).isoformat(), suggestion_id),
+    )
+    conn.commit()
+    conn.close()
+    return cur.rowcount == 1
+
+
+def suggestion_panel_embed(guild: discord.Guild) -> discord.Embed:
+    embed = discord.Embed(
+        title="EL ORÁCULO ESCUCHA",
+        description=(
+            "Toda alma tiene algo que pedir, y este paraíso está dispuesto a escuchar.\n\n"
+            "¿Tienes una idea para mejorar este mundo? ¿Alguna inquietud? Un canal que falta, "
+            "un evento que sueñas ver, una regla que merece cambiar — El Oráculo la recibe.\n\n"
+            "**¿Cómo invocar tu deseo?**\n"
+            "Pulsa **💡 Crear sugerencia** y completa el formulario privado.\n\n"
+            "Tu propuesta será enviada directamente a quienes gobiernan este paraíso. "
+            "El canal no se llenará con las sugerencias.\n\n"
+            "No hay deseo demasiado pequeño, ni pecado demasiado grande de proponer."
+        ),
+        color=discord.Color.blurple(),
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    return embed
+
+
+class SuggestionPanelView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+        button = discord.ui.Button(
+            label="💡 Crear sugerencia",
+            style=discord.ButtonStyle.primary,
+            custom_id=SUGGESTION_PANEL_BUTTON_ID,
+        )
+        button.callback = self.create_suggestion
+        self.add_item(button)
+
+    async def create_suggestion(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message("Este botón solo funciona dentro del servidor.", ephemeral=True)
+            return
+        await interaction.response.send_modal(SuggestionModal())
+
+
+class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
+    titulo = discord.ui.TextInput(
+        label="Título de la sugerencia",
+        placeholder="Ej.: Crear un canal para eventos",
+        max_length=100,
+        required=True,
+    )
+    propuesta = discord.ui.TextInput(
+        label="¿Qué propones?",
+        placeholder="Explica tu idea con claridad…",
+        style=discord.TextStyle.paragraph,
+        max_length=1800,
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("Este formulario solo funciona dentro del servidor.", ephemeral=True)
+            return
+
+        reviewer_ids: list[int] = []
+        if suggestion_owner_enabled(guild.id) and guild.owner_id:
+            reviewer_ids.append(guild.owner_id)
+        for user_id in suggestion_reviewer_ids(guild.id):
+            if user_id not in reviewer_ids:
+                reviewer_ids.append(user_id)
+
+        if not reviewer_ids:
+            await interaction.response.send_message(
+                "⚠️ El sistema de sugerencias todavía no tiene ningún destinatario configurado. Avisa a un administrador.",
+                ephemeral=True,
+            )
+            return
+
+        suggestion_id = suggestion_create(
+            guild.id,
+            interaction.user.id,
+            self.titulo.value.strip(),
+            self.propuesta.value.strip(),
+        )
+
+        embed = discord.Embed(
+            title=f"💡 Nueva sugerencia #{suggestion_id}",
+            description=self.propuesta.value.strip(),
+            color=discord.Color.blurple(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(name="Título", value=self.titulo.value.strip(), inline=False)
+        embed.add_field(name="Solicitada por", value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=False)
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.set_footer(text=f"{guild.name} · Sugerencia #{suggestion_id}")
+
+        sent = 0
+        for reviewer_id in reviewer_ids:
+            try:
+                reviewer = await bot.fetch_user(reviewer_id)
+                message = await reviewer.send(embed=embed, view=SuggestionReviewView(suggestion_id))
+                suggestion_set_review_message(suggestion_id, reviewer_id, message.channel.id, message.id)
+                sent += 1
+            except discord.HTTPException:
+                await log_embed(
+                    guild,
+                    "⚠️ No pude enviar una sugerencia por DM",
+                    f"La sugerencia #{suggestion_id} de {interaction.user.mention} no pudo llegar a <@{reviewer_id}>.",
+                    discord.Color.orange(),
+                )
+
+        if sent == 0:
+            suggestion_decide(suggestion_id, SUGGESTION_STATUS_REJECTED, bot.user.id if bot.user else 0,
+                              "No se pudo entregar la sugerencia a ningún destinatario configurado.")
+            await interaction.response.send_message(
+                "❌ No pude entregar la sugerencia por mensaje privado. Comprueba que los destinatarios permitan DMs.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(
+            f"✅ Tu sugerencia **#{suggestion_id}** fue enviada de forma privada a {sent} destinatario(s). "
+            "Cuando sea aceptada o rechazada recibirás la respuesta por DM.",
+            ephemeral=True,
+        )
+        await log_embed(
+            guild,
+            "💡 Nueva sugerencia",
+            f"Sugerencia **#{suggestion_id}** enviada por {interaction.user.mention} a {sent} destinatario(s).",
+            discord.Color.blurple(),
+        )
+
+
+class SuggestionRejectModal(discord.ui.Modal):
+    def __init__(self, suggestion_id: int) -> None:
+        super().__init__(title=f"Rechazar sugerencia #{suggestion_id}"[:45])
+        self.suggestion_id = suggestion_id
+        self.reason = discord.ui.TextInput(
+            label="Razón del rechazo (obligatoria)",
+            placeholder="Explica por qué no se acepta esta sugerencia…",
+            style=discord.TextStyle.paragraph,
+            min_length=3,
+            max_length=1500,
+            required=True,
+        )
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await finalize_suggestion_decision(
+            interaction,
+            self.suggestion_id,
+            SUGGESTION_STATUS_REJECTED,
+            self.reason.value.strip(),
+        )
+
+
+class SuggestionReviewView(discord.ui.View):
+    def __init__(self, suggestion_id: int) -> None:
+        super().__init__(timeout=None)
+        self.suggestion_id = suggestion_id
+        accept = discord.ui.Button(
+            label="Aceptar",
+            style=discord.ButtonStyle.success,
+            custom_id=f"{SUGGESTION_REVIEW_PREFIX}:accept:{suggestion_id}",
+        )
+        reject = discord.ui.Button(
+            label="Rechazar",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"{SUGGESTION_REVIEW_PREFIX}:reject:{suggestion_id}",
+        )
+        accept.callback = self.accept_suggestion
+        reject.callback = self.reject_suggestion
+        self.add_item(accept)
+        self.add_item(reject)
+
+    async def accept_suggestion(self, interaction: discord.Interaction) -> None:
+        await finalize_suggestion_decision(interaction, self.suggestion_id, SUGGESTION_STATUS_ACCEPTED, None)
+
+    async def reject_suggestion(self, interaction: discord.Interaction) -> None:
+        row = suggestion_get(self.suggestion_id)
+        if row is None:
+            await interaction.response.send_message("❌ Esa sugerencia ya no existe.", ephemeral=True)
+            return
+        if row["status"] != SUGGESTION_STATUS_PENDING:
+            await interaction.response.send_message("ℹ️ Esta sugerencia ya fue resuelta.", ephemeral=True)
+            return
+        await interaction.response.send_modal(SuggestionRejectModal(self.suggestion_id))
+
+
+async def finalize_suggestion_decision(
+    interaction: discord.Interaction,
+    suggestion_id: int,
+    status: str,
+    rejection_reason: str | None,
+) -> None:
+    row = suggestion_get(suggestion_id)
+    if row is None:
+        await _suggestion_interaction_reply(interaction, "❌ Esa sugerencia ya no existe.", ephemeral=True)
+        return
+    if row["status"] != SUGGESTION_STATUS_PENDING:
+        await _suggestion_interaction_reply(interaction, "ℹ️ Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
+        return
+    if status == SUGGESTION_STATUS_REJECTED and not (rejection_reason or "").strip():
+        await _suggestion_interaction_reply(interaction, "❌ La razón del rechazo es obligatoria.", ephemeral=True)
+        return
+
+    changed = suggestion_decide(suggestion_id, status, interaction.user.id, rejection_reason)
+    if not changed:
+        await _suggestion_interaction_reply(interaction, "ℹ️ Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
+        return
+
+    guild = bot.get_guild(int(row["guild_id"]))
+    requester = None
+    try:
+        requester = await bot.fetch_user(int(row["user_id"]))
+    except discord.HTTPException:
+        pass
+
+    decision_word = "aceptada" if status == SUGGESTION_STATUS_ACCEPTED else "rechazada"
+    decision_color = discord.Color.green() if status == SUGGESTION_STATUS_ACCEPTED else discord.Color.red()
+    result_embed = discord.Embed(
+        title=f"{'✅' if status == SUGGESTION_STATUS_ACCEPTED else '❌'} Tu sugerencia #{suggestion_id} fue {decision_word}",
+        description=f"**{row['title']}**",
+        color=decision_color,
+        timestamp=datetime.now(timezone.utc),
+    )
+    if status == SUGGESTION_STATUS_ACCEPTED:
+        result_embed.add_field(
+            name="Respuesta",
+            value="La propuesta fue aceptada por el equipo que administra el paraíso.",
+            inline=False,
+        )
+    else:
+        result_embed.add_field(name="Razón del rechazo", value=rejection_reason.strip(), inline=False)
+    result_embed.set_footer(text=f"Sugerencia #{suggestion_id} · {guild.name if guild else 'Servidor'}")
+
+    dm_ok = False
+    if requester is not None:
+        try:
+            await requester.send(embed=result_embed)
+            dm_ok = True
+        except discord.HTTPException:
+            pass
+
+    # Desactiva los botones de TODAS las copias que recibieron los revisores.
+    review_rows = suggestion_review_messages(suggestion_id)
+    final_embed = discord.Embed(
+        title=f"{'✅ Aceptada' if status == SUGGESTION_STATUS_ACCEPTED else '❌ Rechazada'} — Sugerencia #{suggestion_id}",
+        description=f"**{row['title']}**\n\n{row['content']}",
+        color=decision_color,
+        timestamp=datetime.now(timezone.utc),
+    )
+    final_embed.add_field(name="Resuelta por", value=interaction.user.mention, inline=False)
+    if status == SUGGESTION_STATUS_REJECTED:
+        final_embed.add_field(name="Razón", value=rejection_reason.strip(), inline=False)
+    final_embed.set_footer(text="Esta sugerencia ya no admite otra decisión.")
+
+    for review_row in review_rows:
+        try:
+            channel = bot.get_channel(int(review_row["channel_id"]))
+            if channel is None:
+                channel = await bot.fetch_channel(int(review_row["channel_id"]))
+            message = await channel.fetch_message(int(review_row["message_id"]))
+            await message.edit(embed=final_embed, view=None)
+        except discord.HTTPException:
+            pass
+
+    if guild is not None:
+        await log_embed(
+            guild,
+            f"{'✅ Sugerencia aceptada' if status == SUGGESTION_STATUS_ACCEPTED else '❌ Sugerencia rechazada'}",
+            f"Sugerencia **#{suggestion_id}** de <@{row['user_id']}> — resuelta por {interaction.user.mention}. "
+            + (f"Razón: {rejection_reason.strip()}" if status == SUGGESTION_STATUS_REJECTED else ""),
+            decision_color,
+        )
+
+    dm_note = "DM enviado al autor." if dm_ok else "⚠️ No pude enviar el DM al autor (puede tener los DMs cerrados)."
+    await _suggestion_interaction_reply(
+        interaction,
+        f"{'✅ Sugerencia aceptada.' if status == SUGGESTION_STATUS_ACCEPTED else '❌ Sugerencia rechazada.'} {dm_note}",
+        ephemeral=True,
+    )
+
+
+async def _suggestion_interaction_reply(interaction: discord.Interaction, text: str, ephemeral: bool = True) -> None:
+    if interaction.response.is_done():
+        await interaction.followup.send(text, ephemeral=ephemeral)
+    else:
+        await interaction.response.send_message(text, ephemeral=ephemeral)
+
+
+async def suggestion_publish_panel(guild: discord.Guild, channel: discord.TextChannel) -> discord.Message:
+    message = await channel.send(embed=suggestion_panel_embed(guild), view=SuggestionPanelView())
+    suggestion_set_channel_id(guild.id, channel.id)
+    suggestion_set_panel_message_id(guild.id, message.id)
+    try:
+        await message.pin(reason="Panel sticky del sistema de sugerencias de El Heraldo")
+    except discord.HTTPException:
+        pass
+    return message
+
+
+async def suggestion_ensure_panel(guild: discord.Guild) -> None:
+    channel_id = suggestion_get_channel_id(guild.id)
+    if not channel_id:
+        return
+    channel = guild.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        return
+    panel_id = suggestion_get_panel_message_id(guild.id)
+    if panel_id:
+        try:
+            message = await channel.fetch_message(panel_id)
+            # Refresca el contenido/vista sin crear mensajes duplicados.
+            await message.edit(embed=suggestion_panel_embed(guild), view=SuggestionPanelView())
+            return
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
+            return
+    await suggestion_publish_panel(guild, channel)
+
+
+async def suggestion_panel_deleted(guild_id: int | None, message_id: int) -> None:
+    if not guild_id:
+        return
+    if suggestion_get_panel_message_id(guild_id) != message_id:
+        return
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        return
+    await asyncio.sleep(1)
+    await suggestion_ensure_panel(guild)
+
+
+async def suggestions_startup() -> None:
+    suggestion_db_init()
+    # Vista del panel: un solo custom_id, persistente tras reinicios.
+    if not any(isinstance(v, SuggestionPanelView) for v in bot.persistent_views):
+        bot.add_view(SuggestionPanelView())
+
+    # Registra los botones de todas las sugerencias pendientes para que sobrevivan reinicios.
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    pending = conn.execute("SELECT id FROM suggestions WHERE status = 'pending'").fetchall()
+    review_messages = conn.execute(
+        "SELECT suggestion_id, channel_id, message_id FROM suggestion_review_messages"
+    ).fetchall()
+    conn.close()
+    pending_ids = {int(row["id"]) for row in pending}
+    for row in review_messages:
+        sid = int(row["suggestion_id"])
+        if sid in pending_ids:
+            try:
+                bot.add_view(SuggestionReviewView(sid), message_id=int(row["message_id"]))
+            except Exception:
+                traceback.print_exc()
+
+    for guild in bot.guilds:
+        try:
+            await suggestion_ensure_panel(guild)
+        except Exception:
+            traceback.print_exc()
+
+
+suggestions_group = discord.app_commands.Group(
+    name="suggestions",
+    description="Configurar y administrar el sistema de sugerencias.",
+    guild_only=True,
+    default_permissions=discord.Permissions(manage_guild=True),
+)
+
+
+@suggestions_group.command(name="panel", description="Publicar o reconstruir el panel sticky de sugerencias en un canal.")
+@discord.app_commands.describe(canal="Canal donde quedará el botón para crear sugerencias")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def suggestions_panel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+    perms = canal.permissions_for(interaction.guild.me)
+    missing = [
+        name for name, ok in (
+            ("Ver canal", perms.view_channel),
+            ("Enviar mensajes", perms.send_messages),
+            ("Insertar enlaces", perms.embed_links),
+            ("Gestionar mensajes", perms.manage_messages),
+        ) if not ok
+    ]
+    if missing:
+        await interaction.response.send_message(
+            f"❌ El Heraldo no tiene en {canal.mention}: **{', '.join(missing)}**.", ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True)
+    suggestion_set_channel_id(interaction.guild.id, canal.id)
+    await suggestion_ensure_panel(interaction.guild)
+    await interaction.followup.send(f"✅ Panel de sugerencias configurado en {canal.mention}.", ephemeral=True)
+
+
+@suggestions_group.command(name="config", description="Elegir si el creador del servidor también recibe las sugerencias por DM.")
+@discord.app_commands.describe(dueno="Sí = el dueño/creador recibe las sugerencias; No = solo destinatarios añadidos")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def suggestions_config(interaction: discord.Interaction, dueno: bool) -> None:
+    suggestion_set_owner_enabled(interaction.guild.id, dueno)
+    owner_text = "incluido" if dueno else "excluido"
+    await interaction.response.send_message(
+        f"✅ El dueño del servidor queda **{owner_text}** como destinatario de sugerencias.", ephemeral=True
+    )
+
+
+@suggestions_group.command(name="revisor_add", description="Añadir una persona que recibirá y podrá resolver sugerencias por DM.")
+@discord.app_commands.describe(usuario="Persona que recibirá las sugerencias")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def suggestions_reviewer_add(interaction: discord.Interaction, usuario: discord.Member) -> None:
+    if usuario.bot:
+        await interaction.response.send_message("❌ No puedes añadir un bot como revisor.", ephemeral=True)
+        return
+    suggestion_add_reviewer(interaction.guild.id, usuario.id)
+    await interaction.response.send_message(f"✅ {usuario.mention} recibirá las nuevas sugerencias por DM.", ephemeral=True)
+
+
+@suggestions_group.command(name="revisor_remove", description="Quitar una persona de los destinatarios de sugerencias.")
+@discord.app_commands.describe(usuario="Persona que dejará de recibir nuevas sugerencias")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def suggestions_reviewer_remove(interaction: discord.Interaction, usuario: discord.Member) -> None:
+    removed = suggestion_remove_reviewer(interaction.guild.id, usuario.id)
+    await interaction.response.send_message(
+        "✅ Revisor eliminado." if removed else "ℹ️ Esa persona no estaba configurada como revisor.",
+        ephemeral=True,
+    )
+
+
+@suggestions_group.command(name="lista", description="Ver el canal y las personas que reciben las sugerencias.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def suggestions_list(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    channel = guild.get_channel(suggestion_get_channel_id(guild.id))
+    reviewers = []
+    for user_id in suggestion_reviewer_ids(guild.id):
+        member = guild.get_member(user_id)
+        reviewers.append(member.mention if member else f"<@{user_id}>")
+    owner = f"<@{guild.owner_id}>" if suggestion_owner_enabled(guild.id) and guild.owner_id else "Desactivado"
+    text = (
+        f"**Canal:** {channel.mention if channel else 'No configurado'}\n"
+        f"**Dueño/creador:** {owner}\n"
+        f"**Revisores adicionales:** " + (", ".join(reviewers) if reviewers else "Ninguno")
+    )
+    await interaction.response.send_message(text, ephemeral=True)
+
+
+@suggestions_group.error
+async def suggestions_group_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    await verify_command_error(interaction, error)
+
+
+bot.tree.add_command(suggestions_group)
 
 # ---------------------------------------------------------------------------
 
