@@ -4152,88 +4152,262 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
     await log_embed(interaction.guild, "⚙️ Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
 
 
-@bot.tree.command(name="condenar_template", description="Modificar la tarjeta pública de condena y su botón.")
-@discord.app_commands.describe(
-    campo="Elemento de la plantilla que quieres cambiar",
-    valor="Nuevo valor. Para limpiar un campo usa '-'",
-)
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-@discord.app_commands.guild_only()
-async def condenar_template(interaction: discord.Interaction, campo: str, valor: Optional[str] = None) -> None:
-    choices = {
-        "titulo": "title",
-        "descripcion": "description",
-        "color": "color",
-        "pie": "footer",
-        "expediente": "label_case",
-        "condenado": "label_user",
-        "condeno": "label_by",
-        "motivo": "label_reason",
-        "cuando": "label_when",
-        "donde": "label_where",
-        "duracion": "label_duration",
-        "origen": "label_origin",
-        "roles": "label_roles",
-        "evidencia": "label_message",
-        "boton_label": "button_label",
-        "boton_link": "button_url",
-        "reset": "__reset__",
-        "ver": "__show__",
-    }
-    key = choices.get(campo.lower().strip())
-    if key is None:
-        await interaction.response.send_message(
-            "❌ Campo no válido. Usa: " + ", ".join(choices.keys()), ephemeral=True
+class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
+    title_input = discord.ui.TextInput(label="Título", required=False, max_length=256)
+    description_input = discord.ui.TextInput(
+        label="Descripción",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=4000,
+        placeholder="Admite variables: {usuario}, {servidor}, {motivo}…",
+    )
+    color_input = discord.ui.TextInput(label="Color HEX", required=False, max_length=7, placeholder="#8B0000")
+    footer_input = discord.ui.TextInput(
+        label="Pie del embed",
+        required=False,
+        max_length=2048,
+        placeholder="Admite variables: {servidor}, {servericon}…",
+    )
+    button_label_input = discord.ui.TextInput(label="Texto del botón", required=False, max_length=80)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.title_input.default = condemnation_template_get("title")
+        self.description_input.default = condemnation_template_get("description")
+        self.color_input.default = condemnation_template_get("color")
+        self.footer_input.default = condemnation_template_get("footer")
+        self.button_label_input.default = condemnation_template_get("button_label")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color = str(self.color_input).strip().lstrip("#")
+        if color:
+            try:
+                if len(color) != 6:
+                    raise ValueError
+                int(color, 16)
+            except ValueError:
+                await interaction.response.send_message(
+                    "❌ El color debe ser HEX de 6 dígitos, por ejemplo 8B0000.",
+                    ephemeral=True,
+                )
+                return
+        condemnation_template_set("title", str(self.title_input).strip())
+        condemnation_template_set("description", str(self.description_input).strip())
+        condemnation_template_set("color", color or CONDEMNATION_TEMPLATE_DEFAULTS["color"])
+        condemnation_template_set("footer", str(self.footer_input).strip())
+        condemnation_template_set(
+            "button_label",
+            str(self.button_label_input).strip() or CONDEMNATION_TEMPLATE_DEFAULTS["button_label"],
         )
-        return
+        await condemnation_template_editor_update(interaction, "Diseño actualizado.")
 
-    if key == "__show__":
-        lines = [f"**{k}:** `{condemnation_template_get(k)[:180]}`" for k in CONDEMNATION_TEMPLATE_DEFAULTS]
-        embed = discord.Embed(title="⚙️ Plantilla de condena", description="\n".join(lines), color=condemnation_template_color())
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        return
 
-    if key == "__reset__":
-        condemnation_template_reset()
-        await interaction.response.send_message("✅ La plantilla de condena volvió a sus valores predeterminados.", ephemeral=True)
-        return
+class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"):
+    case_input = discord.ui.TextInput(label="Expediente", required=True, max_length=256)
+    user_input = discord.ui.TextInput(label="Condenado", required=True, max_length=256)
+    by_input = discord.ui.TextInput(label="Quién condenó", required=True, max_length=256)
+    reason_input = discord.ui.TextInput(label="Motivo", required=True, max_length=256)
+    when_input = discord.ui.TextInput(label="Cuándo", required=True, max_length=256)
 
-    if valor is None:
-        await interaction.response.send_message(
-            f"**{campo}** = `{condemnation_template_get(key)}`", ephemeral=True
+    def __init__(self) -> None:
+        super().__init__()
+        self.case_input.default = condemnation_template_get("label_case")
+        self.user_input.default = condemnation_template_get("label_user")
+        self.by_input.default = condemnation_template_get("label_by")
+        self.reason_input.default = condemnation_template_get("label_reason")
+        self.when_input.default = condemnation_template_get("label_when")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        values = (
+            ("label_case", self.case_input.value),
+            ("label_user", self.user_input.value),
+            ("label_by", self.by_input.value),
+            ("label_reason", self.reason_input.value),
+            ("label_when", self.when_input.value),
         )
-        return
+        for key, value in values:
+            condemnation_template_set(key, value.strip())
+        await condemnation_template_editor_update(interaction, "Etiquetas principales actualizadas.")
 
-    value = "" if valor == "-" else valor.strip()
-    if key == "color":
-        try:
-            int(value.lstrip("#"), 16)
-            if len(value.lstrip("#")) != 6:
-                raise ValueError
-        except ValueError:
-            await interaction.response.send_message("❌ El color debe ser hexadecimal, por ejemplo `8B0000`.", ephemeral=True)
+
+class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más etiquetas"):
+    where_input = discord.ui.TextInput(label="Dónde ocurrió", required=True, max_length=256)
+    duration_input = discord.ui.TextInput(label="Duración", required=True, max_length=256)
+    origin_input = discord.ui.TextInput(label="Origen", required=True, max_length=256)
+    roles_input = discord.ui.TextInput(label="Roles retirados", required=True, max_length=256)
+    evidence_input = discord.ui.TextInput(label="Evidencia / mensaje", required=True, max_length=256)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.where_input.default = condemnation_template_get("label_where")
+        self.duration_input.default = condemnation_template_get("label_duration")
+        self.origin_input.default = condemnation_template_get("label_origin")
+        self.roles_input.default = condemnation_template_get("label_roles")
+        self.evidence_input.default = condemnation_template_get("label_message")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        values = (
+            ("label_where", self.where_input.value),
+            ("label_duration", self.duration_input.value),
+            ("label_origin", self.origin_input.value),
+            ("label_roles", self.roles_input.value),
+            ("label_message", self.evidence_input.value),
+        )
+        for key, value in values:
+            condemnation_template_set(key, value.strip())
+        await condemnation_template_editor_update(interaction, "Más etiquetas actualizadas.")
+
+
+class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace"):
+    url_input = discord.ui.TextInput(
+        label="URL del botón",
+        required=False,
+        max_length=2000,
+        placeholder="https://…",
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.url_input.default = condemnation_template_get("button_url")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        url = str(self.url_input).strip()
+        if url and not re.match(r"^https?://", url, re.IGNORECASE):
+            await interaction.response.send_message(
+                "❌ La URL debe comenzar por https:// o http://.",
+                ephemeral=True,
+            )
             return
-    if key == "button_url" and value and not re.match(r"^https?://", value, re.IGNORECASE):
-        await interaction.response.send_message("❌ El enlace del botón debe comenzar por `https://` o `http://`.", ephemeral=True)
+        condemnation_template_set("button_url", url)
+        await condemnation_template_editor_update(interaction, "Enlace del botón actualizado.")
+
+
+def condemnation_template_preview(guild: discord.Guild, member: discord.Member) -> discord.Embed:
+    embed, _ = _build_condemnation_embed(
+        guild,
+        member,
+        "Ejemplo de vista previa — motivo de la condena.",
+        60,
+        "role",
+        member,
+        removed_role_ids=[r.id for r in member.roles if r.is_assignable() and not r.managed],
+        when=datetime.now(timezone.utc),
+    )
+    return embed
+
+
+async def condemnation_template_editor_update(
+    interaction: discord.Interaction,
+    notice: str | None = None,
+) -> None:
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message(
+            "❌ Este editor solo funciona dentro de un servidor.",
+            ephemeral=True,
+        )
         return
 
-    condemnation_template_set(key, value)
-    await interaction.response.send_message(
-        f"✅ Plantilla actualizada: **{campo}** → `{value or '(vacío)'}`", ephemeral=True
+    embed = condemnation_template_preview(guild, interaction.user)
+    view = CondemnationTemplateEditorView(interaction.user.id)
+    content = (
+        "☠️ **Editor de la tarjeta de condenados**\n"
+        "Cada sección se modifica mediante un formulario. Los cambios se guardan "
+        "automáticamente y la vista previa refleja la configuración actual."
+    )
+    if notice:
+        content = "✅ " + notice + "\n\n" + content
+
+    await interaction.response.defer(ephemeral=True)
+    parent = interaction.message
+    if parent is not None:
+        try:
+            await parent.edit(content=content, embed=embed, view=view)
+            return
+        except discord.HTTPException:
+            pass
+    await interaction.followup.send(
+        content=content,
+        embed=embed,
+        view=view,
+        ephemeral=True,
     )
 
 
-@condenar_template.autocomplete("campo")
-async def condenar_template_autocomplete(interaction: discord.Interaction, current: str):
-    names = [
-        "titulo", "descripcion", "color", "pie", "expediente", "condenado", "condeno",
-        "motivo", "cuando", "donde", "duracion", "origen", "roles", "evidencia",
-        "boton_label", "boton_link", "reset", "ver"
-    ]
-    return [
-        discord.app_commands.Choice(name=name, value=name)
-        for name in names if current.lower() in name.lower()
-    ][:25]
+class CondemnationTemplateEditorView(discord.ui.View):
+    def __init__(self, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Este editor no es tuyo. Usa /condenar template para abrir el tuyo.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="✏️ Diseño", style=discord.ButtonStyle.primary, row=0)
+    async def edit_core(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CondemnationCoreModal())
+
+    @discord.ui.button(label="🏷️ Etiquetas", style=discord.ButtonStyle.primary, row=0)
+    async def edit_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CondemnationDetailsModal())
+
+    @discord.ui.button(label="🏷️ Más etiquetas", style=discord.ButtonStyle.primary, row=0)
+    async def edit_more_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CondemnationMoreDetailsModal())
+
+    @discord.ui.button(label="🔗 Enlace del botón", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_button_url(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CondemnationButtonUrlModal())
+
+    @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=1)
+    async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message("❌ Solo disponible en un servidor.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "👁️ **Vista previa actual de la tarjeta de condenados:**",
+            embed=condemnation_template_preview(interaction.guild, interaction.user),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="↩️ Restaurar valores", style=discord.ButtonStyle.danger, row=1)
+    async def reset(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        condemnation_template_reset()
+        await condemnation_template_editor_update(
+            interaction,
+            "La plantilla de condenados volvió a sus valores predeterminados.",
+        )
+
+
+@bot.tree.command(
+    name="condenar_template",
+    description="Abrir el formulario profesional de la tarjeta de condenados.",
+)
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def condenar_template(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "❌ Este comando solo funciona dentro de un servidor.",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.send_message(
+        content=(
+            "☠️ **Editor de la tarjeta de condenados**\n"
+            "Selecciona una sección para abrir su formulario. Los cambios se guardan "
+            "automáticamente y la vista previa se actualiza al terminar cada formulario."
+        ),
+        embed=condemnation_template_preview(interaction.guild, interaction.user),
+        view=CondemnationTemplateEditorView(interaction.user.id),
+        ephemeral=True,
+    )
 
 
 @bot.listen("on_raw_reaction_add")
