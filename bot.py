@@ -4318,20 +4318,27 @@ async def condemnation_template_editor_update(
     if notice:
         content = "✅ " + notice + "\n\n" + content
 
-    await interaction.response.defer(ephemeral=True)
-    parent = interaction.message
-    if parent is not None:
-        try:
-            await parent.edit(content=content, embed=embed, view=view)
-            return
-        except discord.HTTPException:
-            pass
-    await interaction.followup.send(
-        content=content,
-        embed=embed,
-        view=view,
-        ephemeral=True,
-    )
+    try:
+        await interaction.response.edit_message(
+            content=content,
+            embed=embed,
+            view=view,
+        )
+    except discord.HTTPException:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                content=content,
+                embed=embed,
+                view=view,
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                content=content,
+                embed=embed,
+                view=view,
+                ephemeral=True,
+            )
 
 
 class CondemnationTemplateEditorView(discord.ui.View):
