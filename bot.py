@@ -4165,7 +4165,7 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
 async def condenar(
     interaction: discord.Interaction,
     miembro: discord.Member,
-    motivo: Optional[str] = None,
+    motivo: str,
     duracion: Optional[str] = None,
     purga: Optional[str] = None,
 ) -> None:
