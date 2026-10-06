@@ -2736,6 +2736,21 @@ def condemnation_list(guild_id: int) -> list[sqlite3.Row]:
     return rows
 
 
+def condemnation_default_duration_minutes() -> int | None:
+    """Duración predeterminada para nuevas condenas. None = indefinida."""
+    value = db_meta_get("condemnation_default_duration")
+    if not value or value.strip().lower() in {"indefinida", "indefinido", "none", "null", "0"}:
+        return None
+    try:
+        return parse_duration(value, 1, CONDEMNATION_MAX_MINUTES)
+    except ValueError:
+        return None
+
+
+def set_condemnation_default_duration(value: str | None) -> None:
+    db_meta_set("condemnation_default_duration", value or "indefinida")
+
+
 def condemnation_channel_id() -> int:
     value = db_meta_get("condemned_channel_id")
     return int(value) if value else CONDEMNED_CHANNEL_ID
@@ -3852,7 +3867,7 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
             continue
         await condemn_member(
             member, reason="El rol Condenado fue otorgado manualmente (detectado al arrancar).",
-            duration_minutes=None, purge_spec=None, origin="role", applied_by=None,
+            duration_minutes=condemnation_default_duration_minutes(), purge_spec=None, origin="role", applied_by=None,
             send_dm=False, announce=False,
         )
         await asyncio.sleep(1)
@@ -3884,7 +3899,7 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
             return await condemn_member(
                 member,
                 reason="Honeypot: escribió en un canal trampa",
-                duration_minutes=None,
+                duration_minutes=condemnation_default_duration_minutes(),
                 purge_spec=purge_spec,
                 origin="honeypot",
                 applied_by=None,
@@ -4027,7 +4042,7 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
 @discord.app_commands.describe(
     miembro="Miembro que será condenado",
     motivo="Motivo de la condena",
-    duracion="Duración: 30m, 12h, 2d…; vacío = indefinida",
+    duracion="Duración: 30m, 12h, 2d…; vacío = usa la configurada; «indefinida» = hasta retirar",
     purga="Qué borrar del condenado; vacío = últimas 24h, 0 = no borrar",
 )
 @discord.app_commands.checks.has_permissions(kick_members=True)
@@ -4041,10 +4056,14 @@ async def condenar(
 ) -> None:
     guild = interaction.guild
     reason = (motivo or "Condena manual").strip()[:1000]
-    duration_minutes: int | None = None
+    duration_minutes: int | None = condemnation_default_duration_minutes()
     try:
-        if duracion and duracion.strip() != "0":
-            duration_minutes = parse_duration(duracion, 1, CONDEMNATION_MAX_MINUTES)
+        if duracion is not None:
+            raw_duration = duracion.strip()
+            if raw_duration.lower() in {"0", "indefinida", "indefinido", "permanente", "hasta retirar"}:
+                duration_minutes = None
+            else:
+                duration_minutes = parse_duration(raw_duration, 1, CONDEMNATION_MAX_MINUTES)
         purge_spec = parse_purge_spec(purga) if purga else HONEYPOT_PURGE_DEFAULT
     except ValueError as e:
         await interaction.response.send_message(f"❌ No se pudo condenar: {e}", ephemeral=True)
@@ -4230,6 +4249,34 @@ class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"
         await condemnation_template_editor_update(interaction, "Etiquetas principales actualizadas.")
 
 
+class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración"):
+    duration_input = discord.ui.TextInput(
+        label="Duración predeterminada",
+        required=True,
+        max_length=32,
+        placeholder="Indefinida, 30m, 12h, 7d…",
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        current = condemnation_default_duration_minutes()
+        self.duration_input.default = format_duration(current) if current else "Indefinida"
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        value = str(self.duration_input).strip()
+        if value.lower() in {"indefinida", "indefinido", "permanente", "hasta retirar", "0"}:
+            set_condemnation_default_duration(None)
+            await condemnation_template_editor_update(interaction, "Duración predeterminada: **Indefinida (hasta retirar)**.")
+            return
+        try:
+            minutes = parse_duration(value, 1, CONDEMNATION_MAX_MINUTES)
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+            return
+        set_condemnation_default_duration(value)
+        await condemnation_template_editor_update(interaction, f"Duración predeterminada: **{format_duration(minutes)}**.")
+
+
 class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más etiquetas"):
     where_input = discord.ui.TextInput(label="Dónde ocurrió", required=True, max_length=256)
     duration_input = discord.ui.TextInput(label="Duración", required=True, max_length=256)
@@ -4371,6 +4418,10 @@ class CondemnationTemplateEditorView(discord.ui.View):
     async def edit_button_url(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationButtonUrlModal())
 
+    @discord.ui.button(label="⏳ Duración", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(CondemnationDurationModal())
+
     @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=1)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.guild is None:
@@ -4450,7 +4501,7 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
     ok, note = await condemn_member(
         target,
         reason=f"Condena por reacción ☠️ al mensaje {message.jump_url}",
-        duration_minutes=None,
+        duration_minutes=condemnation_default_duration_minutes(),
         purge_spec=HONEYPOT_PURGE_DEFAULT,
         origin="reaction",
         applied_by=actor,
@@ -5785,7 +5836,7 @@ async def raid_act_on_member(member: discord.Member) -> bool:
     try:
         if action == "condemn":
             ok, note = await condemn_member(
-                member, reason=reason, duration_minutes=None, purge_spec=None, origin="raid",
+                member, reason=reason, duration_minutes=condemnation_default_duration_minutes(), purge_spec=None, origin="raid",
                 applied_by=None, send_dm=False, announce=False,
             )
             if not ok:
