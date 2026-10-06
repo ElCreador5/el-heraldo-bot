@@ -88,6 +88,17 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      footer {servidor} + {servericon}. Los embeds con pie propio configurado lo conservan.
      Se cambia en GLOBAL_FOOTER_TEXT / GLOBAL_FOOTER_ICON.
 
+12. AUTOCOMPLETADO DE VARIABLES
+   - Al escribir "{" en los parámetros de texto (/variables, /verify_dm_texts) Discord sugiere las
+     variables; tras "{#", "{@" o "{emoji:" sugiere canales, roles/miembros o emojis. Límite de Discord:
+     el texto resultante no puede pasar de 100 caracteres; los formularios (modales) no lo admiten.
+
+13. EMBEDS PERSONALIZADOS (/embed)
+   - /embed crear abre un formulario; luego un panel con botones sigue la edición (contenido, autor y
+     pie, campos, fecha) también con formularios. Todos los textos aceptan variables.
+   - /embed editar | enviar | lista | borrar. Los embeds se guardan por nombre y los mensajes ya
+     enviados se actualizan solos al editarlos.
+
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
 Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
@@ -6073,6 +6084,634 @@ def _install_embed_hooks() -> None:
 
 
 _install_embed_hooks()
+
+
+# ---------------------------------------------------------------------------
+# 12. AUTOCOMPLETADO DE VARIABLES (al escribir "{")
+# ---------------------------------------------------------------------------
+# En los parámetros de texto de los comandos, al escribir "{" (o "${") Discord muestra sugerencias
+# como en cualquier comando: variables, o canales/roles/miembros/emojis tras "{#", "{@" y "{emoji:".
+# Límite de Discord: el valor de una sugerencia no puede pasar de 100 caracteres, y la sugerencia
+# reemplaza el texto entero; si el texto + la variable pasan de 100, no se puede ofrecer.
+# Los formularios (modales) de Discord no admiten autocompletado.
+
+_AC_OPEN_RE = re.compile(r"(\$?)\{([^{}\n]*)$")
+AC_MAX_VALUE = 100
+
+
+def _ac_choice(label: str, value: str):
+    if not value or len(value) > AC_MAX_VALUE:
+        return None
+    return discord.app_commands.Choice(name=label[:100], value=value)
+
+
+def _ac_rank(typed_key: str, *names: str) -> int | None:
+    """0 = empieza igual, 1 = lo contiene, None = no coincide."""
+    keys = [_var_key(n) for n in names if n]
+    if not typed_key:
+        return 0
+    if any(k.startswith(typed_key) for k in keys):
+        return 0
+    if any(typed_key in k for k in keys):
+        return 1
+    return None
+
+
+def variable_suggestions(guild: discord.Guild | None, current: str) -> list:
+    match = _AC_OPEN_RE.search(current)
+    if match is None:
+        return []
+    head = current[: match.start()]
+    dollar, typed = match.group(1), match.group(2)
+    opener = f"{dollar}{{"
+    out: list = []
+
+    def add(label: str, inner: str) -> None:
+        choice = _ac_choice(label, f"{head}{opener}{inner}}}")
+        if choice is not None:
+            out.append(choice)
+
+    def pick(items, label_fn, query: str, make) -> None:
+        q = _var_key(query)
+        scored = []
+        for item in items:
+            rank = _ac_rank(q, label_fn(item))
+            if rank is not None:
+                scored.append((rank, label_fn(item).lower(), item))
+        for _, _, item in sorted(scored, key=lambda t: (t[0], len(t[1]), t[1]))[:25]:
+            make(item)
+
+    kind, sep, rest = typed.partition(":")
+    kind_key = _var_key(kind) if sep else ""
+    if guild is not None and (typed[:1] == "#" or kind_key in ("canal", "channel", "c")):
+        query = typed[1:] if typed[:1] == "#" else rest
+        prefix = "#" if typed[:1] == "#" else f"{kind}:"
+        pick([c for c in guild.channels if not isinstance(c, discord.CategoryChannel)], lambda c: c.name, query,
+             lambda c: add(f"#{c.name}", f"{prefix}{c.name}"))
+    elif guild is not None and (typed[:1] == "@" or kind_key in ("rol", "role", "r", "usuario", "user", "miembro", "member", "u")):
+        is_role_kind = typed[:1] == "@" or kind_key in ("rol", "role", "r")
+        query = typed[1:] if typed[:1] == "@" else rest
+        prefix = "@" if typed[:1] == "@" else f"{kind}:"
+        roles = [r for r in guild.roles if not r.is_default()] if is_role_kind else []
+        pick(roles, lambda r: r.name, query, lambda r: add(f"@{r.name} (rol)", f"{prefix}{r.name}"))
+        if typed[:1] == "@" or not is_role_kind:
+            pick(guild.members, lambda m: m.display_name, query,
+                 lambda m: add(f"@{m.display_name} (miembro)", f"{prefix}{m.display_name}"))
+    elif kind_key in ("emoji", "e"):
+        pools = list(guild.emojis) if guild is not None else []
+        pick(pools, lambda e: e.name, rest, lambda e: add(f"{e} :{e.name}:", f"{kind}:{e.name}"))
+    elif not sep and typed[:1] not in ("#", "@"):
+        typed_key = _var_key(typed)
+        if not typed_key:  # recién escrita la llave: enseñar también las búsquedas
+            for label, inner in (("#  → canales del servidor", "#"), ("@  → roles y miembros", "@"), ("emoji:  → emojis del servidor", "emoji:")):
+                choice = _ac_choice(label, f"{head}{opener}{inner}")
+                if choice is not None:
+                    out.append(choice)
+        scored = []
+        for group, name, aliases, desc, _ in VARIABLES:
+            rank = _ac_rank(typed_key, name, *aliases)
+            if rank is None and typed_key and typed_key in _var_key(desc):
+                rank = 1
+            if rank is not None:
+                scored.append((rank, name, aliases, desc))
+        for _, name, aliases, desc in sorted(scored, key=lambda t: t[0]):
+            add(f"{{{name}}} — {desc}", name)
+    return out[:25]
+
+
+async def variable_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[discord.app_commands.Choice[str]]:
+    perms = getattr(interaction.user, "guild_permissions", None)
+    if perms is None or not perms.manage_guild:
+        return []
+    try:
+        return variable_suggestions(interaction.guild, current)
+    except Exception:
+        traceback.print_exc()
+        return []
+
+
+variables_command.autocomplete("texto")(variable_autocomplete)
+for _param in ("titulo", "campo", "mensaje", "footer", "icono_footer"):
+    verify_dm_texts.autocomplete(_param)(variable_autocomplete)
+
+
+# ---------------------------------------------------------------------------
+# 13. EMBEDS PERSONALIZADOS (/embed)
+# ---------------------------------------------------------------------------
+# /embed crear abre un formulario (como /verify_texts); después un panel con botones permite seguir
+# editándolo con más formularios: contenido, autor y pie, campos y fecha. Todos los textos aceptan
+# variables ({servidor}, {#reglas}, {servericon}…). Los embeds se guardan por nombre y recuerdan los
+# mensajes donde se enviaron: al editarlos, esos mensajes se actualizan solos.
+
+EMBED_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+EMBED_MAX_FIELDS = 25
+EMBED_ALLOWED_MENTIONS = discord.AllowedMentions(roles=True, users=True, everyone=False)
+EMBED_PERSON_NOTE = "las variables de persona como `{usuario}` solo se resuelven si eliges `miembro` al enviar"
+
+
+def _embed_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS custom_embeds ("
+        "guild_id INTEGER NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL, "
+        "refs TEXT NOT NULL DEFAULT '[]', updated_at TEXT, PRIMARY KEY (guild_id, name))"
+    )
+    return conn
+
+
+def embed_get(guild_id: int, name: str) -> tuple[dict, list] | None:
+    conn = _embed_conn()
+    row = conn.execute("SELECT data, refs FROM custom_embeds WHERE guild_id = ? AND name = ?", (guild_id, name)).fetchone()
+    conn.close()
+    return (json.loads(row[0]), json.loads(row[1])) if row else None
+
+
+def embed_save(guild_id: int, name: str, data: dict, refs: list | None = None) -> None:
+    conn = _embed_conn()
+    now = datetime.now(timezone.utc).isoformat()
+    if refs is None:
+        row = conn.execute("SELECT refs FROM custom_embeds WHERE guild_id = ? AND name = ?", (guild_id, name)).fetchone()
+        refs_json = row[0] if row else "[]"
+    else:
+        refs_json = json.dumps(refs)
+    conn.execute(
+        "INSERT INTO custom_embeds (guild_id, name, data, refs, updated_at) VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(guild_id, name) DO UPDATE SET data = excluded.data, refs = excluded.refs, updated_at = excluded.updated_at",
+        (guild_id, name, json.dumps(data), refs_json, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def embed_names(guild_id: int) -> list[tuple[str, int]]:
+    conn = _embed_conn()
+    rows = conn.execute("SELECT name, refs FROM custom_embeds WHERE guild_id = ? ORDER BY name", (guild_id,)).fetchall()
+    conn.close()
+    return [(name, len(json.loads(refs))) for name, refs in rows]
+
+
+def embed_delete(guild_id: int, name: str) -> bool:
+    conn = _embed_conn()
+    cur = conn.execute("DELETE FROM custom_embeds WHERE guild_id = ? AND name = ?", (guild_id, name))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
+
+
+def parse_hex_color(text: str) -> int:
+    raw = text.strip().lstrip("#").removeprefix("0x").removeprefix("0X")
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
+        raise ValueError(f"El color `{text}` no es válido: usa un código hexadecimal de 6 dígitos, por ejemplo `#E7CF7F`.")
+    return int(raw, 16)
+
+
+def _check_url_field(label: str, value: str) -> str | None:
+    value = value.strip()
+    if value and not re.match(r"^https?://", value, re.IGNORECASE) and not VAR_PATTERN.search(value):
+        return f"La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`)."
+    return None
+
+
+def build_custom_embed(data: dict, ctx: VarContext) -> tuple[discord.Embed, str | None, list[str]]:
+    """(embed, texto fuera del embed, variables sin resolver) con las variables ya aplicadas."""
+    unresolved: list[str] = []
+
+    def r(text: str, limit: int) -> str:
+        out, bad = render_vars_report(text or "", ctx, limit, plain=False)
+        unresolved.extend(bad)
+        return out
+
+    color = EMBED_DEFAULT_COLOR
+    if data.get("color"):
+        try:
+            color = parse_hex_color(data["color"])
+        except ValueError:
+            pass
+    embed = discord.Embed(color=discord.Color(color))
+    if data.get("title"):
+        embed.title = r(data["title"], 256)
+    if data.get("description"):
+        embed.description = r(data["description"], 4096)
+    if data.get("author"):
+        icon = render_url_var(data.get("author_icon", ""), ctx) if data.get("author_icon") else ""
+        embed.set_author(name=r(data["author"], 256), icon_url=icon or None)
+    for f in data.get("fields", []):
+        embed.add_field(name=r(f["name"], 256) or "\u200b", value=r(f["value"], 1024) or "\u200b", inline=bool(f.get("inline")))
+    image = render_url_var(data["image"], ctx) if data.get("image") else ""
+    if image:
+        embed.set_image(url=image)
+    thumb = render_url_var(data["thumbnail"], ctx) if data.get("thumbnail") else ""
+    if thumb:
+        embed.set_thumbnail(url=thumb)
+    if data.get("footer"):
+        icon = render_url_var(data.get("footer_icon", ""), ctx) if data.get("footer_icon") else ""
+        embed.set_footer(text=render_vars(data["footer"], ctx, 2048, plain=True), icon_url=icon or None)
+    if data.get("timestamp"):
+        embed.timestamp = datetime.now(timezone.utc)
+    content = r(data["content"], 2000) if data.get("content") else None
+    return embed, (content or None), list(dict.fromkeys(unresolved))
+
+
+def embed_is_empty(embed: discord.Embed) -> bool:
+    return not (embed.title or embed.description or embed.fields or embed.image or embed.thumbnail or embed.author)
+
+
+async def embed_sync(guild: discord.Guild, name: str) -> int:
+    """Actualiza los mensajes donde ya se envió el embed. Devuelve cuántos se actualizaron."""
+    record = embed_get(guild.id, name)
+    if record is None:
+        return 0
+    data, refs = record
+    kept, updated = [], 0
+    for channel_id, message_id in refs:
+        channel = guild.get_channel_or_thread(channel_id)
+        if channel is None:
+            continue
+        try:
+            message = await channel.fetch_message(message_id)
+            embed, content, _ = build_custom_embed(data, VarContext(guild, None, channel))
+            if embed_is_empty(embed):
+                kept.append([channel_id, message_id])
+                continue
+            await message.edit(content=content, embed=embed, allowed_mentions=EMBED_ALLOWED_MENTIONS)
+            kept.append([channel_id, message_id])
+            updated += 1
+        except discord.NotFound:
+            continue  # el mensaje se borró: se olvida
+        except discord.HTTPException:
+            kept.append([channel_id, message_id])
+    if kept != refs:
+        embed_save(guild.id, name, data, kept)
+    return updated
+
+
+async def embed_send(
+    guild: discord.Guild, name: str, channel, member: discord.Member | None = None,
+) -> str:
+    record = embed_get(guild.id, name)
+    if record is None:
+        return f"❌ No existe un embed llamado `{name}`."
+    data, refs = record
+    embed, content, _ = build_custom_embed(data, VarContext(guild, member, channel))
+    if embed_is_empty(embed):
+        return "❌ El embed está vacío: añade título, descripción o algún campo antes de enviarlo."
+    if len(embed) > 6000:
+        return f"❌ El embed mide {len(embed)} caracteres y Discord permite 6000 como máximo: acórtalo."
+    try:
+        message = await channel.send(content=content, embed=embed, allowed_mentions=EMBED_ALLOWED_MENTIONS)
+    except discord.Forbidden:
+        return f"❌ No tengo permiso para enviar mensajes o embeds en {channel.mention}."
+    except discord.HTTPException as e:
+        return f"❌ Discord rechazó el embed: {e}"
+    refs.append([channel.id, message.id])
+    embed_save(guild.id, name, data, refs)
+    return f"✅ Embed `{name}` enviado en {channel.mention}: {message.jump_url}"
+
+
+def _clean(value: str | None) -> str:
+    return (value or "").strip()
+
+
+class EmbedContentModal(discord.ui.Modal):
+    """Título, descripción, color e imágenes."""
+
+    def __init__(self, guild_id: int, name: str, data: dict, is_new: bool = False) -> None:
+        super().__init__(title=f"Embed: {name}"[:45])
+        self.guild_id, self.name, self.data, self.is_new = guild_id, name, data, is_new
+        self.e_title = discord.ui.TextInput(
+            label="Título", default=data.get("title", ""), required=False, max_length=256)
+        self.e_description = discord.ui.TextInput(
+            label="Descripción", style=discord.TextStyle.paragraph, default=data.get("description", ""),
+            required=False, max_length=4000, placeholder="Admite variables: {servidor}, {#reglas}…")
+        self.e_color = discord.ui.TextInput(
+            label="Color (hexadecimal)", default=data.get("color", ""), required=False, max_length=10,
+            placeholder="#E7CF7F")
+        self.e_image = discord.ui.TextInput(
+            label="Imagen grande (URL o variable)", default=data.get("image", ""), required=False, max_length=500,
+            placeholder="https://… o {serverbanner}")
+        self.e_thumb = discord.ui.TextInput(
+            label="Miniatura (URL o variable)", default=data.get("thumbnail", ""), required=False, max_length=500,
+            placeholder="https://… o {servericon}")
+        for item in (self.e_title, self.e_description, self.e_color, self.e_image, self.e_thumb):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color = _clean(self.e_color.value)
+        error = None
+        if color:
+            try:
+                parse_hex_color(color)
+            except ValueError as e:
+                error = str(e)
+        error = error or _check_url_field("la imagen", self.e_image.value) or _check_url_field("la miniatura", self.e_thumb.value)
+        if error:
+            await interaction.response.send_message(f"❌ No guardé nada: {error}", ephemeral=True)
+            return
+        if self.is_new and embed_get(self.guild_id, self.name) is not None:
+            await interaction.response.send_message(f"❌ Ya existe un embed llamado `{self.name}`.", ephemeral=True)
+            return
+        record = embed_get(self.guild_id, self.name)
+        data = record[0] if record else dict(self.data)
+        data.update(title=_clean(self.e_title.value), description=_clean(self.e_description.value),
+                    color=color, image=_clean(self.e_image.value), thumbnail=_clean(self.e_thumb.value))
+        embed_save(self.guild_id, self.name, data)
+        await embed_refresh(interaction, self.name, new=self.is_new)
+
+
+class EmbedAuthorFooterModal(discord.ui.Modal):
+    """Autor, pie y texto fuera del embed."""
+
+    def __init__(self, guild_id: int, name: str, data: dict) -> None:
+        super().__init__(title=f"Autor y pie: {name}"[:45])
+        self.guild_id, self.name = guild_id, name
+        self.e_author = discord.ui.TextInput(
+            label="Autor (arriba del título)", default=data.get("author", ""), required=False, max_length=256)
+        self.e_author_icon = discord.ui.TextInput(
+            label="Icono del autor (URL o variable)", default=data.get("author_icon", ""), required=False,
+            max_length=500, placeholder="https://… o {servericon}")
+        self.e_footer = discord.ui.TextInput(
+            label="Pie del embed", default=data.get("footer", ""), required=False, max_length=2048,
+            placeholder="Vacío = pie del servidor")
+        self.e_footer_icon = discord.ui.TextInput(
+            label="Icono del pie (URL o variable)", default=data.get("footer_icon", ""), required=False,
+            max_length=500, placeholder="https://… o {servericon}")
+        self.e_content = discord.ui.TextInput(
+            label="Texto fuera del embed (menciones)", style=discord.TextStyle.paragraph,
+            default=data.get("content", ""), required=False, max_length=2000,
+            placeholder="Aquí sí notifican las menciones: <@&rol>, {@Moderador}…")
+        for item in (self.e_author, self.e_author_icon, self.e_footer, self.e_footer_icon, self.e_content):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        error = _check_url_field("el icono del autor", self.e_author_icon.value) \
+            or _check_url_field("el icono del pie", self.e_footer_icon.value)
+        if error:
+            await interaction.response.send_message(f"❌ No guardé nada: {error}", ephemeral=True)
+            return
+        record = embed_get(self.guild_id, self.name)
+        if record is None:
+            await interaction.response.send_message("❌ Ese embed ya no existe.", ephemeral=True)
+            return
+        data = record[0]
+        data.update(author=_clean(self.e_author.value), author_icon=_clean(self.e_author_icon.value),
+                    footer=_clean(self.e_footer.value), footer_icon=_clean(self.e_footer_icon.value),
+                    content=_clean(self.e_content.value))
+        embed_save(self.guild_id, self.name, data)
+        await embed_refresh(interaction, self.name)
+
+
+class EmbedFieldModal(discord.ui.Modal):
+    def __init__(self, guild_id: int, name: str) -> None:
+        super().__init__(title=f"Nuevo campo: {name}"[:45])
+        self.guild_id, self.name = guild_id, name
+        self.f_name = discord.ui.TextInput(label="Nombre del campo", max_length=256)
+        self.f_value = discord.ui.TextInput(
+            label="Valor", style=discord.TextStyle.paragraph, max_length=1024,
+            placeholder="Admite variables: {miembros}, {#reglas}…")
+        self.f_inline = discord.ui.TextInput(
+            label="¿En línea con otros campos? (sí / no)", default="no", required=False, max_length=3)
+        for item in (self.f_name, self.f_value, self.f_inline):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        record = embed_get(self.guild_id, self.name)
+        if record is None:
+            await interaction.response.send_message("❌ Ese embed ya no existe.", ephemeral=True)
+            return
+        data = record[0]
+        fields = data.setdefault("fields", [])
+        if len(fields) >= EMBED_MAX_FIELDS:
+            await interaction.response.send_message(f"❌ Un embed admite como máximo {EMBED_MAX_FIELDS} campos.", ephemeral=True)
+            return
+        inline = _clean(self.f_inline.value).lower() in ("si", "sí", "s", "yes", "y", "true", "1")
+        fields.append({"name": _clean(self.f_name.value), "value": _clean(self.f_value.value), "inline": inline})
+        embed_save(self.guild_id, self.name, data)
+        await embed_refresh(interaction, self.name)
+
+
+class EmbedChannelPicker(discord.ui.View):
+    """Elegir el canal al que enviar el embed desde el panel."""
+
+    def __init__(self, owner_id: int, name: str) -> None:
+        super().__init__(timeout=300)
+        self.owner_id, self.name = owner_id, name
+        select = discord.ui.ChannelSelect(
+            placeholder="Elige el canal de destino…",
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+        )
+        select.callback = self.picked
+        self.select = select
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este selector no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def picked(self, interaction: discord.Interaction) -> None:
+        channel = interaction.guild.get_channel(self.select.values[0].id)
+        if channel is None:
+            await interaction.response.edit_message(content="❌ No pude encontrar ese canal.", view=None)
+            return
+        await interaction.response.defer()
+        result = await embed_send(interaction.guild, self.name, channel)
+        await interaction.edit_original_response(content=result, view=None)
+
+
+class EmbedEditorView(discord.ui.View):
+    def __init__(self, owner_id: int, guild_id: int, name: str, data: dict) -> None:
+        super().__init__(timeout=900)
+        self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
+        self.toggle_time.label = "🕒 Fecha: " + ("sí" if data.get("timestamp") else "no")
+        fields = data.get("fields", [])
+        if fields:
+            options = [
+                discord.SelectOption(label=f"{i + 1}. {f['name']}"[:100], value=str(i), description=f["value"][:100] or None)
+                for i, f in enumerate(fields[:25])
+            ]
+            select = discord.ui.Select(placeholder="🗑️ Quitar un campo…", options=options, row=1)
+            select.callback = self.remove_field
+            self.remove_select = select
+            self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor no es tuyo: usa `/embed editar`.", ephemeral=True)
+            return False
+        return True
+
+    def _data(self) -> dict | None:
+        record = embed_get(self.guild_id, self.name)
+        return record[0] if record else None
+
+    async def _gone(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(content="❌ Ese embed ya no existe.", embed=None, view=None)
+
+    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=0)
+    async def edit_content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        data = self._data()
+        if data is None:
+            return await self._gone(interaction)
+        await interaction.response.send_modal(EmbedContentModal(self.guild_id, self.name, data))
+
+    @discord.ui.button(label="👤 Autor y pie", style=discord.ButtonStyle.primary, row=0)
+    async def edit_author(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        data = self._data()
+        if data is None:
+            return await self._gone(interaction)
+        await interaction.response.send_modal(EmbedAuthorFooterModal(self.guild_id, self.name, data))
+
+    @discord.ui.button(label="➕ Campo", style=discord.ButtonStyle.secondary, row=0)
+    async def add_field(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(EmbedFieldModal(self.guild_id, self.name))
+
+    @discord.ui.button(label="🕒 Fecha: no", style=discord.ButtonStyle.secondary, row=0)
+    async def toggle_time(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        record = embed_get(self.guild_id, self.name)
+        if record is None:
+            return await self._gone(interaction)
+        data = record[0]
+        data["timestamp"] = not data.get("timestamp")
+        embed_save(self.guild_id, self.name, data)
+        await embed_refresh(interaction, self.name)
+
+    async def remove_field(self, interaction: discord.Interaction) -> None:
+        record = embed_get(self.guild_id, self.name)
+        if record is None:
+            return await self._gone(interaction)
+        data = record[0]
+        index = int(self.remove_select.values[0])
+        if 0 <= index < len(data.get("fields", [])):
+            data["fields"].pop(index)
+            embed_save(self.guild_id, self.name, data)
+        await embed_refresh(interaction, self.name)
+
+    @discord.ui.button(label="📤 Enviar", style=discord.ButtonStyle.success, row=2)
+    async def send_embed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            "¿A qué canal lo envío?", view=EmbedChannelPicker(interaction.user.id, self.name), ephemeral=True)
+
+
+async def embed_refresh(interaction: discord.Interaction, name: str, new: bool = False) -> None:
+    """Sincroniza los mensajes ya enviados y muestra (o actualiza) el panel con la vista previa."""
+    guild = interaction.guild
+    record = embed_get(guild.id, name)
+    if record is None:
+        await interaction.response.send_message("❌ Ese embed ya no existe.", ephemeral=True)
+        return
+    data, refs = record
+    synced = 0
+    if refs and not new:
+        await interaction.response.defer()
+        synced = await embed_sync(guild, name)
+    embed, content, unresolved = build_custom_embed(data, VarContext(guild, None, interaction.channel))
+    if embed_is_empty(embed):
+        embed.description = "*(embed vacío: usa ✏️ Contenido para escribirlo)*"
+    lines = [f"📝 **Editando** `{name}` — vista previa (las variables ya aplicadas)."]
+    if content:
+        lines.append(f"Texto fuera del embed: {content}")
+    if synced:
+        lines.append(f"🔄 {synced} mensaje(s) ya enviados se actualizaron.")
+    if unresolved:
+        lines.append("⚠️ Sin resolver: " + " ".join(f"`{u}`" for u in unresolved[:8]) + f" · {EMBED_PERSON_NOTE}.")
+    view = EmbedEditorView(interaction.user.id, guild.id, name, data)
+    text = "\n".join(lines)[:1900]
+    kwargs = dict(content=text, embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
+    if new:
+        await interaction.response.send_message(ephemeral=True, **kwargs)
+    elif interaction.response.is_done():
+        await interaction.edit_original_response(**kwargs)
+    else:
+        await interaction.response.edit_message(**kwargs)
+
+
+embed_group = HoneypotGroup(
+    name="embed",
+    description="Crear, editar y enviar embeds personalizados.",
+    guild_only=True,
+    default_permissions=discord.Permissions(manage_guild=True),
+)
+
+
+async def embed_name_autocomplete(interaction: discord.Interaction, current: str) -> list[discord.app_commands.Choice[str]]:
+    if interaction.guild is None:
+        return []
+    q = current.strip().lower()
+    return [
+        discord.app_commands.Choice(name=f"{name} ({n} enviado(s))" if n else name, value=name)
+        for name, n in embed_names(interaction.guild.id) if q in name
+    ][:25]
+
+
+@embed_group.command(name="crear", description="Crear un embed nuevo con un formulario.")
+@discord.app_commands.describe(nombre="Nombre para guardarlo (letras, números, - y _; máx. 32)")
+async def embed_create(interaction: discord.Interaction, nombre: str) -> None:
+    name = nombre.strip().lower()
+    if not EMBED_NAME_RE.match(name):
+        await interaction.response.send_message("❌ El nombre solo puede tener letras minúsculas sin tildes, números, `-` y `_` (máx. 32).", ephemeral=True)
+        return
+    if embed_get(interaction.guild.id, name) is not None:
+        await interaction.response.send_message(f"❌ Ya existe un embed llamado `{name}`. Edítalo con `/embed editar`.", ephemeral=True)
+        return
+    await interaction.response.send_modal(EmbedContentModal(interaction.guild.id, name, {}, is_new=True))
+
+
+@embed_group.command(name="editar", description="Abrir el panel de edición de un embed guardado.")
+@discord.app_commands.describe(nombre="Embed a editar")
+@discord.app_commands.autocomplete(nombre=embed_name_autocomplete)
+async def embed_edit(interaction: discord.Interaction, nombre: str) -> None:
+    name = nombre.strip().lower()
+    if embed_get(interaction.guild.id, name) is None:
+        await interaction.response.send_message(f"❌ No existe un embed llamado `{name}`. Mira `/embed lista`.", ephemeral=True)
+        return
+    await embed_refresh(interaction, name, new=True)
+
+
+@embed_group.command(name="enviar", description="Enviar un embed guardado a un canal.")
+@discord.app_commands.describe(
+    nombre="Embed a enviar", canal="Canal de destino (por defecto, este)",
+    miembro="Miembro cuyos datos usan {usuario}, {mencion}, {avatar}… (opcional)",
+)
+@discord.app_commands.autocomplete(nombre=embed_name_autocomplete)
+async def embed_send_command(
+    interaction: discord.Interaction, nombre: str,
+    canal: Optional[discord.TextChannel] = None, miembro: Optional[discord.Member] = None,
+) -> None:
+    await interaction.response.defer(ephemeral=True)
+    result = await embed_send(interaction.guild, nombre.strip().lower(), canal or interaction.channel, miembro)
+    await interaction.followup.send(result, ephemeral=True)
+
+
+@embed_group.command(name="lista", description="Ver los embeds guardados.")
+async def embed_list_command(interaction: discord.Interaction) -> None:
+    names = embed_names(interaction.guild.id)
+    if not names:
+        await interaction.response.send_message("No hay embeds guardados. Crea uno con `/embed crear`.", ephemeral=True)
+        return
+    lines = [f"• `{name}`" + (f" — enviado en {n} mensaje(s)" if n else "") for name, n in names]
+    await interaction.response.send_message("**Embeds guardados:**\n" + "\n".join(lines)[:1900], ephemeral=True)
+
+
+@embed_group.command(name="borrar", description="Borrar un embed guardado (los mensajes ya enviados se quedan).")
+@discord.app_commands.describe(nombre="Embed a borrar")
+@discord.app_commands.autocomplete(nombre=embed_name_autocomplete)
+async def embed_delete_command(interaction: discord.Interaction, nombre: str) -> None:
+    name = nombre.strip().lower()
+    if embed_delete(interaction.guild.id, name):
+        await interaction.response.send_message(f"🗑️ Embed `{name}` borrado. Los mensajes ya enviados no se tocan, pero dejarán de actualizarse.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ No existe un embed llamado `{name}`.", ephemeral=True)
+
+
+@embed_group.error
+async def embed_group_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    await verify_command_error(interaction, error)
+
+
+bot.tree.add_command(embed_group)
 
 
 # ---------------------------------------------------------------------------
