@@ -76,6 +76,18 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - Filtro opcional de edad de cuenta; staff y bots nunca se sancionan. El estado sobrevive reinicios.
    - /raid config, /raid status, /raid start (manual), /raid end (con opción de liberar a los condenados).
 
+10. VARIABLES (/variables)
+   - Los textos personalizables aceptan {usuario}, {servidor}, {servericon}, {miembros}, {canal},
+     {fecha}… (también ${nombre}), y búsquedas por nombre/ID: {#canal}, {@rol}, {emoji:nombre}.
+   - No distinguen mayúsculas, tildes ni separadores. Lo desconocido se deja tal cual.
+   - Se aplican al panel y DM de verificación, al mensaje tras verificarse y al aviso del honeypot.
+     /variables lista todas; /variables texto:… prueba un texto con datos reales.
+
+11. RESPUESTAS SIEMPRE EN EMBED
+   - Todo lo que el Heraldo envía o edita sale como embed (el texto plano se convierte) con el
+     footer {servidor} + {servericon}. Los embeds con pie propio configurado lo conservan.
+     Se cambia en GLOBAL_FOOTER_TEXT / GLOBAL_FOOTER_ICON.
+
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
 Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
@@ -83,6 +95,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 """
 
 import asyncio
+import contextvars
 from collections import deque
 import json
 import os
@@ -92,6 +105,7 @@ import sys
 import tempfile
 import time
 import traceback
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -589,7 +603,10 @@ def get_verify_dm_footer_icon() -> str:
     return db_meta_get("verify_dm_footer_icon") or VERIFY_DM_FOOTER_ICON_DEFAULT
 
 
-def build_verification_welcome_embed() -> discord.Embed:
+def build_verification_welcome_embed(
+    member: discord.Member | None = None, guild: discord.Guild | None = None,
+) -> discord.Embed:
+    ctx = VarContext(guild or (member.guild if member is not None else None), member)
     color_text = get_verify_dm_color().strip().lstrip("#")
     try:
         color_value = int(color_text, 16)
@@ -599,19 +616,20 @@ def build_verification_welcome_embed() -> discord.Embed:
         color_value = int(VERIFY_DM_COLOR_DEFAULT, 16)
 
     embed = discord.Embed(
-        title=get_verify_dm_title(),
+        title=render_vars(get_verify_dm_title(), ctx, 256),
         color=discord.Color(color_value),
     )
     embed.add_field(
-        name=get_verify_dm_field_name(),
-        value=get_verify_dm_body(),
+        name=render_vars(get_verify_dm_field_name(), ctx, 256),
+        value=render_vars(get_verify_dm_body(), ctx, 1024),
         inline=False,
     )
-    footer_icon = get_verify_dm_footer_icon().strip()
+    footer_icon = render_url_var(get_verify_dm_footer_icon(), ctx)
+    footer_text = render_vars(get_verify_dm_footer(), ctx, 2048)
     if footer_icon:
-        embed.set_footer(text=get_verify_dm_footer(), icon_url=footer_icon)
+        embed.set_footer(text=footer_text, icon_url=footer_icon)
     else:
-        embed.set_footer(text=get_verify_dm_footer())
+        embed.set_footer(text=footer_text)
     return embed
 
 
@@ -1235,7 +1253,7 @@ async def send_verification_welcome_dm(member: discord.Member) -> bool:
     if db_verification_dm_sent(member.id):
         return True
 
-    embed = build_verification_welcome_embed()
+    embed = build_verification_welcome_embed(member=member)
     try:
         await member.send(embed=embed)
         db_mark_verification_dm_sent(member.id)
@@ -1307,7 +1325,10 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
                 discord.Color.dark_red(),
             )
 
-    await interaction.followup.send(get_verify_success_text(), ephemeral=True)
+    await interaction.followup.send(
+        render_vars(get_verify_success_text(), VarContext(guild, member, interaction.channel), 2000),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
+    )
 
     # DM de bienvenida: solo la primera vez que este usuario obtiene el rol de verificación.
     dm_welcome_ok = await send_verification_welcome_dm(member)
@@ -1401,7 +1422,7 @@ async def update_verify_panel(guild: discord.Guild) -> str:
             return "⚠️ No encontré el canal del panel; publícalo de nuevo con /verify."
         message = await channel.fetch_message(message_id)
         await message.edit(
-            content=get_verify_panel_text(),
+            content=render_vars(get_verify_panel_text(), VarContext(guild, None, channel), 2000),
             view=VerifyView(),
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -1511,7 +1532,7 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     await interaction.response.defer(ephemeral=True)
     try:
         message = await target.send(
-            content=get_verify_panel_text(),
+            content=render_vars(get_verify_panel_text(), VarContext(guild, None, target), 2000),
             view=VerifyView(),
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -1590,9 +1611,9 @@ async def verify_dm_texts(
     if len(icono_footer) > 500:
         await interaction.response.send_message("❌ La URL del icono del footer es demasiado larga.", ephemeral=True)
         return
-    if not re.match(r"^https?://", icono_footer, re.IGNORECASE):
+    if not re.match(r"^https?://", icono_footer, re.IGNORECASE) and not VAR_PATTERN.search(icono_footer):
         await interaction.response.send_message(
-            "❌ El icono del footer debe ser una URL válida que empiece por `https://` o `http://`.",
+            "❌ El icono del footer debe ser una URL válida (`https://…`) o una variable como `{servericon}`.",
             ephemeral=True,
         )
         return
@@ -1642,7 +1663,9 @@ async def verify_dm_preview(interaction: discord.Interaction) -> None:
         )
         return
     try:
-        embed = build_verification_welcome_embed()
+        embed = build_verification_welcome_embed(
+            member=interaction.user if isinstance(interaction.user, discord.Member) else None, guild=guild,
+        )
         await log_channel.send(
             content=f"🔎 **Vista previa del DM de bienvenida** — solicitada por {interaction.user.mention}",
             embed=embed,
@@ -2927,24 +2950,31 @@ def hp_config_summary(guild: discord.Guild) -> str:
 
 # --- Aviso fijado -----------------------------------------------------------
 
-def hp_warning_embed() -> discord.Embed:
+def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord.Embed:
+    ctx = VarContext(channel.guild if channel is not None else None, None, channel)
     if hp_warning_style() == "custom":
         cfg = hp_warning_custom()
         try:
             color = discord.Color(int(cfg["color"].lstrip("#"), 16))
         except ValueError:
             color = discord.Color.gold()
-        embed = discord.Embed(title=cfg["title"], description=cfg["description"], color=color)
-        if cfg["image"]:
-            embed.set_image(url=cfg["image"])
-        if cfg["thumbnail"]:
-            embed.set_thumbnail(url=cfg["thumbnail"])
-        if cfg["footer"]:
-            embed.set_footer(text=cfg["footer"])
+        embed = discord.Embed(
+            title=render_vars(cfg["title"], ctx, 256),
+            description=render_vars(cfg["description"], ctx, 4096), color=color,
+        )
+        image = render_url_var(cfg["image"], ctx) if cfg["image"] else ""
+        if image:
+            embed.set_image(url=image)
+        thumbnail = render_url_var(cfg["thumbnail"], ctx) if cfg["thumbnail"] else ""
+        if thumbnail:
+            embed.set_thumbnail(url=thumbnail)
+        footer = render_vars(cfg["footer"], ctx, 2048) if cfg["footer"] else ""
+        if footer:
+            embed.set_footer(text=footer)
         return embed
     return discord.Embed(
         title="⚠️ No escribas en este canal",
-        description=hp_warning_text(),
+        description=render_vars(hp_warning_text(), ctx, 4096),
         color=discord.Color.gold(),
     )
 
@@ -2969,11 +2999,11 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
             hp_set_warning_message(channel.id, None)
             return None
         if existing:
-            await existing.edit(embed=hp_warning_embed())
+            await existing.edit(embed=hp_warning_embed(channel))
             if not existing.pinned:
                 await existing.pin()
             return None
-        message = await channel.send(embed=hp_warning_embed())
+        message = await channel.send(embed=hp_warning_embed(channel))
         await message.pin()
         hp_set_warning_message(channel.id, message.id)
         # Quita el mensaje de sistema "X ha fijado un mensaje".
@@ -4294,8 +4324,8 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
             await interaction.response.send_message("❌ El color debe ser HEX de 6 dígitos, por ejemplo `F1C40F`.", ephemeral=True)
             return
         for label, url in (("imagen", image),):
-            if url and not re.match(r"^https?://", url, re.IGNORECASE):
-                await interaction.response.send_message(f"❌ La URL de {label} debe empezar por `http://` o `https://`.", ephemeral=True)
+            if url and not re.match(r"^https?://", url, re.IGNORECASE) and not VAR_PATTERN.search(url):
+                await interaction.response.send_message(f"❌ La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
                 return
 
         hp_meta_set("honeypot_warning_title", title)
@@ -5615,6 +5645,434 @@ async def raid_group_error(interaction: discord.Interaction, error: discord.app_
 
 
 bot.tree.add_command(raid_group)
+
+
+# ---------------------------------------------------------------------------
+# 10. VARIABLES ({usuario}, {servidor}, {#canal}, {@rol}, {servericon}…)
+# ---------------------------------------------------------------------------
+# Se escriben con {nombre} o ${nombre}. No distinguen mayúsculas, tildes ni separadores:
+# {servericon} = {server_icon} = {server.icon} = {IconoServidor}. Si una variable no existe o no
+# aplica en ese texto, se deja tal cual para que el error se vea. /variables lista y prueba.
+
+VAR_PATTERN = re.compile(r"\$?\{([^{}\n]{1,100})\}")
+
+
+@dataclass
+class VarContext:
+    guild: discord.Guild | None = None
+    member: discord.Member | discord.User | None = None
+    channel: object | None = None  # canal, hilo... de donde sale {canal}
+
+
+def _var_key(text: str) -> str:
+    """Minúsculas, sin tildes y solo letras/números: 'Server_Icon' -> 'servericon'."""
+    text = unicodedata.normalize("NFKD", text)
+    return re.sub(r"[^a-z0-9]", "", "".join(c for c in text if not unicodedata.combining(c)).lower())
+
+
+_var_plain: contextvars.ContextVar[bool] = contextvars.ContextVar("var_plain", default=False)
+
+
+def _safe(text: str) -> str:
+    if _var_plain.get():  # texto sin formato (p. ej. el pie de un embed): no hace falta escapar
+        return text
+    return discord.utils.escape_mentions(discord.utils.escape_markdown(text))
+
+
+def _vm(fn):  # necesita un miembro en el contexto
+    return lambda c: fn(c.member) if c.member is not None else None
+
+
+def _vg(fn):  # necesita un servidor
+    return lambda c: fn(c.guild) if c.guild is not None else None
+
+
+def _vc(fn):  # necesita un canal
+    return lambda c: fn(c.channel) if c.channel is not None else None
+
+
+def _vn(*_):  # fecha/hora actuales
+    return datetime.now(timezone.utc)
+
+
+def _chan_mention(channel) -> str:
+    return channel.mention if channel is not None else ""
+
+
+# (grupo, nombre, alias, descripción, resolutor)
+VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "usuario", ("user", "nombre", "name"),
+     "nombre visible", _vm(lambda m: _safe(m.display_name))),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "mencion", ("mention", "ping"),
+     "@mención", _vm(lambda m: m.mention)),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "usuarioid", ("userid", "id"),
+     "ID de usuario", _vm(lambda m: str(m.id))),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "tag", ("username", "handle"),
+     "nombre de usuario (@tag)", _vm(lambda m: _safe(m.name))),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "avatar", ("pfp", "foto"),
+     "URL de su avatar", _vm(lambda m: m.display_avatar.url)),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "cuenta", ("created", "cuentacreada"),
+     "fecha de creación de su cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "D"))),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "cuentahace", ("accountago", "antiguedad"),
+     "hace cuánto creó la cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "R"))),
+    ("👤 Persona (solo en mensajes dirigidos a alguien)", "ingreso", ("joined", "entro"),
+     "fecha en que entró al servidor",
+     _vm(lambda m: discord.utils.format_dt(m.joined_at, "D") if getattr(m, "joined_at", None) else "")),
+    ("🏠 Servidor", "servidor", ("server", "guild", "servername"),
+     "nombre del servidor", _vg(lambda g: _safe(g.name))),
+    ("🏠 Servidor", "servidorid", ("serverid", "guildid"),
+     "ID del servidor", _vg(lambda g: str(g.id))),
+    ("🏠 Servidor", "servericon", ("guildicon", "iconoservidor", "icono", "icon"),
+     "URL del icono (úsala en imagen/miniatura/icono del pie)", _vg(lambda g: g.icon.url if g.icon else "")),
+    ("🏠 Servidor", "serverbanner", ("guildbanner", "bannerservidor", "banner"),
+     "URL del banner del servidor", _vg(lambda g: g.banner.url if g.banner else "")),
+    ("🏠 Servidor", "miembros", ("members", "membercount", "usuarios"),
+     "cantidad de miembros", _vg(lambda g: str(g.member_count or len(g.members)))),
+    ("🏠 Servidor", "boosts", ("boostcount",),
+     "cantidad de boosts", _vg(lambda g: str(g.premium_subscription_count))),
+    ("🏠 Servidor", "nivelboost", ("boostlevel", "premiumtier"),
+     "nivel de boost", _vg(lambda g: str(g.premium_tier))),
+    ("🏠 Servidor", "dueno", ("owner", "dueño"),
+     "@mención del dueño", _vg(lambda g: f"<@{g.owner_id}>")),
+    ("🏠 Servidor", "creado", ("servercreated", "guildcreated"),
+     "fecha de creación del servidor", _vg(lambda g: discord.utils.format_dt(g.created_at, "D"))),
+    ("🏠 Servidor", "reglas", ("rules",),
+     "canal de reglas de Discord", _vg(lambda g: _chan_mention(g.rules_channel))),
+    ("🏠 Servidor", "sistema", ("system", "systemchannel"),
+     "canal de mensajes del sistema", _vg(lambda g: _chan_mention(g.system_channel))),
+    ("💬 Canal (donde se publica el mensaje)", "canal", ("channel", "aqui", "here"),
+     "#mención del canal", _vc(lambda ch: ch.mention)),
+    ("💬 Canal (donde se publica el mensaje)", "canalid", ("channelid",),
+     "ID del canal", _vc(lambda ch: str(ch.id))),
+    ("💬 Canal (donde se publica el mensaje)", "canalnombre", ("channelname",),
+     "nombre del canal", _vc(lambda ch: _safe(ch.name))),
+    ("🕒 Tiempo y texto", "fecha", ("date",),
+     "fecha de hoy", lambda c: discord.utils.format_dt(_vn(), "D")),
+    ("🕒 Tiempo y texto", "hora", ("time",),
+     "hora actual", lambda c: discord.utils.format_dt(_vn(), "t")),
+    ("🕒 Tiempo y texto", "ahora", ("now",),
+     "fecha y hora completas", lambda c: discord.utils.format_dt(_vn(), "F")),
+    ("🕒 Tiempo y texto", "timestamp", ("unix",),
+     "marca de tiempo Unix", lambda c: str(int(_vn().timestamp()))),
+    ("🕒 Tiempo y texto", "salto", ("nl", "br"),
+     "salto de línea (útil en campos de una sola línea)", lambda c: "\n"),
+]
+
+_VAR_INDEX: dict[str, object] = {}
+for _g, _name, _aliases, _desc, _fn in VARIABLES:
+    for _k in (_name, *_aliases):
+        _VAR_INDEX[_var_key(_k)] = _fn
+
+
+def _lookup_named(items, arg: str, label_fn=lambda x: x.name):
+    """Busca por ID o por nombre (primero exacto, luego sin tildes/emojis/separadores)."""
+    arg = arg.strip()
+    if not arg:
+        return None
+    if arg.isdigit():
+        return next((i for i in items if i.id == int(arg)), None)
+    exact = next((i for i in items if label_fn(i).lower() == arg.lower()), None)
+    if exact is not None:
+        return exact
+    key = _var_key(arg)
+    return next((i for i in items if key and _var_key(label_fn(i)) == key), None) if key else None
+
+
+def _lookup_channel(arg: str, guild: discord.Guild | None) -> str | None:
+    if guild is None:
+        return None
+    ch = _lookup_named([*guild.channels, *guild.threads], arg.lstrip("#"))
+    return ch.mention if ch else None
+
+
+def _lookup_role(arg: str, guild: discord.Guild | None) -> str | None:
+    if guild is None:
+        return None
+    role = _lookup_named(guild.roles, arg.lstrip("@&"))
+    return role.mention if role else None
+
+
+def _lookup_member(arg: str, guild: discord.Guild | None) -> str | None:
+    if guild is None:
+        return None
+    arg = arg.lstrip("@")
+    member = _lookup_named(guild.members, arg, label_fn=lambda m: m.display_name) \
+        or _lookup_named(guild.members, arg, label_fn=lambda m: m.name)
+    return member.mention if member else None
+
+
+def _lookup_emoji(arg: str, guild: discord.Guild | None) -> str | None:
+    pools = [guild.emojis] if guild is not None else []
+    pools.append(bot.emojis)
+    for pool in pools:
+        emoji = next((e for e in pool if e.name.lower() == arg.strip().strip(":").lower()), None)
+        if emoji is not None:
+            return str(emoji)
+    return None
+
+
+def _var_resolve(name: str, ctx: VarContext) -> str | None:
+    """Valor de una variable, o None si no existe / no aplica (se deja el texto original)."""
+    raw = name.strip()
+    if raw[:1] == "#":
+        return _lookup_channel(raw[1:], ctx.guild)
+    if raw[:1] == "@":
+        return _lookup_role(raw[1:], ctx.guild) or _lookup_member(raw[1:], ctx.guild)
+    if ":" in raw:
+        prefix, _, rest = raw.partition(":")
+        kind = _var_key(prefix)
+        if kind in ("canal", "channel", "c"):
+            return _lookup_channel(rest, ctx.guild)
+        if kind in ("rol", "role", "r"):
+            return _lookup_role(rest, ctx.guild)
+        if kind in ("usuario", "user", "miembro", "member", "u"):
+            return _lookup_member(rest, ctx.guild)
+        if kind in ("emoji", "e"):
+            return _lookup_emoji(rest, ctx.guild)
+        return None
+    fn = _VAR_INDEX.get(_var_key(raw))
+    return fn(ctx) if fn is not None else None
+
+
+def render_vars_report(
+    text: str, ctx: VarContext, limit: int | None = None, plain: bool = False,
+) -> tuple[str, list[str]]:
+    """Reemplaza las variables. Devuelve (texto, variables sin resolver). plain=True no escapa markdown."""
+    unresolved: list[str] = []
+
+    def repl(match: re.Match) -> str:
+        try:
+            value = _var_resolve(match.group(1), ctx)
+        except Exception:
+            traceback.print_exc()
+            value = None
+        if value is None:
+            unresolved.append(match.group(0))
+            return match.group(0)
+        return value
+
+    token = _var_plain.set(plain)
+    try:
+        result = VAR_PATTERN.sub(repl, text)
+    finally:
+        _var_plain.reset(token)
+    if limit is not None and len(result) > limit:
+        result = result[: limit - 1] + "…"
+    return result, unresolved
+
+
+def render_vars(text: str, ctx: VarContext, limit: int | None = None, plain: bool = False) -> str:
+    return render_vars_report(text, ctx, limit, plain)[0]
+
+
+def render_url_var(text: str, ctx: VarContext) -> str:
+    """Para campos de imagen/URL: devuelve la URL ya resuelta, o '' si no es una URL válida."""
+    value = render_vars(text.strip(), ctx).strip()
+    return value if re.match(r"^https?://", value, re.IGNORECASE) else ""
+
+
+def variables_embeds() -> list[discord.Embed]:
+    groups: dict[str, list[str]] = {}
+    for group, name, aliases, desc, _ in VARIABLES:
+        extra = " / ".join(f"`{{{a}}}`" for a in aliases[:2])
+        groups.setdefault(group, []).append(f"`{{{name}}}` — {desc}" + (f" · {extra}" if extra else ""))
+    embed = discord.Embed(
+        title="🧩 Variables de El Heraldo",
+        description=(
+            "Escríbelas con `{nombre}` o `${nombre}` en cualquier texto personalizable del Heraldo "
+            "(panel y DM de verificación, aviso del honeypot…). No importan mayúsculas, tildes ni "
+            "separadores: `{servericon}` = `{server_icon}` = `{Server.Icon}`.\n"
+            "Si una variable no existe o no aplica en ese texto, se deja tal cual para que veas el error."
+        ),
+        color=discord.Color.blurple(),
+    )
+    for group, lines in groups.items():
+        embed.add_field(name=group, value="\n".join(lines)[:1024], inline=False)
+    embed.add_field(
+        name="🔎 Buscar cosas del servidor por nombre o ID",
+        value=(
+            "`{#reglas}` → mención del canal · `{#123456789}` → canal por ID\n"
+            "`{@Moderador}` → mención del rol (o del miembro con ese nombre)\n"
+            "`{emoji:fuego}` → emoji personalizado del servidor\n"
+            "Más explícitas: `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\n"
+            "Ejemplo: `Bienvenid@ {usuario} a {servidor}, lee {#reglas}` · "
+            "`<#{canalid}>` · imagen: `{servericon}`"
+        ),
+        inline=False,
+    )
+    embed.set_footer(text="Prueba un texto con /variables texto:…")
+    return [embed]
+
+
+@bot.tree.command(name="variables", description="Ver las variables disponibles o probar un texto con ellas.")
+@discord.app_commands.describe(
+    texto="Texto con variables para probar, por ejemplo: Hola {usuario}, lee {#reglas}",
+    miembro="Miembro con cuyos datos se prueba (por defecto, tú)",
+    canal="Canal con cuyos datos se prueba (por defecto, este)",
+)
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+@discord.app_commands.guild_only()
+async def variables_command(
+    interaction: discord.Interaction,
+    texto: Optional[str] = None,
+    miembro: Optional[discord.Member] = None,
+    canal: Optional[discord.abc.GuildChannel] = None,
+) -> None:
+    if texto is None:
+        await interaction.response.send_message(embeds=variables_embeds(), ephemeral=True)
+        return
+    ctx = VarContext(interaction.guild, miembro or interaction.user, canal or interaction.channel)
+    result, unresolved = render_vars_report(texto, ctx, limit=1800)
+    note = ""
+    if unresolved:
+        note = "\n\n⚠️ Sin resolver (revisa el nombre o si aplica ahí): " + " ".join(f"`{u}`" for u in unresolved[:10])
+    await interaction.response.send_message(
+        f"**Resultado:**\n{result}{note}", ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+variables_command.error(verify_command_error)
+
+
+# ---------------------------------------------------------------------------
+# 11. RESPUESTAS SIEMPRE EN EMBED, CON FOOTER {servidor}{servericon}
+# ---------------------------------------------------------------------------
+# Todo lo que El Heraldo envía o edita (respuestas a comandos, follow-ups, mensajes a canales y DMs)
+# pasa por aquí: el texto plano se convierte en embed y todo embed sin pie recibe el footer global
+# (nombre del servidor + su icono). Los embeds que ya traen un pie propio (el DM de verificación o el
+# aviso del honeypot, si lo configuraste) lo conservan. Los mensajes con solo archivos no se tocan.
+# Se engancha en discord.py una sola vez, así que no hay que tocar cada comando.
+
+GLOBAL_FOOTER_TEXT = "{servidor}"
+GLOBAL_FOOTER_ICON = "{servericon}"
+EMBED_DEFAULT_COLOR = 0xE7CF7F  # color de los embeds que nacen de texto plano (❌ rojo, ✅ verde, ⚠️ naranja)
+
+_MISSING = discord.utils.MISSING
+_interaction_guilds: dict[str, int] = {}  # token de interacción -> guild_id (para los follow-ups)
+
+
+def heraldo_footer(guild: discord.Guild | None) -> tuple[str, str]:
+    """(texto, icono) del footer global, resueltos con el sistema de variables."""
+    if guild is None and len(bot.guilds) == 1:
+        guild = bot.guilds[0]
+    if guild is None:
+        return (bot.user.name if bot.user else "El Heraldo"), ""
+    ctx = VarContext(guild)
+    return render_vars(GLOBAL_FOOTER_TEXT, ctx, 2048, plain=True), render_url_var(GLOBAL_FOOTER_ICON, ctx)
+
+
+def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Embed:
+    if not embed.footer.text:
+        text, icon = heraldo_footer(guild)
+        if text:
+            embed.set_footer(text=text, icon_url=icon or None)
+    return embed
+
+
+def _content_embed(content: str) -> discord.Embed:
+    stripped = content.lstrip()
+    if stripped.startswith(("❌", "🚫", "⛔")):
+        color = discord.Color.red()
+    elif stripped.startswith("✅"):
+        color = discord.Color.green()
+    elif stripped.startswith(("⚠️", "⚠")):
+        color = discord.Color.orange()
+    else:
+        color = discord.Color(EMBED_DEFAULT_COLOR)
+    return discord.Embed(description=content[:4096], color=color)
+
+
+def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
+    """Devuelve (content, kw) con el texto convertido a embed y todos los embeds con footer."""
+    embed = kw.get("embed")
+    embeds = kw.get("embeds")
+    has_embed = embed not in (None, _MISSING)
+    has_embeds = embeds not in (None, _MISSING) and len(embeds) > 0
+    if has_embed or has_embeds:
+        if has_embed:
+            stamp_embed(embed, guild)
+        if has_embeds:
+            for e in embeds:
+                stamp_embed(e, guild)
+        return content, kw
+    if isinstance(content, str) and content.strip():
+        kw["embed"] = stamp_embed(_content_embed(content), guild)
+        return empty, kw
+    return content, kw
+
+
+def _guild_for(obj) -> discord.Guild | None:
+    guild = getattr(obj, "guild", None)
+    if guild is None:
+        guild = getattr(getattr(obj, "channel", None), "guild", None)
+    return guild
+
+
+def _install_embed_hooks() -> None:
+    # Guarda el servidor de cada interacción para los follow-ups (el Webhook no lo conoce).
+    orig_from_data = discord.Interaction._from_data
+
+    def _from_data(self, data):
+        orig_from_data(self, data)
+        try:
+            if self.guild_id:
+                _interaction_guilds[self.token] = self.guild_id
+                while len(_interaction_guilds) > 2000:
+                    _interaction_guilds.pop(next(iter(_interaction_guilds)))
+        except Exception:
+            pass
+
+    discord.Interaction._from_data = _from_data
+
+    def wrap_positional(cls, name, guild_of, empty):
+        orig = getattr(cls, name)
+
+        async def wrapper(self, content=_MISSING if empty is _MISSING else None, **kw):
+            try:
+                content, kw = _embedify(content, kw, guild_of(self), empty)
+            except Exception:
+                traceback.print_exc()
+            return await orig(self, content, **kw)
+
+        wrapper.__name__ = name
+        wrapper.__doc__ = orig.__doc__
+        setattr(cls, name, wrapper)
+
+    def wrap_edit(cls, name, guild_of):
+        orig = getattr(cls, name)
+
+        async def wrapper(self, **kw):
+            try:
+                content = kw.pop("content", _MISSING)
+                if content is not _MISSING and content is not None:
+                    content, kw = _embedify(content, kw, guild_of(self), None)
+                else:
+                    _, kw = _embedify(None, kw, guild_of(self), None)
+                if content is not _MISSING:
+                    kw["content"] = content
+            except Exception:
+                traceback.print_exc()
+            return await orig(self, **kw)
+
+        wrapper.__name__ = name
+        wrapper.__doc__ = orig.__doc__
+        setattr(cls, name, wrapper)
+
+    def webhook_guild(self):
+        gid = _interaction_guilds.get(getattr(self, "token", None))
+        return bot.get_guild(gid) if gid else None
+
+    wrap_positional(discord.InteractionResponse, "send_message", lambda s: s._parent.guild, None)
+    wrap_edit(discord.InteractionResponse, "edit_message", lambda s: s._parent.guild)
+    wrap_positional(discord.Webhook, "send", webhook_guild, _MISSING)
+    wrap_positional(discord.abc.Messageable, "send", _guild_for, None)
+    wrap_edit(discord.Message, "edit", _guild_for)
+    wrap_edit(discord.WebhookMessage, "edit", _guild_for)
+    wrap_edit(discord.InteractionMessage, "edit", _guild_for)
+    wrap_edit(discord.Interaction, "edit_original_response", lambda s: s.guild)
+
+
+_install_embed_hooks()
 
 
 # ---------------------------------------------------------------------------
