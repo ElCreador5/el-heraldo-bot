@@ -3096,7 +3096,7 @@ def condemnation_default_duration_minutes(guild_id: int | None = None) -> int | 
     if not value or value.strip().lower() in {"indefinida", "indefinido", "none", "null", "0"}:
         return None
     try:
-        return parse_duration(value, 1, get_condemnation_max_minutes(interaction.guild.id))
+        return parse_duration(value, 1, get_condemnation_max_minutes(guild_id))
     except ValueError:
         return None
 
@@ -4095,7 +4095,7 @@ async def condemnation_announce(
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
 ) -> int | None:
-    channel = guild.get_channel(condemnation_channel_id(interaction.guild.id))
+    channel = guild.get_channel(condemnation_channel_id(guild.id))
     if not isinstance(channel, discord.TextChannel):
         return None
     embed, view = _build_condemnation_embed(
@@ -4124,7 +4124,7 @@ async def condemnation_update_pardoned_card(
 ) -> bool:
     """Crea la tarjeta nueva de perdón y elimina la tarjeta original del caso."""
     message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
-    channel = member.guild.get_channel(condemnation_channel_id(guild.id))
+    channel = member.guild.get_channel(condemnation_channel_id(member.guild.id))
     if not isinstance(channel, discord.TextChannel):
         return False
 
@@ -4717,7 +4717,7 @@ async def condenar(
     if not reason:
         await interaction.response.send_message("❌ El motivo de la condena es obligatorio.", ephemeral=True)
         return
-    duration_minutes: int | None = condemnation_default_duration_minutes()
+    duration_minutes: int | None = condemnation_default_duration_minutes(guild.id)
     try:
         if duracion is not None:
             raw_duration = duracion.strip()
@@ -4814,7 +4814,7 @@ async def condenados(interaction: discord.Interaction) -> None:
 @discord.app_commands.guild_only()
 async def condenar_config(interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None) -> None:
     if canal is None:
-        current = interaction.guild.get_channel(condemnation_channel_id())
+        current = interaction.guild.get_channel(condemnation_channel_id(interaction.guild.id))
         await interaction.response.send_message(
             f"**Canal de condenas:** {current.mention if current else 'no configurado'}",
             ephemeral=True,
@@ -5163,7 +5163,7 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
     ok, note = await condemn_member(
         target,
         reason=f"Condena por reacción ☠️ al mensaje {message.jump_url}",
-        duration_minutes=condemnation_default_duration_minutes(),
+        duration_minutes=condemnation_default_duration_minutes(guild.id),
         purge_spec=HONEYPOT_PURGE_DEFAULT,
         origin="reaction",
         applied_by=actor,
@@ -6498,7 +6498,7 @@ async def raid_act_on_member(member: discord.Member) -> bool:
     try:
         if action == "condemn":
             ok, note = await condemn_member(
-                member, reason=reason, duration_minutes=condemnation_default_duration_minutes(), purge_spec=None, origin="raid",
+                member, reason=reason, duration_minutes=condemnation_default_duration_minutes(member.guild.id), purge_spec=None, origin="raid",
                 applied_by=None, send_dm=False, announce=False,
             )
             if not ok:
