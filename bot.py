@@ -2742,6 +2742,48 @@ async def _setup_apply_system_channel(
     return "Canal establecido."
 
 
+async def _setup_get_or_create_system_role(
+    guild: discord.Guild,
+    key: str,
+    label: str,
+    default_name: str,
+) -> tuple[discord.Role | None, bool, str | None]:
+    """Reutiliza o crea un rol del sistema y lo deja vinculado inmediatamente."""
+    configured_id = get_guild_role_id(guild.id, key)
+    role = guild.get_role(configured_id) if configured_id else None
+    created_now = False
+
+    if role is None:
+        role = next(
+            (candidate for candidate in guild.roles if candidate.name.casefold() == default_name.casefold()),
+            None,
+        )
+
+    if role is None:
+        me = guild.me
+        if me is None or not me.guild_permissions.manage_roles:
+            return None, False, "El Heraldo no tiene permiso Gestionar roles."
+        try:
+            role = await guild.create_role(
+                name=default_name,
+                reason=f"El Heraldo: crear rol del sistema para {label}",
+            )
+            created_now = True
+        except discord.Forbidden:
+            return None, False, "Discord rechazó la creación del rol. Revisa Gestionar roles."
+        except discord.HTTPException as exc:
+            return None, False, f"Discord no pudo crear el rol: {exc}"
+
+    me = guild.me
+    if me is None or role.is_default() or role.managed or role >= me.top_role:
+        return None, created_now, f"No puedo administrar {role.mention}. Revisa la jerarquía o integraciones."
+
+    guild_resource_set(guild.id, "role", key, role.id)
+    if key == "tentado":
+        guild_config_set(guild.id, "verify_role_id", str(role.id))
+    return role, created_now, None
+
+
 class HeraldoChannelSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -4195,6 +4237,53 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_trap_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
+    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=1)
+    async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        existing_id = get_guild_channel_id(self.guild_id, "honeypot")
+        channel = guild.get_channel(existing_id) if existing_id else None
+        created_now = False
+        if not isinstance(channel, discord.TextChannel):
+            channel = next((c for c in guild.text_channels if c.name.casefold() == "honeypot"), None)
+        if not isinstance(channel, discord.TextChannel):
+            me = guild.me
+            if me is None or not me.guild_permissions.manage_channels:
+                await interaction.response.send_message(
+                    "El Heraldo necesita Gestionar canales para crear el Honeypot.",
+                    ephemeral=True,
+                )
+                return
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    create_public_threads=False,
+                    create_private_threads=False,
+                    send_messages_in_threads=False,
+                )
+            }
+            await interaction.response.defer(ephemeral=True)
+            try:
+                channel = await guild.create_text_channel(
+                    "Honeypot",
+                    overwrites=overwrites,
+                    reason="El Heraldo: crear canal Honeypot desde /setup",
+                )
+                created_now = True
+            except discord.HTTPException as exc:
+                await interaction.followup.send(f"No pude crear el canal: `{exc}`.", ephemeral=True)
+                return
+        else:
+            await interaction.response.defer(ephemeral=True)
+
+        note = await _setup_apply_system_channel(guild, "honeypot", channel, publish_messages=True)
+        self.pending_trap_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
+            view=self,
+        )
+
     @discord.ui.button(label="Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_enabled if self.pending_enabled is not None else honeypot_enabled(self.guild_id)
@@ -4304,6 +4393,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.pending_role_id: int | None = None
+        self.pending_sin_role_id: int | None = None
         self.pending_channel_id: int | None = None
         self.pending_enabled: bool | None = None
 
@@ -4316,12 +4406,21 @@ class HeraldoVerificationSetupView(discord.ui.View):
         role_select.callback = self.select_role
         self.add_item(role_select)
 
+        sin_role_select = discord.ui.RoleSelect(
+            placeholder="Seleccionar rol Sin Verificar",
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+        sin_role_select.callback = self.select_sin_role
+        self.add_item(sin_role_select)
+
         channel_select = discord.ui.ChannelSelect(
             placeholder="Seleccionar canal de verificación",
             channel_types=[discord.ChannelType.text],
             min_values=1,
             max_values=1,
-            row=1,
+            row=2,
         )
         channel_select.callback = self.select_channel
         self.add_item(channel_select)
@@ -4337,6 +4436,9 @@ class HeraldoVerificationSetupView(discord.ui.View):
         if self.pending_role_id is not None:
             role = guild.get_role(self.pending_role_id)
             items.append(f"Rol de verificación → {role.mention if role else self.pending_role_id}")
+        if self.pending_sin_role_id is not None:
+            role = guild.get_role(self.pending_sin_role_id)
+            items.append(f"Rol Sin Verificar → {role.mention if role else self.pending_sin_role_id}")
         if self.pending_channel_id is not None:
             channel = guild.get_channel(self.pending_channel_id)
             items.append(f"Canal de verificación → {channel.mention if channel else self.pending_channel_id}")
@@ -4357,6 +4459,21 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.pending_role_id = role.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
+    async def select_sin_role(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
+        if role is None:
+            await interaction.response.send_message("No pude localizar ese rol.", ephemeral=True)
+            return
+        if role.is_default() or role.managed or role >= interaction.guild.me.top_role:
+            await interaction.response.send_message(
+                "Ese rol no puede ser administrado por El Heraldo. Revisa jerarquía o integraciones.",
+                ephemeral=True,
+            )
+            return
+        self.pending_sin_role_id = role.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
@@ -4375,13 +4492,82 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.pending_channel_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Textos", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=3)
+    async def create_verify_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        existing_id = get_guild_channel_id(self.guild_id, "verification")
+        channel = guild.get_channel(existing_id) if existing_id else None
+        created_now = False
+        if not isinstance(channel, discord.TextChannel):
+            channel = next((c for c in guild.text_channels if c.name.casefold() == "verificación".casefold()), None)
+        if not isinstance(channel, discord.TextChannel):
+            me = guild.me
+            if me is None or not me.guild_permissions.manage_channels:
+                await interaction.response.send_message(
+                    "El Heraldo necesita Gestionar canales para crear el canal de verificación.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.defer(ephemeral=True)
+            try:
+                channel = await guild.create_text_channel(
+                    "Verificación",
+                    reason="El Heraldo: crear canal de verificación desde /setup",
+                )
+                created_now = True
+            except discord.HTTPException as exc:
+                await interaction.followup.send(f"No pude crear el canal: `{exc}`.", ephemeral=True)
+                return
+        else:
+            await interaction.response.defer(ephemeral=True)
+
+        note = await _setup_apply_system_channel(guild, "verification", channel, publish_messages=True)
+        self.pending_channel_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
+            view=self,
+        )
+
+    @discord.ui.button(label="Crear rol verificación", style=discord.ButtonStyle.success, row=4)
+    async def create_verify_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+        role, created_now, error = await _setup_get_or_create_system_role(
+            interaction.guild, "tentado", "Verificación", "Tentad@"
+        )
+        if error or role is None:
+            await interaction.followup.send(error or "No pude preparar el rol.", ephemeral=True)
+            return
+        self.pending_role_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(interaction.guild) + f"\n\n{action} {role.mention} como rol de verificación.",
+            view=self,
+        )
+
+    @discord.ui.button(label="Crear Sin Verificar", style=discord.ButtonStyle.success, row=4)
+    async def create_sin_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+        role, created_now, error = await _setup_get_or_create_system_role(
+            interaction.guild, "sin_verificar", "Sin Verificar", "Sin Verificar"
+        )
+        if error or role is None:
+            await interaction.followup.send(error or "No pude preparar el rol.", ephemeral=True)
+            return
+        self.pending_sin_role_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(interaction.guild) + f"\n\n{action} {role.mention} como rol Sin Verificar.",
+            view=self,
+        )
+
+    @discord.ui.button(label="Textos", style=discord.ButtonStyle.secondary, row=3)
     async def texts(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
 
-    @discord.ui.button(label="Publicar / actualizar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Publicar / actualizar", style=discord.ButtonStyle.secondary, row=3)
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_role_id is not None or self.pending_channel_id is not None or self.pending_enabled is not None:
+        if self.pending_role_id is not None or self.pending_sin_role_id is not None or self.pending_channel_id is not None or self.pending_enabled is not None:
             await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de publicar.", ephemeral=True)
             return
         channel_id = get_guild_channel_id(self.guild_id, "verification")
@@ -4421,7 +4607,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
         guild_config_set(self.guild_id, "verify_panel_ref", f"{channel.id}:{message.id}")
         await interaction.followup.send(f"Panel de verificación publicado en {channel.mention}.", ephemeral=True)
 
-    @discord.ui.button(label="Activar / desactivar", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Activar / desactivar", style=discord.ButtonStyle.primary, row=3)
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_enabled if self.pending_enabled is not None else verify_enabled(self.guild_id)
         target = not current
@@ -4432,32 +4618,35 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.pending_enabled = target
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_role_id is None and self.pending_channel_id is None and self.pending_enabled is None:
+        if self.pending_role_id is None and self.pending_sin_role_id is None and self.pending_channel_id is None and self.pending_enabled is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         if self.pending_role_id is not None:
             guild_config_set(self.guild_id, "verify_role_id", str(self.pending_role_id))
             guild_resource_set(self.guild_id, "role", "tentado", self.pending_role_id)
+        if self.pending_sin_role_id is not None:
+            guild_resource_set(self.guild_id, "role", "sin_verificar", self.pending_sin_role_id)
         if self.pending_channel_id is not None:
-            guild_resource_set(self.guild_id, "channel", "verification", self.pending_channel_id)
-            guild_config_set(self.guild_id, "verify_channel_id", str(self.pending_channel_id))
+            channel = interaction.guild.get_channel(self.pending_channel_id)
+            if isinstance(channel, discord.TextChannel):
+                await _setup_apply_system_channel(interaction.guild, "verification", channel, publish_messages=True)
         if self.pending_enabled is not None:
             if self.pending_enabled and not guild_config_get(self.guild_id, "verify_panel_ref"):
                 await interaction.followup.send("No activé la verificación: primero publica el panel.", ephemeral=True)
                 return
             guild_config_set(self.guild_id, "verify_enabled", "1" if self.pending_enabled else "0")
-        self.pending_role_id = self.pending_channel_id = self.pending_enabled = None
+        self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.pending_role_id = self.pending_channel_id = self.pending_enabled = None
+        self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -6592,6 +6781,168 @@ class HeraldoCasesSetupView(discord.ui.View):
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
+class HeraldoCondemnationSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.pending_channel_id: int | None = None
+        self.pending_role_id: int | None = None
+
+        channel_select = discord.ui.ChannelSelect(
+            placeholder="Seleccionar canal de condenados",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        channel_select.callback = self.select_channel
+        self.add_item(channel_select)
+
+        role_select = discord.ui.RoleSelect(
+            placeholder="Seleccionar rol Condenado",
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+        role_select.callback = self.select_role
+        self.add_item(role_select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    def _content(self, guild: discord.Guild) -> str:
+        channel = guild.get_channel(condemnation_channel_id(guild.id))
+        role = guild.get_role(get_condenado_role_id(guild.id))
+        items: list[str] = []
+        if self.pending_channel_id is not None:
+            pending_channel = guild.get_channel(self.pending_channel_id)
+            items.append(f"Canal → {pending_channel.mention if pending_channel else self.pending_channel_id}")
+        if self.pending_role_id is not None:
+            pending_role = guild.get_role(self.pending_role_id)
+            items.append(f"Rol → {pending_role.mention if pending_role else self.pending_role_id}")
+        return (
+            "⚖️ **El Heraldo · Moderation · Condenas**\n\n"
+            f"Canal de condenados: {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
+            f"Rol Condenado: {role.mention if role else 'no configurado'}"
+            + _pending_config_text(items)
+        )
+
+    async def select_channel(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not perms.view_channel or not perms.send_messages or not perms.embed_links:
+            await interaction.response.send_message(
+                "El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.",
+                ephemeral=True,
+            )
+            return
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    async def select_role(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
+        if role is None:
+            await interaction.response.send_message("No pude localizar ese rol.", ephemeral=True)
+            return
+        if role.is_default() or role.managed or role >= interaction.guild.me.top_role:
+            await interaction.response.send_message(
+                "Ese rol no puede ser administrado por El Heraldo. Revisa jerarquía o integraciones.",
+                ephemeral=True,
+            )
+            return
+        self.pending_role_id = role.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=2)
+    async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        existing_id = get_guild_channel_id(self.guild_id, "condemned")
+        channel = guild.get_channel(existing_id) if existing_id else None
+        created_now = False
+        if not isinstance(channel, discord.TextChannel):
+            channel = next((c for c in guild.text_channels if c.name.casefold() == "condenados"), None)
+        if not isinstance(channel, discord.TextChannel):
+            me = guild.me
+            if me is None or not me.guild_permissions.manage_channels:
+                await interaction.response.send_message(
+                    "El Heraldo necesita Gestionar canales para crear el canal de condenados.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.defer(ephemeral=True)
+            try:
+                channel = await guild.create_text_channel(
+                    "Condenados",
+                    reason="El Heraldo: crear canal de condenados desde /setup",
+                )
+                created_now = True
+            except discord.HTTPException as exc:
+                await interaction.followup.send(f"No pude crear el canal: `{exc}`.", ephemeral=True)
+                return
+        else:
+            await interaction.response.defer(ephemeral=True)
+
+        note = await _setup_apply_system_channel(guild, "condemned", channel, publish_messages=True)
+        self.pending_channel_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
+            view=self,
+        )
+
+    @discord.ui.button(label="Crear rol Condenado", style=discord.ButtonStyle.success, row=2)
+    async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+        role, created_now, error = await _setup_get_or_create_system_role(
+            interaction.guild, "condenado", "Condenado", "Condenado"
+        )
+        if error or role is None:
+            await interaction.followup.send(error or "No pude preparar el rol.", ephemeral=True)
+            return
+        self.pending_role_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(interaction.guild) + f"\n\n{action} {role.mention} como rol Condenado.",
+            view=self,
+        )
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_channel_id is None and self.pending_role_id is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.pending_channel_id is not None:
+            channel = interaction.guild.get_channel(self.pending_channel_id)
+            if isinstance(channel, discord.TextChannel):
+                await _setup_apply_system_channel(interaction.guild, "condemned", channel, publish_messages=True)
+        if self.pending_role_id is not None:
+            guild_resource_set(self.guild_id, "role", "condenado", self.pending_role_id)
+        self.pending_channel_id = self.pending_role_id = None
+        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_channel_id = self.pending_role_id = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
+            view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
+        )
+
+
 class HeraldoModerationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -6603,6 +6954,11 @@ class HeraldoModerationSetupView(discord.ui.View):
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
         return True
+
+    @discord.ui.button(label="Condenas", style=discord.ButtonStyle.primary, row=0)
+    async def condemnations(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoCondemnationSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
 
     @discord.ui.button(label="Cases", style=discord.ButtonStyle.primary, row=0)
     async def cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6748,6 +7104,43 @@ class HeraldoLoggingSetupView(discord.ui.View):
         self.pending_channel_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
+    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=1)
+    async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        existing_id = get_guild_channel_id(self.guild_id, "logs")
+        channel = guild.get_channel(existing_id) if existing_id else None
+        created_now = False
+        if not isinstance(channel, discord.TextChannel):
+            channel = next((c for c in guild.text_channels if c.name.casefold() == "el heraldo"), None)
+        if not isinstance(channel, discord.TextChannel):
+            me = guild.me
+            if me is None or not me.guild_permissions.manage_channels:
+                await interaction.response.send_message(
+                    "El Heraldo necesita Gestionar canales para crear el canal de logs.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.defer(ephemeral=True)
+            try:
+                channel = await guild.create_text_channel(
+                    "El Heraldo",
+                    reason="El Heraldo: crear canal de logs desde /setup",
+                )
+                created_now = True
+            except discord.HTTPException as exc:
+                await interaction.followup.send(f"No pude crear el canal: `{exc}`.", ephemeral=True)
+                return
+        else:
+            await interaction.response.defer(ephemeral=True)
+
+        note = await _setup_apply_system_channel(guild, "logs", channel, publish_messages=True)
+        self.pending_channel_id = None
+        action = "Creé" if created_now else "Reutilicé"
+        await interaction.edit_original_response(
+            content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
+            view=self,
+        )
+
     @discord.ui.button(label="Plantillas de logs", style=discord.ButtonStyle.primary, row=1)
     async def templates(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
@@ -6761,9 +7154,14 @@ class HeraldoLoggingSetupView(discord.ui.View):
         if self.pending_channel_id is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        guild_resource_set(self.guild_id, "channel", "logs", self.pending_channel_id)
+        channel = interaction.guild.get_channel(self.pending_channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Ese canal ya no existe.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        note = await _setup_apply_system_channel(interaction.guild, "logs", channel, publish_messages=True)
         self.pending_channel_id = None
-        await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+        await interaction.edit_original_response(content=self._content(interaction.guild) + f"\n\nCambios guardados. {note}", view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
     async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
