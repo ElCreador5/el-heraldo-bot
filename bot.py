@@ -6554,7 +6554,7 @@ class HeraldoLoggingSetupView(discord.ui.View):
         if self.pending_channel_id is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        set_guild_channel_id(self.guild_id, "logs", self.pending_channel_id)
+        guild_resource_set(self.guild_id, "channel", "logs", self.pending_channel_id)
         self.pending_channel_id = None
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
