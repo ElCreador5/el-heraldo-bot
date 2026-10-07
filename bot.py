@@ -2541,7 +2541,7 @@ def honeypot_db_init() -> None:
         "user_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, role_id INTEGER NOT NULL DEFAULT 0, role_ids TEXT NOT NULL, "
         "reason TEXT NOT NULL, duration_minutes INTEGER, condemned_at TEXT NOT NULL, "
         "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1, "
-        "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT)"
+        "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT, announcement_message_id INTEGER)"
     )
     try:
         conn.execute("ALTER TABLE condemnations ADD COLUMN role_id INTEGER NOT NULL DEFAULT 0")
@@ -2551,6 +2551,7 @@ def honeypot_db_init() -> None:
         "ALTER TABLE condemnations ADD COLUMN pardoned_by INTEGER",
         "ALTER TABLE condemnations ADD COLUMN pardoned_at TEXT",
         "ALTER TABLE condemnations ADD COLUMN resolution TEXT",
+        "ALTER TABLE condemnations ADD COLUMN announcement_message_id INTEGER",
     ):
         try:
             conn.execute(column_sql)
@@ -2696,8 +2697,8 @@ def condemnation_save(
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT INTO condemnations "
-        "(user_id, guild_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active, pardoned_by, pardoned_at, resolution) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL) "
+        "(user_id, guild_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active, pardoned_by, pardoned_at, resolution, announcement_message_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, NULL) "
         "ON CONFLICT(user_id) DO UPDATE SET guild_id=excluded.guild_id, role_ids=excluded.role_ids, "
         "role_id=excluded.role_id, reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
         "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1, "
@@ -3722,10 +3723,10 @@ async def condemnation_announce(
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
-) -> None:
+) -> int | None:
     channel = guild.get_channel(condemnation_channel_id())
     if not isinstance(channel, discord.TextChannel):
-        return
+        return None
     embed, view = _build_condemnation_embed(
         guild, member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
@@ -3733,12 +3734,62 @@ async def condemnation_announce(
         include_pardon_button=True,
     )
     try:
-        await channel.send(
+        message = await channel.send(
             content=member.mention, embed=embed, view=view,
             allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False),
         )
+        return message.id
     except discord.HTTPException:
-        pass
+        return None
+
+
+async def condemnation_update_pardoned_card(
+    member: discord.Member,
+    row: sqlite3.Row,
+    pardoned_by: discord.abc.User,
+    restored_count: int,
+    lost_count: int,
+) -> bool:
+    message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
+    if not message_id:
+        return False
+    channel = member.guild.get_channel(condemnation_channel_id())
+    if not isinstance(channel, discord.TextChannel):
+        return False
+    try:
+        message = await channel.fetch_message(int(message_id))
+        condemned_at = datetime.fromisoformat(row["condemned_at"])
+        case_id = condemnation_case_id(member, condemned_at)
+        pardoned_at = datetime.now(timezone.utc)
+        embed = discord.Embed(
+            title="🕊️ CONDENA PERDONADA",
+            description=(
+                f"El expediente **{case_id}** ha sido resuelto mediante perdón. "
+                "Esta tarjeta conserva la referencia del caso original y ya no admite acciones."
+            ),
+            color=discord.Color.green(),
+            timestamp=pardoned_at,
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(name="Expediente", value=f"`{case_id}`", inline=True)
+        embed.add_field(name="Condenado", value=f"{member.mention}\n`{member}`", inline=True)
+        embed.add_field(name="Motivo original", value=str(row["reason"])[:1024], inline=False)
+        embed.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
+        embed.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
+        embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
+        result = f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)"
+        if lost_count:
+            result += f"; ⚠️ **{lost_count}** no se pudieron restaurar."
+        else:
+            result += "."
+        embed.add_field(name="Resultado", value=result, inline=False)
+        embed.add_field(name="Origen", value=condemnation_origin_label(row["origin"]), inline=True)
+        embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
+        embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽 · Expediente {case_id}")
+        await message.edit(content=member.mention, embed=embed, view=None)
+        return True
+    except discord.HTTPException:
+        return False
 
 
 def condemnation_role_id(row: sqlite3.Row | None = None) -> int:
@@ -3907,11 +3958,19 @@ async def _condemn_member_inner(
         removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
     ) if send_dm else None
     if announce:
-        await condemnation_announce(
+        announcement_message_id = await condemnation_announce(
             member.guild, member, reason, duration_minutes, origin, applied_by,
             source_message_url=source_message_url, source_channel_id=source_channel_id,
             removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
         )
+        if announcement_message_id:
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute(
+                "UPDATE condemnations SET announcement_message_id = ? WHERE user_id = ?",
+                (announcement_message_id, member.id),
+            )
+            conn.commit()
+            conn.close()
     await log_embed(
         member.guild, "☠️ Condena aplicada",
         f"{member.mention} (`{member.id}`)\n"
@@ -3982,6 +4041,7 @@ async def release_condemned_member(
     if pardon and row is not None and released_by is not None:
         condemned_at = datetime.fromisoformat(row["condemned_at"])
         case_id = condemnation_case_id(member, condemned_at)
+        card_ok = await condemnation_update_pardoned_card(member, row, released_by, len(restore), lost)
         dm_ok = await condemnation_send_pardon_dm(member, row, released_by, len(restore), lost)
         await log_embed(member.guild, "🕊️ Condena perdonada", f"Expediente: {case_id}\nUsuario: {member.mention} ({member.id})\nMotivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\nPerdonó: {released_by.mention}\nRoles: {text}\nDM: {'✅ enviado' if dm_ok else '⚠️ no enviado'}", discord.Color.green())
         return True, text + ("; DM de perdón enviado" if dm_ok else "; DM de perdón no disponible")
