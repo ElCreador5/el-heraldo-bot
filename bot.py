@@ -1201,11 +1201,10 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
         print(f"⏳ {after} recibió Sin Verificar — respaldo de 300s armado.")
 
-    if get_tentado_role_id(after.guild.id) in after_role_ids and get_tentado_role_id(after.guild.id) not in before_role_ids:
-        now = datetime.now(timezone.utc)
-        db_set_tentado(after.id, now)
-        asyncio.create_task(schedule_check(after.guild.id, after.id, now))
-        print(f"⏳ {after} recibió Tentad@ — timer de 10 min armado.")
+    # IMPORTANTE: asignar el rol de verificación/orientación manualmente NO inicia
+    # el temporizador. La orientación solo nace cuando El Heraldo procesa una
+    # verificación nueva desde su botón. Esto protege a miembros antiguos y evita
+    # aplicar expulsiones retroactivas al instalar o reconfigurar el bot.
 
 
 async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: datetime) -> None:
@@ -1953,6 +1952,24 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         render_vars(get_verify_success_text(guild.id), VarContext(guild, member, interaction.channel), 2000),
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
+
+    # Orientación por preferencias: solo se inicia desde ESTE evento de verificación.
+    # Nunca se arma al detectar roles en miembros antiguos. Si el servidor no configuró
+    # roles de orientación, no existe obligación ni expulsión por preferencias.
+    orientation_roles = get_eval_role_ids(guild.id)
+    if orientation_roles and not ({r.id for r in member.roles} & orientation_roles):
+        now = datetime.now(timezone.utc)
+        db_set_tentado(member.id, now)
+        asyncio.create_task(schedule_check(guild.id, member.id, now))
+        await log_embed(
+            guild,
+            "🧭 Orientación iniciada",
+            f"{member.mention} completó la verificación. Tiene "
+            f"{int(get_orientation_window(guild.id).total_seconds() // 60)} min para elegir una preferencia.",
+            discord.Color.blurple(),
+        )
+    else:
+        db_clear_tentado(member.id)
 
     # DM de bienvenida: solo la primera vez que este usuario obtiene el rol de verificación.
     dm_welcome_ok = await send_verification_welcome_dm(member)
