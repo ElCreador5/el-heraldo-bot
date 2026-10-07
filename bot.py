@@ -2269,6 +2269,245 @@ class HeraldoVerificationSetupView(discord.ui.View):
         )
 
 
+
+class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Detección"):
+    threshold_input = discord.ui.TextInput(
+        label="Umbral de entradas",
+        required=True,
+        max_length=4,
+        placeholder="Ej.: 5",
+    )
+    window_input = discord.ui.TextInput(
+        label="Ventana de detección",
+        required=True,
+        max_length=24,
+        placeholder="Ej.: 30s, 1m",
+    )
+    age_input = discord.ui.TextInput(
+        label="Edad máxima de cuenta nueva",
+        required=True,
+        max_length=24,
+        placeholder="Ej.: 7d · 0 = sin filtro",
+    )
+    ratio_input = discord.ui.TextInput(
+        label="Proporción mínima de cuentas nuevas (%)",
+        required=True,
+        max_length=3,
+        placeholder="Ej.: 60 · 0 = desactivada",
+    )
+    duration_input = discord.ui.TextInput(
+        label="Duración de la respuesta",
+        required=True,
+        max_length=24,
+        placeholder="Ej.: 10m, 2h",
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.threshold_input.default = str(raid_threshold(guild_id))
+        self.window_input.default = format_flex_duration(raid_window_seconds(guild_id))
+        age = raid_min_age_seconds(guild_id)
+        self.age_input.default = format_flex_duration(age) if age else "0"
+        self.ratio_input.default = str(raid_new_account_ratio(guild_id))
+        self.duration_input.default = format_flex_duration(raid_duration_seconds(guild_id))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            threshold = int(str(self.threshold_input).strip())
+            ratio = int(str(self.ratio_input).strip())
+            if not RAID_THRESHOLD_MIN <= threshold <= RAID_THRESHOLD_MAX:
+                raise ValueError(
+                    f"El umbral debe estar entre {RAID_THRESHOLD_MIN} y {RAID_THRESHOLD_MAX}."
+                )
+            if not 0 <= ratio <= 100:
+                raise ValueError("La proporción debe estar entre 0 y 100.")
+            window_s = parse_flex_duration(
+                str(self.window_input).strip(), RAID_WINDOW_MIN, RAID_WINDOW_MAX
+            )
+            age_s = parse_flex_duration(
+                str(self.age_input).strip(), 0, RAID_AGE_MAX
+            )
+            duration_s = parse_flex_duration(
+                str(self.duration_input).strip(), RAID_DURATION_MIN, RAID_DURATION_MAX
+            )
+            if ratio > 0 and age_s <= 0:
+                raise ValueError(
+                    "Si usas una proporción de cuentas nuevas, la edad máxima debe ser mayor que 0."
+                )
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
+            return
+
+        guild_config_set(self.guild_id, "raid_threshold", str(threshold))
+        guild_config_set(self.guild_id, "raid_window_seconds", str(window_s))
+        guild_config_set(self.guild_id, "raid_min_age_seconds", str(age_s))
+        guild_config_set(self.guild_id, "raid_new_account_ratio", str(ratio))
+        guild_config_set(self.guild_id, "raid_duration_seconds", str(duration_s))
+        await interaction.response.send_message(
+            "✅ Detección de Raid Protection actualizada.\n\n"
+            + raid_config_summary(interaction.guild),
+            ephemeral=True,
+        )
+
+
+class HeraldoRaidSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+        action_select = discord.ui.Select(
+            placeholder="Respuesta ante el raid",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=label[:100],
+                    value=value,
+                    default=(value == raid_action(guild_id)),
+                )
+                for value, label in RAID_ACTION_LABELS.items()
+            ],
+            row=0,
+        )
+        action_select.callback = self.save_action
+        self.action_select = action_select
+        self.add_item(action_select)
+
+        channel_select = discord.ui.ChannelSelect(
+            placeholder="Canal de alertas de Raid Protection",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+        channel_select.callback = self.save_alert_channel
+        self.add_item(channel_select)
+
+        role_select = discord.ui.RoleSelect(
+            placeholder="Rol a mencionar en las alertas",
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+        role_select.callback = self.save_alert_role
+        self.add_item(role_select)
+
+        self.toggle_enabled.label = (
+            "🛡️ Protección activada" if raid_enabled(guild_id)
+            else "🛡️ Protección desactivada"
+        )
+        self.toggle_invites.label = (
+            "🔒 Pausar invitaciones: sí" if raid_lock_invites_enabled(guild_id)
+            else "🔓 Pausar invitaciones: no"
+        )
+        self.toggle_purge.label = (
+            "🧹 Purgar mensajes: sí" if raid_purge_enabled(guild_id)
+            else "🧹 Purgar mensajes: no"
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Este panel de configuración no es tuyo.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def save_action(self, interaction: discord.Interaction) -> None:
+        value = self.action_select.values[0]
+        if value == "condemn" and interaction.guild.get_role(
+            condemnation_role_id(guild_id=self.guild_id)
+        ) is None:
+            await interaction.response.send_message(
+                "❌ Para usar «Condenar» primero debes configurar el rol Condenado.",
+                ephemeral=True,
+            )
+            return
+        guild_config_set(self.guild_id, "raid_action", value)
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n"
+            + raid_config_summary(interaction.guild),
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
+        )
+
+    async def save_alert_channel(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "❌ No pude localizar ese canal.", ephemeral=True
+            )
+            return
+        guild_config_set(self.guild_id, "raid_alert_channel_id", str(channel.id))
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n"
+            + raid_config_summary(interaction.guild),
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
+        )
+
+    async def save_alert_role(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
+        if role is None:
+            await interaction.response.send_message(
+                "❌ No pude localizar ese rol.", ephemeral=True
+            )
+            return
+        guild_config_set(self.guild_id, "raid_ping_role", str(role.id))
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n"
+            + raid_config_summary(interaction.guild),
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="⚙️ Detección y duración", style=discord.ButtonStyle.primary, row=3)
+    async def detection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoRaidDetectionModal(self.guild_id))
+
+    @discord.ui.button(label="🛡️ Protección", style=discord.ButtonStyle.success, row=3)
+    async def toggle_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = raid_enabled(self.guild_id)
+        guild_config_set(self.guild_id, "raid_enabled", "0" if enabled else "1")
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n"
+            + raid_config_summary(interaction.guild),
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="🔒 Pausar invitaciones", style=discord.ButtonStyle.secondary, row=4)
+    async def toggle_invites(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = raid_lock_invites_enabled(self.guild_id)
+        guild_config_set(self.guild_id, "raid_lock_invites", "0" if enabled else "1")
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n"
+            + raid_config_summary(interaction.guild),
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="🧹 Purgar mensajes", style=discord.ButtonStyle.secondary, row=4)
+    async def toggle_purge(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = raid_purge_enabled(self.guild_id)
+        guild_config_set(self.guild_id, "raid_purge", "0" if enabled else "1")
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n"
+            + raid_config_summary(interaction.guild),
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=4)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Configuración del servidor**\n\n"
+                "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica."
+            ),
+            embed=None,
+            view=HeraldoSetupView(self.guild_id, self.owner_id),
+        )
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -2334,6 +2573,14 @@ class HeraldoSetupView(discord.ui.View):
             content="🍯 **El Heraldo · Honeypot**\n\n" + hp_config_summary(interaction.guild),
             embed=None,
             view=HeraldoHoneypotSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="🛡️ Raid Protection", style=discord.ButtonStyle.secondary, row=1)
+    async def raid_protection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🛡️ **El Heraldo · Raid Protection**\n\n" + raid_config_summary(interaction.guild),
+            embed=None,
+            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="👑 Miembro de la semana", style=discord.ButtonStyle.secondary, row=1)
