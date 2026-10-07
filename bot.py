@@ -3621,6 +3621,7 @@ class CondemnationPardonView(discord.ui.View):
                 member,
                 released_by=interaction.user,
                 pardon=True,
+                announcement_message=interaction.message,
             )
             await interaction.followup.send(
                 ("🕊️ " if ok else "❌ ") + note,
@@ -3749,6 +3750,7 @@ async def condemnation_update_pardoned_card(
     pardoned_by: discord.abc.User,
     restored_count: int,
     lost_count: int,
+    message: discord.Message | None = None,
 ) -> bool:
     message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
     if not message_id:
@@ -3757,7 +3759,12 @@ async def condemnation_update_pardoned_card(
     if not isinstance(channel, discord.TextChannel):
         return False
     try:
-        message = await channel.fetch_message(int(message_id))
+        if message is None:
+            if not message_id:
+                return False
+            message = await channel.fetch_message(int(message_id))
+        elif message.channel.id != channel.id:
+            return False
         condemned_at = datetime.fromisoformat(row["condemned_at"])
         case_id = condemnation_case_id(member, condemned_at)
         pardoned_at = datetime.now(timezone.utc)
@@ -3987,7 +3994,8 @@ async def _condemn_member_inner(
 
 async def release_condemned_member(
     member: discord.Member, *, released_by: discord.abc.User | None = None,
-    automatic: bool = False, pardon: bool = False
+    automatic: bool = False, pardon: bool = False,
+    announcement_message: discord.Message | None = None,
 ) -> tuple[bool, str]:
     row = condemnation_get(member.id)
     punish_role = member.guild.get_role(condemnation_role_id(row))
@@ -4041,7 +4049,7 @@ async def release_condemned_member(
     if pardon and row is not None and released_by is not None:
         condemned_at = datetime.fromisoformat(row["condemned_at"])
         case_id = condemnation_case_id(member, condemned_at)
-        card_ok = await condemnation_update_pardoned_card(member, row, released_by, len(restore), lost)
+        card_ok = await condemnation_update_pardoned_card(member, row, released_by, len(restore), lost, message=announcement_message)
         dm_ok = await condemnation_send_pardon_dm(member, row, released_by, len(restore), lost)
         await log_embed(member.guild, "🕊️ Condena perdonada", f"Expediente: {case_id}\nUsuario: {member.mention} ({member.id})\nMotivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\nPerdonó: {released_by.mention}\nRoles: {text}\nDM: {'✅ enviado' if dm_ok else '⚠️ no enviado'}", discord.Color.green())
         return True, text + ("; DM de perdón enviado" if dm_ok else "; DM de perdón no disponible")
