@@ -5652,7 +5652,7 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
         self.guild_id = guild_id
         self.title_input.default = condemnation_template_get(guild_id, "title")
         self.description_input.default = condemnation_template_get(self.guild_id, "description")
-        self.color_input.default = condemnation_template_get("color")
+        self.color_input.default = condemnation_template_get(self.guild_id, "color")
         self.footer_input.default = condemnation_template_get(self.guild_id, "footer")
         self.button_label_input.default = condemnation_template_get(self.guild_id, "button_label")
 
@@ -6387,7 +6387,7 @@ async def honeypot_history(
 
 @honeypot_group.command(name="resume", description="Reanudar el honeypot tras una pausa por protección contra fallos.")
 async def honeypot_resume(interaction: discord.Interaction) -> None:
-    if not honeypot_paused(guild.id):
+    if not honeypot_paused(interaction.guild.id):
         await interaction.response.send_message("El honeypot no está pausado.", ephemeral=True)
         return
     hp_setting_set(interaction.guild.id, "honeypot_paused", "0")
