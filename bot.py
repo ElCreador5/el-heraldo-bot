@@ -154,6 +154,20 @@ VERIFICATION_WINDOW = timedelta(minutes=10)
 # Este módulo NO usa mensajes existentes. El Heraldo crea y mantiene una tarjeta
 # propia, sus roles y sus reacciones. Los emojis son Unicode para que sobrevivan
 # reinicios sin depender de IDs de emojis personalizados.
+# Roles que El Heraldo crea y conserva mientras el módulo está activo.
+# Solo los cuatro definidos en ORIENTATION_ROLE_DEFINITIONS reciben reacciones.
+ORIENTATION_MANAGED_ROLE_DEFINITIONS = (
+    ("orientation_rr_hetero", "Hétero 🍑"),
+    ("orientation_rr_curioso", "Curios@ 👀"),
+    ("orientation_rr_gay", "Gay 🥒"),
+    ("orientation_rr_bisex", "Bisex-🚻"),
+    ("orientation_role_chica_trans", "Chica Trans 🌶️"),
+    ("orientation_role_chico_trans", "Chico Trans 👠"),
+    ("orientation_role_chica_hetero", "Chica + Hetero 🍓"),
+    ("orientation_role_chico_hetero", "Chico + Hetero 🍆"),
+    ("orientation_role_chicos", "Chicos 🚹"),
+    ("orientation_role_chicas", "Chicas ♀️"),
+)
 ORIENTATION_ROLE_DEFINITIONS = (
     ("orientation_rr_hetero", "Hetero", "🍑"),
     ("orientation_rr_curioso", "Curios@", "👀"),
@@ -162,12 +176,8 @@ ORIENTATION_ROLE_DEFINITIONS = (
 )
 ORIENTATION_EMBED_TITLE = "ORIENTACIÓN"
 ORIENTATION_EMBED_COLOR = 0x19A7E0
-ORIENTATION_EMBED_DESCRIPTION = (
-    "Selecciona el rol que te represente reaccionando con el emoji correspondiente:\n\n"
-    "🍑  Hetero\n"
-    "👀  Curios@\n"
-    "🥒  Gay\n"
-    "🚻  Bisex\n\n"
+ORIENTATION_EMBED_INTRO = "Selecciona el rol que te represente reaccionando con el emoji correspondiente:"
+ORIENTATION_EMBED_DETAILS = (
     "Estos roles permiten definir tu orientación dentro del servidor. "
     "Si tu preferencia cambia, puedes seleccionar otra opción.\n\n"
     "**¿Cómo funciona?**\n"
@@ -827,17 +837,51 @@ def orientation_role_for_emoji(guild: discord.Guild, emoji: str) -> discord.Role
     return None
 
 
+def get_orientation_embed_title(guild_id: int) -> str:
+    return guild_config_get(guild_id, "orientation_embed_title") or ORIENTATION_EMBED_TITLE
+
+
+def get_orientation_embed_intro(guild_id: int) -> str:
+    return guild_config_get(guild_id, "orientation_embed_intro") or ORIENTATION_EMBED_INTRO
+
+
+def get_orientation_embed_details(guild_id: int) -> str:
+    return guild_config_get(guild_id, "orientation_embed_details") or ORIENTATION_EMBED_DETAILS
+
+
+def get_orientation_embed_color(guild_id: int) -> int:
+    raw = (guild_config_get(guild_id, "orientation_embed_color") or f"{ORIENTATION_EMBED_COLOR:06X}").lstrip("#")
+    try:
+        return int(raw, 16)
+    except ValueError:
+        return ORIENTATION_EMBED_COLOR
+
+
+def get_orientation_embed_footer(guild: discord.Guild) -> str:
+    configured = guild_config_get(guild.id, "orientation_embed_footer")
+    return configured if configured is not None else f"{guild.name} {datetime.now(STREAK_TZ).year} ©"
+
+
 def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
-    embed = discord.Embed(
-        title=ORIENTATION_EMBED_TITLE,
-        description=ORIENTATION_EMBED_DESCRIPTION,
-        color=discord.Color(ORIENTATION_EMBED_COLOR),
+    option_lines = [f"{emoji}  {label}" for _key, label, emoji in ORIENTATION_ROLE_DEFINITIONS]
+    description = (
+        get_orientation_embed_intro(guild.id).strip()
+        + "\n\n"
+        + "\n".join(option_lines)
+        + "\n\n"
+        + get_orientation_embed_details(guild.id).strip()
     )
-    footer_text = f"{guild.name} {datetime.now(STREAK_TZ).year} ©"
-    if guild.icon:
-        embed.set_footer(text=footer_text, icon_url=guild.icon.url)
-    else:
-        embed.set_footer(text=footer_text)
+    embed = discord.Embed(
+        title=get_orientation_embed_title(guild.id),
+        description=description,
+        color=discord.Color(get_orientation_embed_color(guild.id)),
+    )
+    footer_text = get_orientation_embed_footer(guild)
+    if footer_text:
+        if guild.icon:
+            embed.set_footer(text=footer_text, icon_url=guild.icon.url)
+        else:
+            embed.set_footer(text=footer_text)
     return embed
 
 
@@ -904,7 +948,8 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     conn.commit()
     conn.close()
 
-    for key, role_name, emoji in ORIENTATION_ROLE_DEFINITIONS:
+    reaction_by_key = {key: emoji for key, _label, emoji in ORIENTATION_ROLE_DEFINITIONS}
+    for key, role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
         role = None
         saved_id = guild_resource_get(guild.id, "role", key)
         if saved_id:
@@ -926,7 +971,9 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
                 return False, f"No pude crear el rol **{role_name}**."
 
         guild_resource_set(guild.id, "role", key, role.id)
-        managed_roles.append((role, emoji))
+        emoji = reaction_by_key.get(key)
+        if emoji is not None:
+            managed_roles.append((role, emoji))
 
     set_orientation_created_role_ids(guild.id, created_ids)
 
@@ -994,7 +1041,7 @@ async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
 
     created_ids = orientation_created_role_ids(guild.id)
     failed_roles: list[str] = []
-    for key, role_name, _emoji in ORIENTATION_ROLE_DEFINITIONS:
+    for key, role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
         role_id = guild_resource_get(guild.id, "role", key)
         role = guild.get_role(role_id) if role_id else None
         if role is not None and role.id in created_ids:
@@ -1007,7 +1054,8 @@ async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     conn.execute(
         """
         DELETE FROM guild_resources
-        WHERE guild_id = ? AND resource_type = 'role' AND config_key LIKE 'orientation_rr_%'
+        WHERE guild_id = ? AND resource_type = 'role'
+          AND (config_key LIKE 'orientation_rr_%' OR config_key LIKE 'orientation_role_%')
         """,
         (guild.id,),
     )
@@ -2122,6 +2170,78 @@ class HeraldoRoleSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientación"):
+    title_input = discord.ui.TextInput(
+        label="Título",
+        required=True,
+        max_length=256,
+    )
+    intro_input = discord.ui.TextInput(
+        label="Texto antes de las opciones",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000,
+    )
+    details_input = discord.ui.TextInput(
+        label="Texto después de las opciones",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=3000,
+    )
+    color_input = discord.ui.TextInput(
+        label="Color HEX",
+        required=True,
+        max_length=7,
+    )
+    footer_input = discord.ui.TextInput(
+        label="Footer",
+        required=False,
+        max_length=2048,
+    )
+
+    def __init__(self, guild: discord.Guild) -> None:
+        super().__init__()
+        self.guild_id = guild.id
+        self.title_input.default = get_orientation_embed_title(guild.id)
+        self.intro_input.default = get_orientation_embed_intro(guild.id)
+        self.details_input.default = get_orientation_embed_details(guild.id)
+        self.color_input.default = f"{get_orientation_embed_color(guild.id):06X}"
+        self.footer_input.default = get_orientation_embed_footer(guild)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        title = str(self.title_input).strip()
+        intro = str(self.intro_input).strip()
+        details = str(self.details_input).strip()
+        color = str(self.color_input).strip().lstrip("#")
+        footer = str(self.footer_input).strip()
+
+        if not title or not intro or not details:
+            await interaction.response.send_message(
+                "❌ Título y textos de la tarjeta no pueden quedar vacíos.",
+                ephemeral=True,
+            )
+            return
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message(
+                "❌ El color debe ser HEX de 6 dígitos, por ejemplo `19A7E0`.",
+                ephemeral=True,
+            )
+            return
+
+        guild_config_set(self.guild_id, "orientation_embed_title", title)
+        guild_config_set(self.guild_id, "orientation_embed_intro", intro)
+        guild_config_set(self.guild_id, "orientation_embed_details", details)
+        guild_config_set(self.guild_id, "orientation_embed_color", color.upper())
+        guild_config_set(self.guild_id, "orientation_embed_footer", footer)
+
+        await interaction.response.defer(ephemeral=True)
+        note = "Tarjeta guardada."
+        if orientation_enabled(self.guild_id):
+            ok, sync_note = await ensure_orientation_system(interaction.guild)
+            note = sync_note if ok else f"Guardé el texto, pero no pude actualizar la tarjeta: {sync_note}"
+        await interaction.followup.send(f"✅ {note}", ephemeral=True)
+
+
 class HeraldoOrientationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -2198,6 +2318,10 @@ class HeraldoOrientationSetupView(discord.ui.View):
             embed=None,
             view=self,
         )
+
+    @discord.ui.button(label="📝 Editar tarjeta", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
     @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
