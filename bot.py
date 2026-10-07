@@ -645,6 +645,26 @@ def db_meta_set(key: str, value: str) -> None:
     conn.close()
 
 
+def _guild_or_legacy_setting(guild_id: int | None, key: str, default: str) -> str:
+    """Lee primero la configuración por servidor. La configuración global antigua
+    solo se acepta si pertenece a este servidor o si el bot aún está en un único servidor."""
+    if guild_id is None:
+        return db_meta_get(key) or default
+    configured = guild_config_get(guild_id, key)
+    if configured is not None:
+        return configured
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    if legacy_owner is not None:
+        try:
+            if int(legacy_owner) != guild_id:
+                return default
+        except (TypeError, ValueError):
+            return default
+    elif len(bot.guilds) > 1:
+        return default
+    return db_meta_get(key) or default
+
+
 def get_motw_weekday() -> int:
     value = db_meta_get("motw_weekday")
     return int(value) if value is not None else MOTW_WEEKDAY_DEFAULT
@@ -775,16 +795,16 @@ def get_verify_action(guild_id: int | None = None) -> str:
     return value if value in VERIFY_ACTION_LABELS else VERIFY_ACTION_DEFAULT
 
 
-def get_verify_panel_text() -> str:
-    return db_meta_get("verify_panel_text") or VERIFY_PANEL_TEXT_DEFAULT
+def get_verify_panel_text(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_panel_text", VERIFY_PANEL_TEXT_DEFAULT)
 
 
-def get_verify_button_label() -> str:
-    return db_meta_get("verify_button_label") or VERIFY_BUTTON_LABEL_DEFAULT
+def get_verify_button_label(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_button_label", VERIFY_BUTTON_LABEL_DEFAULT)
 
 
-def get_verify_success_text() -> str:
-    return db_meta_get("verify_success_text") or VERIFY_SUCCESS_TEXT_DEFAULT
+def get_verify_success_text(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_success_text", VERIFY_SUCCESS_TEXT_DEFAULT)
 
 
 VERIFY_DM_TITLE_DEFAULT = "HAS CRUZADO EL UMBRAL"
@@ -800,30 +820,32 @@ VERIFY_DM_FOOTER_DEFAULT = "© Paraíso Morboso 🍑🍆🥛"
 VERIFY_DM_COLOR_DEFAULT = "4F5BDC"
 VERIFY_DM_FOOTER_ICON_DEFAULT = "https://media.discordapp.net/attachments/1548766637866360852/1548771260476162189/39d74668-f12d-4979-bcc3-9b6826f2e8d5.png?ex=6ac49d63&is=6ac34be3&hm=b939835c020aeea2d422d7057213117b1744d4f95d37d180e8f"
 
-def get_verify_dm_title() -> str:
-    return db_meta_get("verify_dm_title") or VERIFY_DM_TITLE_DEFAULT
+def get_verify_dm_title(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_dm_title", VERIFY_DM_TITLE_DEFAULT)
 
-def get_verify_dm_body() -> str:
-    return db_meta_get("verify_dm_body") or VERIFY_DM_BODY_DEFAULT
+def get_verify_dm_body(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_dm_body", VERIFY_DM_BODY_DEFAULT)
 
-def get_verify_dm_field_name() -> str:
-    return db_meta_get("verify_dm_field_name") or VERIFY_DM_FIELD_NAME_DEFAULT
+def get_verify_dm_field_name(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_dm_field_name", VERIFY_DM_FIELD_NAME_DEFAULT)
 
-def get_verify_dm_footer() -> str:
-    return db_meta_get("verify_dm_footer") or VERIFY_DM_FOOTER_DEFAULT
+def get_verify_dm_footer(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_dm_footer", VERIFY_DM_FOOTER_DEFAULT)
 
-def get_verify_dm_color() -> str:
-    return db_meta_get("verify_dm_color") or VERIFY_DM_COLOR_DEFAULT
+def get_verify_dm_color(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_dm_color", VERIFY_DM_COLOR_DEFAULT)
 
-def get_verify_dm_footer_icon() -> str:
-    return db_meta_get("verify_dm_footer_icon") or VERIFY_DM_FOOTER_ICON_DEFAULT
+def get_verify_dm_footer_icon(guild_id: int | None = None) -> str:
+    return _guild_or_legacy_setting(guild_id, "verify_dm_footer_icon", VERIFY_DM_FOOTER_ICON_DEFAULT)
 
 
 def build_verification_welcome_embed(
     member: discord.Member | None = None, guild: discord.Guild | None = None,
 ) -> discord.Embed:
     ctx = VarContext(guild or (member.guild if member is not None else None), member)
-    color_text = get_verify_dm_color().strip().lstrip("#")
+    effective_guild = guild or (member.guild if member is not None else None)
+    guild_id = effective_guild.id if effective_guild is not None else None
+    color_text = get_verify_dm_color(guild_id).strip().lstrip("#")
     try:
         color_value = int(color_text, 16)
         if not 0 <= color_value <= 0xFFFFFF:
@@ -832,12 +854,12 @@ def build_verification_welcome_embed(
         color_value = int(VERIFY_DM_COLOR_DEFAULT, 16)
 
     embed = discord.Embed(
-        title=render_vars(get_verify_dm_title(), ctx, 256),
+        title=render_vars(get_verify_dm_title(guild_id), ctx, 256),
         color=discord.Color(color_value),
     )
     embed.add_field(
-        name=render_vars(get_verify_dm_field_name(), ctx, 256),
-        value=render_vars(get_verify_dm_body(), ctx, 1024),
+        name=render_vars(get_verify_dm_field_name(guild_id), ctx, 256),
+        value=render_vars(get_verify_dm_body(guild_id), ctx, 1024),
         inline=False,
     )
     footer_icon = render_url_var(get_verify_dm_footer_icon(), ctx)
@@ -890,6 +912,22 @@ async def on_ready() -> None:
 
     db_init()
     honeypot_db_init()
+
+    # Vincula la configuración antigua de una sola instancia al servidor que contiene
+    # el panel de verificación, evitando que otro servidor herede esos textos.
+    if db_meta_get("verify_legacy_guild_id") is None:
+        legacy_ref = db_meta_get("verify_panel_ref")
+        if legacy_ref and legacy_ref.count(":") == 1:
+            try:
+                legacy_channel_id = int(legacy_ref.split(":")[0])
+                legacy_guild = next(
+                    (g for g in bot.guilds if g.get_channel(legacy_channel_id) is not None),
+                    None,
+                )
+                if legacy_guild is not None:
+                    db_meta_set("verify_legacy_guild_id", str(legacy_guild.id))
+            except (TypeError, ValueError):
+                pass
 
     for guild in bot.guilds:
         try:
@@ -1783,7 +1821,11 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
 
 async def update_verify_panel(guild: discord.Guild) -> str:
     """Edita el panel ya publicado con los textos actuales. Devuelve una nota para el admin."""
-    ref = db_meta_get("verify_panel_ref")
+    ref = guild_config_get(guild.id, "verify_panel_ref")
+    if ref is None:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or str(guild.id) == legacy_owner:
+            ref = db_meta_get("verify_panel_ref")
     if not ref:
         return "Aún no hay panel publicado: usa /verify para publicarlo."
     try:
@@ -1793,8 +1835,8 @@ async def update_verify_panel(guild: discord.Guild) -> str:
             return "⚠️ No encontré el canal del panel; publícalo de nuevo con /verify."
         message = await channel.fetch_message(message_id)
         await message.edit(
-            content=render_vars(get_verify_panel_text(), VarContext(guild, None, channel), 2000),
-            view=VerifyView(),
+            content=render_vars(get_verify_panel_text(guild.id), VarContext(guild, None, channel), 2000),
+            view=VerifyView(label=get_verify_button_label(guild.id)),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return "El panel publicado ya muestra los textos nuevos."
@@ -1808,7 +1850,11 @@ def verify_config_summary(guild: discord.Guild) -> str:
     role_id = get_verify_role_id(guild.id)
     role = guild.get_role(role_id)
     role_text = role.mention if role else f"⚠️ no encontrado (`{role_id}`)"
-    ref = db_meta_get("verify_panel_ref")
+    ref = guild_config_get(guild.id, "verify_panel_ref")
+    if ref is None:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or str(guild.id) == legacy_owner:
+            ref = db_meta_get("verify_panel_ref")
     if ref and ref.count(":") == 1:
         channel_id, message_id = ref.split(":")
         panel_text = f"[ir al panel](https://discord.com/channels/{guild.id}/{channel_id}/{message_id})"
@@ -1828,23 +1874,24 @@ def verify_config_summary(guild: discord.Guild) -> str:
 class VerifyTextsModal(discord.ui.Modal):
     """Formulario de textos; se abre con los valores actuales."""
 
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int) -> None:
         super().__init__(title="Textos de la verificación")
+        self.guild_id = guild_id
         self.panel = discord.ui.TextInput(
             label="Mensaje del panel (sobre el botón)",
             style=discord.TextStyle.paragraph,
-            default=get_verify_panel_text(),
+            default=get_verify_panel_text(guild_id),
             max_length=2000,
         )
         self.button_label = discord.ui.TextInput(
             label="Texto del botón",
-            default=get_verify_button_label(),
+            default=get_verify_button_label(guild_id),
             max_length=80,
         )
         self.success = discord.ui.TextInput(
             label="Mensaje tras pulsar el botón",
             style=discord.TextStyle.paragraph,
-            default=get_verify_success_text(),
+            default=get_verify_success_text(guild_id),
             max_length=1000,
         )
         self.add_item(self.panel)
@@ -1858,9 +1905,9 @@ class VerifyTextsModal(discord.ui.Modal):
         if not (panel and label and success):
             await interaction.response.send_message("❌ Ningún texto puede quedar vacío; no guardé nada.", ephemeral=True)
             return
-        db_meta_set("verify_panel_text", panel)
-        db_meta_set("verify_button_label", label)
-        db_meta_set("verify_success_text", success)
+        guild_config_set(interaction.guild.id, "verify_panel_text", panel)
+        guild_config_set(interaction.guild.id, "verify_button_label", label)
+        guild_config_set(interaction.guild.id, "verify_success_text", success)
         await interaction.response.defer(ephemeral=True, thinking=True)
         note = await update_verify_panel(interaction.guild)
         await interaction.followup.send(f"✅ Textos guardados. {note}", ephemeral=True)
@@ -1903,14 +1950,14 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     await interaction.response.defer(ephemeral=True)
     try:
         message = await target.send(
-            content=render_vars(get_verify_panel_text(), VarContext(guild, None, target), 2000),
-            view=VerifyView(),
+            content=render_vars(get_verify_panel_text(guild.id), VarContext(guild, None, target), 2000),
+            view=VerifyView(label=get_verify_button_label(guild.id)),
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.HTTPException as e:
         await interaction.followup.send(f"❌ No pude publicar el panel: `{e}`", ephemeral=True)
         return
-    db_meta_set("verify_panel_ref", f"{target.id}:{message.id}")
+    guild_config_set(guild.id, "verify_panel_ref", f"{target.id}:{message.id}")
     await interaction.followup.send(
         f"✅ Panel publicado en {target.mention}. Cuando quieras que el timeout empiece a aplicarse, "
         f"usa `/verify_config activado:True`.",
@@ -1998,7 +2045,7 @@ async def verify_dm_texts(
         "verify_dm_footer_icon": icono_footer,
     }
     for key, value in values.items():
-        db_meta_set(key, value)
+        guild_config_set(interaction.guild.id, key, value)
 
     await interaction.response.send_message(
         "✅ **DM de bienvenida actualizado correctamente.**\n"
@@ -2054,7 +2101,7 @@ async def verify_dm_preview(interaction: discord.Interaction) -> None:
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
 async def verify_texts(interaction: discord.Interaction) -> None:
-    await interaction.response.send_modal(VerifyTextsModal())
+    await interaction.response.send_modal(VerifyTextsModal(interaction.guild.id))
 
 
 @bot.tree.command(name="verify_config", description="Ver o cambiar la configuración de la verificación por botón.")
@@ -2111,7 +2158,12 @@ async def verify_config(
                 f"❌ No activé la verificación: {effective_role.mention} {problem}.", ephemeral=True
             )
             return
-        if not db_meta_get("verify_panel_ref"):
+        panel_ref = guild_config_get(guild.id, "verify_panel_ref")
+        if panel_ref is None:
+            legacy_owner = db_meta_get("verify_legacy_guild_id")
+            if legacy_owner is None or str(guild.id) == legacy_owner:
+                panel_ref = db_meta_get("verify_panel_ref")
+        if not panel_ref:
             await interaction.response.send_message(
                 "❌ No activé la verificación: aún no hay panel publicado. Usa `/verify` primero; "
                 "si no, nadie podría verificarse y todos los que entren serían sancionados.",
@@ -2122,24 +2174,20 @@ async def verify_config(
     # 2) Guardar.
     changes: list[str] = []
     if rol is not None:
-        db_meta_set("verify_role_id", str(rol.id))
         guild_config_set(interaction.guild.id, "verify_role_id", str(rol.id))
         changes.append(f"rol → {rol.mention}")
     if timeout_seconds is not None:
-        db_meta_set("verify_timeout", str(timeout_seconds))
         guild_config_set(interaction.guild.id, "verify_timeout", str(timeout_seconds))
         changes.append(f"timeout → {format_duration(timeout_seconds // 60)}")
     if accion is not None:
-        db_meta_set("verify_action", accion.value)
         guild_config_set(interaction.guild.id, "verify_action", accion.value)
         changes.append(f"acción → {accion.name}")
     if activado is not None:
-        db_meta_set("verify_enabled", "1" if activado else "0")
         guild_config_set(interaction.guild.id, "verify_enabled", "1" if activado else "0")
         changes.append("activada" if activado else "desactivada")
 
     warnings: list[str] = []
-    if get_verify_timeout() > SIN_VERIFICAR_WINDOW.total_seconds():
+    if get_verify_timeout(guild.id) > get_sin_verificado_window(guild.id).total_seconds():
         warnings.append("⚠️ El respaldo de Sin Verificar sigue en 300 s: quien tenga ese rol será expulsado antes que este timeout.")
     if get_verify_role_id(guild.id) != get_tentado_role_id(guild.id):
         warnings.append("⚠️ El timer de orientación (10 min) solo se arma con Tentad@; con otro rol no se activará.")
