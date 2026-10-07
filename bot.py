@@ -6103,9 +6103,9 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
 
 class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla del reporte"):
     action = discord.ui.TextInput(label="Acción", required=True, max_length=20, placeholder="report, timeout, kick, ban o condemn")
-    duration = discord.ui.TextInput(label="Duración del castigo", required=False, max_length=30, placeholder="30m, 1d o -")
-    threshold = discord.ui.TextInput(label="Reportes necesarios", required=True, max_length=2, placeholder="2")
-    purge = discord.ui.TextInput(label="Purga reciente", required=False, max_length=30, placeholder="30m o -")
+    duration = discord.ui.TextInput(label="Duración", required=False, max_length=30, placeholder="30m, 1d o -")
+    threshold = discord.ui.TextInput(label="Umbral", required=True, max_length=2, placeholder="2")
+    purge = discord.ui.TextInput(label="Ventana de purga", required=False, max_length=30, placeholder="30m o -")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int) -> None:
         super().__init__()
@@ -6260,7 +6260,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     f"\nAcción: {moderation_action_label(str(item.get('action', 'report')))}"
                     f" · Umbral: {item.get('threshold', 1)}"
                     f" · Duración: {format_duration(int(duration)) if duration else '—'}"
-                    f" · Purga: {format_duration(int(purge)) if purge else '—'}"
+                    f" · Ventana de purga: {format_duration(int(purge)) if purge else '—'}"
                 )
         return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild) + selected + _pending_config_text(lines)
 
