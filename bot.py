@@ -1682,6 +1682,177 @@ class HeraldoOrientationSetupView(discord.ui.View):
         )
 
 
+class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · Horario"):
+    weekday_input = discord.ui.TextInput(
+        label="Día (0=Lunes ... 6=Domingo)",
+        required=True,
+        max_length=1,
+    )
+    hour_input = discord.ui.TextInput(
+        label="Hora (0-23, hora RD)",
+        required=True,
+        max_length=2,
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.weekday_input.default = str(get_motw_weekday(guild_id))
+        self.hour_input.default = str(get_motw_hour(guild_id))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            weekday = int(str(self.weekday_input).strip())
+            hour = int(str(self.hour_input).strip())
+            if weekday not in range(7) or hour not in range(24):
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Día debe estar entre 0 y 6, y hora entre 0 y 23.",
+                ephemeral=True,
+            )
+            return
+        set_motw_schedule(self.guild_id, weekday, hour)
+        motw_mark_current_slot(self.guild_id)
+        await interaction.response.send_message(
+            f"✅ Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {hour}:00** (hora RD).",
+            ephemeral=True,
+        )
+
+
+class HeraldoMotwSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        channel = discord.ui.ChannelSelect(
+            placeholder="Seleccionar canal de Miembro de la Semana",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        channel.callback = self.save_channel
+        self.add_item(channel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def save_channel(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not (perms.view_channel and perms.send_messages and perms.embed_links):
+            await interaction.response.send_message(
+                "❌ El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.",
+                ephemeral=True,
+            )
+            return
+        set_motw_channel_id(self.guild_id, channel.id)
+        await interaction.response.send_message(
+            f"✅ Miembro de la Semana se anunciará en {channel.mention}.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="🕒 Horario", style=discord.ButtonStyle.primary, row=1)
+    async def schedule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoMotwScheduleModal(self.guild_id))
+
+    @discord.ui.button(label="🧪 Probar", style=discord.ButtonStyle.secondary, row=1)
+    async def test(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+        error = await announce_member_of_the_week(self.guild_id, reset=False)
+        await interaction.followup.send(
+            "✅ Anuncio de prueba publicado." if not error else f"❌ No pude publicar: {error}",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
+            embed=None,
+            view=HeraldoSetupView(self.guild_id, self.owner_id),
+        )
+
+
+class HeraldoHoneypotSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        channel = discord.ui.ChannelSelect(
+            placeholder="Seleccionar / añadir canal trampa",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        channel.callback = self.save_trap
+        self.add_item(channel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def save_trap(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            return
+        reason = hp_protected_channel_reason(channel)
+        if reason:
+            await interaction.response.send_message(f"❌ Ese canal no puede ser trampa porque {reason}.", ephemeral=True)
+            return
+        hp_add_trap(self.guild_id, channel.id)
+        err = await hp_sync_warning(channel)
+        await interaction.response.send_message(
+            f"✅ {channel.mention} quedó añadido al Honeypot." + (f"\n⚠️ {err}" if err else ""),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⏯️ Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
+    async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = honeypot_enabled(self.guild_id)
+        if not enabled and not hp_traps(self.guild_id):
+            await interaction.response.send_message(
+                "❌ Añade al menos un canal trampa antes de activar el Honeypot.",
+                ephemeral=True,
+            )
+            return
+        hp_setting_set(self.guild_id, "honeypot_enabled", "0" if enabled else "1")
+        hp_setting_set(self.guild_id, "honeypot_paused", "0")
+        await interaction.response.send_message(
+            "✅ Honeypot desactivado." if enabled else "✅ Honeypot activado.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="🖼️ Editar aviso", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+
+    @discord.ui.button(label="📝 Texto aviso", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_text(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HoneypotWarningModal(self.guild_id))
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
+            embed=None,
+            view=HeraldoSetupView(self.guild_id, self.owner_id),
+        )
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -1730,7 +1901,42 @@ class HeraldoSetupView(discord.ui.View):
     async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
 
-    @discord.ui.button(label="🛠️ Crear faltantes", style=discord.ButtonStyle.success, row=1)
+
+    @discord.ui.button(label="🍯 Honeypot", style=discord.ButtonStyle.secondary, row=1)
+    async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🍯 **El Heraldo · Honeypot**\n\n" + hp_config_summary(interaction.guild),
+            embed=None,
+            view=HeraldoHoneypotSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="👑 Miembro semanal", style=discord.ButtonStyle.secondary, row=1)
+    async def motw(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        channel = interaction.guild.get_channel(get_motw_channel_id(self.guild_id))
+        await interaction.response.edit_message(
+            content=(
+                "👑 **El Heraldo · Miembro de la Semana**\n\n"
+                f"Canal: {channel.mention if channel else 'no configurado'}\n"
+                f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} "
+                f"a las {get_motw_hour(self.guild_id)}:00** (hora RD)"
+            ),
+            embed=None,
+            view=HeraldoMotwSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="⚖️ Condenados", style=discord.ButtonStyle.secondary, row=2)
+    async def condemned(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "☠️ **Editor de la tarjeta de condenados**\n"
+                "Usa las mismas opciones de la configuración de condenados ya existente. "
+                "Los cambios se guardan únicamente para este servidor."
+            ),
+            embed=condemnation_template_preview(interaction.guild, interaction.user),
+            view=CondemnationTemplateEditorView(self.owner_id),
+        )
+
+    @discord.ui.button(label="🛠️ Crear faltantes", style=discord.ButtonStyle.success, row=2)
     async def create_missing(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         result = await bootstrap_guild_configuration(interaction.guild, create_missing=True)
@@ -1742,7 +1948,7 @@ class HeraldoSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="🔄 Actualizar panel", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="🔄 Actualizar panel", style=discord.ButtonStyle.secondary, row=3)
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=(
@@ -1754,7 +1960,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=3)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
