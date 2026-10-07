@@ -9519,34 +9519,90 @@ CASE_CODE_MULTIPLIER = 1009
 CASE_CODE_OFFSET = 20000000
 
 
-def moderation_case_code(number: int) -> str:
-    if number < 1 or number >= CASE_CODE_MODULUS:
-        raise ValueError("El número de expediente excede el rango admitido.")
-    encoded = (number * CASE_CODE_MULTIPLIER + CASE_CODE_OFFSET) % CASE_CODE_MODULUS
+def _legacy_case_code(number: int) -> str:
+    value = (number * CASE_CODE_MULTIPLIER + CASE_CODE_OFFSET) % CASE_CODE_MODULUS
     chars = []
     for _ in range(6):
-        encoded, digit = divmod(encoded, 36)
+        value, digit = divmod(value, 36)
         chars.append(CASE_CODE_ALPHABET[digit])
     return "C" + "".join(reversed(chars))
 
 
-def moderation_case_number(code: str) -> int:
+def _case_code_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS moderation_case_codes ("
+        "guild_id INTEGER NOT NULL, case_number INTEGER NOT NULL, "
+        "code TEXT NOT NULL UNIQUE, PRIMARY KEY(guild_id, case_number))"
+    )
+
+
+def moderation_case_code(number: int, guild_id: int) -> str:
+    """Obtener o asignar de forma persistente un código público aleatorio único."""
+    import secrets
+    conn = db_connect()
+    try:
+        _case_code_table(conn)
+        row = conn.execute(
+            "SELECT code FROM moderation_case_codes WHERE guild_id=? AND case_number=?",
+            (guild_id, number),
+        ).fetchone()
+        if row:
+            return str(row[0])
+        for _ in range(30):
+            code = "".join(secrets.choice(CASE_CODE_ALPHABET) for _ in range(7))
+            if not any(ch.isalpha() for ch in code) or not any(ch.isdigit() for ch in code):
+                continue
+            try:
+                conn.execute(
+                    "INSERT INTO moderation_case_codes(guild_id, case_number, code) VALUES (?,?,?)",
+                    (guild_id, number, code),
+                )
+                return code
+            except sqlite3.IntegrityError:
+                row = conn.execute(
+                    "SELECT code FROM moderation_case_codes WHERE guild_id=? AND case_number=?",
+                    (guild_id, number),
+                ).fetchone()
+                if row:
+                    return str(row[0])
+        raise RuntimeError("No fue posible generar un identificador único.")
+    finally:
+        conn.close()
+
+
+def moderation_case_number(code: str, guild_id: int) -> int:
     value = str(code).strip().upper()
     if value.isdecimal():
-        return int(value)  # compatibilidad con comandos antiguos
+        return int(value)
     if value.startswith("C-") and value[2:].isdecimal():
-        return int(value[2:])  # referencias históricas C-000001
-    if len(value) != 7 or not value.startswith("C") or any(
-        ch not in CASE_CODE_ALPHABET for ch in value[1:]
-    ):
-        raise ValueError("Código inválido. Introduzca un identificador de siete caracteres.")
-    encoded = 0
-    for ch in value[1:]:
-        encoded = encoded * 36 + CASE_CODE_ALPHABET.index(ch)
-    number = ((encoded - CASE_CODE_OFFSET) * pow(CASE_CODE_MULTIPLIER, -1, CASE_CODE_MODULUS)) % CASE_CODE_MODULUS
-    if number < 1 or moderation_case_code(number) != value:
-        raise ValueError("Código de expediente inválido.")
-    return number
+        return int(value[2:])
+    if len(value) != 7 or any(ch not in CASE_CODE_ALPHABET for ch in value):
+        raise ValueError("Código inválido. Introduzca siete caracteres alfanuméricos.")
+    conn = db_connect()
+    try:
+        _case_code_table(conn)
+        row = conn.execute(
+            "SELECT case_number FROM moderation_case_codes WHERE guild_id=? AND code=?",
+            (guild_id, value),
+        ).fetchone()
+        if row:
+            return int(row[0])
+        # Compatibilidad con códigos de la versión anterior.
+        if value.startswith("C"):
+            encoded = 0
+            for ch in value[1:]:
+                encoded = encoded * 36 + CASE_CODE_ALPHABET.index(ch)
+            number = ((encoded - CASE_CODE_OFFSET) * pow(CASE_CODE_MULTIPLIER, -1, CASE_CODE_MODULUS)) % CASE_CODE_MODULUS
+            if number >= 1 and _legacy_case_code(number) == value:
+                existing = conn.execute(
+                    "SELECT 1 FROM moderation_cases WHERE guild_id=? AND case_number=?",
+                    (guild_id, number),
+                ).fetchone()
+                if existing:
+                    return number
+    finally:
+        conn.close()
+    raise ValueError("No existe un expediente con ese identificador.")
 
 
 def moderation_case_next_number(guild_id: int) -> int:
@@ -9638,6 +9694,7 @@ def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: 
          moderation_case_message_history(guild_id, user_id)),
     )
     conn.close()
+    moderation_case_code(case_number, guild_id)
     return case_number
 
 
@@ -9711,7 +9768,7 @@ async def moderation_verified_proof(guild: discord.Guild, proof: str | None) -> 
 
 def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Embed:
     embed = discord.Embed(
-        title=f"Expediente {moderation_case_code(row['case_number'])} · {row['type']}",
+        title=f"Expediente {moderation_case_code(row['case_number'], int(row['guild_id']))} · {row['type']}",
         color=discord.Color.orange() if row["open"] else discord.Color.dark_grey(),
         timestamp=datetime.fromisoformat(row["created_at"]),
     )
@@ -9742,7 +9799,7 @@ def moderation_cases_summary(guild: discord.Guild) -> str:
     lines = []
     for row in rows:
         state = "abierto" if row["open"] else "cerrado"
-        lines.append(f"**{moderation_case_code(row['case_number'])}** · {row['type']} · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
+        lines.append(f"**{moderation_case_code(row['case_number'], int(row['guild_id']))}** · {row['type']} · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
     return "**El Heraldo · Moderation · Cases**\n\n" + "\n\n".join(lines)
 
 
@@ -9789,10 +9846,10 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
     dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
     await log_embed(
         guild, f"Moderation · {case_type}",
-        f"Expediente {moderation_case_code(case_number)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}",
+        f"Expediente {moderation_case_code(case_number, guild.id)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}",
         discord.Color.orange(),
     )
-    return True, f"Expediente {moderation_case_code(case_number)} creado.", case_number
+    return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado.", case_number
 
 
 async def moderation_close_case_effect(guild: discord.Guild, row: sqlite3.Row, actor: discord.Member) -> str:
@@ -9802,13 +9859,13 @@ async def moderation_close_case_effect(guild: discord.Guild, row: sqlite3.Row, a
         member = guild.get_member(user_id)
         if member is not None:
             try:
-                await member.timeout(None, reason=f"Cierre del expediente {moderation_case_code(row['case_number'])}")
+                await member.timeout(None, reason=f"Cierre del expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
                 return "Timeout retirado."
             except discord.HTTPException:
                 return "Caso cerrado; no pude retirar el timeout."
     if case_type == "BAN":
         try:
-            await guild.unban(discord.Object(id=user_id), reason=f"Cierre del expediente {moderation_case_code(row['case_number'])}")
+            await guild.unban(discord.Object(id=user_id), reason=f"Cierre del expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
             return "Ban retirado."
         except (discord.NotFound, discord.HTTPException):
             return "Caso cerrado; el usuario no estaba baneado o no pude retirarlo."
@@ -11237,7 +11294,7 @@ def condemnation_case_id(
 ) -> str:
     # Las condenas nuevas usan el mismo identificador único que Moderation Cases.
     if moderation_case_number is not None:
-        return moderation_case_code(moderation_case_number)
+        return moderation_case_code(moderation_case_number, member.guild.id)
     # Compatibilidad para expedientes antiguos creados antes de Moderation Cases.
     return f"C-{when.astimezone(STREAK_TZ):%Y%m%d}-{member.id % 100000:05d}"
 
@@ -11811,17 +11868,17 @@ async def moderation_case_expiry_loop() -> None:
             if case_type == "MUTE" and member is not None and expires > now + timedelta(days=27):
                 current = member.timed_out_until
                 if current is None or current < now + timedelta(days=27):
-                    await member.timeout(min(expires, now + timedelta(days=28)), reason=f"Extensión del expediente {moderation_case_code(row['case_number'])}")
+                    await member.timeout(min(expires, now + timedelta(days=28)), reason=f"Extensión del expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
             if expires > now:
                 continue
             if case_type == "MUTE" and member is not None:
                 try:
-                    await member.timeout(None, reason=f"Expiró el expediente {moderation_case_code(row['case_number'])}")
+                    await member.timeout(None, reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
                 except discord.HTTPException:
                     pass
             elif case_type == "BAN":
                 try:
-                    await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró el expediente {moderation_case_code(row['case_number'])}")
+                    await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
                 except (discord.NotFound, discord.HTTPException):
                     pass
             moderation_case_close(guild.id, int(row["case_number"]), closed_by=None, resolution="Expirado automáticamente")
@@ -13733,7 +13790,7 @@ async def moderation_ban(interaction: discord.Interaction, usuario: discord.Memb
 @app_commands.guild_only()
 async def moderation_caseinfo(interaction: discord.Interaction, caso: str) -> None:
     try:
-        case_number = moderation_case_number(caso)
+        case_number = moderation_case_number(caso, interaction.guild.id)
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
         return
@@ -13757,7 +13814,7 @@ async def moderation_caselist(interaction: discord.Interaction, usuario: Optiona
     if not rows:
         await interaction.response.send_message("No encontré casos con esos filtros.", ephemeral=True)
         return
-    lines = [f"{moderation_case_code(row['case_number'])} · {row['type']} · <@{row['user_id']}> · {'abierto' if row['open'] else 'cerrado'} · {str(row['reason'])[:90]}" for row in rows]
+    lines = [f"{moderation_case_code(row['case_number'], int(row['guild_id']))} · {row['type']} · <@{row['user_id']}> · {'abierto' if row['open'] else 'cerrado'} · {str(row['reason'])[:90]}" for row in rows]
     await interaction.response.send_message("\n".join(lines)[:1900], ephemeral=True)
 
 
@@ -13767,7 +13824,7 @@ async def moderation_caselist(interaction: discord.Interaction, usuario: Optiona
 @app_commands.guild_only()
 async def moderation_caseupdate(interaction: discord.Interaction, caso: str, motivo: Optional[str] = None, duracion: Optional[str] = None, notas: Optional[str] = None) -> None:
     try:
-        case_number = moderation_case_number(caso)
+        case_number = moderation_case_number(caso, interaction.guild.id)
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
         return
@@ -13795,7 +13852,7 @@ async def moderation_caseupdate(interaction: discord.Interaction, caso: str, mot
 @app_commands.guild_only()
 async def moderation_setproof(interaction: discord.Interaction, caso: str, prueba: str) -> None:
     try:
-        case_number = moderation_case_number(caso)
+        case_number = moderation_case_number(caso, interaction.guild.id)
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
         return
@@ -13814,7 +13871,7 @@ async def moderation_setproof(interaction: discord.Interaction, caso: str, prueb
 @app_commands.guild_only()
 async def moderation_caseclose(interaction: discord.Interaction, caso: str, motivo: Optional[str] = None) -> None:
     try:
-        case_number = moderation_case_number(caso)
+        case_number = moderation_case_number(caso, interaction.guild.id)
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
         return
@@ -13828,7 +13885,7 @@ async def moderation_caseclose(interaction: discord.Interaction, caso: str, moti
     await interaction.response.defer(ephemeral=True, thinking=True)
     effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
     moderation_case_close(interaction.guild.id, case_number, closed_by=interaction.user.id, resolution=motivo or "Cerrado manualmente")
-    await interaction.followup.send(f"Expediente {moderation_case_code(case_number)} cerrado. {effect}", ephemeral=True)
+    await interaction.followup.send(f"Expediente {moderation_case_code(case_number, interaction.guild.id)} cerrado. {effect}", ephemeral=True)
 
 
 @bot.tree.command(name="casedelete", description="Elimina definitivamente un caso de Moderation.")
@@ -13836,7 +13893,7 @@ async def moderation_caseclose(interaction: discord.Interaction, caso: str, moti
 @app_commands.guild_only()
 async def moderation_casedelete(interaction: discord.Interaction, caso: str) -> None:
     try:
-        case_number = moderation_case_number(caso)
+        case_number = moderation_case_number(caso, interaction.guild.id)
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
         return
@@ -13844,7 +13901,7 @@ async def moderation_casedelete(interaction: discord.Interaction, caso: str) -> 
         await interaction.response.send_message("No existe ese expediente.", ephemeral=True)
         return
     await interaction.response.send_message(
-        f"Expediente {moderation_case_code(case_number)} eliminado.", ephemeral=True,
+        f"Expediente {moderation_case_code(case_number, interaction.guild.id)} eliminado.", ephemeral=True,
     )
 
 @bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
