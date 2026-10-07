@@ -1853,6 +1853,228 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         )
 
 
+def heraldo_permissions_summary(guild: discord.Guild) -> str:
+    lines: list[str] = []
+    channel_defs = (
+        ("logs", "Logs"),
+        ("condemned", "Condenados"),
+        ("honeypot", "Honeypot"),
+        ("verification", "Verificación"),
+        ("questions", "Dudas"),
+    )
+    for key, label in channel_defs:
+        channel_id = get_guild_channel_id(guild.id, key)
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if not isinstance(channel, discord.TextChannel):
+            lines.append(f"❌ **{label}:** no configurado")
+            continue
+        perms = channel.permissions_for(guild.me)
+        missing: list[str] = []
+        if not perms.view_channel:
+            missing.append("Ver canal")
+        if not perms.send_messages:
+            missing.append("Enviar mensajes")
+        if key in {"logs", "condemned", "honeypot", "verification"} and not perms.embed_links:
+            missing.append("Insertar enlaces")
+        if key == "honeypot" and not perms.manage_messages:
+            missing.append("Gestionar mensajes")
+        lines.append(
+            f"{'✅' if not missing else '⚠️'} **{label}:** {channel.mention}"
+            + (f" · faltan: {', '.join(missing)}" if missing else "")
+        )
+
+    role_defs = (
+        ("sin_verificar", "Sin Verificar"),
+        ("tentado", "Verificación / orientación"),
+        ("condenado", "Condenado"),
+    )
+    for key, label in role_defs:
+        role_id = get_guild_role_id(guild.id, key)
+        role = guild.get_role(role_id) if role_id else None
+        if role is None:
+            lines.append(f"❌ **Rol {label}:** no configurado")
+            continue
+        problem = None
+        if role.is_default():
+            problem = "es @everyone"
+        elif role.managed:
+            problem = "está gestionado por Discord o una integración"
+        elif role >= guild.me.top_role:
+            problem = "está al mismo nivel o por encima del rol del Heraldo"
+        lines.append(
+            f"{'✅' if problem is None else '⚠️'} **Rol {label}:** {role.mention}"
+            + (f" · {problem}" if problem else "")
+        )
+    return "\n".join(lines)
+
+
+class HeraldoVerificationSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+        role_select = discord.ui.RoleSelect(
+            placeholder="Seleccionar rol que se otorga al verificarse",
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        role_select.callback = self.save_role
+        self.add_item(role_select)
+
+        channel_select = discord.ui.ChannelSelect(
+            placeholder="Seleccionar canal de verificación",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+        channel_select.callback = self.save_channel
+        self.add_item(channel_select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def save_role(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
+        if role is None:
+            await interaction.response.send_message("❌ No pude localizar ese rol.", ephemeral=True)
+            return
+        problem = verify_role_problem(role, interaction.guild)
+        if problem:
+            await interaction.response.send_message(f"❌ No guardé el rol: {role.mention} {problem}.", ephemeral=True)
+            return
+        guild_config_set(self.guild_id, "verify_role_id", str(role.id))
+        guild_resource_set(self.guild_id, "role", "tentado", role.id)
+        await interaction.response.send_message(
+            f"✅ Rol de verificación guardado: {role.mention}.",
+            ephemeral=True,
+        )
+
+    async def save_channel(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        missing = []
+        if not perms.view_channel:
+            missing.append("Ver canal")
+        if not perms.send_messages:
+            missing.append("Enviar mensajes")
+        if missing:
+            await interaction.response.send_message(
+                f"❌ No guardé el canal: faltan **{', '.join(missing)}** en {channel.mention}.",
+                ephemeral=True,
+            )
+            return
+        guild_resource_set(self.guild_id, "channel", "verification", channel.id)
+        guild_config_set(self.guild_id, "verify_channel_id", str(channel.id))
+        await interaction.response.send_message(
+            f"✅ Canal de verificación guardado: {channel.mention}.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="📝 Textos", style=discord.ButtonStyle.secondary, row=2)
+    async def texts(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
+
+    @discord.ui.button(label="📌 Publicar / actualizar", style=discord.ButtonStyle.secondary, row=2)
+    async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        channel_id = get_guild_channel_id(self.guild_id, "verification")
+        channel = interaction.guild.get_channel(channel_id) if channel_id else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "❌ Configura primero un canal de verificación.",
+                ephemeral=True,
+            )
+            return
+        role = interaction.guild.get_role(get_verify_role_id(self.guild_id))
+        if role is None:
+            await interaction.response.send_message(
+                "❌ Configura primero un rol de verificación.",
+                ephemeral=True,
+            )
+            return
+        problem = verify_role_problem(role, interaction.guild)
+        if problem:
+            await interaction.response.send_message(f"❌ {role.mention} {problem}.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not (perms.view_channel and perms.send_messages):
+            await interaction.response.send_message(
+                "❌ El Heraldo necesita Ver canal y Enviar mensajes para publicar el panel.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        ref = guild_config_get(self.guild_id, "verify_panel_ref")
+        if ref and ref.count(":") == 1:
+            try:
+                old_channel_id, old_message_id = (int(x) for x in ref.split(":"))
+                old_channel = interaction.guild.get_channel(old_channel_id)
+                if isinstance(old_channel, discord.TextChannel):
+                    old_message = await old_channel.fetch_message(old_message_id)
+                    await old_message.edit(
+                        content=render_vars(get_verify_panel_text(self.guild_id), VarContext(interaction.guild, None, old_channel), 2000),
+                        view=VerifyView(label=get_verify_button_label(self.guild_id)),
+                    )
+                    await interaction.followup.send(
+                        f"✅ Panel de verificación actualizado en {old_channel.mention}.",
+                        ephemeral=True,
+                    )
+                    return
+            except (ValueError, discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+        message = await channel.send(
+            content=render_vars(get_verify_panel_text(self.guild_id), VarContext(interaction.guild, None, channel), 2000),
+            view=VerifyView(label=get_verify_button_label(self.guild_id)),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        guild_config_set(self.guild_id, "verify_panel_ref", f"{channel.id}:{message.id}")
+        await interaction.followup.send(
+            f"✅ Panel de verificación publicado en {channel.mention}.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⏯️ Activar / desactivar", style=discord.ButtonStyle.primary, row=2)
+    async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = verify_enabled(self.guild_id)
+        if not enabled:
+            role = interaction.guild.get_role(get_verify_role_id(self.guild_id))
+            ref = guild_config_get(self.guild_id, "verify_panel_ref")
+            if role is None:
+                await interaction.response.send_message("❌ Configura primero un rol de verificación.", ephemeral=True)
+                return
+            if not ref:
+                await interaction.response.send_message(
+                    "❌ Publica primero el panel de verificación. No activé el timeout.",
+                    ephemeral=True,
+                )
+                return
+        guild_config_set(self.guild_id, "verify_enabled", "0" if enabled else "1")
+        await interaction.response.send_message(
+            "✅ Verificación automática desactivada." if enabled else "✅ Verificación automática activada.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
+            embed=None,
+            view=HeraldoSetupView(self.guild_id, self.owner_id),
+        )
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -1895,6 +2117,15 @@ class HeraldoSetupView(discord.ui.View):
             ),
             embed=None,
             view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
+        )
+
+
+    @discord.ui.button(label="✅ Verificación", style=discord.ButtonStyle.primary, row=0)
+    async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="✅ **El Heraldo · Verificación**\n\n" + verify_config_summary(interaction.guild),
+            embed=None,
+            view=HeraldoVerificationSetupView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="⚙️ Tiempos", style=discord.ButtonStyle.secondary, row=1)
@@ -1945,6 +2176,13 @@ class HeraldoSetupView(discord.ui.View):
             f"Canales creados: **{len(result.get('channels', []))}** · "
             f"roles creados: **{len(result.get('roles', []))}**.\n"
             "Los recursos existentes se reutilizaron; no se creó ningún canal de Anuncios, Reglas ni Recuperación.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="🧪 Revisar permisos", style=discord.ButtonStyle.secondary, row=3)
+    async def permissions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            "🧪 **Diagnóstico de configuración**\n\n" + heraldo_permissions_summary(interaction.guild),
             ephemeral=True,
         )
 
