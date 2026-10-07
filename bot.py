@@ -8573,10 +8573,10 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
 MODERATION_REPORT_MAX_REACTIONS = 10
 MODERATION_REPORT_ACTIONS = {"report", "timeout", "kick", "ban", "condemn"}
 MODERATION_REPORT_REACTION_DEFAULTS = (
-    {"emoji": "📢", "label": "Spam", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
-    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
-    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
-    {"emoji": "🔞", "label": "Posible menor de edad", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
+    {"emoji": "📢", "label": "Spam", "action": "timeout", "duration_minutes": 30, "threshold": 2, "delete_message": True},
+    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido", "action": "condemn", "duration_minutes": 1440, "threshold": 3, "delete_message": True},
+    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)", "action": "condemn", "duration_minutes": None, "threshold": 2, "delete_message": True},
+    {"emoji": "🔞", "label": "Posible menor de edad", "action": "ban", "duration_minutes": None, "threshold": 2, "delete_message": True},
 )
 _moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
 _reaction_condemn_pending: set[tuple[int, int]] = set()
@@ -8760,7 +8760,7 @@ async def execute_moderation_report_action(
             ok, note = await condemn_member(
                 target,
                 reason=reason,
-                duration_minutes=duration_minutes or condemnation_default_duration_minutes(guild.id),
+                duration_minutes=duration_minutes,
                 purge_spec=None,
                 origin="reaction_report",
                 applied_by=None,
