@@ -7465,7 +7465,7 @@ async def raid_expiry_loop() -> None:
 
 def raid_config_summary(guild: discord.Guild) -> str:
     role = guild.get_role(raid_ping_role_id(guild.id)) if raid_ping_role_id(guild.id) else None
-    min_age = raid_min_age_seconds(member.guild.id)
+    min_age = raid_min_age_seconds(guild.id)
     state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
     until = raid_until(guild.id)
     lines = [
