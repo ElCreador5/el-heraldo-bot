@@ -823,7 +823,7 @@ def join_roles_summary(guild: discord.Guild) -> str:
     )
 
 
-async def _assign_join_roles_now(member: discord.Member) -> tuple[bool, str]:
+async def _assign_join_roles_now(member: discord.Member, *, synchronization: bool = False) -> tuple[bool, str]:
     if member.bot or not join_roles_enabled(member.guild.id):
         return True, "No aplica."
 
@@ -833,11 +833,18 @@ async def _assign_join_roles_now(member: discord.Member) -> tuple[bool, str]:
     already_verified = verify_role_id and verify_role_id in {role.id for role in member.roles}
     sin_role_id = get_sin_verificado_role_id(member.guild.id)
 
+    row = db_get(member.guild.id, member.id) if synchronization else None
+    verification_pending = bool(row and row["verify_pending_at"]) if row is not None else False
+
     for role_id in role_ids:
         role = member.guild.get_role(role_id)
         if role is None:
             continue
         if already_verified and role.id == sin_role_id:
+            continue
+        # Sync no convierte miembros antiguos en "Sin Verificar": ese rol de estado
+        # solo se repara si el miembro ya estaba realmente pendiente de verificación.
+        if synchronization and role.id == sin_role_id and not verification_pending:
             continue
         if role in member.roles:
             continue
@@ -879,7 +886,7 @@ async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
     async for member in guild.fetch_members(limit=None):
         if member.bot:
             continue
-        ok, note = await _assign_join_roles_now(member)
+        ok, note = await _assign_join_roles_now(member, synchronization=True)
         if ok:
             if note.startswith("Asignados"):
                 assigned += 1
@@ -1610,9 +1617,15 @@ async def on_member_join(member: discord.Member) -> None:
         asyncio.create_task(assign_join_roles(member))
 
     if verify_enabled(member.guild.id):
-        now = datetime.now(timezone.utc)
-        db_set_verify_pending(member.guild.id, member.id, now)
-        asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
+        waiting_screening = (
+            join_roles_enabled(member.guild.id)
+            and join_roles_wait_screening(member.guild.id)
+            and getattr(member, "pending", False)
+        )
+        if not waiting_screening:
+            now = datetime.now(timezone.utc)
+            db_set_verify_pending(member.guild.id, member.id, now)
+            asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
 
 
 # ---------------------------------------------------------------------------
@@ -1722,6 +1735,14 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         and not getattr(after, "pending", False)
     ):
         asyncio.create_task(assign_join_roles(after))
+        verify_role_id_after_screening = get_verify_role_id(after.guild.id)
+        if (
+            verify_enabled(after.guild.id)
+            and verify_role_id_after_screening not in after_role_ids
+        ):
+            now = datetime.now(timezone.utc)
+            db_set_verify_pending(after.guild.id, after.id, now)
+            asyncio.create_task(schedule_verify_timeout(after.guild.id, after.id, now))
 
     # Si el rol de verificación aparece por cualquier medio, Sin Verificar se retira.
     verify_role_id = get_verify_role_id(after.guild.id)
