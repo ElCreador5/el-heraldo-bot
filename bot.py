@@ -2836,6 +2836,17 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
         )
 
 
+def heraldo_messages_command_content() -> str:
+    return (
+        "📝 **El Heraldo · Centro de mensajes**\n\n"
+        "Desde aquí puedes editar los paneles persistentes que sí admiten personalización. "
+        "Los cambios siguen separados por servidor y, cuando existe un panel ya publicado, "
+        "se actualiza sin crear duplicados.\n\n"
+        "**No aparecen aquí** paneles que solo muestran información real del bot o del servidor, "
+        "como Variables, comandos, diagnósticos, estados y listados."
+    )
+
+
 def heraldo_messages_setup_content() -> str:
     return (
         "✉️ **El Heraldo · Mensajes y paneles**\n\n"
@@ -2951,7 +2962,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
                     "Los casos históricos no se reescriben."
                 ),
                 embed=condemnation_template_preview(interaction.guild, interaction.user),
-                view=CondemnationTemplateEditorView(self.owner_id),
+                view=CondemnationTemplateEditorView(self.owner_id, return_to="messages_setup"),
             )
             return
 
@@ -3060,7 +3071,7 @@ class HeraldoSetupView(discord.ui.View):
                 "Los cambios se guardan únicamente para este servidor."
             ),
             embed=condemnation_template_preview(interaction.guild, interaction.user),
-            view=CondemnationTemplateEditorView(self.owner_id),
+            view=CondemnationTemplateEditorView(self.owner_id, return_to="setup"),
         )
 
     @discord.ui.button(label="✉️ Mensajes y paneles", style=discord.ButtonStyle.primary, row=2)
@@ -6718,9 +6729,10 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
     )
     button_label_input = discord.ui.TextInput(label="Texto del botón", required=False, max_length=80)
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, return_to: str = "setup") -> None:
         super().__init__()
         self.guild_id = guild_id
+        self.return_to = return_to
         self.title_input.default = condemnation_template_get(guild_id, "title")
         self.description_input.default = condemnation_template_get(self.guild_id, "description")
         self.color_input.default = condemnation_template_get(self.guild_id, "color")
@@ -6748,7 +6760,7 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
             interaction.guild.id, "button_label",
             str(self.button_label_input).strip() or CONDEMNATION_TEMPLATE_DEFAULTS["button_label"],
         )
-        await condemnation_template_editor_update(interaction, "Diseño actualizado.")
+        await condemnation_template_editor_update(interaction, "Diseño actualizado.", self.return_to)
 
 
 class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"):
@@ -6758,9 +6770,10 @@ class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"
     reason_input = discord.ui.TextInput(label="Motivo", required=True, max_length=256)
     when_input = discord.ui.TextInput(label="Cuándo", required=True, max_length=256)
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, return_to: str = "setup") -> None:
         super().__init__()
         self.guild_id = guild_id
+        self.return_to = return_to
         self.case_input.default = condemnation_template_get(guild_id, "label_case")
         self.user_input.default = condemnation_template_get(self.guild_id, "label_user")
         self.by_input.default = condemnation_template_get(self.guild_id, "label_by")
@@ -6777,7 +6790,7 @@ class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"
         )
         for key, value in values:
             condemnation_template_set(interaction.guild.id, key, value.strip())
-        await condemnation_template_editor_update(interaction, "Etiquetas principales actualizadas.")
+        await condemnation_template_editor_update(interaction, "Etiquetas principales actualizadas.", self.return_to)
 
 
 class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración"):
@@ -6788,9 +6801,10 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
         placeholder="Indefinida, 30m, 12h, 7d…",
     )
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, return_to: str = "setup") -> None:
         super().__init__()
         self.guild_id = guild_id
+        self.return_to = return_to
         current = condemnation_default_duration_minutes(guild_id)
         self.duration_input.default = format_duration(current) if current else "Indefinida"
 
@@ -6798,7 +6812,7 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
         value = str(self.duration_input).strip()
         if value.lower() in {"indefinida", "indefinido", "permanente", "hasta retirar", "0"}:
             set_condemnation_default_duration(None, interaction.guild.id)
-            await condemnation_template_editor_update(interaction, "Duración predeterminada: **Indefinida (hasta retirar)**.")
+            await condemnation_template_editor_update(interaction, "Duración predeterminada: **Indefinida (hasta retirar)**.", self.return_to)
             return
         try:
             minutes = parse_duration(value, 1, CONDEMNATION_MAX_MINUTES)
@@ -6806,7 +6820,7 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
             await interaction.response.send_message(f"❌ {e}", ephemeral=True)
             return
         set_condemnation_default_duration(value, interaction.guild.id)
-        await condemnation_template_editor_update(interaction, f"Duración predeterminada: **{format_duration(minutes)}**.")
+        await condemnation_template_editor_update(interaction, f"Duración predeterminada: **{format_duration(minutes)}**.", self.return_to)
 
 
 class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más etiquetas"):
@@ -6816,9 +6830,10 @@ class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más e
     roles_input = discord.ui.TextInput(label="Roles retirados", required=True, max_length=256)
     evidence_input = discord.ui.TextInput(label="Evidencia / mensaje", required=True, max_length=256)
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, return_to: str = "setup") -> None:
         super().__init__()
         self.guild_id = guild_id
+        self.return_to = return_to
         self.where_input.default = condemnation_template_get(self.guild_id, "label_where")
         self.duration_input.default = condemnation_template_get(self.guild_id, "label_duration")
         self.origin_input.default = condemnation_template_get(self.guild_id, "label_origin")
@@ -6835,7 +6850,7 @@ class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más e
         )
         for key, value in values:
             condemnation_template_set(interaction.guild.id, key, value.strip())
-        await condemnation_template_editor_update(interaction, "Más etiquetas actualizadas.")
+        await condemnation_template_editor_update(interaction, "Más etiquetas actualizadas.", self.return_to)
 
 
 class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace"):
@@ -6846,9 +6861,10 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
         placeholder="https://…",
     )
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, return_to: str = "setup") -> None:
         super().__init__()
         self.guild_id = guild_id
+        self.return_to = return_to
         self.url_input.default = condemnation_template_get(guild_id, "button_url")
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -6860,7 +6876,7 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
             )
             return
         condemnation_template_set(interaction.guild.id, "button_url", url)
-        await condemnation_template_editor_update(interaction, "Enlace del botón actualizado.")
+        await condemnation_template_editor_update(interaction, "Enlace del botón actualizado.", self.return_to)
 
 
 def condemnation_template_preview(guild: discord.Guild, member: discord.Member) -> discord.Embed:
@@ -6882,6 +6898,7 @@ def condemnation_template_preview(guild: discord.Guild, member: discord.Member) 
 async def condemnation_template_editor_update(
     interaction: discord.Interaction,
     notice: str | None = None,
+    return_to: str = "setup",
 ) -> None:
     guild = interaction.guild
     if guild is None:
@@ -6892,7 +6909,7 @@ async def condemnation_template_editor_update(
         return
 
     embed = condemnation_template_preview(guild, interaction.user)
-    view = CondemnationTemplateEditorView(interaction.user.id)
+    view = CondemnationTemplateEditorView(interaction.user.id, return_to=return_to)
     content = (
         "☠️ **Editor de la tarjeta de condenados**\n"
         "Cada sección se modifica mediante un formulario. Los cambios se guardan "
@@ -6925,9 +6942,10 @@ async def condemnation_template_editor_update(
 
 
 class CondemnationTemplateEditorView(discord.ui.View):
-    def __init__(self, owner_id: int) -> None:
+    def __init__(self, owner_id: int, return_to: str = "setup") -> None:
         super().__init__(timeout=900)
         self.owner_id = owner_id
+        self.return_to = return_to
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
@@ -6940,23 +6958,23 @@ class CondemnationTemplateEditorView(discord.ui.View):
 
     @discord.ui.button(label="✏️ Diseño", style=discord.ButtonStyle.primary, row=0)
     async def edit_core(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationCoreModal(interaction.guild.id))
+        await interaction.response.send_modal(CondemnationCoreModal(interaction.guild.id, self.return_to))
 
     @discord.ui.button(label="🏷️ Etiquetas", style=discord.ButtonStyle.primary, row=0)
     async def edit_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationDetailsModal(interaction.guild.id))
+        await interaction.response.send_modal(CondemnationDetailsModal(interaction.guild.id, self.return_to))
 
     @discord.ui.button(label="🏷️ Más etiquetas", style=discord.ButtonStyle.primary, row=0)
     async def edit_more_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationMoreDetailsModal(interaction.guild.id))
+        await interaction.response.send_modal(CondemnationMoreDetailsModal(interaction.guild.id, self.return_to))
 
     @discord.ui.button(label="🔗 Enlace del botón", style=discord.ButtonStyle.secondary, row=1)
     async def edit_button_url(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationButtonUrlModal(interaction.guild.id))
+        await interaction.response.send_modal(CondemnationButtonUrlModal(interaction.guild.id, self.return_to))
 
     @discord.ui.button(label="⏳ Duración", style=discord.ButtonStyle.secondary, row=1)
     async def edit_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationDurationModal(interaction.guild.id))
+        await interaction.response.send_modal(CondemnationDurationModal(interaction.guild.id, self.return_to))
 
     @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=1)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6975,11 +6993,26 @@ class CondemnationTemplateEditorView(discord.ui.View):
         await condemnation_template_editor_update(
             interaction,
             "La plantilla de condenados volvió a sus valores predeterminados.",
+            self.return_to,
         )
 
 
-    @discord.ui.button(label="⬅️ Volver a /setup", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back_to_heraldo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.return_to == "messages_command":
+            await interaction.response.edit_message(
+                content=heraldo_messages_command_content(),
+                embed=None,
+                view=HeraldoMessagesView(interaction.guild.id, self.owner_id),
+            )
+            return
+        if self.return_to == "messages_setup":
+            await interaction.response.edit_message(
+                content=heraldo_messages_setup_content(),
+                embed=None,
+                view=HeraldoMessagesSetupView(interaction.guild.id, self.owner_id),
+            )
+            return
         await heraldo_setup_go_home(interaction, interaction.guild.id, self.owner_id)
 
 
@@ -7004,7 +7037,7 @@ async def condenar_template(interaction: discord.Interaction) -> None:
             "automáticamente y la vista previa se actualiza al terminar cada formulario."
         ),
         embed=condemnation_template_preview(interaction.guild, interaction.user),
-        view=CondemnationTemplateEditorView(interaction.user.id),
+        view=CondemnationTemplateEditorView(interaction.user.id, return_to="setup"),
         ephemeral=True,
     )
 
@@ -10762,7 +10795,7 @@ class HeraldoMessagesView(discord.ui.View):
                 "Edita la apariencia y las etiquetas de la tarjeta persistente de condena."
             ),
             embed=condemnation_template_preview(interaction.guild, interaction.user),
-            view=CondemnationTemplateEditorView(self.owner_id),
+            view=CondemnationTemplateEditorView(self.owner_id, return_to="messages_command"),
         )
 
     @discord.ui.button(label="🧩 Embeds personalizados", style=discord.ButtonStyle.secondary, row=1)
@@ -10793,12 +10826,7 @@ class HeraldoMessagesView(discord.ui.View):
 @app_commands.guild_only()
 async def mensajes_command(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
-        "📝 **El Heraldo · Centro de mensajes**\n\n"
-        "Desde aquí puedes editar los paneles persistentes que sí admiten personalización. "
-        "Los cambios siguen separados por servidor y, cuando existe un panel ya publicado, "
-        "se actualiza sin crear duplicados.\n\n"
-        "**No aparecen aquí** paneles que solo muestran información real del bot o del servidor, "
-        "como Variables, comandos, diagnósticos, estados y listados.",
+        heraldo_messages_command_content(),
         view=HeraldoMessagesView(interaction.guild.id, interaction.user.id),
         ephemeral=True,
     )
