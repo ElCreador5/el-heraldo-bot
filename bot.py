@@ -3917,8 +3917,8 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Rol de castigo:** {f'<@&{hp_punish_role_id(guild.id)}>' if hp_punish_role_id(guild.id) else '—'}",
         f"**Purga al castigado:** {format_purge_spec(*hp_purge_spec(guild.id))}",
         f"**Duración del timeout:** {format_duration(hp_timeout_minutes(guild.id))}",
-        f"**Aviso fijado:** {'sí' if hp_warning_enabled(channel.guild.id) else 'no'}"
-        + (" (texto personalizado)" if hp_setting_get(guild_id, "honeypot_warning_text") else " (texto por defecto)"),
+        f"**Aviso fijado:** {'sí' if hp_warning_enabled(guild.id) else 'no'}"
+        + (" (texto personalizado)" if hp_setting_get(guild.id, "honeypot_warning_text") else " (texto por defecto)"),
         f"**Rol a mencionar en reportes:** {ping}",
         f"**Roles exentos:** {', '.join(f'<@&{i}>' for i in hp_exempt_ids(guild.id, 'role')) or '—'}",
         f"**Miembros exentos:** {', '.join(f'<@{i}>' for i in hp_exempt_ids(guild.id, 'member')) or '—'}",
