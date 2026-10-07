@@ -1928,6 +1928,14 @@ async def on_ready() -> None:
             await condemnation_reconcile(guild)
         except Exception:
             traceback.print_exc()
+
+        setup_view_errors = validate_setup_view_layouts(guild.id)
+        if setup_view_errors:
+            print(f"❌ Autoprueba /setup falló en {guild.name}:")
+            for error in setup_view_errors:
+                print(f"   - {error}")
+        else:
+            print(f"✅ Autoprueba /setup correcta en {guild.name}.")
     if not member_of_the_week_loop.is_running():
         member_of_the_week_loop.start()
     if not join_roles_sync_loop.is_running():
@@ -2723,12 +2731,12 @@ class HeraldoRoleSetupView(discord.ui.View):
             ("tentado", "🧭 En orientación"),
             ("condenado", "⚖️ Condenado"),
         )
-        for key, label in definitions:
+        for row_index, (key, label) in enumerate(definitions):
             select = discord.ui.RoleSelect(
                 placeholder=f"Seleccionar rol · {label}",
                 min_values=1,
                 max_values=1,
-                row=len(self.children),
+                row=row_index,
             )
             select.callback = self._make_callback(key, label)
             self.add_item(select)
@@ -5751,6 +5759,32 @@ class HeraldoMessagesSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+def validate_setup_view_layouts(guild_id: int) -> list[str]:
+    """Construye las vistas de /setup para detectar errores de layout al arrancar."""
+    factories = [
+        ("HeraldoSetupView", lambda: HeraldoSetupView(guild_id, 0)),
+        ("HeraldoChannelSetupView", lambda: HeraldoChannelSetupView(guild_id, 0)),
+        ("HeraldoRoleSetupView", lambda: HeraldoRoleSetupView(guild_id, 0)),
+        ("HeraldoOrientationSetupView", lambda: HeraldoOrientationSetupView(guild_id, 0)),
+        ("HeraldoMotwSetupView", lambda: HeraldoMotwSetupView(guild_id, 0)),
+        ("HeraldoHoneypotSetupView", lambda: HeraldoHoneypotSetupView(guild_id, 0)),
+        ("HeraldoVerificationSetupView", lambda: HeraldoVerificationSetupView(guild_id, 0)),
+        ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
+        ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
+        ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
+    ]
+    errors: list[str] = []
+    for name, factory in factories:
+        try:
+            view = factory()
+            if len(view.children) > 25:
+                errors.append(f"{name}: {len(view.children)} componentes; Discord permite 25.")
+            view.stop()
+        except Exception as exc:
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+    return errors
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -5765,7 +5799,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="📋 Configurar canales", style=discord.ButtonStyle.primary, row=0)
     async def channels(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content=(
                 "🪽 **El Heraldo · Canales del sistema**\n\n"
                 + heraldo_channels_summary(interaction.guild)
@@ -5778,7 +5813,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="👥 Configurar roles", style=discord.ButtonStyle.primary, row=0)
     async def roles(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content="🪽 **El Heraldo · Roles del sistema**\n\nSelecciona roles existentes. Nada se crea desde esta sección.",
             embed=None,
             view=HeraldoRoleSetupView(self.guild_id, self.owner_id),
@@ -5786,7 +5822,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="🧭 Roles de orientación", style=discord.ButtonStyle.primary, row=0)
     async def orientation(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(interaction.guild),
             embed=None,
             view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
@@ -5795,7 +5832,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="✅ Verificación de edad", style=discord.ButtonStyle.primary, row=0)
     async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content="✅ **El Heraldo · Verificación**\n\n" + verify_config_summary(interaction.guild),
             embed=None,
             view=HeraldoVerificationSetupView(self.guild_id, self.owner_id),
@@ -5808,7 +5846,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="🚪 Join Roles", style=discord.ButtonStyle.secondary, row=1)
     async def join_roles(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
             embed=None,
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
@@ -5816,7 +5855,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="🍯 Honeypot", style=discord.ButtonStyle.secondary, row=1)
     async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content="🍯 **El Heraldo · Honeypot**\n\n" + hp_config_summary(interaction.guild),
             embed=None,
             view=HeraldoHoneypotSetupView(self.guild_id, self.owner_id),
@@ -5824,7 +5864,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="🛡️ Raid Protection", style=discord.ButtonStyle.secondary, row=1)
     async def raid_protection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content="🛡️ **El Heraldo · Raid Protection**\n\n" + raid_config_summary(interaction.guild),
             embed=None,
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
@@ -5832,8 +5873,9 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="👑 Miembro de la semana", style=discord.ButtonStyle.secondary, row=1)
     async def motw(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
         channel = interaction.guild.get_channel(get_motw_channel_id(self.guild_id))
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=(
                 "👑 **El Heraldo · Miembro de la Semana**\n\n"
                 f"Canal: {channel.mention if channel else 'no configurado'}\n"
@@ -5846,7 +5888,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="⚖️ Tarjeta de condena", style=discord.ButtonStyle.secondary, row=2)
     async def condemned(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content=(
                 "☠️ **Editor de la tarjeta de condenados**\n"
                 "Usa las mismas opciones de la configuración de condenados ya existente. "
@@ -5858,7 +5901,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="✉️ Mensajes y paneles", style=discord.ButtonStyle.primary, row=2)
     async def messages(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(
             content=heraldo_messages_setup_content(),
             embed=None,
             view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
@@ -5866,7 +5910,8 @@ class HeraldoSetupView(discord.ui.View):
 
     @discord.ui.button(label="🧪 Revisar configuración", style=discord.ButtonStyle.secondary, row=2)
     async def permissions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send(
             "🧪 **Diagnóstico de configuración**\n\n" + heraldo_permissions_summary(interaction.guild),
             ephemeral=True,
         )
@@ -5874,7 +5919,8 @@ class HeraldoSetupView(discord.ui.View):
     @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
-        await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
+        await interaction.response.defer(ephemeral=True)
+        await interaction.edit_original_response(content="Panel de configuración cerrado.", view=None)
 
 
 @bot.tree.command(name="setup", description="Configura las opciones generales de El Heraldo en este servidor.")
