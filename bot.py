@@ -8258,7 +8258,7 @@ async def joinroles_sync_command(interaction: discord.Interaction) -> None:
         f"**{skipped}** no necesitaron cambios."
     )
     if errors:
-        text += f"\n⚠️ **{len(errors)}** error(es) por permisos o jerarquía."
+        text += f"\nAdvertencia: **{len(errors)}** errores por permisos o jerarquía."
     await interaction.followup.send(text, ephemeral=True)
 
 
@@ -8702,9 +8702,9 @@ async def template_config(
     if get_template_mode(guild.id) != "off":
         try:
             if not await guild.templates():
-                note = "\n\n⚠️ El servidor aún no tiene plantilla: créala en Ajustes del servidor → Plantilla de servidor, o la copia fallará."
+                note = "\n\nAdvertencia: El servidor aún no tiene plantilla: créala en Ajustes del servidor → Plantilla de servidor, o la copia fallará."
         except discord.HTTPException as e:
-            note = f"\n\n⚠️ No pude comprobar si hay plantilla: `{e}`"
+            note = f"\n\nAdvertencia: No se pudo comprobar si hay plantilla: `{e}`"
 
     await interaction.followup.send(
         "Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(guild.id, now) + note,
@@ -9694,7 +9694,7 @@ def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Emb
         embed.add_field(name="Notas del moderador", value=str(row["moderator_notes"])[:1024], inline=False)
     if not row["open"] and row["resolution"]:
         embed.add_field(name="Resolución", value=str(row["resolution"])[:1024], inline=False)
-    embed.set_footer(text=f"{guild.name} · El Heraldo 🪽")
+    embed.set_footer(text=f"{guild.name} · El Heraldo")
     return embed
 
 
@@ -10926,7 +10926,7 @@ async def condemnation_send_pardon_dm(
     embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
     embed.add_field(name="Resultado", value=(f"Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
     embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
-    embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽")
+    embed.set_footer(text=f"{member.guild.name} · El Heraldo")
     try:
         await member.send(embed=embed)
         return True
@@ -13054,7 +13054,7 @@ async def honeypot_history(
         when = discord.utils.format_dt(datetime.fromisoformat(r["triggered_at"]), "R")
         content = (r["content"] or "(sin texto)").replace("`", "'")[:150]
         embed.add_field(
-            name=f"{'✅' if r['success'] else '❌'} {r['username']} · {when}",
+            name=f"{'Completado' if r['success'] else 'Error'} · {r['username']} · {when}",
             value=(
                 f"<#{r['channel_id']}> · {HONEYPOT_ACTION_LABELS.get(r['action'], r['action'])}\n"
                 f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}\n"
