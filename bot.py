@@ -5772,6 +5772,19 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
+        ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
+        ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
+        ("HeraldoJoinRolesBotsView", lambda: HeraldoJoinRolesBotsView(guild_id, 0)),
+        ("HeraldoJoinRolesSyncView", lambda: HeraldoJoinRolesSyncView(guild_id, 0)),
+        ("DefaultMessageStudioView:verification:preview", lambda: DefaultMessageStudioView(guild_id, 0, "verification", "preview", "messages_setup")),
+        ("DefaultMessageStudioView:verification:edit", lambda: DefaultMessageStudioView(guild_id, 0, "verification", "edit", "messages_setup")),
+        ("DefaultMessageStudioView:verify_dm:edit", lambda: DefaultMessageStudioView(guild_id, 0, "verify_dm", "edit", "messages_setup")),
+        ("DefaultMessageStudioView:suggestions:edit", lambda: DefaultMessageStudioView(guild_id, 0, "suggestions", "edit", "messages_setup")),
+        ("DefaultMessageStudioView:honeypot:edit", lambda: DefaultMessageStudioView(guild_id, 0, "honeypot", "edit", "messages_setup")),
+        ("DefaultMessageStudioView:condemnation:edit", lambda: DefaultMessageStudioView(guild_id, 0, "condemnation", "edit", "messages_setup")),
+        ("LogTemplateEditorView:preview", lambda: LogTemplateEditorView(guild_id, 0, "general", None, "messages_setup", "preview")),
+        ("LogTemplateEditorView:edit", lambda: LogTemplateEditorView(guild_id, 0, "general", None, "messages_setup", "edit")),
+        ("LogTemplateEditorView:variables", lambda: LogTemplateEditorView(guild_id, 0, "general", None, "messages_setup", "variables")),
     ]
     errors: list[str] = []
     for name, factory in factories:
