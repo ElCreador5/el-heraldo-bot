@@ -6668,6 +6668,179 @@ verify_dm_texts.error(verify_command_error)
 verify_dm_preview.error(verify_command_error)
 
 
+joinroles_group = discord.app_commands.Group(
+    name="joinroles",
+    description="Gestionar Join Roles al estilo Sapphire.",
+    guild_only=True,
+    default_permissions=discord.Permissions(manage_guild=True),
+)
+
+
+def _joinroles_command_roles(*roles: discord.Role | None) -> list[discord.Role]:
+    result: list[discord.Role] = []
+    for role in roles:
+        if role is not None and role not in result:
+            result.append(role)
+    return result
+
+
+def _joinroles_validate_command_roles(
+    guild: discord.Guild,
+    roles: list[discord.Role],
+) -> str | None:
+    issues: list[str] = []
+    for role in roles:
+        _role, issue = _join_role_status(guild, role.id)
+        if issue:
+            issues.append(f"{role.mention}: {issue}")
+    return "; ".join(issues) if issues else None
+
+
+@joinroles_group.command(name="status", description="Ver la configuración actual de Join Roles.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def joinroles_status(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(
+        "🚪 **El Heraldo · Join Roles**\n\n"
+        + join_roles_basic_summary(interaction.guild)
+        + "\n\n"
+        + join_roles_bots_summary(interaction.guild)
+        + "\n\n"
+        + join_roles_sync_summary(interaction.guild),
+        ephemeral=True,
+    )
+
+
+@joinroles_group.command(name="sync", description="Asignar ahora los Join Roles a los miembros elegibles.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def joinroles_sync_command(interaction: discord.Interaction) -> None:
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    assigned, skipped, errors = await sync_join_roles(interaction.guild)
+    text = (
+        f"✅ Sync terminado. **{assigned}** miembro(s) recibieron Join Roles; "
+        f"**{skipped}** no necesitaron cambios."
+    )
+    if errors:
+        text += f"\n⚠️ **{len(errors)}** error(es) por permisos o jerarquía."
+    await interaction.followup.send(text, ephemeral=True)
+
+
+@joinroles_group.command(name="add", description="Añadir uno o varios Join Roles generales.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def joinroles_add(
+    interaction: discord.Interaction,
+    rol: discord.Role,
+    rol2: Optional[discord.Role] = None,
+    rol3: Optional[discord.Role] = None,
+    rol4: Optional[discord.Role] = None,
+    rol5: Optional[discord.Role] = None,
+) -> None:
+    roles = _joinroles_command_roles(rol, rol2, rol3, rol4, rol5)
+    issue = _joinroles_validate_command_roles(interaction.guild, roles)
+    if issue:
+        await interaction.response.send_message(f"❌ {issue}", ephemeral=True)
+        return
+    current = get_join_role_ids(interaction.guild.id)
+    for role in roles:
+        if role.id not in current:
+            current.append(role.id)
+    set_join_role_ids(interaction.guild.id, current[:JOIN_ROLES_MAX])
+    guild_config_set(interaction.guild.id, "join_roles_enabled", "1")
+    await interaction.response.send_message(
+        "✅ Join Roles actualizados:\n" + _join_roles_render(interaction.guild, get_join_role_ids(interaction.guild.id)),
+        ephemeral=True,
+    )
+
+
+@joinroles_group.command(name="remove", description="Quitar uno o varios Join Roles generales.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def joinroles_remove(
+    interaction: discord.Interaction,
+    rol: discord.Role,
+    rol2: Optional[discord.Role] = None,
+    rol3: Optional[discord.Role] = None,
+    rol4: Optional[discord.Role] = None,
+    rol5: Optional[discord.Role] = None,
+) -> None:
+    remove_ids = {role.id for role in _joinroles_command_roles(rol, rol2, rol3, rol4, rol5)}
+    current = [role_id for role_id in get_join_role_ids(interaction.guild.id) if role_id not in remove_ids]
+    set_join_role_ids(interaction.guild.id, current)
+    await interaction.response.send_message(
+        "✅ Join Roles actualizados:\n" + _join_roles_render(interaction.guild, current),
+        ephemeral=True,
+    )
+
+
+@joinroles_group.command(name="user_add", description="Añadir un rol específico a un Discord User ID.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def joinroles_user_add(
+    interaction: discord.Interaction,
+    user_id: str,
+    rol: discord.Role,
+) -> None:
+    try:
+        target_id = int(user_id.strip())
+        if target_id <= 0:
+            raise ValueError
+    except ValueError:
+        await interaction.response.send_message("❌ Discord User ID inválido.", ephemeral=True)
+        return
+    issue = _joinroles_validate_command_roles(interaction.guild, [rol])
+    if issue:
+        await interaction.response.send_message(f"❌ {issue}", ephemeral=True)
+        return
+    mapping = get_join_specific_roles(interaction.guild.id)
+    roles = mapping.get(target_id, [])
+    if rol.id not in roles:
+        roles.append(rol.id)
+    set_join_specific_user_roles(interaction.guild.id, target_id, roles)
+    await interaction.response.send_message(
+        f"✅ <@{target_id}> recibirá {rol.mention} cuando ingrese.", ephemeral=True
+    )
+
+
+@joinroles_group.command(name="user_remove", description="Quitar un rol específico o eliminar el User ID de la lista.")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def joinroles_user_remove(
+    interaction: discord.Interaction,
+    user_id: str,
+    rol: Optional[discord.Role] = None,
+) -> None:
+    try:
+        target_id = int(user_id.strip())
+        if target_id <= 0:
+            raise ValueError
+    except ValueError:
+        await interaction.response.send_message("❌ Discord User ID inválido.", ephemeral=True)
+        return
+
+    mapping = get_join_specific_roles(interaction.guild.id)
+    if target_id not in mapping:
+        await interaction.response.send_message("ℹ️ Ese User ID no está configurado.", ephemeral=True)
+        return
+    if rol is None:
+        remove_join_specific_user(interaction.guild.id, target_id)
+        await interaction.response.send_message("✅ Usuario eliminado de la lista.", ephemeral=True)
+        return
+
+    roles = [role_id for role_id in mapping[target_id] if role_id != rol.id]
+    set_join_specific_user_roles(interaction.guild.id, target_id, roles)
+    await interaction.response.send_message(
+        f"✅ {rol.mention} eliminado de los roles específicos de <@{target_id}>.",
+        ephemeral=True,
+    )
+
+
+@joinroles_group.error
+async def joinroles_group_error(
+    interaction: discord.Interaction,
+    error: discord.app_commands.AppCommandError,
+) -> None:
+    await verify_command_error(interaction, error)
+
+
+bot.tree.add_command(joinroles_group)
+
+
 # ---------------------------------------------------------------------------
 # Copia de seguridad de la plantilla del servidor (/server_template_setup, /template_sync)
 # ---------------------------------------------------------------------------
