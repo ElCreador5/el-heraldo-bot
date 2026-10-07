@@ -1687,7 +1687,9 @@ class VerifyView(discord.ui.View):
     def __init__(self, label: str | None = None) -> None:
         super().__init__(timeout=None)
         button = discord.ui.Button(
-            label=label or get_verify_button_label(),
+            # Esta vista se registra al arrancar sin conocer un guild concreto.
+            # El panel real conserva el texto configurado por su propio servidor.
+            label=label or VERIFY_BUTTON_LABEL_DEFAULT,
             style=discord.ButtonStyle.success,
             custom_id=VERIFY_BUTTON_ID,
         )
