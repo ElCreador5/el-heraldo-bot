@@ -2281,11 +2281,10 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
 
     db_clear_sin_verificado(guild_id, user_id)
     try:
-        await member.kick(reason="No se verificó (respaldo del timeout)")
+        await member.kick(reason="No completó la verificación dentro del plazo establecido.")
         await log_embed(
-            guild, "Kick — No se verificó",
-            f"{member.mention} (`{member.id}`) — no se verificó dentro del tiempo límite. "
-            f"(Respaldo: no fue expulsado antes por el timeout.)",
+            guild, "Expulsión por falta de verificación",
+            f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
             discord.Color.red(),
         )
     except discord.Forbidden:
@@ -5532,8 +5531,8 @@ LOG_EVENT_CATALOG = {
         ("verified_path", "Verificado"),
         ("age_verification", "Verificación de edad"),
         ("verification_expired", "Verificación vencida"),
-        ("verification_kick", "Kick — No se verificó"),
-        ("verification_ban", "Ban — No se verificó"),
+        ("verification_kick", "Expulsión por falta de verificación"),
+        ("verification_ban", "Expulsión permanente por falta de verificación"),
         ("verification_panel_published", "Panel de verificación publicado"),
         ("verification_texts_updated", "Textos de verificación actualizados"),
         ("verification_dm_updated", "DM de bienvenida actualizado"),
@@ -7803,7 +7802,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         )
         return
     await log_embed(
-        guild, "Ban — No se verificó" if action == "ban" else "Kick — No se verificó",
+        guild, "Expulsión permanente por falta de verificación" if action == "ban" else "Expulsión por falta de verificación",
         f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
         discord.Color.red(),
     )
