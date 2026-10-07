@@ -2328,8 +2328,10 @@ async def run_scheduled_template_backup() -> None:
 
     sent = False
     try:
-        user = await bot.fetch_user(_meta_int("template_user_id", 0))
-        await user.send(embed=embed)
+        # La copia programada siempre pertenece al servidor: el destinatario es
+        # el propietario actual del servidor, no el usuario que configuró el comando.
+        owner = await bot.fetch_user(guild.owner_id)
+        await owner.send(embed=embed)
         sent = True
     except discord.HTTPException:
         pass  # incluye Forbidden (mensajes privados cerrados)
@@ -2365,12 +2367,11 @@ def template_config_summary(now_utc: datetime) -> str:
     )
     last = db_meta_get("template_last_run")
     last_text = discord.utils.format_dt(datetime.fromisoformat(last), "f") if last and get_template_mode() != "off" else "ninguna todavía"
-    user_id = db_meta_get("template_user_id")
     return (
         f"**Frecuencia:** {template_schedule_text()}\n"
         f"**Próxima copia:** {next_text}\n"
         f"**Última copia programada:** {last_text}\n"
-        f"**Enlace por mensaje privado a:** {f'<@{user_id}>' if user_id else 'quien configure (aún sin definir)'}"
+        f"**Enlace por mensaje privado a:** creador/propietario del servidor"
     )
 
 
@@ -2381,7 +2382,6 @@ def template_config_summary(now_utc: datetime) -> str:
     dia_semana="Día de la semana (frecuencia semanal)",
     dia_mes="Día del mes, 1-28 (frecuencia mensual)",
     intervalo="Intervalo entre copias (frecuencia por intervalo): usa d, h y m, por ejemplo 30m, 6h o 1d",
-    enviar_a="Quién recibe el enlace por mensaje privado (por defecto, tú)",
 )
 @discord.app_commands.choices(
     frecuencia=[
@@ -2400,11 +2400,10 @@ async def template_config(
     dia_semana: Optional[discord.app_commands.Choice[int]] = None,
     dia_mes: Optional[discord.app_commands.Range[int, 1, 28]] = None,
     intervalo: Optional[str] = None,
-    enviar_a: Optional[discord.User] = None,
 ) -> None:
     guild = interaction.guild
     now = datetime.now(timezone.utc)
-    if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, intervalo, enviar_a)):
+    if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, intervalo)):
         await interaction.response.send_message(template_config_summary(now), ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
@@ -2435,11 +2434,6 @@ async def template_config(
         db_meta_set("template_interval_minutes", str(intervalo_minutes))
         changes.append(f"intervalo → {format_duration(intervalo_minutes)}")
     db_meta_set("template_guild_id", str(guild.id))
-    if enviar_a is not None:
-        db_meta_set("template_user_id", str(enviar_a.id))
-        changes.append(f"enviar a → {enviar_a.mention}")
-    elif db_meta_get("template_user_id") is None:
-        db_meta_set("template_user_id", str(interaction.user.id))
 
     # Un cambio de horario solo afecta a la PRÓXIMA copia: da por hecho el turno actual
     # (o reinicia el reloj del intervalo) para que no dispare una copia inmediata.
@@ -2478,13 +2472,18 @@ async def template_sync(interaction: discord.Interaction) -> None:
         return
     embed = template_report_embed(template, was_dirty, "manual")
     try:
-        await interaction.user.send(embed=embed)  # el enlace va a tus mensajes privados
-        await interaction.followup.send("✅ Plantilla sincronizada. Te envié el enlace por mensaje privado.", ephemeral=True)
+        owner = await bot.fetch_user(interaction.guild.owner_id)
+        await owner.send(embed=embed)
+        if interaction.user.id == owner.id:
+            confirmation = "✅ Plantilla sincronizada. Te envié el enlace por mensaje privado."
+        else:
+            confirmation = "✅ Plantilla sincronizada. El enlace fue enviado por mensaje privado al creador del servidor."
+        await interaction.followup.send(confirmation, ephemeral=True)
     except discord.HTTPException:
-        # DMs cerrados: se muestra aquí, solo visible para ti, para no perder el enlace.
+        # El enlace no se publica en el canal ni se entrega a otro administrador.
         await interaction.followup.send(
-            "⚠️ No pude enviarte el mensaje privado (¿tienes los DMs cerrados?). Aquí tienes el enlace:",
-            embed=embed, ephemeral=True,
+            "⚠️ La plantilla se sincronizó, pero no pude enviar el enlace por mensaje privado al creador del servidor. Debe tener los DMs habilitados.",
+            ephemeral=True,
         )
     await log_embed(
         interaction.guild, "🛡️ Plantilla sincronizada manualmente",
