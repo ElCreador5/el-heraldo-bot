@@ -41,7 +41,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /verify_setup (rol, timeout, acción, activar) y /verify_texts (mensaje del
      panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
-6. COPIA DE SEGURIDAD DE LA PLANTILLA (/template_setup, /template_sync)
+6. COPIA DE SEGURIDAD DE LA PLANTILLA (/server_template_setup, /template_sync)
    - Sincroniza la plantilla del servidor (roles, canales y permisos) con su estado
      actual, como una copia de seguridad: cada día, semana o mes, o cada intervalo
      configurable en días/horas/minutos, con
@@ -210,7 +210,7 @@ VERIFY_DANGEROUS_PERMS = (
     ("mention_everyone", "Mencionar a todos"),
 )
 
-# --- Copia de seguridad de la plantilla del servidor (/template_setup) ---
+# --- Copia de seguridad de la plantilla del servidor (/server_template_setup) ---
 # Valores por defecto; la configuración real se guarda en la DB. Hora local de STREAK_TZ.
 TEMPLATE_MODE_LABELS = {
     "off": "Desactivada",
@@ -3038,7 +3038,7 @@ verify_dm_preview.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
-# Copia de seguridad de la plantilla del servidor (/template_setup, /template_sync)
+# Copia de seguridad de la plantilla del servidor (/server_template_setup, /template_sync)
 # ---------------------------------------------------------------------------
 
 def _meta_int(key: str, default: int) -> int:
@@ -3287,7 +3287,7 @@ def template_config_summary(guild_id: int, now_utc: datetime) -> str:
     )
 
 
-@bot.tree.command(name="template_setup", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
+@bot.tree.command(name="server_template_setup", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
 @discord.app_commands.describe(
     frecuencia="Cada cuánto se hace la copia",
     hora="Hora del día (0-23, hora de RD)",
