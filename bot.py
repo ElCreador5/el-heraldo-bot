@@ -264,7 +264,10 @@ async def log_embed(
     print(f"{title} — {description}")
     if guild is None:
         return
-    channel = guild.get_channel(get_log_channel_id(guild.id))
+    configured_channel_id = raid_alert_channel_id(guild.id)
+    channel = guild.get_channel(configured_channel_id) if configured_channel_id else None
+    if channel is None:
+        channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is None:
         return
     embed = discord.Embed(
@@ -7566,6 +7569,16 @@ def raid_min_age_seconds(guild_id: int) -> int:
     return raid_setting_int(guild_id, "raid_min_age_seconds", 0)
 
 
+def raid_new_account_ratio(guild_id: int) -> int:
+    """Porcentaje mínimo de cuentas nuevas dentro de la ventana. 0 = desactivado."""
+    return max(0, min(100, raid_setting_int(guild_id, "raid_new_account_ratio", 0)))
+
+
+def raid_alert_channel_id(guild_id: int) -> int:
+    """Canal específico de alertas de raid; si no existe, usa el canal general de logs."""
+    return raid_setting_int(guild_id, "raid_alert_channel_id", 0)
+
+
 def raid_action(guild_id: int) -> str:
     value = raid_setting_get(guild_id, "raid_action")
     return value if value in RAID_ACTION_LABELS else RAID_ACTION_DEFAULT
@@ -7801,9 +7814,30 @@ async def raid_handle_join(member: discord.Member) -> bool:
         return await raid_act_on_member(member)
     if len(joins) < raid_threshold(guild.id):
         return False
+
     suspects = [uid for _, uid in joins]
+    ratio_required = raid_new_account_ratio(guild.id)
+    min_age = raid_min_age_seconds(guild.id)
+    ratio_note = ""
+    if ratio_required > 0:
+        if min_age <= 0:
+            return False
+        now_utc = datetime.now(timezone.utc)
+        resolved = [guild.get_member(uid) for uid in suspects]
+        new_accounts = [
+            m for m in resolved
+            if m is not None and (now_utc - m.created_at).total_seconds() < min_age
+        ]
+        ratio_actual = round((len(new_accounts) / len(suspects)) * 100) if suspects else 0
+        if ratio_actual < ratio_required:
+            return False
+        ratio_note = f" · cuentas nuevas: {ratio_actual}% (mínimo: {ratio_required}%)"
+
     joins.clear()
-    trigger = f"{len(suspects)} ingresos en {format_flex_duration(window)} (umbral: {raid_threshold(guild.id)})"
+    trigger = (
+        f"{len(suspects)} ingresos en {format_flex_duration(window)} "
+        f"(umbral: {raid_threshold(guild.id)}){ratio_note}"
+    )
     acted = await raid_start(guild, trigger=trigger, suspects=suspects)
     return member.id in acted
 
@@ -7826,6 +7860,8 @@ async def raid_expiry_loop() -> None:
 def raid_config_summary(guild: discord.Guild) -> str:
     role = guild.get_role(raid_ping_role_id(guild.id)) if raid_ping_role_id(guild.id) else None
     min_age = raid_min_age_seconds(guild.id)
+    ratio = raid_new_account_ratio(guild.id)
+    alert_channel = guild.get_channel(raid_alert_channel_id(guild.id)) if raid_alert_channel_id(guild.id) else None
     state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
     until = raid_until(guild.id)
     lines = [
@@ -7834,6 +7870,8 @@ def raid_config_summary(guild: discord.Guild) -> str:
         f"• Duración del modo raid: **{format_flex_duration(raid_duration_seconds(guild.id))}**",
         f"• Acción: **{RAID_ACTION_LABELS[raid_action(guild.id)]}**",
         f"• Filtro de edad de cuenta: **{'cuentas de menos de ' + format_flex_duration(min_age) if min_age else 'sin filtro (todos los ingresos del raid)'}**",
+        f"• Proporción mínima de cuentas nuevas: **{str(ratio) + '%' if ratio else 'desactivada'}**",
+        f"• Canal de alertas: {alert_channel.mention if alert_channel else '**canal general de logs**'}",
         f"• Pausar invitaciones: **{'sí' if raid_lock_invites_enabled(guild.id) else 'no'}**",
         f"• Purgar mensajes de los sancionados: **{'sí' if raid_purge_enabled(guild.id) else 'no'}**",
         f"• Rol de alerta: {role.mention if role else '**ninguno**'}",
@@ -7860,7 +7898,9 @@ raid_group = HoneypotGroup(
     ventana="En cuánto tiempo deben llegar: 10s, 1m… (1s a 1h)",
     duracion="Cuánto dura el modo raid: 30s, 10m, 12h, 2d, 1 mes… (10s a 12 meses)",
     accion="Qué hacer con los sospechosos durante el raid",
-    edad_cuenta="Solo actuar sobre cuentas más nuevas que esto: 30m, 7d, 1 mes…; 0 = todas",
+    edad_cuenta="Considerar nueva una cuenta más joven que esto: 30m, 7d, 1 mes…; 0 = sin filtro",
+    proporcion_cuentas_nuevas="Porcentaje mínimo de cuentas nuevas en la ráfaga: 0 a 100; 0 = desactivado",
+    canal_alertas="Canal donde se enviarán las alertas de Raid Protection",
     pausar_invitaciones="Pausar las invitaciones del servidor mientras dure el raid",
     purgar="Borrar los mensajes que los sancionados mandaron desde que entraron",
     ping_rol="Rol a mencionar en la alerta de raid",
@@ -7876,12 +7916,17 @@ async def raid_config(
     duracion: Optional[str] = None,
     accion: Optional[discord.app_commands.Choice[str]] = None,
     edad_cuenta: Optional[str] = None,
+    proporcion_cuentas_nuevas: Optional[discord.app_commands.Range[int, 0, 100]] = None,
+    canal_alertas: Optional[discord.TextChannel] = None,
     pausar_invitaciones: Optional[bool] = None,
     purgar: Optional[bool] = None,
     ping_rol: Optional[discord.Role] = None,
 ) -> None:
     guild = interaction.guild
-    values = (activado, ingresos, ventana, duracion, accion, edad_cuenta, pausar_invitaciones, purgar, ping_rol)
+    values = (
+        activado, ingresos, ventana, duracion, accion, edad_cuenta,
+        proporcion_cuentas_nuevas, canal_alertas, pausar_invitaciones, purgar, ping_rol
+    )
     if all(v is None for v in values):
         await interaction.response.send_message(raid_config_summary(guild), ephemeral=True)
         return
@@ -7896,6 +7941,19 @@ async def raid_config(
         return
     effective_action = accion.value if accion is not None else raid_action(guild.id)
     effective_enabled = activado if activado is not None else raid_enabled(guild.id)
+    effective_age = edad_s if edad_s is not None else raid_min_age_seconds(guild.id)
+    effective_ratio = (
+        int(proporcion_cuentas_nuevas)
+        if proporcion_cuentas_nuevas is not None
+        else raid_new_account_ratio(guild.id)
+    )
+    if effective_ratio > 0 and effective_age <= 0:
+        await interaction.response.send_message(
+            "❌ No guardé nada: para usar una proporción de cuentas nuevas debes configurar "
+            "también una edad de cuenta mayor que 0.",
+            ephemeral=True,
+        )
+        return
     if effective_enabled and effective_action == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None \
             and (activado or accion is not None):
         await interaction.response.send_message(
@@ -7924,6 +7982,15 @@ async def raid_config(
     if edad_s is not None:
         guild_config_set(guild.id, "raid_min_age_seconds", str(edad_s))
         changes.append(f"edad de cuenta → {format_flex_duration(edad_s) if edad_s else 'sin filtro'}")
+    if proporcion_cuentas_nuevas is not None:
+        guild_config_set(guild.id, "raid_new_account_ratio", str(int(proporcion_cuentas_nuevas)))
+        changes.append(
+            "proporción de cuentas nuevas → "
+            + (f"{int(proporcion_cuentas_nuevas)}%" if int(proporcion_cuentas_nuevas) else "desactivada")
+        )
+    if canal_alertas is not None:
+        guild_config_set(guild.id, "raid_alert_channel_id", str(canal_alertas.id))
+        changes.append(f"canal de alertas → {canal_alertas.mention}")
     if pausar_invitaciones is not None:
         guild_config_set(guild.id, "raid_lock_invites", "1" if pausar_invitaciones else "0")
         changes.append("pausar invitaciones: " + ("sí" if pausar_invitaciones else "no"))
