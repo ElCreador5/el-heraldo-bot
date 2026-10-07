@@ -4408,7 +4408,7 @@ def hp_is_exempt(member: discord.Member) -> bool:
 
 
 def hp_config_summary(guild: discord.Guild) -> str:
-    traps = hp_traps(guild.id)
+    traps = hp_traps(interaction.guild.id)
     trap_text = ", ".join(f"<#{cid}>" for cid in traps) or "—"
     ping = f"<@&{hp_ping_role_id(guild.id)}>" if hp_ping_role_id(guild.id) else "—"
     estado = "✅ Activado" if honeypot_enabled(guild.id) else "❌ Desactivado"
@@ -6478,7 +6478,7 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
             pass
     hp_remove_trap(interaction.guild.id, canal.id)
     extra = ""
-    if not hp_traps(guild.id) and honeypot_enabled(guild.id):
+    if not hp_traps(interaction.guild.id) and honeypot_enabled(interaction.guild.id):
         hp_setting_set(interaction.guild.id, "honeypot_enabled", "0")
         extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
     await interaction.followup.send(f"✅ {canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
