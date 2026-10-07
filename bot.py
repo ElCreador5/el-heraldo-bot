@@ -653,29 +653,45 @@ def _guild_or_legacy_setting(guild_id: int | None, key: str, default: str) -> st
     return db_meta_get(key) or default
 
 
-def get_motw_weekday() -> int:
-    value = db_meta_get("motw_weekday")
+def get_motw_weekday(guild_id: int) -> int:
+    value = guild_config_get(guild_id, "motw_weekday")
+    if value is None:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or legacy_owner == str(guild_id):
+            value = db_meta_get("motw_weekday")
     return int(value) if value is not None else MOTW_WEEKDAY_DEFAULT
 
 
-def get_motw_hour() -> int:
-    value = db_meta_get("motw_hour")
+def get_motw_hour(guild_id: int) -> int:
+    value = guild_config_get(guild_id, "motw_hour")
+    if value is None:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or legacy_owner == str(guild_id):
+            value = db_meta_get("motw_hour")
     return int(value) if value is not None else MOTW_HOUR_DEFAULT
 
 
-def get_motw_channel_id() -> int:
-    """Canal elegido con /motw_set_channel; si no hay, el MOTW_CHANNEL_ID por defecto."""
-    value = db_meta_get("motw_channel_id")
-    return int(value) if value is not None else MOTW_CHANNEL_ID
+def get_motw_channel_id(guild_id: int) -> int:
+    value = guild_config_get(guild_id, "motw_channel_id")
+    if value is not None:
+        return int(value)
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    if legacy_owner is None or legacy_owner == str(guild_id):
+        legacy = db_meta_get("motw_channel_id")
+        if legacy:
+            return int(legacy)
+        if len(bot.guilds) <= 1:
+            return MOTW_CHANNEL_ID
+    return 0
 
 
-def set_motw_channel_id(channel_id: int) -> None:
-    db_meta_set("motw_channel_id", str(channel_id))
+def set_motw_channel_id(guild_id: int, channel_id: int) -> None:
+    guild_config_set(guild_id, "motw_channel_id", str(channel_id))
 
 
-def set_motw_schedule(weekday: int, hour: int) -> None:
-    db_meta_set("motw_weekday", str(weekday))
-    db_meta_set("motw_hour", str(hour))
+def set_motw_schedule(guild_id: int, weekday: int, hour: int) -> None:
+    guild_config_set(guild_id, "motw_weekday", str(weekday))
+    guild_config_set(guild_id, "motw_hour", str(hour))
 
 
 def get_guild_role_id(guild_id: int, key: str, fallback: int = 0) -> int:
@@ -1008,11 +1024,8 @@ async def on_ready() -> None:
             await condemnation_reconcile(guild)
         except Exception:
             traceback.print_exc()
-    if get_motw_channel_id():
-        if not member_of_the_week_loop.is_running():
-            member_of_the_week_loop.start()
-    else:
-        print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID o usa /motw_set_channel.")
+    if not member_of_the_week_loop.is_running():
+        member_of_the_week_loop.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
     _startup_done = True
@@ -3003,10 +3016,10 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
 # Miembro de la Semana
 # ---------------------------------------------------------------------------
 
-def motw_last_scheduled(now: datetime) -> datetime:
+def motw_last_scheduled(guild_id: int, now: datetime) -> datetime:
     """Último momento programado (día/hora configurables, hora local) que ya
     pasó respecto a `now`."""
-    weekday, hour = get_motw_weekday(), get_motw_hour()
+    weekday, hour = get_motw_weekday(guild_id), get_motw_hour(guild_id)
     days_back = (now.weekday() - weekday) % 7
     scheduled = (now - timedelta(days=days_back)).replace(
         hour=hour, minute=0, second=0, microsecond=0
@@ -3016,42 +3029,44 @@ def motw_last_scheduled(now: datetime) -> datetime:
     return scheduled
 
 
-def motw_mark_current_slot(now: datetime | None = None) -> None:
+def motw_mark_current_slot(guild_id: int, now: datetime | None = None) -> None:
     """Llamar tras cambiar el horario: da por "ya pasado" el turno más reciente del
     nuevo horario, para que el cambio solo afecte al PRÓXIMO anuncio y no dispare uno
     inmediato con la semana a medias. Solo avanza el marcador, nunca lo retrocede
     (así tampoco se duplica un anuncio ya hecho hoy)."""
-    new_slot = motw_last_scheduled(now or datetime.now(STREAK_TZ)).date().isoformat()
-    last = db_meta_get("motw_last_slot")
+    new_slot = motw_last_scheduled(guild_id, now or datetime.now(STREAK_TZ)).date().isoformat()
+    last = guild_config_get(guild_id, "motw_last_slot")
     if last is None or new_slot > last:
-        db_meta_set("motw_last_slot", new_slot)
+        guild_config_set(guild_id, "motw_last_slot", new_slot)
 
 
 @tasks.loop(minutes=10)
 async def member_of_the_week_loop() -> None:
-    """Revisa cada 10 min si toca el anuncio. Al comparar contra el último
-    anuncio guardado en la DB, también se recupera si el bot estaba caído a la hora."""
+    """Revisa de forma independiente el turno de Miembro de la Semana de cada servidor."""
     try:
-        slot = motw_last_scheduled(datetime.now(STREAK_TZ)).date().isoformat()
-        last = db_meta_get("motw_last_slot")
-        if last is None:
-            # Primer arranque: no anunciar con datos parciales, esperar al próximo turno.
-            db_meta_set("motw_last_slot", slot)
-            return
-        if last == slot:
-            return
-        db_meta_set("motw_last_slot", slot)  # se marca antes para no duplicar anuncios
-        await announce_member_of_the_week()
+        now = datetime.now(STREAK_TZ)
+        for guild in bot.guilds:
+            if not get_motw_channel_id(guild.id):
+                continue
+            slot = motw_last_scheduled(guild.id, now).date().isoformat()
+            last = guild_config_get(guild.id, "motw_last_slot")
+            if last is None:
+                guild_config_set(guild.id, "motw_last_slot", slot)
+                continue
+            if last == slot:
+                continue
+            guild_config_set(guild.id, "motw_last_slot", slot)
+            await announce_member_of_the_week(guild.id)
     except Exception:
-        traceback.print_exc()  # que un error no detenga el loop
+        traceback.print_exc()
 
 
-async def announce_member_of_the_week(reset: bool = True) -> str | None:
+async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str | None:
     """reset=False es para /motw_test: anuncia con los datos reales pero no
     toca los contadores, para poder probar sin afectar la semana en curso.
     Devuelve None si se publicó bien, o el texto del error si Discord lo rechazó
     (en ese caso NO se reinician los contadores, para no perder la semana)."""
-    channel = bot.get_channel(get_motw_channel_id())
+    channel = bot.get_channel(get_motw_channel_id(guild_id))
     if channel is None:
         print("⚠️ Miembro de la Semana: no encontré el canal de anuncios configurado.")
         return "No encontré el canal de anuncios configurado."
@@ -3121,10 +3136,10 @@ async def announce_member_of_the_week(reset: bool = True) -> str | None:
 ])
 @discord.app_commands.checks.has_permissions(kick_members=True)
 async def motw_set_schedule(interaction: discord.Interaction, dia: discord.app_commands.Choice[int], hora: discord.app_commands.Range[int, 0, 23]) -> None:
-    set_motw_schedule(dia.value, hora)
-    motw_mark_current_slot()
+    set_motw_schedule(interaction.guild.id, dia.value, hora)
+    motw_mark_current_slot(interaction.guild.id)
     now = datetime.now(STREAK_TZ)
-    next_run = motw_last_scheduled(now) + timedelta(days=7)
+    next_run = motw_last_scheduled(interaction.guild.id, now) + timedelta(days=7)
     await interaction.response.send_message(
         f"✅ Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).\n"
         f"Próximo anuncio: **{MOTW_WEEKDAY_NAMES[next_run.weekday()]} {next_run.day}/{next_run.month} a las {next_run.hour}:00**.",
@@ -3166,7 +3181,7 @@ async def motw_set_channel(interaction: discord.Interaction, canal: discord.Text
         )
         return
 
-    set_motw_channel_id(canal.id)
+    set_motw_channel_id(interaction.guild.id, canal.id)
     await interaction.response.send_message(
         f"✅ Miembro de la Semana se anunciará en {canal.mention}. Usa `/motw_test` para probarlo.",
         ephemeral=True,
@@ -3189,11 +3204,11 @@ async def motw_set_channel_error(interaction: discord.Interaction, error: discor
 @bot.tree.command(name="motw_test", description="Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
 async def motw_test(interaction: discord.Interaction) -> None:
-    if bot.get_channel(get_motw_channel_id()) is None:
+    if bot.get_channel(get_motw_channel_id(interaction.guild.id)) is None:
         await interaction.response.send_message("No encuentro el canal de anuncios configurado (¿fue borrado o el bot perdió acceso?). Elige otro con /motw_set_channel.", ephemeral=True)
         return
     await interaction.response.send_message("Probando el anuncio de Miembro de la Semana (no se resetean contadores)...", ephemeral=True)
-    error = await announce_member_of_the_week(reset=False)
+    error = await announce_member_of_the_week(interaction.guild.id, reset=False)
     if error:
         await interaction.followup.send(
             f"❌ No pude publicar en el canal de anuncios: `{error}`\n"
@@ -3655,7 +3670,7 @@ def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None
     """Canales del propio Heraldo que nunca deben ser una trampa."""
     if channel.id == get_log_channel_id(channel.guild.id):
         return "es el canal de logs del Heraldo"
-    if channel.id == get_motw_channel_id():
+    if channel.id == get_motw_channel_id(channel.guild.id):
         return "es el canal del Miembro de la Semana"
     if channel.id == get_recovery_channel_id(channel.guild.id):
         return "es el canal de recuperación"
