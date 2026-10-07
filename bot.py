@@ -2422,22 +2422,23 @@ class HeraldoOrientationSetupView(discord.ui.View):
 
     @discord.ui.button(label="✅ Activar / reparar", style=discord.ButtonStyle.success, row=2)
     async def activate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+
         channel = interaction.guild.get_channel(get_orientation_channel_id(self.guild_id))
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Primero selecciona el canal donde El Heraldo publicará la tarjeta de orientación.",
                 ephemeral=True,
             )
             return
         bindings = get_orientation_bindings(self.guild_id)
         if not (ORIENTATION_MIN_ROLES <= len(bindings) <= ORIENTATION_MAX_ROLES):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Primero selecciona entre **1 y 6 roles existentes**.",
                 ephemeral=True,
             )
             return
 
-        await interaction.response.defer(ephemeral=True)
         try:
             guild_config_set(self.guild_id, "orientation_enabled", "1")
         except sqlite3.OperationalError as exc:
@@ -2461,10 +2462,10 @@ class HeraldoOrientationSetupView(discord.ui.View):
 
     @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=2)
     async def deactivate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not orientation_enabled(self.guild_id):
-            await interaction.response.send_message("ℹ️ El sistema de orientación ya está desactivado.", ephemeral=True)
-            return
         await interaction.response.defer(ephemeral=True)
+        if not orientation_enabled(self.guild_id):
+            await interaction.followup.send("ℹ️ El sistema de orientación ya está desactivado.", ephemeral=True)
+            return
         ok, note = await disable_orientation_system(interaction.guild)
         await interaction.edit_original_response(
             content=(
