@@ -2709,20 +2709,47 @@ class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Delay"):
         await interaction.response.send_message(f"✅ Delay guardado: **{seconds} s**.", ephemeral=True)
 
 
-class HeraldoJoinRolesSetupView(discord.ui.View):
+class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periódico"):
+    minutes = discord.ui.TextInput(
+        label="Intervalo en minutos",
+        required=True,
+        max_length=6,
+        placeholder="0 = desactivar",
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.minutes.default = str(get_join_sync_interval_minutes(guild_id))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            minutes = int(str(self.minutes).strip())
+            if minutes < 0 or minutes > 10080:
+                raise ValueError
+            if minutes and minutes < 10:
+                await interaction.response.send_message(
+                    "❌ El intervalo mínimo para Sync periódico es **10 minutos**.",
+                    ephemeral=True,
+                )
+                return
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Usa un valor entre 0 y 10080 minutos.", ephemeral=True
+            )
+            return
+        guild_config_set(self.guild_id, "join_sync_interval_minutes", str(minutes))
+        await interaction.response.send_message(
+            "✅ Sync periódico " + (f"configurado cada **{minutes} min**." if minutes else "desactivado."),
+            ephemeral=True,
+        )
+
+
+class _JoinRolesOwnedView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
-
-        selector = discord.ui.RoleSelect(
-            placeholder="Selecciona los Join Roles",
-            min_values=1,
-            max_values=JOIN_ROLES_MAX,
-            row=0,
-        )
-        selector.callback = self.save_roles
-        self.add_item(selector)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
@@ -2732,6 +2759,53 @@ class HeraldoJoinRolesSetupView(discord.ui.View):
             return False
         return True
 
+
+class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
+    @discord.ui.button(label="⚙️ Basic setup", style=discord.ButtonStyle.primary, row=0)
+    async def basic(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            view=HeraldoJoinRolesBasicView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="👤 User specific roles", style=discord.ButtonStyle.secondary, row=0)
+    async def users(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
+            view=HeraldoJoinRolesUsersView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="🤖 Bot roles", style=discord.ButtonStyle.secondary, row=1)
+    async def bots(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            view=HeraldoJoinRolesBotsView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="🔄 Synchronization", style=discord.ButtonStyle.secondary, row=1)
+    async def synchronization(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
+            view=HeraldoJoinRolesSyncView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+
+class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(guild_id, owner_id)
+        selector = discord.ui.RoleSelect(
+            placeholder="Roles asignados a todos los usuarios nuevos",
+            min_values=0,
+            max_values=JOIN_ROLES_MAX,
+            row=0,
+        )
+        selector.callback = self.save_roles
+        self.add_item(selector)
+
     async def save_roles(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         roles = [interaction.guild.get_role(int(value)) for value in values]
@@ -2740,16 +2814,16 @@ class HeraldoJoinRolesSetupView(discord.ui.View):
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
             await interaction.response.send_message(
-                "❌ No puedo asignar estos roles: "
-                + ", ".join(role.mention for role in invalid)
-                + ". Revisa jerarquía o si pertenecen a una integración.",
+                "❌ No puedo asignar: " + ", ".join(role.mention for role in invalid)
+                + ". Coloca El Heraldo por encima o elige roles no administrados.",
                 ephemeral=True,
             )
             return
         set_join_role_ids(self.guild_id, [role.id for role in roles])
-        guild_config_set(self.guild_id, "join_roles_enabled", "1")
+        if roles:
+            guild_config_set(self.guild_id, "join_roles_enabled", "1")
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
             view=self,
         )
 
@@ -2758,7 +2832,7 @@ class HeraldoJoinRolesSetupView(discord.ui.View):
         enabled = not join_roles_wait_screening(self.guild_id)
         guild_config_set(self.guild_id, "join_roles_wait_screening", "1" if enabled else "0")
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
             view=self,
         )
 
@@ -2766,29 +2840,237 @@ class HeraldoJoinRolesSetupView(discord.ui.View):
     async def delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesDelayModal(self.guild_id))
 
+    @discord.ui.button(label="✅ Activar", style=discord.ButtonStyle.success, row=2)
+    async def enable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not get_join_role_ids(self.guild_id):
+            await interaction.response.send_message("❌ Añade al menos un Join Role.", ephemeral=True)
+            return
+        guild_config_set(self.guild_id, "join_roles_enabled", "1")
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=2)
+    async def disable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild_config_set(self.guild_id, "join_roles_enabled", "0")
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
+        )
+
+
+class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(guild_id, owner_id)
+        self.selected_user_id: int | None = None
+        self.selected_role_ids: list[int] = []
+
+        user_select = discord.ui.UserSelect(
+            placeholder="Usuario específico",
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        user_select.callback = self.select_user
+        self.add_item(user_select)
+
+        role_select = discord.ui.RoleSelect(
+            placeholder="Roles adicionales para ese usuario",
+            min_values=1,
+            max_values=JOIN_ROLES_MAX,
+            row=1,
+        )
+        role_select.callback = self.select_roles
+        self.add_item(role_select)
+
+    async def select_user(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        self.selected_user_id = int(values[0]) if values else None
+        await interaction.response.defer()
+
+    async def select_roles(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        self.selected_role_ids = [int(value) for value in values]
+        await interaction.response.defer()
+
+    @discord.ui.button(label="💾 Guardar usuario", style=discord.ButtonStyle.success, row=2)
+    async def save_user(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.selected_user_id is None or not self.selected_role_ids:
+            await interaction.response.send_message(
+                "❌ Selecciona primero un usuario y uno o más roles.", ephemeral=True
+            )
+            return
+        roles = [interaction.guild.get_role(role_id) for role_id in self.selected_role_ids]
+        roles = [role for role in roles if role is not None]
+        me = interaction.guild.me
+        invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
+        if invalid:
+            await interaction.response.send_message(
+                "❌ No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True
+            )
+            return
+        set_join_specific_user_roles(self.guild_id, self.selected_user_id, [role.id for role in roles])
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="🗑️ Quitar usuario", style=discord.ButtonStyle.danger, row=2)
+    async def remove_user(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.selected_user_id is None:
+            await interaction.response.send_message("❌ Selecciona primero un usuario.", ephemeral=True)
+            return
+        existed = remove_join_specific_user(self.guild_id, self.selected_user_id)
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n"
+            + join_roles_users_summary(interaction.guild)
+            + ("\n\n✅ Usuario eliminado de la lista." if existed else "\n\nℹ️ Ese usuario no estaba en la lista."),
+            view=self,
+        )
+
+    @discord.ui.button(label="🧹 Remove after join", style=discord.ButtonStyle.secondary, row=3)
+    async def remove_after(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = not join_roles_remove_specific_after_join(self.guild_id)
+        guild_config_set(self.guild_id, "join_roles_specific_remove_after_join", "1" if enabled else "0")
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
+        )
+
+
+class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(guild_id, owner_id)
+        selector = discord.ui.RoleSelect(
+            placeholder="Roles alternativos para bots",
+            min_values=0,
+            max_values=JOIN_ROLES_MAX,
+            row=0,
+        )
+        selector.callback = self.save_bot_roles
+        self.add_item(selector)
+
+    async def save_bot_roles(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        roles = [interaction.guild.get_role(int(value)) for value in values]
+        roles = [role for role in roles if role is not None]
+        me = interaction.guild.me
+        invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
+        if invalid:
+            await interaction.response.send_message(
+                "❌ No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True
+            )
+            return
+        set_join_bot_role_ids(self.guild_id, [role.id for role in roles])
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="🤖 Assign for bots", style=discord.ButtonStyle.secondary, row=1)
+    async def bot_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = not join_roles_bot_enabled(self.guild_id)
+        guild_config_set(self.guild_id, "join_roles_bot_enabled", "1" if enabled else "0")
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="⏱️ Apply delay", style=discord.ButtonStyle.secondary, row=1)
+    async def bot_delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = not join_roles_bot_apply_delay(self.guild_id)
+        guild_config_set(self.guild_id, "join_roles_bot_apply_delay", "1" if enabled else "0")
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="🔀 Different roles", style=discord.ButtonStyle.secondary, row=1)
+    async def bot_different(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enabled = not join_roles_bot_use_different(self.guild_id)
+        if enabled and not get_join_bot_role_ids(self.guild_id):
+            await interaction.response.send_message(
+                "❌ Selecciona primero uno o más roles alternativos para bots.", ephemeral=True
+            )
+            return
+        guild_config_set(self.guild_id, "join_roles_bot_use_different", "1" if enabled else "0")
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
+        )
+
+
+class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(guild_id, owner_id)
+        selector = discord.ui.RoleSelect(
+            placeholder="Roles que excluyen miembros del Sync",
+            min_values=0,
+            max_values=JOIN_ROLES_MAX,
+            row=0,
+        )
+        selector.callback = self.save_excluded
+        self.add_item(selector)
+
+    async def save_excluded(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        set_join_sync_excluded_role_ids(self.guild_id, [int(value) for value in values])
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
+            view=self,
+        )
+
     @discord.ui.button(label="🔄 Sync now", style=discord.ButtonStyle.primary, row=1)
     async def sync_now(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         assigned, skipped, errors = await sync_join_roles(interaction.guild)
         msg = (
             f"✅ Sync terminado. **{assigned}** miembro(s) recibieron roles; "
-            f"**{skipped}** no necesitaban cambios."
+            f"**{skipped}** no necesitaron cambios."
         )
         if errors:
-            msg += f"\n⚠️ **{len(errors)}** error(es). Revisa jerarquía/permisos."
+            msg += f"\n⚠️ **{len(errors)}** error(es) por permisos/jerarquía."
         await interaction.followup.send(msg, ephemeral=True)
 
-    @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=2)
-    async def disable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        guild_config_set(self.guild_id, "join_roles_enabled", "0")
+    @discord.ui.button(label="🗓️ Schedule", style=discord.ButtonStyle.secondary, row=1)
+    async def schedule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(JoinRolesScheduleModal(self.guild_id))
+
+    @discord.ui.button(label="♻️ Actualizar", style=discord.ButtonStyle.secondary, row=1)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
+        )
 
 
 class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientación"):
