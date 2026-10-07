@@ -1480,7 +1480,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
     add_mention_fields(embed, expelled, "Expulsados — sin rol de orientación")
     add_mention_fields(embed, expelled_sin_verificar, "Expulsados — no se verificaron")
 
-    channel = guild.get_channel(get_log_channel_id())
+    channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is not None:
         try:
             await channel.send(embed=embed)
@@ -1766,7 +1766,7 @@ async def update_verify_panel(guild: discord.Guild) -> str:
 
 
 def verify_config_summary(guild: discord.Guild) -> str:
-    role_id = get_verify_role_id()
+    role_id = get_verify_role_id(guild.id)
     role = guild.get_role(role_id)
     role_text = role.mention if role else f"⚠️ no encontrado (`{role_id}`)"
     ref = db_meta_get("verify_panel_ref")
@@ -3175,7 +3175,7 @@ def hp_punish_role_id() -> int:
 
 def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None:
     """Canales del propio Heraldo que nunca deben ser una trampa."""
-    if channel.id == get_log_channel_id():
+    if channel.id == get_log_channel_id(channel.guild.id):
         return "es el canal de logs del Heraldo"
     if channel.id == get_motw_channel_id():
         return "es el canal del Miembro de la Semana"
@@ -4512,7 +4512,7 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
 
 async def hp_report(guild: discord.Guild, member: discord.Member, channel: discord.abc.GuildChannel,
                     content: str, attachments: int, action: str, success: bool, note: str) -> None:
-    log_channel = guild.get_channel(get_log_channel_id())
+    log_channel = guild.get_channel(get_log_channel_id(guild.id))
     if log_channel is None:
         return
     evidence = content.replace("`", "'")[:900] if content else ""
@@ -6368,7 +6368,7 @@ def raid_is_suspicious(member: discord.Member) -> bool:
 async def raid_alert(guild: discord.Guild, title: str, description: str, color: discord.Color) -> None:
     """Embed en el canal de logs con mención opcional al rol de alerta."""
     print(f"{title} — {description}")
-    channel = guild.get_channel(get_log_channel_id())
+    channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is None:
         return
     role = guild.get_role(raid_ping_role_id()) if raid_ping_role_id() else None
