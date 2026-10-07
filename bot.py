@@ -2569,16 +2569,32 @@ async def orientation_reaction_remove(payload: discord.RawReactionActionEvent) -
 async def orientation_role_deleted(role: discord.Role) -> None:
     if not orientation_enabled(role.guild.id):
         return
-    configured_ids = {int(item["role_id"]) for item in get_orientation_bindings(role.guild.id)}
-    if role.id not in configured_ids:
+
+    bindings = get_orientation_bindings(role.guild.id)
+    if role.id not in {int(item["role_id"]) for item in bindings}:
         return
-    await log_embed(
-        role.guild,
-        "⚠️ Rol de orientación eliminado",
-        "Se eliminó un rol vinculado a la tarjeta de orientación. El Heraldo no lo recreará: "
-        "selecciona otro rol existente desde **/heraldo setup** y vuelve a sincronizar el módulo.",
-        discord.Color.orange(),
-    )
+
+    remaining = [item for item in bindings if int(item["role_id"]) != role.id]
+    set_orientation_bindings(role.guild.id, remaining)
+
+    if remaining:
+        ok, note = await ensure_orientation_system(role.guild)
+        title = "🧭 Orientación actualizada" if ok else "⚠️ Orientación necesita atención"
+        description = (
+            f"Se eliminó el rol **{role.name}**. El Heraldo retiró su vínculo y su reacción; "
+            "no creó ningún rol nuevo.\n\n" + note
+        )
+        color = discord.Color.green() if ok else discord.Color.orange()
+    else:
+        await disable_orientation_system(role.guild)
+        title = "⚠️ Orientación desactivada"
+        description = (
+            f"Se eliminó **{role.name}**, que era el último rol vinculado. "
+            "El módulo se desactivó porque necesita al menos un rol existente."
+        )
+        color = discord.Color.orange()
+
+    await log_embed(role.guild, title, description, color)
 
 
 @bot.listen("on_raw_message_delete")
