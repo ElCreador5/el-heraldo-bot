@@ -2739,6 +2739,8 @@ class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periód
             )
             return
         guild_config_set(self.guild_id, "join_sync_interval_minutes", str(minutes))
+        if minutes:
+            set_join_sync_last(self.guild_id)
         await interaction.response.send_message(
             "✅ Sync periódico " + (f"configurado cada **{minutes} min**." if minutes else "desactivado."),
             ephemeral=True,
@@ -2867,23 +2869,47 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         )
 
 
+class JoinRolesUserIdModal(discord.ui.Modal, title="Join Roles · Usuario específico"):
+    user_id_input = discord.ui.TextInput(
+        label="Discord User ID",
+        required=True,
+        max_length=24,
+        placeholder="Ej.: 123456789012345678",
+    )
+
+    def __init__(self, parent_view: "HeraldoJoinRolesUsersView") -> None:
+        super().__init__()
+        self.parent_view = parent_view
+        if parent_view.selected_user_id:
+            self.user_id_input.default = str(parent_view.selected_user_id)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        raw = str(self.user_id_input).strip()
+        try:
+            user_id = int(raw)
+            if user_id <= 0:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Introduce un Discord User ID numérico válido.", ephemeral=True
+            )
+            return
+        self.parent_view.selected_user_id = user_id
+        await interaction.response.send_message(
+            f"✅ Usuario objetivo guardado: <@{user_id}> (\`{user_id}\`). "
+            "Ahora selecciona sus roles y pulsa **Guardar usuario**.",
+            ephemeral=True,
+        )
+
+
 class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(guild_id, owner_id)
         self.selected_user_id: int | None = None
         self.selected_role_ids: list[int] = []
 
-        user_select = discord.ui.UserSelect(
-            placeholder="Usuario específico",
-            min_values=1,
-            max_values=1,
-            row=0,
-        )
-        user_select.callback = self.select_user
-        self.add_item(user_select)
-
         role_select = discord.ui.RoleSelect(
-            placeholder="Roles adicionales para ese usuario",
+            placeholder="Roles adicionales para ese User ID",
             min_values=1,
             max_values=JOIN_ROLES_MAX,
             row=1,
@@ -2891,10 +2917,9 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         role_select.callback = self.select_roles
         self.add_item(role_select)
 
-    async def select_user(self, interaction: discord.Interaction) -> None:
-        values = interaction.data.get("values") if interaction.data else []
-        self.selected_user_id = int(values[0]) if values else None
-        await interaction.response.defer()
+    @discord.ui.button(label="🆔 Definir User ID", style=discord.ButtonStyle.primary, row=0)
+    async def set_user_id(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(JoinRolesUserIdModal(self))
 
     async def select_roles(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
