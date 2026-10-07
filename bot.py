@@ -1416,10 +1416,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
         "condemned": "Condenados",
         "honeypot": "Honeypot",
         "verification": "Verificación",
-        "rules": "Reglas",
-        "roles": "Roles",
         "questions": "Dudas",
-        "announcements": "Anuncios",
     }
     created: dict[str, list[int]] = {"channels": [], "roles": []}
     if create_missing is None:
