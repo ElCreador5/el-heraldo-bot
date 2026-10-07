@@ -2633,8 +2633,8 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
 def heraldo_setup_home_content() -> str:
     return (
         "🪽 **El Heraldo · Configuración del servidor**\n\n"
-        "La configuración está organizada por módulos. Entra en la sección que quieras modificar:\n"
-        "**AutoMod · Moderation · Join Roles · Reaction Roles · Role Connections · Logging · Verification · Idioma**."
+        "Selecciona un módulo en el menú desplegable y pulsa **Configurar** para abrirlo.\n"
+        "Puedes volver a este menú desde las opciones de navegación de cada módulo."
     )
 
 
