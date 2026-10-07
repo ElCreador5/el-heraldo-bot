@@ -3504,6 +3504,10 @@ def honeypot_db_init() -> None:
         "channel_id INTEGER, content TEXT, action TEXT, success INTEGER, note TEXT, "
         "account_created TEXT, joined_at TEXT, triggered_at TEXT)"
     )
+    try:
+        conn.execute("ALTER TABLE honeypot_triggers ADD COLUMN guild_id INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.execute(
         "CREATE TABLE IF NOT EXISTS condemnations ("
         "user_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, role_id INTEGER NOT NULL DEFAULT 0, role_ids TEXT NOT NULL, "
@@ -3547,7 +3551,6 @@ def honeypot_db_init() -> None:
         )
     conn.commit()
     conn.close()
-    hp_prune_history()
 
 
 _hp_meta_cache: dict[str, str | None] = {}
@@ -3830,7 +3833,9 @@ def condemnation_default_duration_minutes(guild_id: int | None = None) -> int | 
     """Duración predeterminada para nuevas condenas. None = indefinida."""
     value = guild_config_get(guild_id, "condemnation_default_duration") if guild_id is not None else None
     if value is None:
-        value = db_meta_get("condemnation_default_duration")
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if guild_id is None or legacy_owner is None or legacy_owner == str(guild_id):
+            value = db_meta_get("condemnation_default_duration")
     if not value or value.strip().lower() in {"indefinida", "indefinido", "none", "null", "0"}:
         return None
     try:
@@ -3863,7 +3868,10 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
         value = guild_config_get(guild_id, "condemnation_emoji")
         if value:
             return value
-    return db_meta_get("condemnation_emoji") or CONDEMNED_EMOJI
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    if guild_id is None or legacy_owner is None or legacy_owner == str(guild_id):
+        return db_meta_get("condemnation_emoji") or CONDEMNED_EMOJI
+    return CONDEMNED_EMOJI
 
 
 def get_condemnation_max_minutes(guild_id: int | None = None) -> int:
@@ -3908,10 +3916,10 @@ def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action
                    success: bool, note: str) -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        "INSERT INTO honeypot_triggers (user_id, username, channel_id, content, action, success, note, "
-        "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO honeypot_triggers (guild_id, user_id, username, channel_id, content, action, success, note, "
+        "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            member.id, str(member), channel_id, content[:1500], action, int(success), note,
+            member.guild.id, member.id, str(member), channel_id, content[:1500], action, int(success), note,
             member.created_at.isoformat(),
             member.joined_at.isoformat() if member.joined_at else None,
             datetime.now(timezone.utc).isoformat(),
@@ -3919,34 +3927,65 @@ def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action
     )
     conn.commit()
     conn.close()
-    hp_prune_history()
+    hp_prune_history(member.guild.id)
 
 
-def hp_retention_minutes() -> int:
-    v = hp_meta_get("honeypot_retention_minutes")
-    return int(v) if v else HONEYPOT_RETENTION_DEFAULT_MINUTES
+def hp_retention_minutes(guild_id: int) -> int:
+    value = hp_setting_get(guild_id, "honeypot_retention_minutes")
+    return int(value) if value else HONEYPOT_RETENTION_DEFAULT_MINUTES
 
 
-def hp_prune_history() -> None:
-    """Borra capturas (con el texto de los mensajes) más antiguas que la retención."""
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=hp_retention_minutes())
+def _hp_history_legacy_allowed(guild_id: int) -> bool:
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    return legacy_owner is None or legacy_owner == str(guild_id)
+
+
+def hp_prune_history(guild_id: int) -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=hp_retention_minutes(guild_id))
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM honeypot_triggers WHERE triggered_at < ?", (cutoff.isoformat(),))
+    if _hp_history_legacy_allowed(guild_id):
+        conn.execute(
+            "DELETE FROM honeypot_triggers WHERE (guild_id = ? OR guild_id = 0) AND triggered_at < ?",
+            (guild_id, cutoff.isoformat()),
+        )
+    else:
+        conn.execute(
+            "DELETE FROM honeypot_triggers WHERE guild_id = ? AND triggered_at < ?",
+            (guild_id, cutoff.isoformat()),
+        )
     conn.commit()
     conn.close()
 
 
-def hp_recent_triggers(limit: int = 10) -> list[sqlite3.Row]:
+def hp_recent_triggers(guild_id: int, limit: int = 10) -> list[sqlite3.Row]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM honeypot_triggers ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    if _hp_history_legacy_allowed(guild_id):
+        rows = conn.execute(
+            "SELECT * FROM honeypot_triggers WHERE guild_id = ? OR guild_id = 0 ORDER BY id DESC LIMIT ?",
+            (guild_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM honeypot_triggers WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+            (guild_id, limit),
+        ).fetchall()
     conn.close()
     return rows
 
 
-def hp_total_triggers() -> int:
+def hp_total_triggers(guild_id: int) -> int:
     conn = sqlite3.connect(DB_PATH)
-    total = conn.execute("SELECT COUNT(*) FROM honeypot_triggers WHERE success = 1").fetchone()[0]
+    if _hp_history_legacy_allowed(guild_id):
+        total = conn.execute(
+            "SELECT COUNT(*) FROM honeypot_triggers WHERE success = 1 AND (guild_id = ? OR guild_id = 0)",
+            (guild_id,),
+        ).fetchone()[0]
+    else:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM honeypot_triggers WHERE success = 1 AND guild_id = ?",
+            (guild_id,),
+        ).fetchone()[0]
     conn.close()
     return total
 
@@ -3984,7 +4023,11 @@ def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None
         return "es el canal del Miembro de la Semana"
     if channel.id == get_recovery_channel_id(channel.guild.id):
         return "es el canal de recuperación"
-    ref = db_meta_get("verify_panel_ref")
+    ref = guild_config_get(channel.guild.id, "verify_panel_ref")
+    if ref is None:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or legacy_owner == str(channel.guild.id):
+            ref = db_meta_get("verify_panel_ref")
     if ref:
         try:
             if int(ref.split(":")[0]) == channel.id:
@@ -4128,7 +4171,7 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Rol a mencionar en reportes:** {ping}",
         f"**Roles exentos:** {', '.join(f'<@&{i}>' for i in hp_exempt_ids(guild.id, 'role')) or '—'}",
         f"**Miembros exentos:** {', '.join(f'<@{i}>' for i in hp_exempt_ids(guild.id, 'member')) or '—'}",
-        f"**Capturas en el historial:** {hp_total_triggers()} (se guardan {format_duration(hp_retention_minutes())})",
+        f"**Capturas en el historial:** {hp_total_triggers(guild.id)} (se guardan {format_duration(hp_retention_minutes(guild.id))})",
     ]
     return "\n".join(lines)
 
@@ -6078,7 +6121,7 @@ async def honeypot_config(
         changes.append(f"timeout → {format_duration(timeout_min)}")
     if retencion_min is not None:
         hp_setting_set(interaction.guild.id, "honeypot_retention_minutes", str(retencion_min))
-        hp_prune_history()
+        hp_prune_history(interaction.guild.id)
         changes.append(f"retención → {format_duration(retencion_min)}")
     if ping_rol is not None:
         hp_setting_set(interaction.guild.id, "honeypot_ping_role", str(ping_rol.id))
@@ -6318,13 +6361,13 @@ async def honeypot_exempt_remove(
 async def honeypot_history(
     interaction: discord.Interaction, cantidad: discord.app_commands.Range[int, 1, 10] = 10
 ) -> None:
-    rows = hp_recent_triggers(cantidad)
+    rows = hp_recent_triggers(interaction.guild.id, cantidad)
     if not rows:
         await interaction.response.send_message("Aún no ha caído nadie en la trampa.", ephemeral=True)
         return
     embed = discord.Embed(
         title="🍯 Historial del honeypot",
-        description=f"**{hp_total_triggers()}** miembros atrapados en total.",
+        description=f"**{hp_total_triggers(interaction.guild.id)}** miembros atrapados en total.",
         color=discord.Color.orange(),
     )
     for r in rows:
