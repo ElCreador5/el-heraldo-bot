@@ -4397,15 +4397,15 @@ def _build_condemnation_embed(
     )
 
     embed = discord.Embed(
-        title=render(condemnation_template_get("title"))[:256],
-        description=render(condemnation_template_get("description"))[:4096],
-        color=condemnation_template_color(),
+        title=render(condemnation_template_get(guild.id, "title"))[:256],
+        description=render(condemnation_template_get(guild.id, "description"))[:4096],
+        color=condemnation_template_color(guild.id),
         timestamp=when,
     )
     embed.set_thumbnail(url=member.display_avatar.url)
 
     def field(label_key: str, value: str, inline: bool = True) -> None:
-        embed.add_field(name=condemnation_template_get(label_key)[:256], value=value[:1024] or "—", inline=inline)
+        embed.add_field(name=condemnation_template_get(guild.id, label_key)[:256], value=value[:1024] or "—", inline=inline)
 
     field("label_case", f"`{case_id}`", True)
     field("label_user", f"{member.mention}\n`{member}`", True)
@@ -4427,10 +4427,10 @@ def _build_condemnation_embed(
     if source_message_url:
         field("label_message", f"[🔗 Abrir mensaje que originó la condena]({source_message_url})", False)
 
-    embed.set_footer(text=render(condemnation_template_get("footer"))[:2048])
+    embed.set_footer(text=render(condemnation_template_get(guild.id, "footer"))[:2048])
 
-    button_url = condemnation_template_get("button_url").strip()
-    button_label = render(condemnation_template_get("button_label")).strip()[:80]
+    button_url = condemnation_template_get(guild.id, "button_url").strip()
+    button_label = render(condemnation_template_get(guild.id, "button_label")).strip()[:80]
     view = None
     if button_url and re.match(r"^https?://", button_url, re.IGNORECASE):
         view = discord.ui.View(timeout=None)
@@ -4571,24 +4571,35 @@ async def condemnation_send_dm(
         return False
 
 
-def condemnation_template_get(key: str) -> str:
-    return db_meta_get(f"condemnation_template_{key}") or CONDEMNATION_TEMPLATE_DEFAULTS[key]
+def condemnation_template_get(guild_id: int, key: str) -> str:
+    value = guild_config_get(guild_id, f"condemnation_template_{key}")
+    if value is not None:
+        return value
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    if legacy_owner is None or legacy_owner == str(guild_id):
+        legacy = db_meta_get(f"condemnation_template_{key}")
+        if legacy is not None:
+            return legacy
+    return CONDEMNATION_TEMPLATE_DEFAULTS[key]
 
 
-def condemnation_template_set(key: str, value: str) -> None:
-    db_meta_set(f"condemnation_template_{key}", value[:1024])
+def condemnation_template_set(guild_id: int, key: str, value: str) -> None:
+    guild_config_set(guild_id, f"condemnation_template_{key}", value[:1024])
 
 
-def condemnation_template_reset() -> None:
+def condemnation_template_reset(guild_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
     for key in CONDEMNATION_TEMPLATE_DEFAULTS:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("DELETE FROM meta WHERE key = ?", (f"condemnation_template_{key}",))
-        conn.commit()
-        conn.close()
+        conn.execute(
+            "DELETE FROM guild_settings WHERE guild_id = ? AND key = ?",
+            (guild_id, f"condemnation_template_{key}"),
+        )
+    conn.commit()
+    conn.close()
 
 
-def condemnation_template_color() -> discord.Color:
-    raw = condemnation_template_get("color").strip().lstrip("#")
+def condemnation_template_color(guild_id: int) -> discord.Color:
+    raw = condemnation_template_get(guild_id, "color").strip().lstrip("#")
     try:
         value = int(raw, 16)
         if not 0 <= value <= 0xFFFFFF:
@@ -5387,13 +5398,14 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
     )
     button_label_input = discord.ui.TextInput(label="Texto del botón", required=False, max_length=80)
 
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int) -> None:
         super().__init__()
-        self.title_input.default = condemnation_template_get("title")
-        self.description_input.default = condemnation_template_get("description")
+        self.guild_id = guild_id
+        self.title_input.default = condemnation_template_get(guild_id, "title")
+        self.description_input.default = condemnation_template_get(self.guild_id, "description")
         self.color_input.default = condemnation_template_get("color")
-        self.footer_input.default = condemnation_template_get("footer")
-        self.button_label_input.default = condemnation_template_get("button_label")
+        self.footer_input.default = condemnation_template_get(self.guild_id, "footer")
+        self.button_label_input.default = condemnation_template_get(self.guild_id, "button_label")
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         color = str(self.color_input).strip().lstrip("#")
@@ -5408,12 +5420,12 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
                     ephemeral=True,
                 )
                 return
-        condemnation_template_set("title", str(self.title_input).strip())
-        condemnation_template_set("description", str(self.description_input).strip())
-        condemnation_template_set("color", color or CONDEMNATION_TEMPLATE_DEFAULTS["color"])
-        condemnation_template_set("footer", str(self.footer_input).strip())
+        condemnation_template_set(interaction.guild.id, "title", str(self.title_input).strip())
+        condemnation_template_set(interaction.guild.id, "description", str(self.description_input).strip())
+        condemnation_template_set(interaction.guild.id, "color", color or CONDEMNATION_TEMPLATE_DEFAULTS["color"])
+        condemnation_template_set(interaction.guild.id, "footer", str(self.footer_input).strip())
         condemnation_template_set(
-            "button_label",
+            interaction.guild.id, "button_label",
             str(self.button_label_input).strip() or CONDEMNATION_TEMPLATE_DEFAULTS["button_label"],
         )
         await condemnation_template_editor_update(interaction, "Diseño actualizado.")
@@ -5426,13 +5438,14 @@ class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"
     reason_input = discord.ui.TextInput(label="Motivo", required=True, max_length=256)
     when_input = discord.ui.TextInput(label="Cuándo", required=True, max_length=256)
 
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int) -> None:
         super().__init__()
-        self.case_input.default = condemnation_template_get("label_case")
-        self.user_input.default = condemnation_template_get("label_user")
-        self.by_input.default = condemnation_template_get("label_by")
-        self.reason_input.default = condemnation_template_get("label_reason")
-        self.when_input.default = condemnation_template_get("label_when")
+        self.guild_id = guild_id
+        self.case_input.default = condemnation_template_get(guild_id, "label_case")
+        self.user_input.default = condemnation_template_get(self.guild_id, "label_user")
+        self.by_input.default = condemnation_template_get(self.guild_id, "label_by")
+        self.reason_input.default = condemnation_template_get(self.guild_id, "label_reason")
+        self.when_input.default = condemnation_template_get(self.guild_id, "label_when")
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         values = (
@@ -5443,7 +5456,7 @@ class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"
             ("label_when", self.when_input.value),
         )
         for key, value in values:
-            condemnation_template_set(key, value.strip())
+            condemnation_template_set(interaction.guild.id, key, value.strip())
         await condemnation_template_editor_update(interaction, "Etiquetas principales actualizadas.")
 
 
@@ -5455,9 +5468,10 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
         placeholder="Indefinida, 30m, 12h, 7d…",
     )
 
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int) -> None:
         super().__init__()
-        current = condemnation_default_duration_minutes(interaction.guild.id)
+        self.guild_id = guild_id
+        current = condemnation_default_duration_minutes(guild_id)
         self.duration_input.default = format_duration(current) if current else "Indefinida"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -5482,13 +5496,14 @@ class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más e
     roles_input = discord.ui.TextInput(label="Roles retirados", required=True, max_length=256)
     evidence_input = discord.ui.TextInput(label="Evidencia / mensaje", required=True, max_length=256)
 
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int) -> None:
         super().__init__()
-        self.where_input.default = condemnation_template_get("label_where")
-        self.duration_input.default = condemnation_template_get("label_duration")
-        self.origin_input.default = condemnation_template_get("label_origin")
-        self.roles_input.default = condemnation_template_get("label_roles")
-        self.evidence_input.default = condemnation_template_get("label_message")
+        self.guild_id = guild_id
+        self.where_input.default = condemnation_template_get(self.guild_id, "label_where")
+        self.duration_input.default = condemnation_template_get(self.guild_id, "label_duration")
+        self.origin_input.default = condemnation_template_get(self.guild_id, "label_origin")
+        self.roles_input.default = condemnation_template_get(self.guild_id, "label_roles")
+        self.evidence_input.default = condemnation_template_get(self.guild_id, "label_message")
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         values = (
@@ -5499,7 +5514,7 @@ class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más e
             ("label_message", self.evidence_input.value),
         )
         for key, value in values:
-            condemnation_template_set(key, value.strip())
+            condemnation_template_set(interaction.guild.id, key, value.strip())
         await condemnation_template_editor_update(interaction, "Más etiquetas actualizadas.")
 
 
@@ -5511,9 +5526,10 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
         placeholder="https://…",
     )
 
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int) -> None:
         super().__init__()
-        self.url_input.default = condemnation_template_get("button_url")
+        self.guild_id = guild_id
+        self.url_input.default = condemnation_template_get(guild_id, "button_url")
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         url = str(self.url_input).strip()
@@ -5523,7 +5539,7 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
                 ephemeral=True,
             )
             return
-        condemnation_template_set("button_url", url)
+        condemnation_template_set(interaction.guild.id, "button_url", url)
         await condemnation_template_editor_update(interaction, "Enlace del botón actualizado.")
 
 
@@ -5602,23 +5618,23 @@ class CondemnationTemplateEditorView(discord.ui.View):
 
     @discord.ui.button(label="✏️ Diseño", style=discord.ButtonStyle.primary, row=0)
     async def edit_core(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationCoreModal())
+        await interaction.response.send_modal(CondemnationCoreModal(interaction.guild.id))
 
     @discord.ui.button(label="🏷️ Etiquetas", style=discord.ButtonStyle.primary, row=0)
     async def edit_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationDetailsModal())
+        await interaction.response.send_modal(CondemnationDetailsModal(interaction.guild.id))
 
     @discord.ui.button(label="🏷️ Más etiquetas", style=discord.ButtonStyle.primary, row=0)
     async def edit_more_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationMoreDetailsModal())
+        await interaction.response.send_modal(CondemnationMoreDetailsModal(interaction.guild.id))
 
     @discord.ui.button(label="🔗 Enlace del botón", style=discord.ButtonStyle.secondary, row=1)
     async def edit_button_url(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationButtonUrlModal())
+        await interaction.response.send_modal(CondemnationButtonUrlModal(interaction.guild.id))
 
     @discord.ui.button(label="⏳ Duración", style=discord.ButtonStyle.secondary, row=1)
     async def edit_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(CondemnationDurationModal())
+        await interaction.response.send_modal(CondemnationDurationModal(interaction.guild.id))
 
     @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=1)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5633,7 +5649,7 @@ class CondemnationTemplateEditorView(discord.ui.View):
 
     @discord.ui.button(label="↩️ Restaurar valores", style=discord.ButtonStyle.danger, row=1)
     async def reset(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        condemnation_template_reset()
+        condemnation_template_reset(interaction.guild.id)
         await condemnation_template_editor_update(
             interaction,
             "La plantilla de condenados volvió a sus valores predeterminados.",
