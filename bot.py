@@ -264,10 +264,7 @@ async def log_embed(
     print(f"{title} — {description}")
     if guild is None:
         return
-    configured_channel_id = raid_alert_channel_id(guild.id)
-    channel = guild.get_channel(configured_channel_id) if configured_channel_id else None
-    if channel is None:
-        channel = guild.get_channel(get_log_channel_id(guild.id))
+    channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is None:
         return
     embed = discord.Embed(
@@ -2260,7 +2257,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
@@ -2375,21 +2372,11 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.action_select = action_select
         self.add_item(action_select)
 
-        channel_select = discord.ui.ChannelSelect(
-            placeholder="Canal de alertas de Raid Protection",
-            channel_types=[discord.ChannelType.text],
-            min_values=1,
-            max_values=1,
-            row=1,
-        )
-        channel_select.callback = self.save_alert_channel
-        self.add_item(channel_select)
-
         role_select = discord.ui.RoleSelect(
             placeholder="Rol a mencionar en las alertas",
             min_values=1,
             max_values=1,
-            row=2,
+            row=1,
         )
         role_select.callback = self.save_alert_role
         self.add_item(role_select)
@@ -2432,21 +2419,6 @@ class HeraldoRaidSetupView(discord.ui.View):
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    async def save_alert_channel(self, interaction: discord.Interaction) -> None:
-        values = interaction.data.get("values") if interaction.data else []
-        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(
-                "❌ No pude localizar ese canal.", ephemeral=True
-            )
-            return
-        guild_config_set(self.guild_id, "raid_alert_channel_id", str(channel.id))
-        await interaction.response.edit_message(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n"
-            + raid_config_summary(interaction.guild),
-            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
-        )
-
     async def save_alert_role(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
@@ -2462,11 +2434,11 @@ class HeraldoRaidSetupView(discord.ui.View):
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="⚙️ Detección y duración", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label="⚙️ Detección y duración", style=discord.ButtonStyle.primary, row=2)
     async def detection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoRaidDetectionModal(self.guild_id))
 
-    @discord.ui.button(label="🛡️ Protección", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="🛡️ Protección", style=discord.ButtonStyle.success, row=2)
     async def toggle_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enabled = raid_enabled(self.guild_id)
         guild_config_set(self.guild_id, "raid_enabled", "0" if enabled else "1")
@@ -2476,7 +2448,7 @@ class HeraldoRaidSetupView(discord.ui.View):
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🔒 Pausar invitaciones", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="🔒 Pausar invitaciones", style=discord.ButtonStyle.secondary, row=3)
     async def toggle_invites(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enabled = raid_lock_invites_enabled(self.guild_id)
         guild_config_set(self.guild_id, "raid_lock_invites", "0" if enabled else "1")
@@ -2486,7 +2458,7 @@ class HeraldoRaidSetupView(discord.ui.View):
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🧹 Purgar mensajes", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="🧹 Purgar mensajes", style=discord.ButtonStyle.secondary, row=3)
     async def toggle_purge(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enabled = raid_purge_enabled(self.guild_id)
         guild_config_set(self.guild_id, "raid_purge", "0" if enabled else "1")
@@ -2496,7 +2468,7 @@ class HeraldoRaidSetupView(discord.ui.View):
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=(
@@ -2541,17 +2513,14 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoRoleSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🧭 Roles de orientación", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(
+        label="🧭 Orientación · Próximamente",
+        style=discord.ButtonStyle.secondary,
+        row=0,
+        disabled=True,
+    )
     async def orientation(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content=(
-                "🪽 **El Heraldo · Orientación**\n\n"
-                "Selecciona uno o varios roles que contarán como elección de orientación. "
-                "Si no configuras ninguno, El Heraldo no expulsará a nadie por no elegir una preferencia."
-            ),
-            embed=None,
-            view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
-        )
+        pass
 
 
     @discord.ui.button(label="✅ Verificación de edad", style=discord.ButtonStyle.primary, row=0)
@@ -2634,7 +2603,7 @@ async def heraldo_setup(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         "🪽 **El Heraldo · Configuración del servidor**\n\n"
         "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica. "
-        "Este panel no crea canales ni roles automáticamente.",
+        "Raid Protection usa el canal general de Logs; no crea un canal de alertas separado.",
         view=HeraldoSetupView(guild.id, interaction.user.id),
         ephemeral=True,
     )
@@ -7821,10 +7790,6 @@ def raid_new_account_ratio(guild_id: int) -> int:
     return max(0, min(100, raid_setting_int(guild_id, "raid_new_account_ratio", 0)))
 
 
-def raid_alert_channel_id(guild_id: int) -> int:
-    """Canal específico de alertas de raid; si no existe, usa el canal general de logs."""
-    return raid_setting_int(guild_id, "raid_alert_channel_id", 0)
-
 
 def raid_action(guild_id: int) -> str:
     value = raid_setting_get(guild_id, "raid_action")
@@ -8108,7 +8073,6 @@ def raid_config_summary(guild: discord.Guild) -> str:
     role = guild.get_role(raid_ping_role_id(guild.id)) if raid_ping_role_id(guild.id) else None
     min_age = raid_min_age_seconds(guild.id)
     ratio = raid_new_account_ratio(guild.id)
-    alert_channel = guild.get_channel(raid_alert_channel_id(guild.id)) if raid_alert_channel_id(guild.id) else None
     state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
     until = raid_until(guild.id)
     lines = [
@@ -8118,7 +8082,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
         f"• Acción: **{RAID_ACTION_LABELS[raid_action(guild.id)]}**",
         f"• Filtro de edad de cuenta: **{'cuentas de menos de ' + format_flex_duration(min_age) if min_age else 'sin filtro (todos los ingresos del raid)'}**",
         f"• Proporción mínima de cuentas nuevas: **{str(ratio) + '%' if ratio else 'desactivada'}**",
-        f"• Canal de alertas: {alert_channel.mention if alert_channel else '**canal general de logs**'}",
+        f"• Alertas: **canal general de Logs de El Heraldo**",
         f"• Pausar invitaciones: **{'sí' if raid_lock_invites_enabled(guild.id) else 'no'}**",
         f"• Purgar mensajes de los sancionados: **{'sí' if raid_purge_enabled(guild.id) else 'no'}**",
         f"• Rol de alerta: {role.mention if role else '**ninguno**'}",
@@ -8147,7 +8111,6 @@ raid_group = HoneypotGroup(
     accion="Qué hacer con los sospechosos durante el raid",
     edad_cuenta="Considerar nueva una cuenta más joven que esto: 30m, 7d, 1 mes…; 0 = sin filtro",
     proporcion_cuentas_nuevas="Porcentaje mínimo de cuentas nuevas en la ráfaga: 0 a 100; 0 = desactivado",
-    canal_alertas="Canal donde se enviarán las alertas de Raid Protection",
     pausar_invitaciones="Pausar las invitaciones del servidor mientras dure el raid",
     purgar="Borrar los mensajes que los sancionados mandaron desde que entraron",
     ping_rol="Rol a mencionar en la alerta de raid",
@@ -8164,7 +8127,6 @@ async def raid_config(
     accion: Optional[discord.app_commands.Choice[str]] = None,
     edad_cuenta: Optional[str] = None,
     proporcion_cuentas_nuevas: Optional[discord.app_commands.Range[int, 0, 100]] = None,
-    canal_alertas: Optional[discord.TextChannel] = None,
     pausar_invitaciones: Optional[bool] = None,
     purgar: Optional[bool] = None,
     ping_rol: Optional[discord.Role] = None,
@@ -8235,9 +8197,6 @@ async def raid_config(
             "proporción de cuentas nuevas → "
             + (f"{int(proporcion_cuentas_nuevas)}%" if int(proporcion_cuentas_nuevas) else "desactivada")
         )
-    if canal_alertas is not None:
-        guild_config_set(guild.id, "raid_alert_channel_id", str(canal_alertas.id))
-        changes.append(f"canal de alertas → {canal_alertas.mention}")
     if pausar_invitaciones is not None:
         guild_config_set(guild.id, "raid_lock_invites", "1" if pausar_invitaciones else "0")
         changes.append("pausar invitaciones: " + ("sí" if pausar_invitaciones else "no"))
