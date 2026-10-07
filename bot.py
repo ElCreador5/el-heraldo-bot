@@ -827,6 +827,20 @@ def set_orientation_created_role_ids(guild_id: int, role_ids: set[int]) -> None:
     guild_config_set(guild_id, "orientation_created_role_ids", json.dumps(sorted(role_ids)))
 
 
+def get_orientation_role_name(guild_id: int, key: str, default_name: str) -> str:
+    """Nombre configurable de un rol administrado de orientación."""
+    configured = guild_config_get(guild_id, f"orientation_role_name_{key}")
+    name = (configured or default_name).strip()
+    return name[:100] if name else default_name
+
+
+def orientation_managed_role_names(guild_id: int) -> dict[str, str]:
+    return {
+        key: get_orientation_role_name(guild_id, key, default_name)
+        for key, default_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS
+    }
+
+
 def orientation_role_for_emoji(guild: discord.Guild, emoji: str) -> discord.Role | None:
     normalized = emoji.replace("\ufe0f", "")
     for key, _name, role_emoji in ORIENTATION_ROLE_DEFINITIONS:
@@ -863,7 +877,11 @@ def get_orientation_embed_footer(guild: discord.Guild) -> str:
 
 
 def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
-    option_lines = [f"{emoji}  {label}" for _key, label, emoji in ORIENTATION_ROLE_DEFINITIONS]
+    default_names = dict(ORIENTATION_MANAGED_ROLE_DEFINITIONS)
+    option_lines = [
+        f"{emoji}  {get_orientation_role_name(guild.id, key, default_names[key])}"
+        for key, _label, emoji in ORIENTATION_ROLE_DEFINITIONS
+    ]
     description = (
         get_orientation_embed_intro(guild.id).strip()
         + "\n\n"
@@ -889,10 +907,12 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
     enabled = orientation_enabled(guild.id)
     channel = guild.get_channel(get_orientation_channel_id(guild.id))
     roles = []
-    for key, name, emoji in ORIENTATION_ROLE_DEFINITIONS:
+    default_names = dict(ORIENTATION_MANAGED_ROLE_DEFINITIONS)
+    for key, _name, emoji in ORIENTATION_ROLE_DEFINITIONS:
+        configured_name = get_orientation_role_name(guild.id, key, default_names[key])
         role_id = guild_resource_get(guild.id, "role", key)
         role = guild.get_role(role_id) if role_id else None
-        roles.append(f"{emoji} {role.mention if role else f'**{name}** · pendiente'}")
+        roles.append(f"{emoji} {role.mention if role else f'**{configured_name}** · pendiente'}")
     return (
         f"Estado: **{'Activo' if enabled else 'Desactivado'}**\n"
         f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
@@ -955,7 +975,8 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     conn.close()
 
     reaction_by_key = {key: emoji for key, _label, emoji in ORIENTATION_ROLE_DEFINITIONS}
-    for key, role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
+    for key, default_role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
+        role_name = get_orientation_role_name(guild.id, key, default_role_name)
         role = None
         saved_id = guild_resource_get(guild.id, "role", key)
         if saved_id:
@@ -1058,7 +1079,8 @@ async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
 
     created_ids = orientation_created_role_ids(guild.id)
     failed_roles: list[str] = []
-    for key, role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
+    for key, default_role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
+        role_name = get_orientation_role_name(guild.id, key, default_role_name)
         role_id = guild_resource_get(guild.id, "role", key)
         role = guild.get_role(role_id) if role_id else None
         if role is not None and role.id in created_ids:
@@ -2187,6 +2209,59 @@ class HeraldoRoleSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+class OrientationRoleNamesModal(discord.ui.Modal):
+    def __init__(self, guild: discord.Guild, page: int) -> None:
+        if page not in (1, 2):
+            raise ValueError("Página de nombres de orientación inválida")
+        super().__init__(title=f"Editar nombres de roles · {page}/2")
+        self.guild_id = guild.id
+        start = 0 if page == 1 else 5
+        self.definitions = ORIENTATION_MANAGED_ROLE_DEFINITIONS[start:start + 5]
+        self.inputs: list[discord.ui.TextInput] = []
+
+        for key, default_name in self.definitions:
+            field = discord.ui.TextInput(
+                label=default_name[:45],
+                default=get_orientation_role_name(guild.id, key, default_name),
+                required=True,
+                max_length=100,
+            )
+            self.inputs.append(field)
+            self.add_item(field)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        values: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for (key, _default_name), field in zip(self.definitions, self.inputs):
+            name = str(field).strip()
+            if not name:
+                await interaction.response.send_message(
+                    "❌ Ningún nombre de rol puede quedar vacío.",
+                    ephemeral=True,
+                )
+                return
+            normalized = name.casefold()
+            if normalized in seen:
+                await interaction.response.send_message(
+                    "❌ No repitas el mismo nombre dentro de esta página.",
+                    ephemeral=True,
+                )
+                return
+            seen.add(normalized)
+            values.append((key, name))
+
+        for key, name in values:
+            guild_config_set(self.guild_id, f"orientation_role_name_{key}", name)
+
+        await interaction.response.defer(ephemeral=True)
+        note = "Nombres guardados."
+        if orientation_enabled(self.guild_id):
+            ok, sync_note = await ensure_orientation_system(interaction.guild)
+            note = sync_note if ok else f"Guardé los nombres, pero no pude sincronizar los roles: {sync_note}"
+
+        await interaction.followup.send(f"✅ {note}", ephemeral=True)
+
+
 class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientación"):
     title_input = discord.ui.TextInput(
         label="Título",
@@ -2340,7 +2415,15 @@ class HeraldoOrientationSetupView(discord.ui.View):
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="🏷️ Nombres 1/2", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_role_names_1(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(OrientationRoleNamesModal(interaction.guild, 1))
+
+    @discord.ui.button(label="🏷️ Nombres 2/2", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_role_names_2(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(OrientationRoleNamesModal(interaction.guild, 2))
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
