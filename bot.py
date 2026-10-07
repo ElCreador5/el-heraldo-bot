@@ -2643,10 +2643,8 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
 async def update_verify_panel(guild: discord.Guild) -> str:
     """Edita el panel ya publicado con los textos actuales. Devuelve una nota para el admin."""
     ref = guild_config_get(guild.id, "verify_panel_ref")
-    if ref is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or str(guild.id) == legacy_owner:
-            ref = db_meta_get("verify_panel_ref")
+    if ref is None and legacy_fallback_allowed(guild.id):
+        ref = db_meta_get("verify_panel_ref")
     if not ref:
         return "Aún no hay panel publicado: usa /verify para publicarlo."
     try:
@@ -2672,10 +2670,8 @@ def verify_config_summary(guild: discord.Guild) -> str:
     role = guild.get_role(role_id)
     role_text = role.mention if role else f"⚠️ no encontrado (`{role_id}`)"
     ref = guild_config_get(guild.id, "verify_panel_ref")
-    if ref is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or str(guild.id) == legacy_owner:
-            ref = db_meta_get("verify_panel_ref")
+    if ref is None and legacy_fallback_allowed(guild.id):
+        ref = db_meta_get("verify_panel_ref")
     if ref and ref.count(":") == 1:
         channel_id, message_id = ref.split(":")
         panel_text = f"[ir al panel](https://discord.com/channels/{guild.id}/{channel_id}/{message_id})"
@@ -2980,10 +2976,8 @@ async def verify_config(
             )
             return
         panel_ref = guild_config_get(guild.id, "verify_panel_ref")
-        if panel_ref is None:
-            legacy_owner = db_meta_get("verify_legacy_guild_id")
-            if legacy_owner is None or str(guild.id) == legacy_owner:
-                panel_ref = db_meta_get("verify_panel_ref")
+        if panel_ref is None and legacy_fallback_allowed(guild.id):
+            panel_ref = db_meta_get("verify_panel_ref")
         if not panel_ref:
             await interaction.response.send_message(
                 "❌ No activé la verificación: aún no hay panel publicado. Usa `/verify` primero; "
@@ -3981,9 +3975,7 @@ def condemnation_get(guild_id: int, user_id: int, active_only: bool = True) -> s
         query += " AND active = 1"
     row = conn.execute(query, params).fetchone()
     if row is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        allow_legacy = legacy_owner is None or legacy_owner == str(guild_id)
-        if allow_legacy:
+        if legacy_fallback_allowed(guild_id):
             legacy_query = "SELECT * FROM condemnations WHERE user_id = ? AND (guild_id = ? OR guild_id = 0)"
             if active_only:
                 legacy_query += " AND active = 1"
@@ -4289,10 +4281,8 @@ def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None
     if channel.id == get_recovery_channel_id(channel.guild.id):
         return "es el canal de recuperación"
     ref = guild_config_get(channel.guild.id, "verify_panel_ref")
-    if ref is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or legacy_owner == str(channel.guild.id):
-            ref = db_meta_get("verify_panel_ref")
+    if ref is None and legacy_fallback_allowed(channel.guild.id):
+        ref = db_meta_get("verify_panel_ref")
     if ref:
         try:
             if int(ref.split(":")[0]) == channel.id:
