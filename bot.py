@@ -738,8 +738,11 @@ def set_log_channel_id(channel_id: int) -> None:
     db_meta_set("log_channel_id", str(channel_id))
 
 
-def verify_enabled() -> bool:
-    return db_meta_get("verify_enabled") == "1"
+def verify_enabled(guild_id: int | None = None) -> bool:
+    value = guild_config_get(guild_id, "verify_enabled") if guild_id is not None else None
+    if value is None:
+        value = db_meta_get("verify_enabled")
+    return value == "1"
 
 
 def get_verify_role_id(guild_id: int | None = None) -> int:
@@ -754,15 +757,21 @@ def get_verify_role_id(guild_id: int | None = None) -> int:
     return int(value) if value is not None else TENTADO_ROLE_ID
 
 
-def get_verify_timeout() -> int:
-    """Devuelve el timeout en segundos. Las configuraciones antiguas siguen guardadas en segundos;
-    las nuevas se guardan como duración d/h/m convertida a segundos."""
-    value = db_meta_get("verify_timeout")
-    return int(value) if value is not None else VERIFY_TIMEOUT_DEFAULT
+def get_verify_timeout(guild_id: int | None = None) -> int:
+    """Timeout de verificación por servidor, con compatibilidad con la configuración antigua."""
+    value = guild_config_get(guild_id, "verify_timeout") if guild_id is not None else None
+    if value is None:
+        value = db_meta_get("verify_timeout")
+    try:
+        return int(value) if value is not None else VERIFY_TIMEOUT_DEFAULT
+    except (TypeError, ValueError):
+        return VERIFY_TIMEOUT_DEFAULT
 
 
-def get_verify_action() -> str:
-    value = db_meta_get("verify_action")
+def get_verify_action(guild_id: int | None = None) -> str:
+    value = guild_config_get(guild_id, "verify_action") if guild_id is not None else None
+    if value is None:
+        value = db_meta_get("verify_action")
     return value if value in VERIFY_ACTION_LABELS else VERIFY_ACTION_DEFAULT
 
 
@@ -1032,7 +1041,7 @@ async def on_member_join(member: discord.Member) -> None:
     except Exception:
         traceback.print_exc()
 
-    if verify_enabled():
+    if verify_enabled(member.guild.id):
         now = datetime.now(timezone.utc)
         db_set_verify_pending(member.id, now)
         asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
@@ -1213,7 +1222,7 @@ async def check_pending_verifications() -> None:
     conn.close()
 
     now = datetime.now(timezone.utc)
-    verify_window = timedelta(seconds=get_verify_timeout())
+    verify_window = timedelta(seconds=get_verify_timeout(guild_id))
     for row in rows:
         if row["tentado_at"] is not None:
             tentado_at = datetime.fromisoformat(row["tentado_at"])
@@ -1732,11 +1741,11 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
     if guild is None:
         return
     member = guild.get_member(user_id)
-    if member is None or not verify_enabled():
+    if member is None or not verify_enabled(guild.id):
         db_clear_verify_pending(user_id)  # se fue, o la verificación se desactivó
         return
 
-    timeout = get_verify_timeout()
+    timeout = get_verify_timeout(guild_id)
     deadline = datetime.fromisoformat(row["verify_pending_at"]) + timedelta(seconds=timeout)
     if datetime.now(timezone.utc) + timedelta(seconds=1) < deadline:
         return
@@ -1746,7 +1755,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
     if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
         return  # se verificó a tiempo (o un admin le dio un rol de orientación)
 
-    action = get_verify_action()
+    action = get_verify_action(guild.id)
     if action == "none":
         await log_embed(
             guild, "⏰ Verificación vencida",
@@ -1811,10 +1820,10 @@ def verify_config_summary(guild: discord.Guild) -> str:
     else:
         panel_text = "sin publicar (usa /verify)"
     return (
-        f"**Verificación:** {'✅ activada' if verify_enabled() else '⏸️ desactivada'}\n"
+        f"**Verificación:** {'✅ activada' if verify_enabled(guild.id) else '⏸️ desactivada'}\n"
         f"**Rol de verificación:** {role_text}\n"
-        f"**Timeout:** {format_duration((get_verify_timeout() + 59) // 60)}\n"
-        f"**Acción al agotarse:** {VERIFY_ACTION_LABELS[get_verify_action()]}\n"
+        f"**Timeout:** {format_duration((get_verify_timeout(guild.id) + 59) // 60)}\n"
+        f"**Acción al agotarse:** {VERIFY_ACTION_LABELS[get_verify_action(guild.id)]}\n"
         f"**Panel:** {panel_text}"
     )
 
@@ -2121,12 +2130,15 @@ async def verify_config(
         changes.append(f"rol → {rol.mention}")
     if timeout_seconds is not None:
         db_meta_set("verify_timeout", str(timeout_seconds))
+        guild_config_set(interaction.guild.id, "verify_timeout", str(timeout_seconds))
         changes.append(f"timeout → {format_duration(timeout_seconds // 60)}")
     if accion is not None:
         db_meta_set("verify_action", accion.value)
+        guild_config_set(interaction.guild.id, "verify_action", accion.value)
         changes.append(f"acción → {accion.name}")
     if activado is not None:
         db_meta_set("verify_enabled", "1" if activado else "0")
+        guild_config_set(interaction.guild.id, "verify_enabled", "1" if activado else "0")
         changes.append("activada" if activado else "desactivada")
 
     warnings: list[str] = []
