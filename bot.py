@@ -1156,7 +1156,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                     after,
                     reason="El rol Condenado fue otorgado manualmente.",
                     duration_minutes=None,
-                    purge_spec=hp_purge_spec(guild.id),
+                    purge_spec=hp_purge_spec(after.guild.id),
                     origin="role",
                     applied_by=actor,
                     preserve_role_ids=list(before_role_ids),
@@ -1183,7 +1183,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                     role_id=condemned_id,
                 )
                 if ok:
-                    condemnation_add_saved_roles(after.id, new_ids)
+                    condemnation_add_saved_roles(after.guild.id, after.id, new_ids)
                 else:
                     await log_embed(after.guild, "⚠️ No pude re-quitar roles a un condenado", f"{after.mention}: {note}", discord.Color.orange())
             except Exception:
@@ -7491,7 +7491,7 @@ def raid_is_active(guild_id: int) -> bool:
 
 def raid_is_suspicious(member: discord.Member) -> bool:
     """Con edad mínima configurada, solo se actúa sobre cuentas más nuevas que ese tiempo."""
-    min_age = raid_min_age_seconds(guild.id)
+    min_age = raid_min_age_seconds(member.guild.id)
     if min_age <= 0:
         return True
     return (datetime.now(timezone.utc) - member.created_at).total_seconds() < min_age
