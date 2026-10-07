@@ -2955,7 +2955,7 @@ async def track_activity(message: discord.Message) -> None:
         return
     if EXCLUDED_ROLE_IDS and any(r.id in EXCLUDED_ROLE_IDS for r in message.author.roles):
         return
-    if message.channel.id in hp_trap_ids():
+    if message.channel.id in hp_trap_ids(message.guild.id):
         return  # lo escrito en un canal trampa no cuenta como actividad
     punish_id = hp_punish_role_id()
     if (punish_id and any(r.id == punish_id for r in message.author.roles)) or condemnation_get(message.guild.id, message.author.id) is not None:
@@ -3274,6 +3274,21 @@ def honeypot_db_init() -> None:
         "kind TEXT NOT NULL, target_id INTEGER NOT NULL, PRIMARY KEY (kind, target_id))"
     )
     conn.execute(
+        "CREATE TABLE IF NOT EXISTS guild_honeypot_channels ("
+        "guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, warning_message_id INTEGER, "
+        "PRIMARY KEY (guild_id, channel_id))"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS guild_honeypot_exempt ("
+        "guild_id INTEGER NOT NULL, kind TEXT NOT NULL, target_id INTEGER NOT NULL, "
+        "PRIMARY KEY (guild_id, kind, target_id))"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS guild_honeypot_state ("
+        "guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, role_ids TEXT NOT NULL, saved_at TEXT NOT NULL, "
+        "PRIMARY KEY (guild_id, user_id))"
+    )
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS honeypot_punished ("
         "user_id INTEGER PRIMARY KEY, role_ids TEXT NOT NULL, punished_at TEXT NOT NULL)"
     )
@@ -3345,88 +3360,127 @@ def hp_meta_set(key: str, value: str) -> None:
     _hp_meta_cache.pop(key, None)
 
 
-def hp_trap_ids() -> set[int]:
-    global _hp_trap_cache
-    if _hp_trap_cache is None:
-        _hp_trap_cache = set(hp_traps())
-    return _hp_trap_cache
+def hp_trap_ids(guild_id: int) -> set[int]:
+    return set(hp_traps(guild_id))
 
 
-def hp_traps() -> dict[int, int | None]:
+def hp_traps(guild_id: int) -> dict[int, int | None]:
     conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT channel_id, warning_message_id FROM honeypot_channels").fetchall()
+    rows = conn.execute(
+        "SELECT channel_id, warning_message_id FROM guild_honeypot_channels WHERE guild_id = ?",
+        (guild_id,),
+    ).fetchall()
+    if not rows:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or legacy_owner == str(guild_id):
+            rows = conn.execute("SELECT channel_id, warning_message_id FROM honeypot_channels").fetchall()
+            for channel_id, warning_message_id in rows:
+                conn.execute(
+                    "INSERT OR IGNORE INTO guild_honeypot_channels (guild_id, channel_id, warning_message_id) VALUES (?, ?, ?)",
+                    (guild_id, channel_id, warning_message_id),
+                )
+            conn.commit()
     conn.close()
-    return {r[0]: r[1] for r in rows}
+    return {row[0]: row[1] for row in rows}
 
 
-def hp_add_trap(channel_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("INSERT OR IGNORE INTO honeypot_channels (channel_id) VALUES (?)", (channel_id,))
-    conn.commit()
-    conn.close()
-    global _hp_trap_cache
-    _hp_trap_cache = None
-
-
-def hp_remove_trap(channel_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM honeypot_channels WHERE channel_id = ?", (channel_id,))
-    conn.commit()
-    conn.close()
-    global _hp_trap_cache
-    _hp_trap_cache = None
-
-
-def hp_set_warning_message(channel_id: int, message_id: int | None) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE honeypot_channels SET warning_message_id = ? WHERE channel_id = ?", (message_id, channel_id))
-    conn.commit()
-    conn.close()
-
-
-def hp_exempt_ids(kind: str) -> set[int]:
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT target_id FROM honeypot_exempt WHERE kind = ?", (kind,)).fetchall()
-    conn.close()
-    return {r[0] for r in rows}
-
-
-def hp_exempt_add(kind: str, target_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("INSERT OR IGNORE INTO honeypot_exempt (kind, target_id) VALUES (?, ?)", (kind, target_id))
-    conn.commit()
-    conn.close()
-
-
-def hp_exempt_remove(kind: str, target_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM honeypot_exempt WHERE kind = ? AND target_id = ?", (kind, target_id))
-    conn.commit()
-    conn.close()
-
-
-def hp_save_punished(user_id: int, role_ids: list[int]) -> None:
-    """Guarda los roles quitados para poder devolverlos con /liberar."""
+def hp_add_trap(guild_id: int, channel_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        "INSERT INTO honeypot_punished (user_id, role_ids, punished_at) VALUES (?, ?, ?) "
-        "ON CONFLICT(user_id) DO UPDATE SET role_ids = excluded.role_ids, punished_at = excluded.punished_at",
-        (user_id, json.dumps(role_ids), datetime.now(timezone.utc).isoformat()),
+        "INSERT OR IGNORE INTO guild_honeypot_channels (guild_id, channel_id) VALUES (?, ?)",
+        (guild_id, channel_id),
     )
     conn.commit()
     conn.close()
 
 
-def hp_get_punished(user_id: int) -> list[int] | None:
+def hp_remove_trap(guild_id: int, channel_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
-    row = conn.execute("SELECT role_ids FROM honeypot_punished WHERE user_id = ?", (user_id,)).fetchone()
+    conn.execute(
+        "DELETE FROM guild_honeypot_channels WHERE guild_id = ? AND channel_id = ?",
+        (guild_id, channel_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_set_warning_message(guild_id: int, channel_id: int, message_id: int | None) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE guild_honeypot_channels SET warning_message_id = ? WHERE guild_id = ? AND channel_id = ?",
+        (message_id, guild_id, channel_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_exempt_ids(guild_id: int, kind: str) -> set[int]:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT target_id FROM guild_honeypot_exempt WHERE guild_id = ? AND kind = ?",
+        (guild_id, kind),
+    ).fetchall()
+    if not rows:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        if legacy_owner is None or legacy_owner == str(guild_id):
+            rows = conn.execute("SELECT target_id FROM honeypot_exempt WHERE kind = ?", (kind,)).fetchall()
+            for (target_id,) in rows:
+                conn.execute(
+                    "INSERT OR IGNORE INTO guild_honeypot_exempt (guild_id, kind, target_id) VALUES (?, ?, ?)",
+                    (guild_id, kind, target_id),
+                )
+            conn.commit()
+    conn.close()
+    return {row[0] for row in rows}
+
+
+def hp_exempt_add(guild_id: int, kind: str, target_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT OR IGNORE INTO guild_honeypot_exempt (guild_id, kind, target_id) VALUES (?, ?, ?)",
+        (guild_id, kind, target_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_exempt_remove(guild_id: int, kind: str, target_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "DELETE FROM guild_honeypot_exempt WHERE guild_id = ? AND kind = ? AND target_id = ?",
+        (guild_id, kind, target_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_save_punished(guild_id: int, user_id: int, role_ids: list[int]) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO guild_honeypot_state (guild_id, user_id, role_ids, saved_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(guild_id, user_id) DO UPDATE SET role_ids = excluded.role_ids, saved_at = excluded.saved_at",
+        (guild_id, user_id, json.dumps(role_ids), datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hp_get_punished(guild_id: int, user_id: int) -> list[int] | None:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT role_ids FROM guild_honeypot_state WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
+    ).fetchone()
     conn.close()
     return json.loads(row[0]) if row else None
 
 
-def hp_clear_punished(user_id: int) -> None:
+def hp_clear_punished(guild_id: int, user_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM honeypot_punished WHERE user_id = ?", (user_id,))
+    conn.execute(
+        "DELETE FROM guild_honeypot_state WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
+    )
     conn.commit()
     conn.close()
 
@@ -3505,7 +3559,7 @@ def condemnation_deactivate(
         conn.execute("UPDATE guild_cases SET active = 0 WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
     conn.commit()
     conn.close()
-    hp_clear_punished(user_id)
+    hp_clear_punished(guild_id, user_id)
 
 
 def condemnation_add_saved_roles(guild_id: int, user_id: int, new_ids: list[int]) -> None:
@@ -3826,14 +3880,14 @@ def hp_is_exempt(member: discord.Member) -> bool:
     if (perms.administrator or perms.manage_guild or perms.manage_messages
             or perms.kick_members or perms.ban_members or perms.moderate_members):
         return True  # el equipo de moderación nunca cae en la trampa
-    if member.id in hp_exempt_ids("member"):
+    if member.id in hp_exempt_ids(member.guild.id, "member"):
         return True
-    exempt_roles = hp_exempt_ids("role")
+    exempt_roles = hp_exempt_ids(member.guild.id, "role")
     return any(r.id in exempt_roles for r in member.roles)
 
 
 def hp_config_summary(guild: discord.Guild) -> str:
-    traps = hp_traps()
+    traps = hp_traps(guild.id)
     trap_text = ", ".join(f"<#{cid}>" for cid in traps) or "—"
     ping = f"<@&{hp_ping_role_id()}>" if hp_ping_role_id() else "—"
     estado = "✅ Activado" if honeypot_enabled() else "❌ Desactivado"
@@ -3890,7 +3944,7 @@ def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord
 async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
     """Publica/actualiza (o borra) el aviso fijado de un canal trampa. Devuelve un
     texto de error o None si todo fue bien."""
-    msg_id = hp_traps().get(channel.id)
+    msg_id = hp_traps(guild.id).get(channel.id)
     existing: discord.Message | None = None
     if msg_id:
         try:
@@ -3904,7 +3958,7 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
         if not hp_warning_enabled():
             if existing:
                 await existing.delete()
-            hp_set_warning_message(channel.id, None)
+            hp_set_warning_message(channel.guild.id, channel.id, None)
             return None
         if existing:
             await existing.edit(embed=hp_warning_embed(channel))
@@ -3913,7 +3967,7 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
             return None
         message = await channel.send(embed=hp_warning_embed(channel))
         await message.pin()
-        hp_set_warning_message(channel.id, message.id)
+        hp_set_warning_message(channel.guild.id, channel.id, message.id)
         # Quita el mensaje de sistema "X ha fijado un mensaje".
         async for m in channel.history(limit=5):
             if m.type == discord.MessageType.pins_add:
@@ -3928,7 +3982,7 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
 
 async def hp_sync_all_warnings(guild: discord.Guild) -> list[str]:
     errors: list[str] = []
-    for channel_id in list(hp_traps()):
+    for channel_id in list(hp_traps(guild.id)):
         channel = guild.get_channel(channel_id)
         if isinstance(channel, discord.TextChannel):
             err = await hp_sync_warning(channel)
@@ -4716,7 +4770,7 @@ async def condemnation_sync_roles(
 
     if save_snapshot:
         # Solo se guardan roles que realmente estaban antes de la condena y que el bot puede restaurar.
-        hp_save_punished(member.id, saved_ids)
+        hp_save_punished(member.guild.id, member.id, saved_ids)
     return True, saved_ids, f"{len(removed)} rol(es) asignable(s) retirado(s); Tentad@ y Sin Verificar retirados."
 
 
@@ -4872,7 +4926,7 @@ async def release_condemned_member(
     if row is None and not (punish_role and punish_role in member.roles):
         return False, "Ese miembro no tiene una condena activa."
 
-    saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.id) or [])
+    saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.guild.id, member.id) or [])
     restore: list[discord.Role] = []
     lost = 0
     for rid in saved:
@@ -5115,7 +5169,7 @@ async def honeypot_listener(message: discord.Message) -> None:
         return  # DMs, webhooks y otros bots se ignoran (tus integraciones están a salvo)
     if not honeypot_enabled() or honeypot_paused():
         return
-    if message.channel.id not in hp_trap_ids():
+    if message.channel.id not in hp_trap_ids(message.guild.id):
         return
     member = message.author
     if not isinstance(member, discord.Member) or hp_is_exempt(member):
@@ -5144,13 +5198,13 @@ async def honeypot_listener(message: discord.Message) -> None:
 
 @bot.listen("on_guild_channel_delete")
 async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
-    if channel.id not in hp_traps():
+    if channel.id not in hp_traps(channel.guild.id):
         return
-    hp_remove_trap(channel.id)
+    hp_remove_trap(channel.guild.id, channel.id)
     await log_embed(
         channel.guild, "🍯 Canal trampa eliminado",
         f"Se borró `#{channel.name}` en Discord y se quitó del honeypot automáticamente. "
-        f"Quedan {len(hp_traps())} canal(es) trampa.",
+        f"Quedan {len(hp_traps(channel.guild.id))} canal(es) trampa.",
         discord.Color.orange(),
     )
 
@@ -5718,7 +5772,7 @@ async def honeypot_config(
     if all(v is None for v in (activado, accion, rol_castigo, purga, timeout, aviso, ping_rol, retencion)):
         await interaction.response.send_message(hp_config_summary(guild), ephemeral=True)
         return
-    if activado and not hp_traps():
+    if activado and not hp_traps(guild.id):
         await interaction.response.send_message(
             "❌ No lo activé: añade al menos un canal trampa con `/honeypot add` o `/honeypot create`.",
             ephemeral=True,
@@ -5797,7 +5851,7 @@ async def honeypot_config(
 @discord.app_commands.describe(canal="Canal de texto que todos puedan ver y en el que puedan escribir")
 async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
     guild = interaction.guild
-    if canal.id in hp_traps():
+    if canal.id in hp_traps(guild.id):
         await interaction.response.send_message(f"{canal.mention} ya es un canal trampa.", ephemeral=True)
         return
     reason = hp_protected_channel_reason(canal)
@@ -5815,7 +5869,7 @@ async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChan
         )
         return
     everyone = canal.permissions_for(guild.default_role)
-    hp_add_trap(canal.id)
+    hp_add_trap(guild.id, canal.id)
     await interaction.response.defer(ephemeral=True)
     err = await hp_sync_warning(canal)
     notes: list[str] = []
@@ -5850,7 +5904,7 @@ async def honeypot_create(interaction: discord.Interaction) -> None:
     except discord.HTTPException as e:
         await interaction.followup.send(f"❌ No pude crear el canal: `{e}`", ephemeral=True)
         return
-    hp_add_trap(channel.id)
+    hp_add_trap(guild.id, channel.id)
     err = await hp_sync_warning(channel)
     await interaction.followup.send(
         f"✅ Creé {channel.mention} y lo añadí como trampa." + (f"\n⚠️ {err}" if err else "")
@@ -5862,7 +5916,7 @@ async def honeypot_create(interaction: discord.Interaction) -> None:
 
 @honeypot_group.command(name="remove", description="Quitar un canal del honeypot (no lo borra).")
 async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
-    traps = hp_traps()
+    traps = hp_traps(guild.id)
     if canal.id not in traps:
         await interaction.response.send_message(f"{canal.mention} no es un canal trampa.", ephemeral=True)
         return
@@ -5873,9 +5927,9 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
             await (await canal.fetch_message(msg_id)).delete()
         except discord.HTTPException:
             pass
-    hp_remove_trap(canal.id)
+    hp_remove_trap(interaction.guild.id, canal.id)
     extra = ""
-    if not hp_traps() and honeypot_enabled():
+    if not hp_traps(guild.id) and honeypot_enabled():
         hp_meta_set("honeypot_enabled", "0")
         extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
     await interaction.followup.send(f"✅ {canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
@@ -5981,10 +6035,10 @@ async def honeypot_exempt_add(
         await interaction.response.send_message("Elige **uno**: `rol` o `miembro`.", ephemeral=True)
         return
     if rol is not None:
-        hp_exempt_add("role", rol.id)
+        hp_exempt_add(interaction.guild.id, "role", rol.id)
         text = f"rol {rol.mention}"
     else:
-        hp_exempt_add("member", miembro.id)
+        hp_exempt_add(interaction.guild.id, "member", miembro.id)
         text = f"miembro {miembro.mention}"
     await interaction.response.send_message(f"✅ Eximido: {text}.", ephemeral=True)
 
@@ -6000,10 +6054,10 @@ async def honeypot_exempt_remove(
         await interaction.response.send_message("Elige **uno**: `rol` o `miembro`.", ephemeral=True)
         return
     if rol is not None:
-        hp_exempt_remove("role", rol.id)
+        hp_exempt_remove(interaction.guild.id, "role", rol.id)
         text = f"rol {rol.mention}"
     else:
-        hp_exempt_remove("member", miembro.id)
+        hp_exempt_remove(interaction.guild.id, "member", miembro.id)
         text = f"miembro {miembro.mention}"
     await interaction.response.send_message(f"✅ Exención quitada: {text}.", ephemeral=True)
 
