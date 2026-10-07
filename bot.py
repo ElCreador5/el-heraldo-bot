@@ -309,6 +309,21 @@ def db_init() -> None:
         pass  # la columna ya existe
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS guild_members (
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            entry_invite TEXT,
+            tentado_at TEXT,
+            dm_sent INTEGER DEFAULT 0,
+            verification_dm_sent INTEGER DEFAULT 0,
+            sin_verificado_at TEXT,
+            verify_pending_at TEXT,
+            PRIMARY KEY (guild_id, user_id)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS activity (
             user_id INTEGER PRIMARY KEY,
             messages INTEGER NOT NULL DEFAULT 0,
@@ -360,129 +375,89 @@ def db_init() -> None:
     conn.close()
 
 
-def db_get(user_id: int) -> sqlite3.Row | None:
+def db_get(guild_id: int, user_id: int) -> sqlite3.Row | None:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     row = conn.execute(
-        "SELECT * FROM members WHERE user_id = ?", (user_id,)
+        "SELECT * FROM guild_members WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)
     ).fetchone()
     conn.close()
     return row
 
 
-def db_upsert_join(user_id: int, invite_code: str | None) -> None:
-    """Registra o actualiza el invite de entrada de un usuario al unirse."""
-    row = db_get(user_id)
+def db_upsert_join(guild_id: int, user_id: int, invite_code: str | None) -> None:
+    """Registra el estado del miembro de forma independiente en cada servidor."""
+    row = db_get(guild_id, user_id)
     conn = sqlite3.connect(DB_PATH)
     if row is None:
         conn.execute(
-            "INSERT INTO members (user_id, entry_invite, dm_sent) VALUES (?, ?, 0)",
-            (user_id, invite_code),
+            "INSERT INTO guild_members (guild_id, user_id, entry_invite, dm_sent) VALUES (?, ?, ?, 0)",
+            (guild_id, user_id, invite_code),
         )
     else:
-        # Reingreso: si usó el mismo invite original, se le resetea dm_sent
-        # para darle otra oportunidad; si no, se conserva el estado previo.
         if row["entry_invite"] and invite_code == row["entry_invite"]:
             conn.execute(
-                "UPDATE members SET dm_sent = 0 WHERE user_id = ?", (user_id,)
+                "UPDATE guild_members SET dm_sent = 0 WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
-        # si entry_invite era NULL (primer registro sin invite detectado), lo fija ahora
         if row["entry_invite"] is None:
             conn.execute(
-                "UPDATE members SET entry_invite = ? WHERE user_id = ?",
-                (invite_code, user_id),
+                "UPDATE guild_members SET entry_invite = ? WHERE guild_id = ? AND user_id = ?",
+                (invite_code, guild_id, user_id),
             )
     conn.commit()
     conn.close()
 
 
-def db_set_tentado(user_id: int, when: datetime) -> None:
+def _db_member_set(guild_id: int, user_id: int, column: str, value) -> None:
+    allowed = {"tentado_at", "dm_sent", "verification_dm_sent", "sin_verificado_at", "verify_pending_at"}
+    if column not in allowed:
+        raise ValueError("Columna de miembro no permitida")
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        "UPDATE members SET tentado_at = ? WHERE user_id = ?",
-        (when.isoformat(), user_id),
+        f"INSERT INTO guild_members (guild_id, user_id, {column}) VALUES (?, ?, ?) "
+        f"ON CONFLICT(guild_id, user_id) DO UPDATE SET {column} = excluded.{column}",
+        (guild_id, user_id, value),
     )
     conn.commit()
     conn.close()
 
 
-def db_mark_dm_sent(user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "UPDATE members SET dm_sent = 1 WHERE user_id = ?", (user_id,)
-    )
-    conn.commit()
-    conn.close()
+def db_set_tentado(guild_id: int, user_id: int, when: datetime) -> None:
+    _db_member_set(guild_id, user_id, "tentado_at", when.isoformat())
 
 
-def db_verification_dm_sent(user_id: int) -> bool:
-    row = db_get(user_id)
+def db_mark_dm_sent(guild_id: int, user_id: int) -> None:
+    _db_member_set(guild_id, user_id, "dm_sent", 1)
+
+
+def db_verification_dm_sent(guild_id: int, user_id: int) -> bool:
+    row = db_get(guild_id, user_id)
     return bool(row and row["verification_dm_sent"])
 
 
-def db_mark_verification_dm_sent(user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "UPDATE members SET verification_dm_sent = 1 WHERE user_id = ?", (user_id,)
-    )
-    conn.commit()
-    conn.close()
+def db_mark_verification_dm_sent(guild_id: int, user_id: int) -> None:
+    _db_member_set(guild_id, user_id, "verification_dm_sent", 1)
 
 
-def db_clear_tentado(user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "UPDATE members SET tentado_at = NULL WHERE user_id = ?", (user_id,)
-    )
-    conn.commit()
-    conn.close()
+def db_clear_tentado(guild_id: int, user_id: int) -> None:
+    _db_member_set(guild_id, user_id, "tentado_at", None)
 
 
-def db_set_sin_verificado(user_id: int, when: datetime) -> None:
-    """Upsert: la fila puede no existir todavía si Sin Verificar se asigna
-    antes de que on_member_join termine de registrar el join."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
-        INSERT INTO members (user_id, sin_verificado_at, dm_sent) VALUES (?, ?, 0)
-        ON CONFLICT(user_id) DO UPDATE SET sin_verificado_at = excluded.sin_verificado_at
-        """,
-        (user_id, when.isoformat()),
-    )
-    conn.commit()
-    conn.close()
+def db_set_sin_verificado(guild_id: int, user_id: int, when: datetime) -> None:
+    _db_member_set(guild_id, user_id, "sin_verificado_at", when.isoformat())
 
 
-def db_clear_sin_verificado(user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "UPDATE members SET sin_verificado_at = NULL WHERE user_id = ?", (user_id,)
-    )
-    conn.commit()
-    conn.close()
+def db_clear_sin_verificado(guild_id: int, user_id: int) -> None:
+    _db_member_set(guild_id, user_id, "sin_verificado_at", None)
 
 
-def db_set_verify_pending(user_id: int, when: datetime) -> None:
-    """Upsert: marca desde cuándo corre el timeout de verificación del miembro."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
-        INSERT INTO members (user_id, verify_pending_at, dm_sent) VALUES (?, ?, 0)
-        ON CONFLICT(user_id) DO UPDATE SET verify_pending_at = excluded.verify_pending_at
-        """,
-        (user_id, when.isoformat()),
-    )
-    conn.commit()
-    conn.close()
+def db_set_verify_pending(guild_id: int, user_id: int, when: datetime) -> None:
+    _db_member_set(guild_id, user_id, "verify_pending_at", when.isoformat())
 
 
-def db_clear_verify_pending(user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "UPDATE members SET verify_pending_at = NULL WHERE user_id = ?", (user_id,)
-    )
-    conn.commit()
-    conn.close()
+def db_clear_verify_pending(guild_id: int, user_id: int) -> None:
+    _db_member_set(guild_id, user_id, "verify_pending_at", None)
 
 
 def db_track_message(user_id: int, today: str, yesterday: str) -> None:
@@ -1053,7 +1028,7 @@ async def on_member_join(member: discord.Member) -> None:
         return  # los bots no pasan por el flujo de verificación
 
     invite_code = await detect_used_invite(member.guild)
-    db_upsert_join(member.id, invite_code)
+    db_upsert_join(member.guild.id, member.id, invite_code)
 
     # Una condena activa tiene prioridad absoluta sobre los flujos de verificación.
     # El miembro puede salir y volver: la condena persiste en SQLite.
@@ -1062,7 +1037,7 @@ async def on_member_join(member: discord.Member) -> None:
         condemnation_deactivate(member.id)  # caducó mientras estaba fuera: entra como cualquier miembro nuevo
         condemnation = None
     if condemnation is not None:
-        db_clear_verify_pending(member.id)
+        db_clear_verify_pending(member.guild.id, member.id)
         _condemn_sync_busy.add(member.id)
         try:
             ok, _, note = await condemnation_sync_roles(member, save_snapshot=False, reason="Reingreso con condena activa", role_id=condemnation_role_id(condemnation))
@@ -1085,14 +1060,14 @@ async def on_member_join(member: discord.Member) -> None:
     # no pasa por la verificación.
     try:
         if await raid_handle_join(member):
-            db_clear_verify_pending(member.id)
+            db_clear_verify_pending(member.guild.id, member.id)
             return
     except Exception:
         traceback.print_exc()
 
     if verify_enabled(member.guild.id):
         now = datetime.now(timezone.utc)
-        db_set_verify_pending(member.id, now)
+        db_set_verify_pending(member.guild.id, member.id, now)
         asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
 
 
@@ -1189,15 +1164,15 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                 traceback.print_exc()
             finally:
                 _condemn_sync_busy.discard(after.id)
-        db_clear_tentado(after.id)
-        db_clear_sin_verificado(after.id)
-        db_clear_verify_pending(after.id)
+        db_clear_tentado(after.guild.id, after.id)
+        db_clear_sin_verificado(after.guild.id, after.id)
+        db_clear_verify_pending(after.guild.id, after.id)
         return
 
     # Flujos normales de verificación; una condena activa ya salió por arriba.
     if get_sin_verificado_role_id(after.guild.id) in after_role_ids and get_sin_verificado_role_id(after.guild.id) not in before_role_ids:
         now = datetime.now(timezone.utc)
-        db_set_sin_verificado(after.id, now)
+        db_set_sin_verificado(after.guild.id, after.id, now)
         asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
         print(f"⏳ {after} recibió Sin Verificar — respaldo de 300s armado.")
 
@@ -1218,21 +1193,21 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
     """Respaldo del timeout de Sin Verificar (299s). Si a los 300s el
     miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
     if condemnation_get(user_id) is not None:
-        db_clear_sin_verificado(user_id)
+        db_clear_sin_verificado(guild_id, user_id)
         return
     guild = bot.get_guild(guild_id)
     if guild is None:
         return
     member = guild.get_member(user_id)
     if member is None:
-        db_clear_sin_verificado(user_id)  # ya lo expulsaron — nada que hacer
+        db_clear_sin_verificado(guild_id, user_id)  # ya lo expulsaron — nada que hacer
         return
 
     if get_sin_verificado_role_id(guild_id) not in {r.id for r in member.roles}:
-        db_clear_sin_verificado(user_id)  # ya verificó a tiempo
+        db_clear_sin_verificado(guild_id, user_id)  # ya verificó a tiempo
         return
 
-    db_clear_sin_verificado(user_id)
+    db_clear_sin_verificado(guild_id, user_id)
     try:
         await member.kick(reason="No se verificó (respaldo del timeout)")
         await log_embed(
@@ -1263,7 +1238,7 @@ async def check_pending_verifications() -> None:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT user_id, tentado_at, sin_verificado_at, verify_pending_at FROM members "
+        "SELECT guild_id, user_id, tentado_at, sin_verificado_at, verify_pending_at FROM guild_members "
         "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL "
         "OR verify_pending_at IS NOT NULL"
     ).fetchall()
@@ -1271,14 +1246,14 @@ async def check_pending_verifications() -> None:
 
     now = datetime.now(timezone.utc)
     for row in rows:
-        guild = next((g for g in bot.guilds if g.get_member(row["user_id"])), None)
+        guild = bot.get_guild(row["guild_id"])
         if guild is None:
             if row["tentado_at"] is not None:
-                db_clear_tentado(row["user_id"])
+                db_clear_tentado(row["guild_id"], row["user_id"])
             if row["sin_verificado_at"] is not None:
-                db_clear_sin_verificado(row["user_id"])
+                db_clear_sin_verificado(row["guild_id"], row["user_id"])
             if row["verify_pending_at"] is not None:
-                db_clear_verify_pending(row["user_id"])
+                db_clear_verify_pending(row["guild_id"], row["user_id"])
             continue
 
         if row["tentado_at"] is not None:
@@ -1301,24 +1276,24 @@ async def check_pending_verifications() -> None:
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
     """Devuelve 'verificado', 'expulsado', 'castigado' o 'ausente'/'sin-guild'."""
     if condemnation_get(user_id) is not None:
-        db_clear_tentado(user_id)
+        db_clear_tentado(guild_id, user_id)
         return "castigado"
     guild = bot.get_guild(guild_id)
     if guild is None:
         return "sin-guild"
     member = guild.get_member(user_id)
     if member is None:
-        db_clear_tentado(user_id)  # ya no está, nada que hacer
+        db_clear_tentado(guild_id, user_id)  # ya no está, nada que hacer
         return "ausente"
 
     punish_id = hp_punish_role_id()
     if punish_id and any(r.id == punish_id for r in member.roles):
-        db_clear_tentado(user_id)  # castigado por el honeypot: no se expulsa por falta de orientación
+        db_clear_tentado(guild_id, user_id)  # castigado por el honeypot: no se expulsa por falta de orientación
         return "castigado"
 
     role_ids = {r.id for r in member.roles}
     if role_ids & get_eval_role_ids(guild.id):
-        db_clear_tentado(user_id)  # se verificó a tiempo
+        db_clear_tentado(guild_id, user_id)  # se verificó a tiempo
         if report:
             await log_embed(guild, "✅ Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
         return "verificado"
@@ -1332,16 +1307,16 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
 # ---------------------------------------------------------------------------
 
 async def expel(member: discord.Member, report: bool = True) -> None:
-    row = db_get(member.id)
+    row = db_get(member.guild.id, member.id)
     dm_sent_before = bool(row["dm_sent"]) if row else False
     is_first_fault = not dm_sent_before
 
     dm_ok = None  # None = no aplica (2da falta, no se intenta DM)
     if is_first_fault:
         dm_ok = await send_recovery_dm(member, report=report)
-        db_mark_dm_sent(member.id)
+        db_mark_dm_sent(member.guild.id, member.id)
 
-    db_clear_tentado(member.id)
+    db_clear_tentado(member.guild.id, member.id)
     try:
         await member.kick(reason="No seleccionó rol de verificación en 10 min")
         kicked = True
@@ -1842,7 +1817,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
                 expelled.append(member)
             await asyncio.sleep(1)  # evitar ráfagas contra el rate limit de Discord
         elif get_sin_verificado_role_id(guild.id) in role_ids:
-            db_clear_sin_verificado(member.id)
+            db_clear_sin_verificado(member.guild.id, member.id)
             try:
                 await member.kick(reason="No se verificó")
                 expelled_sin_verificar.append(member)
@@ -1988,13 +1963,13 @@ class VerifyView(discord.ui.View):
 
 async def send_verification_welcome_dm(member: discord.Member) -> bool:
     """Envía el DM de bienvenida una sola vez, cuando el miembro se verifica por primera vez."""
-    if db_verification_dm_sent(member.id):
+    if db_verification_dm_sent(member.guild.id, member.id):
         return True
 
     embed = build_verification_welcome_embed(member=member)
     try:
         await member.send(embed=embed)
-        db_mark_verification_dm_sent(member.id)
+        db_mark_verification_dm_sent(member.guild.id, member.id)
         return True
     except discord.HTTPException:
         return False
@@ -2049,13 +2024,13 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         )
         return
 
-    db_clear_verify_pending(member.id)
+    db_clear_verify_pending(member.guild.id, member.id)
     # Quien se verifica deja de estar "Sin Verificar" (si no, el respaldo de 300 s lo expulsaría).
     sin_role = guild.get_role(get_sin_verificado_role_id(guild.id))
     if sin_role is not None and sin_role in member.roles:
         try:
             await member.remove_roles(sin_role, reason="Verificación de edad (botón de El Heraldo)")
-            db_clear_sin_verificado(member.id)
+            db_clear_sin_verificado(member.guild.id, member.id)
         except discord.HTTPException as e:
             await log_embed(
                 guild, "⚠️ No pude quitar Sin Verificar",
@@ -2074,7 +2049,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
     orientation_roles = get_eval_role_ids(guild.id)
     if orientation_roles and not ({r.id for r in member.roles} & orientation_roles):
         now = datetime.now(timezone.utc)
-        db_set_tentado(member.id, now)
+        db_set_tentado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_check(guild.id, member.id, now))
         await log_embed(
             guild,
@@ -2084,7 +2059,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
             discord.Color.blurple(),
         )
     else:
-        db_clear_tentado(member.id)
+        db_clear_tentado(member.guild.id, member.id)
 
     # DM de bienvenida: solo la primera vez que este usuario obtiene el rol de verificación.
     dm_welcome_ok = await send_verification_welcome_dm(member)
@@ -2114,9 +2089,9 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
     Lee siempre la configuración actual: si el timeout se alargó mientras esperaba, no
     actúa todavía (check_pending_verifications lo retoma al vencer el nuevo plazo)."""
     if condemnation_get(user_id) is not None:
-        db_clear_verify_pending(user_id)
+        db_clear_verify_pending(guild_id, user_id)
         return
-    row = db_get(user_id)
+    row = db_get(guild_id, user_id)
     if row is None or row["verify_pending_at"] is None:
         return  # ya verificado, ya evaluado o nunca estuvo pendiente
     guild = bot.get_guild(guild_id)
@@ -2124,7 +2099,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         return
     member = guild.get_member(user_id)
     if member is None or not verify_enabled(guild.id):
-        db_clear_verify_pending(user_id)  # se fue, o la verificación se desactivó
+        db_clear_verify_pending(guild_id, user_id)  # se fue, o la verificación se desactivó
         return
 
     timeout = get_verify_timeout(guild_id)
@@ -2133,7 +2108,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         return
 
     role_ids = {r.id for r in member.roles}
-    db_clear_verify_pending(user_id)
+    db_clear_verify_pending(guild_id, user_id)
     if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
         return  # se verificó a tiempo (o un admin le dio un rol de orientación)
 
@@ -4775,9 +4750,9 @@ async def _condemn_member_inner(
                            reason[:1000], duration_minutes, origin, applied_by.id if applied_by else None,
                            condemned_at=datetime.fromisoformat(existing["condemned_at"]))
 
-    db_clear_tentado(member.id)
-    db_clear_sin_verificado(member.id)
-    db_clear_verify_pending(member.id)
+    db_clear_tentado(member.guild.id, member.id)
+    db_clear_sin_verificado(member.guild.id, member.id)
+    db_clear_verify_pending(member.guild.id, member.id)
     db_zero_week_messages(member.id)
 
     if purge_spec and purge_spec[0] != "none":
@@ -4863,20 +4838,20 @@ async def release_condemned_member(
         condemnation_deactivate(member.id, resolution="pardoned", resolved_by=released_by.id)
     else:
         condemnation_deactivate(member.id, resolution="expired" if automatic else None)
-    db_clear_tentado(member.id)
-    db_clear_sin_verificado(member.id)
-    db_clear_verify_pending(member.id)
+    db_clear_tentado(member.guild.id, member.id)
+    db_clear_sin_verificado(member.guild.id, member.id)
+    db_clear_verify_pending(member.guild.id, member.id)
 
     # Si entre los roles originales estaban los de verificación, vuelven a su flujo normal
     # desde cero; mientras la condena estuvo activa nunca corrió ninguna evaluación.
     restored_ids = {r.id for r in restore}
     if get_tentado_role_id(member.guild.id) in restored_ids:
         now = datetime.now(timezone.utc)
-        db_set_tentado(member.id, now)
+        db_set_tentado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_check(member.guild.id, member.id, now))
     if get_sin_verificado_role_id(member.guild.id) in restored_ids:
         now = datetime.now(timezone.utc)
-        db_set_sin_verificado(member.id, now)
+        db_set_sin_verificado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_sin_verificado_check(member.guild.id, member.id, now))
 
     text = f"{len(restore)} rol(es) restaurado(s)" + (f"; {lost} no se pudieron restaurar" if lost else "")
