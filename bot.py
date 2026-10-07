@@ -694,17 +694,6 @@ _startup_done = False
 async def on_ready() -> None:
     global _startup_done
 
-    # Registra las vistas persistentes primero. Esto debe ocurrir antes de DB,
-    # sincronización de comandos o tareas para que los botones ya publicados
-    # nunca queden huérfanos si otra parte del arranque falla.
-    if not any(isinstance(view, CondemnationPardonView) for view in bot.persistent_views):
-        try:
-            bot.add_view(CondemnationPardonView())
-            print("✅ Vista persistente de perdón registrada.")
-        except Exception:
-            print("❌ No se pudo registrar la vista persistente de perdón:")
-            traceback.print_exc()
-
     if not any(isinstance(view, VerifyView) for view in bot.persistent_views):
         try:
             bot.add_view(VerifyView())
@@ -717,6 +706,27 @@ async def on_ready() -> None:
 
     db_init()
     honeypot_db_init()
+
+    # Reasocia cada botón de perdón a su mensaje real. Esto es más robusto que
+    # registrar una vista global porque Discord puede entregar el custom_id de
+    # una tarjeta antigua después de un reinicio.
+    try:
+        active_condemnations = condemnation_list_all_active()
+        for condemnation_row in active_condemnations:
+            message_id = condemnation_row["announcement_message_id"]
+            if not message_id:
+                continue
+            bot.add_view(
+                CondemnationPardonView(),
+                message_id=int(message_id),
+            )
+        print(
+            f"✅ Vistas de perdón restauradas: "
+            f"{sum(1 for row in active_condemnations if row['announcement_message_id'])}"
+        )
+    except Exception:
+        print("❌ No se pudieron restaurar las vistas de perdón:")
+        traceback.print_exc()
     # Sistema de sugerencias: registra las vistas persistentes y recupera el panel/revisiones pendientes.
     try:
         await suggestions_startup()
@@ -2763,6 +2773,18 @@ def condemnation_is_expired(row: sqlite3.Row) -> bool:
     return bool(row["expires_at"]) and datetime.fromisoformat(row["expires_at"]) <= datetime.now(timezone.utc)
 
 
+def condemnation_list_all_active() -> list[sqlite3.Row]:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM condemnations WHERE active = 1 "
+        "AND (expires_at IS NULL OR expires_at > ?)",
+        (datetime.now(timezone.utc).isoformat(),),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
 def condemnation_list(guild_id: int) -> list[sqlite3.Row]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -3566,15 +3588,17 @@ def _build_condemnation_embed(
 class CondemnationPardonView(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
-        button = discord.ui.Button(
-            label="🕊️ Perdonar",
-            style=discord.ButtonStyle.success,
-            custom_id="heraldo:condemnation:pardon",
-        )
-        button.callback = self.pardon_callback
-        self.add_item(button)
 
-    async def pardon_callback(self, interaction: discord.Interaction) -> None:
+    @discord.ui.button(
+        label="🕊️ Perdonar",
+        style=discord.ButtonStyle.success,
+        custom_id="heraldo:condemnation:pardon",
+    )
+    async def pardon_callback(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
         # Acknowledge the interaction immediately. Si cualquier paso posterior
         # falla, Discord no mostrará "La aplicación no respondió".
         if interaction.guild is None or interaction.message is None:
