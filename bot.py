@@ -680,8 +680,26 @@ def get_guild_channel_id(guild_id: int, key: str, fallback: int = 0) -> int:
     return value if value is not None else fallback
 
 
+def guild_setting_int(guild_id: int, key: str, fallback: int) -> int:
+    value = guild_config_get(guild_id, key)
+    try:
+        return int(value) if value is not None else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
 def get_sin_verificado_role_id(guild_id: int) -> int:
     return get_guild_role_id(guild_id, "sin_verificar")
+
+
+def get_sin_verificado_window(guild_id: int) -> timedelta:
+    seconds = guild_setting_int(guild_id, "sin_verificado_timeout_seconds", int(SIN_VERIFICAR_WINDOW.total_seconds()))
+    return timedelta(seconds=max(1, seconds))
+
+
+def get_orientation_window(guild_id: int) -> timedelta:
+    seconds = guild_setting_int(guild_id, "orientation_timeout_seconds", int(VERIFICATION_WINDOW.total_seconds()))
+    return timedelta(seconds=max(1, seconds))
 
 
 def get_tentado_role_id(guild_id: int) -> int:
@@ -882,7 +900,6 @@ async def on_ready() -> None:
                     guild_resource_set(guild.id, "role", f"eval_{idx}", role_id)
             legacy_channels = {
                 "logs": LOG_CHANNEL_ID,
-                "recovery": RECOVERY_CHANNEL_ID,
                 "condemned": CONDEMNED_CHANNEL_ID,
             }
             for key, channel_id in legacy_channels.items():
@@ -1134,7 +1151,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
 
 
 async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: datetime) -> None:
-    delay = (marked_at + SIN_VERIFICAR_WINDOW - datetime.now(timezone.utc)).total_seconds()
+    delay = (marked_at + get_sin_verificado_window(guild_id) - datetime.now(timezone.utc)).total_seconds()
     if delay > 0:
         await asyncio.sleep(delay)
     await evaluate_sin_verificado(guild_id, user_id)
@@ -1176,7 +1193,7 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
 
 
 async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> None:
-    delay = (tentado_at + VERIFICATION_WINDOW - datetime.now(timezone.utc)).total_seconds()
+    delay = (tentado_at + get_orientation_window(guild_id) - datetime.now(timezone.utc)).total_seconds()
     if delay > 0:
         await asyncio.sleep(delay)
     await evaluate_member(guild_id, user_id)
@@ -1200,7 +1217,7 @@ async def check_pending_verifications() -> None:
     for row in rows:
         if row["tentado_at"] is not None:
             tentado_at = datetime.fromisoformat(row["tentado_at"])
-            if now >= tentado_at + VERIFICATION_WINDOW:
+            if now >= tentado_at + get_orientation_window(guild.id):
                 for guild in bot.guilds:
                     if guild.get_member(row["user_id"]):
                         await evaluate_member(guild.id, row["user_id"])
@@ -1209,7 +1226,7 @@ async def check_pending_verifications() -> None:
                     db_clear_tentado(row["user_id"])  # ya no está en ningún servidor
         if row["sin_verificado_at"] is not None:
             sin_verificado_at = datetime.fromisoformat(row["sin_verificado_at"])
-            if now >= sin_verificado_at + SIN_VERIFICAR_WINDOW:
+            if now >= sin_verificado_at + get_sin_verificado_window(guild.id):
                 for guild in bot.guilds:
                     if guild.get_member(row["user_id"]):
                         await evaluate_sin_verificado(guild.id, row["user_id"])
@@ -1350,8 +1367,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild) -> dict[str, list[
         "roles": "Roles",
         "questions": "Dudas",
         "announcements": "Anuncios",
-        "recovery": "Recuperación",
-    }
+            }
     created: dict[str, list[int]] = {"channels": [], "roles": []}
     me = guild.me
     if me is None or not me.guild_permissions.manage_channels:
@@ -3072,28 +3088,58 @@ def condemnation_list(guild_id: int) -> list[sqlite3.Row]:
     return rows
 
 
-def condemnation_default_duration_minutes() -> int | None:
+def condemnation_default_duration_minutes(guild_id: int | None = None) -> int | None:
     """Duración predeterminada para nuevas condenas. None = indefinida."""
-    value = db_meta_get("condemnation_default_duration")
+    value = guild_config_get(guild_id, "condemnation_default_duration") if guild_id is not None else None
+    if value is None:
+        value = db_meta_get("condemnation_default_duration")
     if not value or value.strip().lower() in {"indefinida", "indefinido", "none", "null", "0"}:
         return None
     try:
-        return parse_duration(value, 1, CONDEMNATION_MAX_MINUTES)
+        return parse_duration(value, 1, get_condemnation_max_minutes(interaction.guild.id))
     except ValueError:
         return None
 
 
-def set_condemnation_default_duration(value: str | None) -> None:
-    db_meta_set("condemnation_default_duration", value or "indefinida")
+def set_condemnation_default_duration(value: str | None, guild_id: int | None = None) -> None:
+    if guild_id is not None:
+        guild_config_set(guild_id, "condemnation_default_duration", value or "indefinida")
+    else:
+        db_meta_set("condemnation_default_duration", value or "indefinida")
 
 
-def condemnation_channel_id() -> int:
+def condemnation_channel_id(guild_id: int | None = None) -> int:
+    if guild_id is not None:
+        configured = get_guild_channel_id(guild_id, "condemned")
+        if configured:
+            return configured
+        value = guild_config_get(guild_id, "condemned_channel_id")
+        if value:
+            return int(value)
     value = db_meta_get("condemned_channel_id")
     return int(value) if value else CONDEMNED_CHANNEL_ID
 
 
-def set_condemnation_channel_id(channel_id: int) -> None:
-    db_meta_set("condemned_channel_id", str(channel_id))
+def get_condemnation_emoji(guild_id: int | None = None) -> str:
+    if guild_id is not None:
+        value = guild_config_get(guild_id, "condemnation_emoji")
+        if value:
+            return value
+    return db_meta_get("condemnation_emoji") or CONDEMNED_EMOJI
+
+
+def get_condemnation_max_minutes(guild_id: int | None = None) -> int:
+    if guild_id is not None:
+        return guild_setting_int(guild_id, "condemnation_max_minutes", CONDEMNATION_MAX_MINUTES)
+    return CONDEMNATION_MAX_MINUTES
+
+
+def set_condemnation_channel_id(channel_id: int, guild_id: int | None = None) -> None:
+    if guild_id is not None:
+        guild_resource_set(guild_id, "channel", "condemned", channel_id)
+        guild_config_set(guild_id, "condemned_channel_id", str(channel_id))
+    else:
+        db_meta_set("condemned_channel_id", str(channel_id))
 
 
 def condemnation_duration_text(row: sqlite3.Row) -> str:
@@ -4049,7 +4095,7 @@ async def condemnation_announce(
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
 ) -> int | None:
-    channel = guild.get_channel(condemnation_channel_id())
+    channel = guild.get_channel(condemnation_channel_id(interaction.guild.id))
     if not isinstance(channel, discord.TextChannel):
         return None
     embed, view = _build_condemnation_embed(
@@ -4078,7 +4124,7 @@ async def condemnation_update_pardoned_card(
 ) -> bool:
     """Crea la tarjeta nueva de perdón y elimina la tarjeta original del caso."""
     message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
-    channel = member.guild.get_channel(condemnation_channel_id())
+    channel = member.guild.get_channel(condemnation_channel_id(guild.id))
     if not isinstance(channel, discord.TextChannel):
         return False
 
@@ -4479,7 +4525,7 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
             continue
         await condemn_member(
             member, reason="El rol Condenado fue otorgado manualmente (detectado al arrancar).",
-            duration_minutes=condemnation_default_duration_minutes(), purge_spec=None, origin="role", applied_by=None,
+            duration_minutes=condemnation_default_duration_minutes(guild.id), purge_spec=None, origin="role", applied_by=None,
             send_dm=False, announce=False,
         )
         await asyncio.sleep(1)
@@ -4511,7 +4557,7 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
             return await condemn_member(
                 member,
                 reason="Honeypot: escribió en un canal trampa",
-                duration_minutes=condemnation_default_duration_minutes(),
+                duration_minutes=condemnation_default_duration_minutes(member.guild.id),
                 purge_spec=purge_spec,
                 origin="honeypot",
                 applied_by=None,
@@ -4678,7 +4724,7 @@ async def condenar(
             if raw_duration.lower() in {"0", "indefinida", "indefinido", "permanente", "hasta retirar"}:
                 duration_minutes = None
             else:
-                duration_minutes = parse_duration(raw_duration, 1, CONDEMNATION_MAX_MINUTES)
+                duration_minutes = parse_duration(raw_duration, 1, get_condemnation_max_minutes(guild.id))
         purge_spec = parse_purge_spec(purga) if purga else HONEYPOT_PURGE_DEFAULT
     except ValueError as e:
         await interaction.response.send_message(f"❌ No se pudo condenar: {e}", ephemeral=True)
@@ -4781,7 +4827,7 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
             f"❌ No guardé el cambio: faltan **{', '.join(missing)}** en {canal.mention}.", ephemeral=True
         )
         return
-    set_condemnation_channel_id(canal.id)
+    set_condemnation_channel_id(canal.id, interaction.guild.id)
     guild_resource_set(interaction.guild.id, "channel", "condemned", canal.id)
     await interaction.response.send_message(f"✅ Los avisos de condena se publicarán en {canal.mention}.", ephemeral=True)
     await log_embed(interaction.guild, "⚙️ Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
@@ -4875,13 +4921,13 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
 
     def __init__(self) -> None:
         super().__init__()
-        current = condemnation_default_duration_minutes()
+        current = condemnation_default_duration_minutes(interaction.guild.id)
         self.duration_input.default = format_duration(current) if current else "Indefinida"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.duration_input).strip()
         if value.lower() in {"indefinida", "indefinido", "permanente", "hasta retirar", "0"}:
-            set_condemnation_default_duration(None)
+            set_condemnation_default_duration(None, interaction.guild.id)
             await condemnation_template_editor_update(interaction, "Duración predeterminada: **Indefinida (hasta retirar)**.")
             return
         try:
@@ -4889,7 +4935,7 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
         except ValueError as e:
             await interaction.response.send_message(f"❌ {e}", ephemeral=True)
             return
-        set_condemnation_default_duration(value)
+        set_condemnation_default_duration(value, interaction.guild.id)
         await condemnation_template_editor_update(interaction, f"Duración predeterminada: **{format_duration(minutes)}**.")
 
 
@@ -5087,7 +5133,7 @@ async def condenar_template(interaction: discord.Interaction) -> None:
 @bot.listen("on_raw_reaction_add")
 async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None:
     # Con o sin selector de variación (U+FE0F) el cráneo es el mismo emoji.
-    if payload.guild_id is None or str(payload.emoji).replace("\ufe0f", "") != CONDEMNED_EMOJI.replace("\ufe0f", ""):
+    if payload.guild_id is None or str(payload.emoji).replace("\ufe0f", "") != get_condemnation_emoji(payload.guild_id).replace("\ufe0f", ""):
         return
     guild = bot.get_guild(payload.guild_id)
     if guild is None or payload.user_id == bot.user.id:
