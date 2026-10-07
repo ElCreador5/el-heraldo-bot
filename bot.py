@@ -769,6 +769,128 @@ def guild_setting_int(guild_id: int, key: str, fallback: int) -> int:
 def get_sin_verificado_role_id(guild_id: int) -> int:
     return get_guild_role_id(guild_id, "sin_verificar")
 
+JOIN_ROLES_MAX = 25
+
+
+def get_join_role_ids(guild_id: int) -> list[int]:
+    raw = guild_config_get(guild_id, "join_role_ids")
+    if not raw:
+        legacy_role = get_guild_role_id(guild_id, "sin_verificar")
+        return [legacy_role] if legacy_role else []
+    try:
+        values = json.loads(raw)
+        return [int(value) for value in values if int(value) > 0][:JOIN_ROLES_MAX]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+def set_join_role_ids(guild_id: int, role_ids: list[int]) -> None:
+    unique: list[int] = []
+    for role_id in role_ids:
+        role_id = int(role_id)
+        if role_id > 0 and role_id not in unique:
+            unique.append(role_id)
+    guild_config_set(guild_id, "join_role_ids", json.dumps(unique[:JOIN_ROLES_MAX]))
+
+
+def get_join_roles_delay(guild_id: int) -> int:
+    return max(0, guild_setting_int(guild_id, "join_roles_delay_seconds", 0))
+
+
+def join_roles_wait_screening(guild_id: int) -> bool:
+    return guild_config_get(guild_id, "join_roles_wait_screening") == "1"
+
+
+def join_roles_enabled(guild_id: int) -> bool:
+    value = guild_config_get(guild_id, "join_roles_enabled")
+    if value is None:
+        return bool(get_join_role_ids(guild_id))
+    return value == "1"
+
+
+def join_roles_summary(guild: discord.Guild) -> str:
+    roles = [guild.get_role(role_id) for role_id in get_join_role_ids(guild.id)]
+    roles = [role for role in roles if role is not None]
+    role_text = ", ".join(role.mention for role in roles) if roles else "**Ninguno**"
+    return (
+        f"Estado: **{'Activo' if join_roles_enabled(guild.id) else 'Desactivado'}**\n"
+        f"Join Roles: {role_text}\n"
+        f"Esperar Rules Screening: **{'Sí' if join_roles_wait_screening(guild.id) else 'No'}**\n"
+        f"Delay: **{get_join_roles_delay(guild.id)} s**\n\n"
+        "**Cómo funciona:** los roles seleccionados se asignan automáticamente a cada miembro nuevo. "
+        "Si uno de ellos es el rol de sistema **Sin Verificar**, El Heraldo lo retira automáticamente "
+        "cuando el miembro obtiene el rol de verificación."
+    )
+
+
+async def _assign_join_roles_now(member: discord.Member) -> tuple[bool, str]:
+    if member.bot or not join_roles_enabled(member.guild.id):
+        return True, "No aplica."
+
+    role_ids = get_join_role_ids(member.guild.id)
+    roles: list[discord.Role] = []
+    verify_role_id = get_verify_role_id(member.guild.id)
+    already_verified = verify_role_id and verify_role_id in {role.id for role in member.roles}
+    sin_role_id = get_sin_verificado_role_id(member.guild.id)
+
+    for role_id in role_ids:
+        role = member.guild.get_role(role_id)
+        if role is None:
+            continue
+        if already_verified and role.id == sin_role_id:
+            continue
+        if role in member.roles:
+            continue
+        if role.managed or not role.is_assignable():
+            return False, f"No puedo asignar {role.mention}; revisa jerarquía y permisos."
+        roles.append(role)
+
+    if not roles:
+        return True, "No había roles pendientes."
+    try:
+        await member.add_roles(*roles, reason="El Heraldo · Join Roles")
+        return True, f"Asignados {len(roles)} Join Role(s)."
+    except discord.HTTPException as exc:
+        return False, f"Discord rechazó la asignación: {exc}."
+
+
+async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
+    if member.bot or not join_roles_enabled(member.guild.id):
+        return True, "No aplica."
+    if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
+        return True, "Esperando Rules Screening."
+
+    delay = get_join_roles_delay(member.guild.id)
+    if delay > 0:
+        await asyncio.sleep(delay)
+        refreshed = member.guild.get_member(member.id)
+        if refreshed is None:
+            return True, "El miembro ya no está en el servidor."
+        member = refreshed
+        if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
+            return True, "Esperando Rules Screening."
+    return await _assign_join_roles_now(member)
+
+
+async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
+    assigned = 0
+    skipped = 0
+    errors: list[str] = []
+    async for member in guild.fetch_members(limit=None):
+        if member.bot:
+            continue
+        ok, note = await _assign_join_roles_now(member)
+        if ok:
+            if note.startswith("Asignados"):
+                assigned += 1
+            else:
+                skipped += 1
+        else:
+            errors.append(f"{member}: {note}")
+        await asyncio.sleep(0.15)
+    return assigned, skipped, errors
+
+
 
 def get_sin_verificado_window(guild_id: int) -> timedelta:
     seconds = guild_setting_int(guild_id, "sin_verificado_timeout_seconds", int(SIN_VERIFICAR_WINDOW.total_seconds()))
