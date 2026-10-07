@@ -2237,6 +2237,11 @@ verify_dm_preview.error(verify_command_error)
 # Copia de seguridad de la plantilla del servidor (/template_config, /template_sync)
 # ---------------------------------------------------------------------------
 
+def _meta_int(key: str, default: int) -> int:
+    value = db_meta_get(key)
+    return int(value) if value is not None else default
+
+
 def _template_value(guild_id: int, key: str, default: str) -> str:
     value = guild_config_get(guild_id, key)
     if value is not None:
