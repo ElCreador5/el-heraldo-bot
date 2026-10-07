@@ -7239,11 +7239,13 @@ class HeraldoSetupView(discord.ui.View):
     async def select_module(self, interaction: discord.Interaction) -> None:
         # Confirmar inmediatamente la interacción. No necesitamos editar el embed
         # cada vez que se cambia el desplegable.
-        values = self.module_select.values
+        # Leer el valor enviado por Discord en esta interacción, sin depender
+        # de estado cacheado de la instancia de la vista.
+        values = (interaction.data or {}).get("values", [])
         if not values:
             await interaction.response.send_message("Selecciona un módulo.", ephemeral=True)
             return
-        selected = values[0]
+        selected = str(values[0])
         if selected not in {item[0] for item in self.MODULES}:
             await interaction.response.send_message("Módulo no válido.", ephemeral=True)
             return
@@ -7305,6 +7307,29 @@ class HeraldoSetupView(discord.ui.View):
 
         # Una sola respuesta de actualización, sin defer + segunda llamada HTTP.
         await interaction.response.edit_message(content=content, embed=None, view=view)
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item,
+    ) -> None:
+        # No dejar interacciones silenciosas si falla la navegación.
+        print(
+            f"❌ /setup: error en {type(item).__name__} "
+            f"(guild={self.guild_id}, module={self.selected_module}): {error!r}"
+        )
+        traceback.print_exception(type(error), error, error.__traceback__)
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    "❌ Error al abrir la configuración. Revisa los logs de El Heraldo.",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "❌ Error al abrir la configuración. Revisa los logs de El Heraldo.",
+                    ephemeral=True,
+                )
+        except discord.HTTPException:
+            pass
 
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
