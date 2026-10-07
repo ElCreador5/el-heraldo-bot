@@ -8448,8 +8448,13 @@ def honeypot_db_init() -> None:
         "reason TEXT NOT NULL, duration_minutes INTEGER, condemned_at TEXT NOT NULL, "
         "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1, "
         "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT, announcement_message_id INTEGER, "
+        "moderation_case_number INTEGER, "
         "PRIMARY KEY (guild_id, user_id))"
     )
+    try:
+        conn.execute("ALTER TABLE guild_cases ADD COLUMN moderation_case_number INTEGER")
+    except sqlite3.OperationalError:
+        pass
     try:
         conn.execute("ALTER TABLE condemnations ADD COLUMN role_id INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -10173,7 +10178,12 @@ async def condemnation_send_pardon_dm(
 ) -> bool:
     condemned_at = datetime.fromisoformat(row["condemned_at"])
     pardoned_at = datetime.now(timezone.utc)
-    case_id = condemnation_case_id(member, condemned_at)
+    linked_case = (
+        int(row["moderation_case_number"])
+        if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
+        else None
+    )
+    case_id = condemnation_case_id(member, condemned_at, linked_case)
     embed = discord.Embed(
         title="🕊️ CONDENA PERDONADA",
         description=(
@@ -10460,8 +10470,13 @@ def condemnation_template_color(guild_id: int) -> discord.Color:
         return discord.Color.dark_red()
 
 
-def condemnation_case_id(member: discord.Member, when: datetime) -> str:
-    # Identificador legible y estable para referirse al expediente sin exponer datos extra.
+def condemnation_case_id(
+    member: discord.Member, when: datetime, moderation_case_number: int | None = None,
+) -> str:
+    # Las condenas nuevas usan el mismo identificador único que Moderation Cases.
+    if moderation_case_number is not None:
+        return f"C-{moderation_case_number:06d}"
+    # Compatibilidad para expedientes antiguos creados antes de Moderation Cases.
     return f"C-{when.astimezone(STREAK_TZ):%Y%m%d}-{member.id % 100000:05d}"
 
 
@@ -10536,7 +10551,12 @@ async def condemnation_update_pardoned_card(
             return False
 
         condemned_at = datetime.fromisoformat(row["condemned_at"])
-        case_id = condemnation_case_id(member, condemned_at)
+        linked_case = (
+            int(row["moderation_case_number"])
+            if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
+            else None
+        )
+        case_id = condemnation_case_id(member, condemned_at, linked_case)
         pardoned_at = datetime.now(timezone.utc)
 
         resolution = discord.Embed(
@@ -10761,9 +10781,31 @@ async def _condemn_member_inner(
         applied_by=applied_by,
     )
 
-    # Ambos destinos reciben la misma resolución: mismo expediente, fecha y datos.
+    # Ambos destinos reciben la misma resolución y el mismo Moderation Case.
     condemnation_when = datetime.now(timezone.utc)
-    condemnation_case = condemnation_case_id(member, condemnation_when)
+    linked_case_number: int | None = None
+    if send_dm or announce:
+        try:
+            verified = evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            linked_case_number = moderation_case_create(
+                member.guild.id, "CONDEMN", member.id, reason,
+                duration_minutes=duration_minutes,
+                author_id=applied_by.id if applied_by else None,
+                proof=evidence_url or source_message_url,
+                verified_proof=verified,
+            )
+            conn = db_connect()
+            conn.execute(
+                "UPDATE guild_cases SET moderation_case_number = ? WHERE guild_id = ? AND user_id = ?",
+                (linked_case_number, member.guild.id, member.id),
+            )
+            conn.close()
+        except Exception:
+            traceback.print_exc()
+    elif existing is not None and "moderation_case_number" in existing.keys() and existing["moderation_case_number"]:
+        linked_case_number = int(existing["moderation_case_number"])
+
+    condemnation_case = condemnation_case_id(member, condemnation_when, linked_case_number)
     dm_ok = await condemnation_send_dm(
         member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
@@ -10783,20 +10825,7 @@ async def _condemn_member_inner(
                 "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
                 (announcement_message_id, member.guild.id, member.id),
             )
-            conn.commit()
             conn.close()
-    if send_dm or announce:
-        try:
-            verified = await moderation_verified_proof(member.guild, source_message_url)
-            moderation_case_create(
-                member.guild.id, "CONDEMN", member.id, reason,
-                duration_minutes=duration_minutes,
-                author_id=applied_by.id if applied_by else None,
-                proof=evidence_url or source_message_url,
-                verified_proof=evidence_text or verified,
-            )
-        except Exception:
-            traceback.print_exc()
     if purge_spec and purge_spec[0] != "none":
         kind, value = purge_spec
         after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
@@ -10863,10 +10892,25 @@ async def release_condemned_member(
     finally:
         _condemn_sync_busy.discard(member.id)
 
+    linked_case_number = (
+        int(row["moderation_case_number"])
+        if row is not None and "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
+        else None
+    )
     if pardon and row is not None and released_by is not None:
         condemnation_deactivate(member.guild.id, member.id, resolution="pardoned", resolved_by=released_by.id)
+        if linked_case_number is not None:
+            moderation_case_close(
+                member.guild.id, linked_case_number,
+                closed_by=released_by.id, resolution="Perdonado",
+            )
     else:
         condemnation_deactivate(member.guild.id, member.id, resolution="expired" if automatic else None)
+        if automatic and linked_case_number is not None:
+            moderation_case_close(
+                member.guild.id, linked_case_number,
+                closed_by=None, resolution="Expirado automáticamente",
+            )
     db_clear_tentado(member.guild.id, member.id)
     db_clear_sin_verificado(member.guild.id, member.id)
     db_clear_verify_pending(member.guild.id, member.id)
@@ -10886,7 +10930,7 @@ async def release_condemned_member(
     text = f"{len(restore)} rol(es) restaurado(s)" + (f"; {lost} no se pudieron restaurar" if lost else "")
     if pardon and row is not None and released_by is not None:
         condemned_at = datetime.fromisoformat(row["condemned_at"])
-        case_id = condemnation_case_id(member, condemned_at)
+        case_id = condemnation_case_id(member, condemned_at, linked_case_number)
         card_ok = await condemnation_update_pardoned_card(
             member, row, released_by, len(restore), lost, message=announcement_message
         )
