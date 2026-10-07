@@ -332,6 +332,19 @@ def db_init() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS guild_activity (
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            messages INTEGER NOT NULL DEFAULT 0,
+            streak INTEGER NOT NULL DEFAULT 0,
+            last_active_day TEXT,
+            week_messages INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (guild_id, user_id)
+        )
+        """
+    )
     try:
         conn.execute("ALTER TABLE activity ADD COLUMN week_messages INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -460,67 +473,67 @@ def db_clear_verify_pending(guild_id: int, user_id: int) -> None:
     _db_member_set(guild_id, user_id, "verify_pending_at", None)
 
 
-def db_track_message(user_id: int, today: str, yesterday: str) -> None:
-    """Suma 1 mensaje y actualiza la racha diaria (días en formato YYYY-MM-DD)."""
+def db_track_message(guild_id: int, user_id: int, today: str, yesterday: str) -> None:
+    """Suma actividad de un miembro únicamente dentro de su servidor."""
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(
-        "SELECT messages, streak, last_active_day FROM activity WHERE user_id = ?",
-        (user_id,),
+        "SELECT messages, streak, last_active_day FROM guild_activity WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
     ).fetchone()
     if row is None:
         conn.execute(
-            "INSERT INTO activity (user_id, messages, streak, last_active_day, week_messages) "
-            "VALUES (?, 1, 1, ?, 1)",
-            (user_id, today),
+            "INSERT INTO guild_activity (guild_id, user_id, messages, streak, last_active_day, week_messages) "
+            "VALUES (?, ?, 1, 1, ?, 1)",
+            (guild_id, user_id, today),
         )
     else:
         messages, streak, last_active = row
         if last_active != today:
-            # Ayer -> la racha continúa; cualquier otra cosa -> empieza de nuevo.
             streak = streak + 1 if last_active == yesterday else 1
             last_active = today
         conn.execute(
-            "UPDATE activity SET messages = ?, streak = ?, last_active_day = ?, "
-            "week_messages = week_messages + 1 WHERE user_id = ?",
-            (messages + 1, streak, last_active, user_id),
+            "UPDATE guild_activity SET messages = ?, streak = ?, last_active_day = ?, "
+            "week_messages = week_messages + 1 WHERE guild_id = ? AND user_id = ?",
+            (messages + 1, streak, last_active, guild_id, user_id),
         )
     conn.commit()
     conn.close()
 
 
-def db_get_activity(user_id: int) -> tuple[int, int, str | None]:
-    """Devuelve (mensajes, racha guardada, último día activo)."""
+def db_get_activity(guild_id: int, user_id: int) -> tuple[int, int, str | None]:
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute(
-        "SELECT messages, streak, last_active_day FROM activity WHERE user_id = ?",
-        (user_id,),
+        "SELECT messages, streak, last_active_day FROM guild_activity WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
     ).fetchone()
     conn.close()
     return (row[0], row[1], row[2]) if row else (0, 0, None)
 
 
-def db_week_ranking() -> list[tuple[int, int]]:
-    """[(user_id, mensajes_de_la_semana)] de mayor a menor. En empate, gana el
-    user_id menor (cuenta más antigua) para que el resultado sea determinista."""
+def db_week_ranking(guild_id: int) -> list[tuple[int, int]]:
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
-        "SELECT user_id, week_messages FROM activity WHERE week_messages > 0 "
-        "ORDER BY week_messages DESC, user_id ASC"
+        "SELECT user_id, week_messages FROM guild_activity "
+        "WHERE guild_id = ? AND week_messages > 0 ORDER BY week_messages DESC, user_id ASC",
+        (guild_id,),
     ).fetchall()
     conn.close()
     return [(r[0], r[1]) for r in rows]
 
 
-def db_zero_week_messages(user_id: int) -> None:
+def db_zero_week_messages(guild_id: int, user_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE activity SET week_messages = 0 WHERE user_id = ?", (user_id,))
+    conn.execute(
+        "UPDATE guild_activity SET week_messages = 0 WHERE guild_id = ? AND user_id = ?",
+        (guild_id, user_id),
+    )
     conn.commit()
     conn.close()
 
 
-def db_reset_week() -> None:
+def db_reset_week(guild_id: int) -> None:
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE activity SET week_messages = 0")
+    conn.execute("UPDATE guild_activity SET week_messages = 0 WHERE guild_id = ?", (guild_id,))
     conn.commit()
     conn.close()
 
@@ -2937,7 +2950,7 @@ async def track_activity(message: discord.Message) -> None:
 
     today = datetime.now(STREAK_TZ).date()
     yesterday = today - timedelta(days=1)
-    db_track_message(message.author.id, today.isoformat(), yesterday.isoformat())
+    db_track_message(message.guild.id, message.author.id, today.isoformat(), yesterday.isoformat())
 
 
 @bot.tree.command(name="profile", description="Muestra tu perfil o el de otro miembro.")
@@ -2953,7 +2966,7 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
             await interaction.response.send_message(f"{user} no está en el servidor.", ephemeral=True)
             return
 
-    messages, streak, last_active = db_get_activity(target.id)
+    messages, streak, last_active = db_get_activity(interaction.guild.id, target.id)
 
     # La racha guardada solo es "actual" si el último día activo fue hoy o ayer;
     # si pasó más tiempo, la racha ya se rompió aunque aún no haya escrito de nuevo.
@@ -3046,7 +3059,7 @@ async def announce_member_of_the_week(reset: bool = True) -> str | None:
 
     # Top 2 entre quienes siguen en el servidor.
     ranking: list[tuple[discord.Member, int]] = []
-    for user_id, count in db_week_ranking():
+    for user_id, count in db_week_ranking(guild.id):
         member = guild.get_member(user_id)
         punish_id = hp_punish_role_id()
         if punish_id and member is not None and any(r.id == punish_id for r in member.roles):
@@ -3065,7 +3078,7 @@ async def announce_member_of_the_week(reset: bool = True) -> str | None:
             print(f"No se pudo escribir en el canal de Miembro de la Semana: {e}")
             return str(e)
         if reset:
-            db_reset_week()
+            db_reset_week(guild.id)
         return None
 
     winner, winner_count = ranking[0]
@@ -3097,7 +3110,7 @@ async def announce_member_of_the_week(reset: bool = True) -> str | None:
         return str(e)
 
     if reset:
-        db_reset_week()  # contadores de la nueva semana en cero (para TODOS, no solo el top)
+        db_reset_week(guild.id)  # contadores de la nueva semana en cero (para TODOS, no solo el top)
     return None
 
 
@@ -4753,7 +4766,7 @@ async def _condemn_member_inner(
     db_clear_tentado(member.guild.id, member.id)
     db_clear_sin_verificado(member.guild.id, member.id)
     db_clear_verify_pending(member.guild.id, member.id)
-    db_zero_week_messages(member.id)
+    db_zero_week_messages(member.guild.id, member.id)
 
     if purge_spec and purge_spec[0] != "none":
         kind, value = purge_spec
