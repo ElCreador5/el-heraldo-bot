@@ -2551,13 +2551,8 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         now = datetime.now(timezone.utc)
         db_set_tentado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_check(guild.id, member.id, now))
-        await log_embed(
-            guild,
-            "🧭 Orientación iniciada",
-            f"{member.mention} completó la verificación. Tiene "
-            f"{int(get_orientation_window(guild.id).total_seconds() // 60)} min para elegir una preferencia.",
-            discord.Color.blurple(),
-        )
+        # Log de "Orientación iniciada" desactivado temporalmente.
+        # La orientación y su temporizador siguen funcionando con normalidad.
     else:
         db_clear_tentado(member.guild.id, member.id)
 
