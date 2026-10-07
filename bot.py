@@ -1207,6 +1207,31 @@ def join_roles_summary(guild: discord.Guild) -> str:
     )
 
 
+
+@tasks.loop(minutes=10)
+async def join_roles_sync_loop() -> None:
+    """Ejecuta los Sync periódicos configurados por servidor."""
+    now = datetime.now(timezone.utc)
+    for guild in bot.guilds:
+        try:
+            interval = get_join_sync_interval_minutes(guild.id)
+            if interval <= 0 or not join_roles_enabled(guild.id):
+                continue
+            last = get_join_sync_last(guild.id)
+            if last is not None and now < last + timedelta(minutes=interval):
+                continue
+            assigned, skipped, errors = await sync_join_roles(guild)
+            await log_embed(
+                guild,
+                "🔄 Join Roles · sincronización periódica",
+                f"Asignados a **{assigned}** miembro(s); **{skipped}** sin cambios."
+                + (f" **{len(errors)}** error(es)." if errors else ""),
+                discord.Color.blurple() if not errors else discord.Color.orange(),
+            )
+        except Exception:
+            traceback.print_exc()
+
+
 def get_sin_verificado_window(guild_id: int) -> timedelta:
     seconds = guild_setting_int(guild_id, "sin_verificado_timeout_seconds", int(SIN_VERIFICAR_WINDOW.total_seconds()))
     return timedelta(seconds=max(1, seconds))
@@ -1856,6 +1881,8 @@ async def on_ready() -> None:
             traceback.print_exc()
     if not member_of_the_week_loop.is_running():
         member_of_the_week_loop.start()
+    if not join_roles_sync_loop.is_running():
+        join_roles_sync_loop.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
     _startup_done = True
@@ -1881,7 +1908,11 @@ async def on_guild_join(guild: discord.Guild) -> None:
 @bot.event
 async def on_member_join(member: discord.Member) -> None:
     if member.bot:
-        return  # los bots no pasan por el flujo de verificación
+        # Los bots no pasan por verificación, pero Sapphire-style Bot Roles sí
+        # pueden asignarse de forma independiente.
+        if join_roles_bot_enabled(member.guild.id):
+            asyncio.create_task(assign_bot_join_roles(member))
+        return
 
     invite_code = await detect_used_invite(member.guild)
     db_upsert_join(member.guild.id, member.id, invite_code)
