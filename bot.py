@@ -5001,10 +5001,12 @@ async def condemnation_update_pardoned_card(
         return False
 
 
-def condemnation_role_id(row: sqlite3.Row | None = None) -> int:
+def condemnation_role_id(row: sqlite3.Row | None = None, guild_id: int | None = None) -> int:
     if row is not None and row["role_id"]:
         return int(row["role_id"])
-    return hp_punish_role_id(guild.id)
+    if guild_id is None and row is not None and "guild_id" in row.keys():
+        guild_id = int(row["guild_id"])
+    return hp_punish_role_id(guild_id) if guild_id is not None else 0
 
 
 async def condemnation_sync_roles(
@@ -7460,7 +7462,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
     ]
     if raid_is_active(guild.id) and until:
         lines.append(f"• El modo raid termina <t:{int(until.timestamp())}:R>")
-    if raid_action() == "condemn" and guild.get_role(condemnation_role_id()) is None:
+    if raid_action() == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None:
         lines.append("⚠️ La acción es Condenar pero no hay rol Condenado: configúralo con `/honeypot setup rol_castigo`.")
     return "\n".join(lines)
 
@@ -7516,7 +7518,7 @@ async def raid_config(
         return
     effective_action = accion.value if accion is not None else raid_action()
     effective_enabled = activado if activado is not None else raid_enabled()
-    if effective_enabled and effective_action == "condemn" and guild.get_role(condemnation_role_id()) is None \
+    if effective_enabled and effective_action == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None \
             and (activado or accion is not None):
         await interaction.response.send_message(
             "❌ No guardé nada: la acción «Condenar» necesita el rol Condenado. "
