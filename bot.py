@@ -8097,8 +8097,9 @@ def variables_embeds() -> list[discord.Embed]:
         value=(
             "`{#reglas}` → mención del canal · `{#123456789}` → canal por ID\n"
             "`{@Moderador}` → mención del rol (o del miembro con ese nombre)\n"
+            "`{mencionrol:Moderador}` → mención explícita de un rol por nombre o ID\n"
             "`{emoji:fuego}` → emoji personalizado del servidor\n"
-            "Más explícitas: `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\n"
+            "Más explícitas: `{canal:nombre}` · `{rol:nombre}` · `{mencionrol:nombre}` · `{usuario:nombre}`\n"
             "Ejemplo: `Bienvenid@ {usuario} a {servidor}, lee {#reglas}` · "
             "`<#{canalid}>` · imagen: `{servericon}`"
         ),
