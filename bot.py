@@ -1718,7 +1718,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
 
 
 async def schedule_verify_timeout(guild_id: int, user_id: int, pending_at: datetime) -> None:
-    delay = (pending_at + timedelta(seconds=get_verify_timeout()) - datetime.now(timezone.utc)).total_seconds()
+    delay = (pending_at + timedelta(seconds=get_verify_timeout(guild_id)) - datetime.now(timezone.utc)).total_seconds()
     if delay > 0:
         await asyncio.sleep(delay)
     await evaluate_verify_timeout(guild_id, user_id)
