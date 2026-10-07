@@ -633,6 +633,18 @@ def db_meta_set(key: str, value: str) -> None:
     conn.close()
 
 
+def legacy_fallback_allowed(guild_id: int | None) -> bool:
+    if guild_id is None:
+        return True
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    if legacy_owner is not None:
+        try:
+            return int(legacy_owner) == guild_id
+        except (TypeError, ValueError):
+            return False
+    return len(bot.guilds) <= 1
+
+
 def _guild_or_legacy_setting(guild_id: int | None, key: str, default: str) -> str:
     """Lee primero la configuración por servidor. La configuración global antigua
     solo se acepta si pertenece a este servidor o si el bot aún está en un único servidor."""
@@ -641,33 +653,22 @@ def _guild_or_legacy_setting(guild_id: int | None, key: str, default: str) -> st
     configured = guild_config_get(guild_id, key)
     if configured is not None:
         return configured
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    if legacy_owner is not None:
-        try:
-            if int(legacy_owner) != guild_id:
-                return default
-        except (TypeError, ValueError):
-            return default
-    elif len(bot.guilds) > 1:
+    if not legacy_fallback_allowed(guild_id):
         return default
     return db_meta_get(key) or default
 
 
 def get_motw_weekday(guild_id: int) -> int:
     value = guild_config_get(guild_id, "motw_weekday")
-    if value is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or legacy_owner == str(guild_id):
-            value = db_meta_get("motw_weekday")
+    if value is None and legacy_fallback_allowed(guild_id):
+        value = db_meta_get("motw_weekday")
     return int(value) if value is not None else MOTW_WEEKDAY_DEFAULT
 
 
 def get_motw_hour(guild_id: int) -> int:
     value = guild_config_get(guild_id, "motw_hour")
-    if value is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or legacy_owner == str(guild_id):
-            value = db_meta_get("motw_hour")
+    if value is None and legacy_fallback_allowed(guild_id):
+        value = db_meta_get("motw_hour")
     return int(value) if value is not None else MOTW_HOUR_DEFAULT
 
 
@@ -675,8 +676,7 @@ def get_motw_channel_id(guild_id: int) -> int:
     value = guild_config_get(guild_id, "motw_channel_id")
     if value is not None:
         return int(value)
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    if legacy_owner is None or legacy_owner == str(guild_id):
+    if legacy_fallback_allowed(guild_id):
         legacy = db_meta_get("motw_channel_id")
         if legacy:
             return int(legacy)
@@ -749,17 +749,29 @@ def get_recovery_channel_id(guild_id: int) -> int:
 
 
 def get_log_channel_id(guild_id: int | None = None) -> int:
-    """Canal elegido con /heraldo_log_channel; si no hay, el LOG_CHANNEL_ID por defecto."""
-    if guild_id is not None:
-        configured = get_guild_channel_id(guild_id, "logs")
-        if configured:
-            return configured
-    value = db_meta_get("log_channel_id")
-    return int(value) if value is not None else LOG_CHANNEL_ID
+    if guild_id is None:
+        value = db_meta_get("log_channel_id")
+        return int(value) if value is not None else LOG_CHANNEL_ID
+    configured = get_guild_channel_id(guild_id, "logs")
+    if configured:
+        return configured
+    configured = guild_config_get(guild_id, "log_channel_id")
+    if configured:
+        return int(configured)
+    if legacy_fallback_allowed(guild_id):
+        value = db_meta_get("log_channel_id")
+        if value is not None:
+            return int(value)
+        return LOG_CHANNEL_ID
+    return 0
 
 
-def set_log_channel_id(channel_id: int) -> None:
-    db_meta_set("log_channel_id", str(channel_id))
+def set_log_channel_id(channel_id: int, guild_id: int | None = None) -> None:
+    if guild_id is None:
+        db_meta_set("log_channel_id", str(channel_id))
+    else:
+        guild_resource_set(guild_id, "channel", "logs", channel_id)
+        guild_config_set(guild_id, "log_channel_id", str(channel_id))
 
 
 def verify_enabled(guild_id: int | None = None) -> bool:
@@ -783,6 +795,7 @@ def get_verify_role_id(guild_id: int | None = None) -> int:
         tentado = get_tentado_role_id(guild_id)
         if tentado:
             return tentado
+        return 0
     value = db_meta_get("verify_role_id")
     try:
         return int(value) if value is not None else TENTADO_ROLE_ID
@@ -943,6 +956,22 @@ async def on_ready() -> None:
                     db_meta_set("verify_legacy_guild_id", str(legacy_guild.id))
             except (TypeError, ValueError):
                 pass
+
+    if db_meta_get("verify_legacy_guild_id") is None:
+        legacy_ids = {x for x in (LOG_CHANNEL_ID, CONDEMNED_CHANNEL_ID, TENTADO_ROLE_ID, SIN_VERIFICAR_ROLE_ID) if x}
+        scored: list[tuple[int, discord.Guild]] = []
+        for candidate in bot.guilds:
+            score = sum(
+                1 for resource_id in legacy_ids
+                if candidate.get_channel(resource_id) is not None or candidate.get_role(resource_id) is not None
+            )
+            if score:
+                scored.append((score, candidate))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+            db_meta_set("verify_legacy_guild_id", str(scored[0][1].id))
+        elif len(bot.guilds) == 1:
+            db_meta_set("verify_legacy_guild_id", str(bot.guilds[0].id))
 
     for guild in bot.guilds:
         try:
@@ -2373,7 +2402,7 @@ async def heraldo_log_channel(interaction: discord.Interaction, canal: discord.T
         )
         return
 
-    set_log_channel_id(canal.id)
+    set_log_channel_id(canal.id, interaction.guild.id)
     guild_resource_set(interaction.guild.id, "channel", "logs", canal.id)
     await interaction.response.send_message(
         f"✅ Los logs de El Heraldo ahora se publicarán en {canal.mention}.",
@@ -3811,8 +3840,7 @@ def hp_setting_get(guild_id: int, key: str) -> str | None:
     value = guild_config_get(guild_id, key)
     if value is not None:
         return value
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    if legacy_owner is None or legacy_owner == str(guild_id):
+    if legacy_fallback_allowed(guild_id):
         return hp_meta_get(key)
     return None
 
@@ -3832,8 +3860,7 @@ def hp_traps(guild_id: int) -> dict[int, int | None]:
         (guild_id,),
     ).fetchall()
     if not rows:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or legacy_owner == str(guild_id):
+        if legacy_fallback_allowed(guild_id):
             rows = conn.execute("SELECT channel_id, warning_message_id FROM honeypot_channels").fetchall()
             for channel_id, warning_message_id in rows:
                 conn.execute(
@@ -3882,8 +3909,7 @@ def hp_exempt_ids(guild_id: int, kind: str) -> set[int]:
         (guild_id, kind),
     ).fetchall()
     if not rows:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if legacy_owner is None or legacy_owner == str(guild_id):
+        if legacy_fallback_allowed(guild_id):
             rows = conn.execute("SELECT target_id FROM honeypot_exempt WHERE kind = ?", (kind,)).fetchall()
             for (target_id,) in rows:
                 conn.execute(
@@ -4071,8 +4097,7 @@ def condemnation_default_duration_minutes(guild_id: int | None = None) -> int | 
     """Duración predeterminada para nuevas condenas. None = indefinida."""
     value = guild_config_get(guild_id, "condemnation_default_duration") if guild_id is not None else None
     if value is None:
-        legacy_owner = db_meta_get("verify_legacy_guild_id")
-        if guild_id is None or legacy_owner is None or legacy_owner == str(guild_id):
+        if legacy_fallback_allowed(guild_id):
             value = db_meta_get("condemnation_default_duration")
     if not value or value.strip().lower() in {"indefinida", "indefinido", "none", "null", "0"}:
         return None
@@ -4090,15 +4115,19 @@ def set_condemnation_default_duration(value: str | None, guild_id: int | None = 
 
 
 def condemnation_channel_id(guild_id: int | None = None) -> int:
-    if guild_id is not None:
-        configured = get_guild_channel_id(guild_id, "condemned")
-        if configured:
-            return configured
-        value = guild_config_get(guild_id, "condemned_channel_id")
-        if value:
-            return int(value)
-    value = db_meta_get("condemned_channel_id")
-    return int(value) if value else CONDEMNED_CHANNEL_ID
+    if guild_id is None:
+        value = db_meta_get("condemned_channel_id")
+        return int(value) if value else CONDEMNED_CHANNEL_ID
+    configured = get_guild_channel_id(guild_id, "condemned")
+    if configured:
+        return configured
+    value = guild_config_get(guild_id, "condemned_channel_id")
+    if value:
+        return int(value)
+    if legacy_fallback_allowed(guild_id):
+        value = db_meta_get("condemned_channel_id")
+        return int(value) if value else CONDEMNED_CHANNEL_ID
+    return 0
 
 
 def get_condemnation_emoji(guild_id: int | None = None) -> str:
@@ -4106,8 +4135,7 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
         value = guild_config_get(guild_id, "condemnation_emoji")
         if value:
             return value
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    if guild_id is None or legacy_owner is None or legacy_owner == str(guild_id):
+    if legacy_fallback_allowed(guild_id):
         return db_meta_get("condemnation_emoji") or CONDEMNED_EMOJI
     return CONDEMNED_EMOJI
 
@@ -4174,8 +4202,7 @@ def hp_retention_minutes(guild_id: int) -> int:
 
 
 def _hp_history_legacy_allowed(guild_id: int) -> bool:
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    return legacy_owner is None or legacy_owner == str(guild_id)
+    return legacy_fallback_allowed(guild_id)
 
 
 def hp_prune_history(guild_id: int) -> None:
@@ -5062,8 +5089,7 @@ def condemnation_template_get(guild_id: int, key: str) -> str:
     value = guild_config_get(guild_id, f"condemnation_template_{key}")
     if value is not None:
         return value
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    if legacy_owner is None or legacy_owner == str(guild_id):
+    if legacy_fallback_allowed(guild_id):
         legacy = db_meta_get(f"condemnation_template_{key}")
         if legacy is not None:
             return legacy
@@ -7409,8 +7435,7 @@ def raid_setting_get(guild_id: int, key: str) -> str | None:
     value = guild_config_get(guild_id, key)
     if value is not None:
         return value
-    legacy_owner = db_meta_get("verify_legacy_guild_id")
-    if legacy_owner is None or legacy_owner == str(guild_id):
+    if legacy_fallback_allowed(guild_id):
         return db_meta_get(key)
     return None
 
