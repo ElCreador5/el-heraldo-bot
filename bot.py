@@ -6049,6 +6049,8 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
 
 
 def condemnation_template_preview(guild: discord.Guild, member: discord.Member) -> discord.Embed:
+    # La vista previa no usa los roles reales del administrador que abrió el editor.
+    # En una condena real sí se muestran únicamente los roles que fueron retirados al condenado.
     embed, _ = _build_condemnation_embed(
         guild,
         member,
@@ -6056,7 +6058,7 @@ def condemnation_template_preview(guild: discord.Guild, member: discord.Member) 
         60,
         "role",
         member,
-        removed_role_ids=[r.id for r in member.roles if r.is_assignable() and not r.managed],
+        removed_role_ids=[],
         when=datetime.now(timezone.utc),
     )
     return embed
