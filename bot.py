@@ -9742,7 +9742,7 @@ def moderation_cases_summary(guild: discord.Guild) -> str:
     lines = []
     for row in rows:
         state = "abierto" if row["open"] else "cerrado"
-        lines.append(f"**{moderation_case_code(row['case_number'])}** · {row['type']}" · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
+        lines.append(f"**{moderation_case_code(row['case_number'])}** · {row['type']} · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
     return "**El Heraldo · Moderation · Cases**\n\n" + "\n\n".join(lines)
 
 
@@ -13757,7 +13757,7 @@ async def moderation_caselist(interaction: discord.Interaction, usuario: Optiona
     if not rows:
         await interaction.response.send_message("No encontré casos con esos filtros.", ephemeral=True)
         return
-    lines = [f"{moderation_case_code(row['case_number'])} · {row['type']}" · <@{row['user_id']}> · {'abierto' if row['open'] else 'cerrado'} · {str(row['reason'])[:90]}" for row in rows]
+    lines = [f"{moderation_case_code(row['case_number'])} · {row['type']} · <@{row['user_id']}> · {'abierto' if row['open'] else 'cerrado'} · {str(row['reason'])[:90]}" for row in rows]
     await interaction.response.send_message("\n".join(lines)[:1900], ephemeral=True)
 
 
@@ -13834,11 +13834,18 @@ async def moderation_caseclose(interaction: discord.Interaction, caso: str, moti
 @bot.tree.command(name="casedelete", description="Elimina definitivamente un caso de Moderation.")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.guild_only()
-async def moderation_casedelete(interaction: discord.Interaction, caso: int) -> None:
-    if not moderation_case_delete(interaction.guild.id, caso):
-        await interaction.response.send_message("No existe ese caso.", ephemeral=True)
+async def moderation_casedelete(interaction: discord.Interaction, caso: str) -> None:
+    try:
+        case_number = moderation_case_number(caso)
+    except ValueError as exc:
+        await interaction.response.send_message(str(exc), ephemeral=True)
         return
-    await interaction.response.send_message(f"Caso #{caso} eliminado.", ephemeral=True)
+    if not moderation_case_delete(interaction.guild.id, case_number):
+        await interaction.response.send_message("No existe ese expediente.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"Expediente {moderation_case_code(case_number)} eliminado.", ephemeral=True,
+    )
 
 @bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
 @discord.app_commands.describe(
