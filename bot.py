@@ -10148,30 +10148,48 @@ def _build_condemnation_embed(
 
     button_url = condemnation_template_get(guild.id, "button_url").strip()
     button_label = render(condemnation_template_get(guild.id, "button_label")).strip()[:80]
-    view = None
-    if button_url and re.match(r"^https?://", button_url, re.IGNORECASE):
-        view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label=button_label or "Ver información del caso", style=discord.ButtonStyle.link, url=button_url))
+    valid_button_url = button_url if re.match(r"^https?://", button_url, re.IGNORECASE) else None
     if include_pardon_button:
-        if view is None:
-            view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label="Perdonar", style=discord.ButtonStyle.success, custom_id="heraldo:condemnation:pardon"))
+        view = CondemnationPardonView(
+            link_label=button_label or "Ver información del caso",
+            link_url=valid_button_url,
+        )
+    elif valid_button_url:
+        view = discord.ui.View(timeout=None)
+        view.add_item(
+            discord.ui.Button(
+                label=button_label or "Ver información del caso",
+                style=discord.ButtonStyle.link,
+                url=valid_button_url,
+            )
+        )
+    else:
+        view = None
     return embed, view
 
 
 class CondemnationPardonView(discord.ui.View):
-    def __init__(self) -> None:
+    def __init__(self, *, link_label: str | None = None, link_url: str | None = None) -> None:
         super().__init__(timeout=None)
+        if link_url:
+            self.add_item(
+                discord.ui.Button(
+                    label=(link_label or "Ver información del caso")[:80],
+                    style=discord.ButtonStyle.link,
+                    url=link_url,
+                )
+            )
+        pardon_button = discord.ui.Button(
+            label="Perdonar",
+            style=discord.ButtonStyle.success,
+            custom_id="heraldo:condemnation:pardon",
+        )
+        pardon_button.callback = self.pardon_callback
+        self.add_item(pardon_button)
 
-    @discord.ui.button(
-        label="Perdonar",
-        style=discord.ButtonStyle.success,
-        custom_id="heraldo:condemnation:pardon",
-    )
     async def pardon_callback(
         self,
         interaction: discord.Interaction,
-        button: discord.ui.Button,
     ) -> None:
         # Acknowledge the interaction immediately. Si cualquier paso posterior
         # falla, Discord no mostrará "La aplicación no respondió".
