@@ -2237,70 +2237,86 @@ verify_dm_preview.error(verify_command_error)
 # Copia de seguridad de la plantilla del servidor (/template_config, /template_sync)
 # ---------------------------------------------------------------------------
 
-def _meta_int(key: str, default: int) -> int:
-    value = db_meta_get(key)
-    return int(value) if value is not None else default
+def _template_value(guild_id: int, key: str, default: str) -> str:
+    value = guild_config_get(guild_id, key)
+    if value is not None:
+        return value
+    if db_meta_get("template_guild_id") == str(guild_id):
+        legacy = db_meta_get(key)
+        if legacy is not None:
+            return legacy
+        if key == "template_interval_minutes":
+            old = db_meta_get("template_interval_hours")
+            if old is not None:
+                return str(int(old) * 60)
+    return default
 
 
-def get_template_mode() -> str:
-    value = db_meta_get("template_mode")
+def get_template_mode(guild_id: int) -> str:
+    value = _template_value(guild_id, "template_mode", "off")
     return value if value in TEMPLATE_MODE_LABELS else "off"
 
 
-def get_template_hour() -> int:
-    return _meta_int("template_hour", TEMPLATE_HOUR_DEFAULT)
+def get_template_hour(guild_id: int) -> int:
+    try:
+        return int(_template_value(guild_id, "template_hour", str(TEMPLATE_HOUR_DEFAULT)))
+    except (TypeError, ValueError):
+        return TEMPLATE_HOUR_DEFAULT
 
 
-def get_template_weekday() -> int:
-    return _meta_int("template_weekday", TEMPLATE_WEEKDAY_DEFAULT)
+def get_template_weekday(guild_id: int) -> int:
+    try:
+        value = int(_template_value(guild_id, "template_weekday", str(TEMPLATE_WEEKDAY_DEFAULT)))
+    except (TypeError, ValueError):
+        return TEMPLATE_WEEKDAY_DEFAULT
+    return value if 0 <= value <= 6 else TEMPLATE_WEEKDAY_DEFAULT
 
 
-def get_template_monthday() -> int:
-    return _meta_int("template_monthday", TEMPLATE_MONTHDAY_DEFAULT)
+def get_template_monthday(guild_id: int) -> int:
+    try:
+        value = int(_template_value(guild_id, "template_monthday", str(TEMPLATE_MONTHDAY_DEFAULT)))
+    except (TypeError, ValueError):
+        return TEMPLATE_MONTHDAY_DEFAULT
+    return max(1, min(28, value))
 
 
-def get_template_interval_minutes() -> int:
-    """Intervalo en minutos. Las versiones antiguas guardaban horas; se leen como compatibilidad."""
-    value = db_meta_get("template_interval_minutes")
-    if value is not None:
-        return int(value)
-    old = db_meta_get("template_interval_hours")
-    if old is not None:
-        return int(old) * 60
-    return TEMPLATE_INTERVAL_DEFAULT * 60
+def get_template_interval_minutes(guild_id: int) -> int:
+    try:
+        value = int(_template_value(guild_id, "template_interval_minutes", str(TEMPLATE_INTERVAL_DEFAULT * 60)))
+    except (TypeError, ValueError):
+        return TEMPLATE_INTERVAL_DEFAULT * 60
+    return max(1, value)
 
 
-def template_schedule_text() -> str:
-    mode = get_template_mode()
-    hour = f"{get_template_hour()}:00 (hora de RD)"
+def template_schedule_text(guild_id: int) -> str:
+    mode = get_template_mode(guild_id)
+    hour = f"{get_template_hour(guild_id)}:00 (hora de RD)"
     if mode == "off":
         return "Desactivada"
     if mode == "daily":
         return f"Cada día a las {hour}"
     if mode == "weekly":
-        return f"Cada semana, {MOTW_WEEKDAY_NAMES[get_template_weekday()]} a las {hour}"
+        return f"Cada semana, {MOTW_WEEKDAY_NAMES[get_template_weekday(guild_id)]} a las {hour}"
     if mode == "monthly":
-        return f"Cada mes, el día {get_template_monthday()} a las {hour}"
-    return f"Cada {format_duration(get_template_interval_minutes())}"
+        return f"Cada mes, el día {get_template_monthday(guild_id)} a las {hour}"
+    return f"Cada {format_duration(get_template_interval_minutes(guild_id))}"
 
 
-def template_last_slot(mode: str, now: datetime) -> datetime | None:
-    """Último turno programado (hora local de STREAK_TZ) que ya pasó respecto a `now`.
-    Solo para los modos de calendario (diario, semanal, mensual)."""
-    hour = get_template_hour()
+def template_last_slot(guild_id: int, mode: str, now: datetime) -> datetime | None:
+    hour = get_template_hour(guild_id)
     if mode == "daily":
         slot = now.replace(hour=hour, minute=0, second=0, microsecond=0)
         if slot > now:
             slot -= timedelta(days=1)
         return slot
     if mode == "weekly":
-        days_back = (now.weekday() - get_template_weekday()) % 7
+        days_back = (now.weekday() - get_template_weekday(guild_id)) % 7
         slot = (now - timedelta(days=days_back)).replace(hour=hour, minute=0, second=0, microsecond=0)
         if slot > now:
             slot -= timedelta(days=7)
         return slot
     if mode == "monthly":
-        day = get_template_monthday()  # 1-28: existe en todos los meses
+        day = get_template_monthday(guild_id)
         slot = now.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
         if slot > now:
             last_of_previous = now.replace(day=1) - timedelta(days=1)
@@ -2309,50 +2325,54 @@ def template_last_slot(mode: str, now: datetime) -> datetime | None:
     return None
 
 
-def template_next_run(now_utc: datetime) -> datetime | None:
-    """Próxima copia programada, en hora local de STREAK_TZ (None si está desactivada)."""
-    mode = get_template_mode()
+def template_next_run(guild_id: int, now_utc: datetime) -> datetime | None:
+    mode = get_template_mode(guild_id)
     if mode == "off":
         return None
     if mode == "interval":
-        last = db_meta_get("template_last_run")
+        last = guild_config_get(guild_id, "template_last_run")
+        if last is None and db_meta_get("template_guild_id") == str(guild_id):
+            last = db_meta_get("template_last_run")
         base = datetime.fromisoformat(last) if last else now_utc
-        return (base + timedelta(minutes=get_template_interval_minutes())).astimezone(STREAK_TZ)
-    slot = template_last_slot(mode, now_utc.astimezone(STREAK_TZ))
+        return (base + timedelta(minutes=get_template_interval_minutes(guild_id))).astimezone(STREAK_TZ)
+    slot = template_last_slot(guild_id, mode, now_utc.astimezone(STREAK_TZ))
     if mode == "daily":
         return slot + timedelta(days=1)
     if mode == "weekly":
         return slot + timedelta(days=7)
     first_of_next = (slot.replace(day=28) + timedelta(days=4)).replace(day=1)
-    return first_of_next.replace(day=get_template_monthday())
+    return first_of_next.replace(day=get_template_monthday(guild_id))
 
 
-def template_due(now_utc: datetime) -> bool:
-    """¿Toca la copia? En el primer arranque (o tras activarla) solo arranca el reloj:
-    no hace una copia con la configuración recién cambiada."""
-    mode = get_template_mode()
+def template_due(guild_id: int, now_utc: datetime) -> bool:
+    mode = get_template_mode(guild_id)
     if mode == "off":
         return False
     if mode == "interval":
-        last = db_meta_get("template_last_run")
+        last = guild_config_get(guild_id, "template_last_run")
+        if last is None and db_meta_get("template_guild_id") == str(guild_id):
+            last = db_meta_get("template_last_run")
         if last is None:
-            db_meta_set("template_last_run", now_utc.isoformat())
+            guild_config_set(guild_id, "template_last_run", now_utc.isoformat())
             return False
-        return now_utc >= datetime.fromisoformat(last) + timedelta(minutes=get_template_interval_minutes())
-    slot = template_last_slot(mode, now_utc.astimezone(STREAK_TZ))
-    handled = db_meta_get("template_last_slot")
+        return now_utc >= datetime.fromisoformat(last) + timedelta(minutes=get_template_interval_minutes(guild_id))
+    slot = template_last_slot(guild_id, mode, now_utc.astimezone(STREAK_TZ))
+    handled = guild_config_get(guild_id, "template_last_slot")
+    if handled is None and db_meta_get("template_guild_id") == str(guild_id):
+        handled = db_meta_get("template_last_slot")
     if handled is None:
-        db_meta_set("template_last_slot", slot.isoformat())
+        guild_config_set(guild_id, "template_last_slot", slot.isoformat())
         return False
     return slot > datetime.fromisoformat(handled)
 
 
-def template_mark_done(now_utc: datetime) -> None:
-    """Da el turno actual por hecho (se llama ANTES de la copia, para no duplicarla)."""
-    db_meta_set("template_last_run", now_utc.isoformat())
-    mode = get_template_mode()
+def template_mark_done(guild_id: int, now_utc: datetime) -> None:
+    guild_config_set(guild_id, "template_last_run", now_utc.isoformat())
+    mode = get_template_mode(guild_id)
     if mode in ("daily", "weekly", "monthly"):
-        db_meta_set("template_last_slot", template_last_slot(mode, now_utc.astimezone(STREAK_TZ)).isoformat())
+        slot = template_last_slot(guild_id, mode, now_utc.astimezone(STREAK_TZ))
+        if slot is not None:
+            guild_config_set(guild_id, "template_last_slot", slot.isoformat())
 
 
 async def sync_server_template(guild: discord.Guild) -> tuple[discord.Template | None, bool | None, str | None]:
