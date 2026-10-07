@@ -6231,7 +6231,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         if self.pending_condemn_emoji is not None:
             lines.append(f"Emoji de condena → {self.pending_condemn_emoji}")
         return (
-            "**El Heraldo · Moderation · Reportes de usuarios**\n\n"
+            "**El Heraldo · Moderation · Reportes**\n\n"
             + moderation_reports_summary(guild)
             + _pending_config_text(lines)
         )
@@ -6313,7 +6313,7 @@ class HeraldoModerationSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Reportes de usuarios", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Reportes", style=discord.ButtonStyle.primary, row=0)
     async def user_reports(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
