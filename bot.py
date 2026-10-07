@@ -970,6 +970,17 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
             except (discord.Forbidden, discord.HTTPException):
                 return False, f"No pude crear el rol **{role_name}**."
 
+        # Si el Heraldo creó el rol en una versión anterior, conserva el ID pero
+        # sincroniza su nombre con la definición canónica actual.
+        if role.id in created_ids and role.name != role_name:
+            try:
+                role = await role.edit(
+                    name=role_name,
+                    reason="El Heraldo: sincronización de rol administrado de orientación",
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                return False, f"No pude actualizar el rol administrado **{role_name}**."
+
         guild_resource_set(guild.id, "role", key, role.id)
         emoji = reaction_by_key.get(key)
         if emoji is not None:
@@ -2411,7 +2422,7 @@ async def orientation_role_deleted(role: discord.Role) -> None:
         return
     configured = {
         guild_resource_get(role.guild.id, "role", key)
-        for key, _name, _emoji in ORIENTATION_ROLE_DEFINITIONS
+        for key, _name in ORIENTATION_MANAGED_ROLE_DEFINITIONS
     }
     if role.id not in configured:
         return
