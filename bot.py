@@ -691,11 +691,30 @@ _startup_done = False
 
 
 @bot.event
-@bot.event
 async def on_ready() -> None:
     global _startup_done
+
+    # Registra las vistas persistentes primero. Esto debe ocurrir antes de DB,
+    # sincronización de comandos o tareas para que los botones ya publicados
+    # nunca queden huérfanos si otra parte del arranque falla.
+    if not any(isinstance(view, CondemnationPardonView) for view in bot.persistent_views):
+        try:
+            bot.add_view(CondemnationPardonView())
+            print("✅ Vista persistente de perdón registrada.")
+        except Exception:
+            print("❌ No se pudo registrar la vista persistente de perdón:")
+            traceback.print_exc()
+
+    if not any(isinstance(view, VerifyView) for view in bot.persistent_views):
+        try:
+            bot.add_view(VerifyView())
+        except Exception:
+            print("❌ No se pudo registrar la vista persistente de verificación:")
+            traceback.print_exc()
+
     if _startup_done:
-        return  # on_ready se repite en cada reconexión: no resincronizar comandos ni relanzar tareas
+        return  # on_ready se repite en cada reconexión: las vistas ya están registradas
+
     db_init()
     honeypot_db_init()
     # Sistema de sugerencias: registra las vistas persistentes y recupera el panel/revisiones pendientes.
@@ -703,10 +722,6 @@ async def on_ready() -> None:
         await suggestions_startup()
     except Exception:
         traceback.print_exc()
-    if not any(isinstance(view, VerifyView) for view in bot.persistent_views):
-        bot.add_view(VerifyView())
-    if not any(isinstance(view, CondemnationPardonView) for view in bot.persistent_views):
-        bot.add_view(CondemnationPardonView())
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
