@@ -54,7 +54,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      administrador o la asignación manual del rol activan el mismo proceso: se guardan los
      roles, se quitan los roles asignables (incluidos Tentad@ y Sin Verificar), se aplica Condenado,
      se pausa la evaluación de verificación y se excluye actividad/Miembro de la Semana.
-   - /liberar devuelve los roles guardados; /condenados muestra motivo, origen, inicio y caducidad.
+   - /liberar devuelve los roles guardados; /list condenados muestra motivo, origen, inicio y caducidad.
    - Las condenas tienen duración opcional, sobreviven reinicios y sobreviven a una salida/reentrada.
    - /honeypot release deja de existir para evitar dos motores de liberación distintos.
    - La reacción ☠️ solo la procesan administradores.
@@ -81,7 +81,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      {fecha}… (también ${nombre}), y búsquedas por nombre/ID: {#canal}, {@rol}, {emoji:nombre}.
    - No distinguen mayúsculas, tildes ni separadores. Lo desconocido se deja tal cual.
    - Se aplican al panel y DM de verificación, al mensaje tras verificarse y al aviso del honeypot.
-     /variables lista todas; /variables texto:… prueba un texto con datos reales.
+     /list variables lista todas; /variables texto:… prueba un texto con datos reales.
 
 11. RESPUESTAS SIEMPRE EN EMBED
    - Todo lo que el Heraldo envía o edita sale como embed (el texto plano se convierte) con el
@@ -96,8 +96,9 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
 13. EMBEDS PERSONALIZADOS (/embed)
    - /embed crear abre un formulario; luego un panel con botones sigue la edición (contenido, autor y
      pie, campos, fecha) también con formularios. Todos los textos aceptan variables.
-   - /embed editar | enviar | lista | borrar. Los embeds se guardan por nombre y los mensajes ya
-     enviados se actualizan solos al editarlos.
+   - /embed editar | enviar | borrar. /list embeds muestra los embeds guardados por nombre.
+     Los mensajes ya enviados se actualizan solos al editarlos.
+   - /list comandos | variables | condenados | embeds centraliza los listados privados del creador del servidor.
 
 Toda la actividad relevante se reporta como embed en el canal de logs
 (LOG_CHANNEL_ID por defecto; cambiable con /heraldo_log_channel).
@@ -5831,35 +5832,6 @@ async def liberar_error(interaction: discord.Interaction, error: discord.app_com
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
-@bot.tree.command(name="condenados", description="Listar las condenas activas con motivo, origen y caducidad.")
-@discord.app_commands.checks.has_permissions(kick_members=True)
-@discord.app_commands.guild_only()
-async def condenados(interaction: discord.Interaction) -> None:
-    rows = condemnation_list(interaction.guild.id)
-    if not rows:
-        await interaction.response.send_message("No hay condenas activas.", ephemeral=True)
-        return
-    embed = discord.Embed(
-        title="☠️ Condenados activos",
-        description=f"**{len(rows)}** condena(s) activa(s).",
-        color=discord.Color.dark_red(),
-    )
-    for row in rows[:25]:
-        member = interaction.guild.get_member(row["user_id"])
-        mention = member.mention if member else f"`{row['user_id']}`"
-        when = discord.utils.format_dt(datetime.fromisoformat(row["condemned_at"]), "R")
-        value = (
-            f"**Motivo:** {row['reason'][:500]}\n"
-            f"**Desde:** {when}\n"
-            f"**Caduca:** {condemnation_duration_text(row)}\n"
-            f"**Origen:** {condemnation_origin_label(row['origin'])}"
-        )
-        embed.add_field(name=mention, value=value, inline=False)
-    if len(rows) > 25:
-        embed.set_footer(text=f"Mostrando 25 de {len(rows)} condenas activas.")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 @bot.tree.command(name="condenar_setup", description="Configurar el canal donde se anuncian las nuevas condenas.")
 @discord.app_commands.describe(canal="Canal de texto para los avisos de condena; vacío = ver configuración")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
@@ -8136,7 +8108,7 @@ def variables_embeds() -> list[discord.Embed]:
     return [embed]
 
 
-@bot.tree.command(name="variables", description="Ver las variables disponibles o probar un texto con ellas.")
+@bot.tree.command(name="variables", description="Probar un texto con las variables de El Heraldo.")
 @discord.app_commands.describe(
     texto="Texto con variables para probar, por ejemplo: Hola {usuario}, lee {#reglas}",
     miembro="Miembro con cuyos datos se prueba (por defecto, tú)",
@@ -8151,7 +8123,11 @@ async def variables_command(
     canal: Optional[discord.abc.GuildChannel] = None,
 ) -> None:
     if texto is None:
-        await interaction.response.send_message(embeds=variables_embeds(), ephemeral=True)
+        await interaction.response.send_message(
+            "ℹ️ El catálogo de variables se movió a `/list variables`. "
+            "Usa este comando con `texto` cuando quieras probar cómo se resuelven.",
+            ephemeral=True,
+        )
         return
     ctx = VarContext(interaction.guild, miembro or interaction.user, canal or interaction.channel)
     result, unresolved = render_vars_report(texto, ctx, limit=1800)
@@ -8164,6 +8140,181 @@ async def variables_command(
 
 
 variables_command.error(verify_command_error)
+
+
+# ---------------------------------------------------------------------------
+# LISTADOS CENTRALIZADOS (/list)
+# ---------------------------------------------------------------------------
+# Los listados administrativos viven aquí para evitar comandos duplicados como
+# /condenados o /embed lista. Son privados y exclusivos del creador del servidor.
+
+list_group = discord.app_commands.Group(
+    name="list",
+    description="Consultar los listados privados de El Heraldo.",
+    guild_only=True,
+)
+
+
+async def _list_require_server_owner(interaction: discord.Interaction) -> bool:
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("❌ Este comando solo funciona dentro de un servidor.", ephemeral=True)
+        return False
+    if interaction.user.id != guild.owner_id:
+        await interaction.response.send_message(
+            "❌ Solo el creador del servidor puede consultar estos listados.",
+            ephemeral=True,
+        )
+        return False
+    return True
+
+
+def _list_text_embeds(
+    title: str,
+    lines: list[str],
+    *,
+    color: discord.Color = discord.Color.blurple(),
+    empty_text: str = "No hay elementos.",
+) -> list[discord.Embed]:
+    """Convierte líneas en páginas seguras para Discord (máx. 10 embeds por respuesta)."""
+    if not lines:
+        return [discord.Embed(title=title, description=empty_text, color=color)]
+
+    pages: list[str] = []
+    current = ""
+    for line in lines:
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > 3800:
+            if current:
+                pages.append(current)
+            current = line[:3800]
+        else:
+            current = candidate
+    if current:
+        pages.append(current)
+
+    hidden_pages = max(0, len(pages) - 10)
+    pages = pages[:10]
+    embeds: list[discord.Embed] = []
+    total = len(pages)
+    for index, page in enumerate(pages, start=1):
+        page_title = title if total == 1 else f"{title} · {index}/{total}"
+        embed = discord.Embed(title=page_title, description=page, color=color)
+        if hidden_pages and index == total:
+            embed.set_footer(text=f"Hay {hidden_pages} página(s) adicional(es) que exceden el límite de Discord.")
+        embeds.append(embed)
+    return embeds
+
+
+def _list_command_lines() -> list[str]:
+    lines: list[str] = []
+
+    def visit(commands_list, prefix: str = "") -> None:
+        for command in sorted(commands_list, key=lambda item: item.name):
+            qualified = f"{prefix} {command.name}".strip()
+            children = getattr(command, "commands", None)
+            if children:
+                visit(children, qualified)
+                continue
+            description = (getattr(command, "description", "") or "Sin descripción").strip()
+            lines.append(f"• `/{qualified}` — {description}")
+
+    visit(bot.tree.get_commands())
+    return lines
+
+
+@list_group.command(name="comandos", description="Ver todos los comandos disponibles del Heraldo.")
+async def list_commands_command(interaction: discord.Interaction) -> None:
+    if not await _list_require_server_owner(interaction):
+        return
+    lines = _list_command_lines()
+    embeds = _list_text_embeds(
+        "📚 Comandos de El Heraldo",
+        lines,
+        empty_text="No hay comandos registrados.",
+    )
+    embeds[0].description = f"**{len(lines)}** comando(s) registrado(s).\n\n" + (embeds[0].description or "")
+    await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
+
+@list_group.command(name="variables", description="Ver todas las variables disponibles para textos y embeds.")
+async def list_variables_command(interaction: discord.Interaction) -> None:
+    if not await _list_require_server_owner(interaction):
+        return
+    await interaction.response.send_message(embeds=variables_embeds(), ephemeral=True)
+
+
+@list_group.command(name="condenados", description="Ver todas las condenas activas del servidor.")
+async def list_condemned_command(interaction: discord.Interaction) -> None:
+    if not await _list_require_server_owner(interaction):
+        return
+    rows = condemnation_list(interaction.guild.id)
+    if not rows:
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="☠️ Condenados activos",
+                description="No hay condenas activas.",
+                color=discord.Color.dark_red(),
+            ),
+            ephemeral=True,
+        )
+        return
+
+    embeds: list[discord.Embed] = []
+    for start in range(0, len(rows), 25):
+        batch = rows[start:start + 25]
+        page = start // 25 + 1
+        total_pages = (len(rows) + 24) // 25
+        title = "☠️ Condenados activos" if total_pages == 1 else f"☠️ Condenados activos · {page}/{total_pages}"
+        embed = discord.Embed(
+            title=title,
+            description=f"**{len(rows)}** condena(s) activa(s) en este servidor.",
+            color=discord.Color.dark_red(),
+        )
+        for row in batch:
+            member = interaction.guild.get_member(row["user_id"])
+            mention = member.mention if member else f"`{row['user_id']}`"
+            when = discord.utils.format_dt(datetime.fromisoformat(row["condemned_at"]), "R")
+            value = (
+                f"**Motivo:** {row['reason'][:500]}\n"
+                f"**Desde:** {when}\n"
+                f"**Caduca:** {condemnation_duration_text(row)}\n"
+                f"**Origen:** {condemnation_origin_label(row['origin'])}"
+            )
+            embed.add_field(name=mention, value=value, inline=False)
+        embeds.append(embed)
+        if len(embeds) == 10:
+            break
+    if len(rows) > 250:
+        embeds[-1].set_footer(text=f"Mostrando 250 de {len(rows)} condenas activas por el límite de Discord.")
+    await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
+
+@list_group.command(name="embeds", description="Ver los embeds personalizados guardados por nombre.")
+async def list_embeds_command(interaction: discord.Interaction) -> None:
+    if not await _list_require_server_owner(interaction):
+        return
+    names = embed_names(interaction.guild.id)
+    lines = [
+        f"• `{name}`" + (f" — enviado en **{count}** mensaje(s)" if count else " — todavía no enviado")
+        for name, count in names
+    ]
+    embeds = _list_text_embeds(
+        "🧩 Embeds guardados",
+        lines,
+        empty_text="No hay embeds guardados. Crea uno con `/embed crear`.",
+    )
+    if names:
+        embeds[0].description = f"**{len(names)}** embed(s) guardado(s).\n\n" + (embeds[0].description or "")
+    await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
+
+@list_group.error
+async def list_group_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
+    await verify_command_error(interaction, error)
+
+
+bot.tree.add_command(list_group)
 
 
 # ---------------------------------------------------------------------------
@@ -8886,7 +9037,7 @@ async def embed_create(interaction: discord.Interaction, nombre: str) -> None:
 async def embed_edit(interaction: discord.Interaction, nombre: str) -> None:
     name = nombre.strip().lower()
     if embed_get(interaction.guild.id, name) is None:
-        await interaction.response.send_message(f"❌ No existe un embed llamado `{name}`. Mira `/embed lista`.", ephemeral=True)
+        await interaction.response.send_message(f"❌ No existe un embed llamado `{name}`. Mira `/list embeds`.", ephemeral=True)
         return
     await embed_refresh(interaction, name, new=True)
 
@@ -8904,16 +9055,6 @@ async def embed_send_command(
     await interaction.response.defer(ephemeral=True)
     result = await embed_send(interaction.guild, nombre.strip().lower(), canal or interaction.channel, miembro)
     await interaction.followup.send(result, ephemeral=True)
-
-
-@embed_group.command(name="lista", description="Ver los embeds guardados.")
-async def embed_list_command(interaction: discord.Interaction) -> None:
-    names = embed_names(interaction.guild.id)
-    if not names:
-        await interaction.response.send_message("No hay embeds guardados. Crea uno con `/embed crear`.", ephemeral=True)
-        return
-    lines = [f"• `{name}`" + (f" — enviado en {n} mensaje(s)" if n else "") for name, n in names]
-    await interaction.response.send_message("**Embeds guardados:**\n" + "\n".join(lines)[:1900], ephemeral=True)
 
 
 @embed_group.command(name="borrar", description="Borrar un embed guardado (los mensajes ya enviados se quedan).")
