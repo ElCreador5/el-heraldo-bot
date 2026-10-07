@@ -1599,6 +1599,24 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
     return "\n".join(lines)
 
 
+def heraldo_setup_home_content() -> str:
+    return (
+        "🪽 **El Heraldo · Configuración del servidor**\n\n"
+        "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica. "
+        "Raid Protection usa el canal general de Logs; no crea un canal de alertas separado."
+    )
+
+
+async def heraldo_setup_go_home(
+    interaction: discord.Interaction, guild_id: int, owner_id: int,
+) -> None:
+    await interaction.response.edit_message(
+        content=heraldo_setup_home_content(),
+        embed=None,
+        view=HeraldoSetupView(guild_id, owner_id),
+    )
+
+
 class HeraldoChannelSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -1769,14 +1787,7 @@ class HeraldoChannelSetupView(discord.ui.View):
         )
 
     async def back(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(
-            content=(
-                "🪽 **El Heraldo · Configuración del servidor**\n\n"
-                "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica."
-            ),
-            embed=None,
-            view=HeraldoSetupView(self.guild_id, self.owner_id),
-        )
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 class HeraldoRoleSetupView(discord.ui.View):
@@ -1813,11 +1824,19 @@ class HeraldoRoleSetupView(discord.ui.View):
                 await interaction.response.send_message("❌ No pude localizar ese rol.", ephemeral=True)
                 return
             guild_resource_set(self.guild_id, "role", key, role.id)
-            await interaction.response.send_message(
-                f"✅ {label}: {role.mention} quedó configurado para este servidor.",
-                ephemeral=True,
+            await interaction.response.edit_message(
+                content=(
+                    "🪽 **El Heraldo · Roles del sistema**\n\n"
+                    f"✅ {label}: {role.mention} quedó configurado para este servidor.\n\n"
+                    "Puedes configurar otro rol o volver al menú principal."
+                ),
+                view=self,
             )
         return callback
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 class HeraldoOrientationSetupView(discord.ui.View):
@@ -1946,9 +1965,15 @@ class HeraldoMotwSetupView(discord.ui.View):
             )
             return
         set_motw_channel_id(self.guild_id, channel.id)
-        await interaction.response.send_message(
-            f"✅ Miembro de la Semana se anunciará en {channel.mention}.",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=(
+                "👑 **El Heraldo · Miembro de la Semana**\n\n"
+                f"Canal: {channel.mention}\n"
+                f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} "
+                f"a las {get_motw_hour(self.guild_id)}:00** (hora RD)\n\n"
+                "✅ Canal actualizado."
+            ),
+            view=self,
         )
 
     @discord.ui.button(label="🕒 Horario", style=discord.ButtonStyle.primary, row=1)
@@ -1966,11 +1991,7 @@ class HeraldoMotwSetupView(discord.ui.View):
 
     @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
-            embed=None,
-            view=HeraldoSetupView(self.guild_id, self.owner_id),
-        )
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 class HeraldoHoneypotSetupView(discord.ui.View):
@@ -2006,9 +2027,14 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             return
         hp_add_trap(self.guild_id, channel.id)
         err = await hp_sync_warning(channel)
-        await interaction.response.send_message(
-            f"✅ {channel.mention} quedó añadido al Honeypot." + (f"\n⚠️ {err}" if err else ""),
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=(
+                "🍯 **El Heraldo · Honeypot**\n\n"
+                + hp_config_summary(interaction.guild)
+                + f"\n\n✅ {channel.mention} quedó añadido al Honeypot."
+                + (f"\n⚠️ {err}" if err else "")
+            ),
+            view=self,
         )
 
     @discord.ui.button(label="⏯️ Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
@@ -2022,9 +2048,13 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             return
         hp_setting_set(self.guild_id, "honeypot_enabled", "0" if enabled else "1")
         hp_setting_set(self.guild_id, "honeypot_paused", "0")
-        await interaction.response.send_message(
-            "✅ Honeypot desactivado." if enabled else "✅ Honeypot activado.",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=(
+                "🍯 **El Heraldo · Honeypot**\n\n"
+                + hp_config_summary(interaction.guild)
+                + ("\n\n✅ Honeypot desactivado." if enabled else "\n\n✅ Honeypot activado.")
+            ),
+            view=self,
         )
 
     @discord.ui.button(label="🖼️ Editar aviso", style=discord.ButtonStyle.secondary, row=1)
@@ -2037,11 +2067,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
 
     @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
-            embed=None,
-            view=HeraldoSetupView(self.guild_id, self.owner_id),
-        )
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 def heraldo_permissions_summary(guild: discord.Guild) -> str:
@@ -2142,9 +2168,13 @@ class HeraldoVerificationSetupView(discord.ui.View):
             return
         guild_config_set(self.guild_id, "verify_role_id", str(role.id))
         guild_resource_set(self.guild_id, "role", "tentado", role.id)
-        await interaction.response.send_message(
-            f"✅ Rol de verificación guardado: {role.mention}.",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=(
+                "✅ **El Heraldo · Verificación**\n\n"
+                + verify_config_summary(interaction.guild)
+                + f"\n\n✅ Rol de verificación guardado: {role.mention}."
+            ),
+            view=self,
         )
 
     async def save_channel(self, interaction: discord.Interaction) -> None:
@@ -2167,9 +2197,13 @@ class HeraldoVerificationSetupView(discord.ui.View):
             return
         guild_resource_set(self.guild_id, "channel", "verification", channel.id)
         guild_config_set(self.guild_id, "verify_channel_id", str(channel.id))
-        await interaction.response.send_message(
-            f"✅ Canal de verificación guardado: {channel.mention}.",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=(
+                "✅ **El Heraldo · Verificación**\n\n"
+                + verify_config_summary(interaction.guild)
+                + f"\n\n✅ Canal de verificación guardado: {channel.mention}."
+            ),
+            view=self,
         )
 
     @discord.ui.button(label="📝 Textos", style=discord.ButtonStyle.secondary, row=2)
@@ -2252,18 +2286,18 @@ class HeraldoVerificationSetupView(discord.ui.View):
                 )
                 return
         guild_config_set(self.guild_id, "verify_enabled", "0" if enabled else "1")
-        await interaction.response.send_message(
-            "✅ Verificación automática desactivada." if enabled else "✅ Verificación automática activada.",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=(
+                "✅ **El Heraldo · Verificación**\n\n"
+                + verify_config_summary(interaction.guild)
+                + ("\n\n✅ Verificación automática desactivada." if enabled else "\n\n✅ Verificación automática activada.")
+            ),
+            view=self,
         )
 
     @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
-            embed=None,
-            view=HeraldoSetupView(self.guild_id, self.owner_id),
-        )
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 
@@ -2470,14 +2504,7 @@ class HeraldoRaidSetupView(discord.ui.View):
 
     @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content=(
-                "🪽 **El Heraldo · Configuración del servidor**\n\n"
-                "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica."
-            ),
-            embed=None,
-            view=HeraldoSetupView(self.guild_id, self.owner_id),
-        )
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 class HeraldoSetupView(discord.ui.View):
@@ -2601,9 +2628,7 @@ async def setup(interaction: discord.Interaction) -> None:
         return
 
     await interaction.response.send_message(
-        "🪽 **El Heraldo · Configuración del servidor**\n\n"
-        "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica. "
-        "Raid Protection usa el canal general de Logs; no crea un canal de alertas separado.",
+        heraldo_setup_home_content(),
         view=HeraldoSetupView(guild.id, interaction.user.id),
         ephemeral=True,
     )
@@ -6487,13 +6512,9 @@ class CondemnationTemplateEditorView(discord.ui.View):
         )
 
 
-    @discord.ui.button(label="🏠 Heraldo setup", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="⬅️ Volver a /setup", style=discord.ButtonStyle.secondary, row=2)
     async def back_to_heraldo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
-            embed=None,
-            view=HeraldoSetupView(interaction.guild.id, self.owner_id),
-        )
+        await heraldo_setup_go_home(interaction, interaction.guild.id, self.owner_id)
 
 
 @bot.tree.command(
