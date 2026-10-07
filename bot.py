@@ -1001,18 +1001,40 @@ def join_roles_bots_summary(guild: discord.Guild) -> str:
     )
 
 
+def _join_verify_pending_ids(guild_id: int) -> set[int]:
+    conn = db_connect()
+    try:
+        rows = conn.execute(
+            "SELECT user_id FROM guild_members WHERE guild_id = ? AND verify_pending_at IS NOT NULL",
+            (guild_id,),
+        ).fetchall()
+        return {int(row[0]) for row in rows}
+    finally:
+        conn.close()
+
+
 def _join_member_sync_excluded(member: discord.Member) -> bool:
     excluded = set(get_join_sync_excluded_role_ids(member.guild.id))
     return bool(excluded.intersection(role.id for role in member.roles))
 
 
-def _join_member_required_general_roles(member: discord.Member, *, synchronization: bool) -> list[discord.Role]:
+def _join_member_required_general_roles(
+    member: discord.Member,
+    *,
+    synchronization: bool,
+    pending_ids: set[int] | None = None,
+) -> list[discord.Role]:
     guild = member.guild
     verify_role_id = get_verify_role_id(guild.id)
     already_verified = bool(verify_role_id and verify_role_id in {role.id for role in member.roles})
     sin_role_id = get_sin_verificado_role_id(guild.id)
-    row = db_get(guild.id, member.id) if synchronization else None
-    verification_pending = bool(row and row["verify_pending_at"]) if row is not None else False
+    if synchronization:
+        if pending_ids is None:
+            verification_pending = member.id in _join_verify_pending_ids(guild.id)
+        else:
+            verification_pending = member.id in pending_ids
+    else:
+        verification_pending = False
 
     roles: list[discord.Role] = []
     for role_id in get_join_role_ids(guild.id):
@@ -1056,13 +1078,21 @@ async def _assign_join_roles_now(
     member: discord.Member,
     *,
     synchronization: bool = False,
+    pending_ids: set[int] | None = None,
 ) -> tuple[bool, str]:
     if member.bot or not join_roles_enabled(member.guild.id):
         return True, "No aplica."
     if synchronization and _join_member_sync_excluded(member):
         return True, "Excluido de sincronización."
 
-    role_ids = [role.id for role in _join_member_required_general_roles(member, synchronization=synchronization)]
+    role_ids = [
+        role.id
+        for role in _join_member_required_general_roles(
+            member,
+            synchronization=synchronization,
+            pending_ids=pending_ids,
+        )
+    ]
     ok, count, note = await _joinroles_add_roles(
         member,
         role_ids,
@@ -1157,10 +1187,15 @@ async def assign_bot_join_roles(member: discord.Member) -> tuple[bool, str]:
 
 def approximate_missing_join_roles(guild: discord.Guild) -> int:
     missing = 0
+    pending_ids = _join_verify_pending_ids(guild.id)
     for member in guild.members:
         if member.bot or _join_member_sync_excluded(member):
             continue
-        required = _join_member_required_general_roles(member, synchronization=True)
+        required = _join_member_required_general_roles(
+            member,
+            synchronization=True,
+            pending_ids=pending_ids,
+        )
         member_ids = {role.id for role in member.roles}
         if any(role.id not in member_ids for role in required):
             missing += 1
@@ -1171,11 +1206,16 @@ async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
     assigned = 0
     skipped = 0
     errors: list[str] = []
+    pending_ids = _join_verify_pending_ids(guild.id)
 
     async for member in guild.fetch_members(limit=None):
         if member.bot:
             continue
-        ok, note = await _assign_join_roles_now(member, synchronization=True)
+        ok, note = await _assign_join_roles_now(
+            member,
+            synchronization=True,
+            pending_ids=pending_ids,
+        )
         if ok:
             if note.startswith("Asignados"):
                 assigned += 1
