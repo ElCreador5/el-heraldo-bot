@@ -317,8 +317,26 @@ async def log_embed(
 # Persistencia
 # ---------------------------------------------------------------------------
 
+def db_connect() -> sqlite3.Connection:
+    """Conexión SQLite corta y segura para un bot asíncrono.
+
+    Autocommit evita dejar transacciones de escritura abiertas si una función falla
+    entre execute() y close(). WAL permite lectores mientras hay una escritura.
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=2.0, isolation_level=None)
+    conn.execute("PRAGMA busy_timeout = 2000")
+    return conn
+
+
 def db_init() -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except sqlite3.OperationalError:
+        # Si un despliegue anterior aún está drenando, continúa; las siguientes
+        # conexiones mantienen busy_timeout y el próximo arranque reintentará WAL.
+        pass
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS members (
@@ -424,7 +442,7 @@ def db_init() -> None:
 
 
 def db_get(guild_id: int, user_id: int) -> sqlite3.Row | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     row = conn.execute(
         "SELECT * FROM guild_members WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)
@@ -436,7 +454,7 @@ def db_get(guild_id: int, user_id: int) -> sqlite3.Row | None:
 def db_upsert_join(guild_id: int, user_id: int, invite_code: str | None) -> None:
     """Registra el estado del miembro de forma independiente en cada servidor."""
     row = db_get(guild_id, user_id)
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     if row is None:
         conn.execute(
             "INSERT INTO guild_members (guild_id, user_id, entry_invite, dm_sent) VALUES (?, ?, ?, 0)",
@@ -461,7 +479,7 @@ def _db_member_set(guild_id: int, user_id: int, column: str, value) -> None:
     allowed = {"tentado_at", "dm_sent", "verification_dm_sent", "sin_verificado_at", "verify_pending_at"}
     if column not in allowed:
         raise ValueError("Columna de miembro no permitida")
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         f"INSERT INTO guild_members (guild_id, user_id, {column}) VALUES (?, ?, ?) "
         f"ON CONFLICT(guild_id, user_id) DO UPDATE SET {column} = excluded.{column}",
@@ -510,7 +528,7 @@ def db_clear_verify_pending(guild_id: int, user_id: int) -> None:
 
 def db_track_message(guild_id: int, user_id: int, today: str, yesterday: str) -> None:
     """Suma actividad de un miembro únicamente dentro de su servidor."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute(
         "SELECT messages, streak, last_active_day FROM guild_activity WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
@@ -536,7 +554,7 @@ def db_track_message(guild_id: int, user_id: int, today: str, yesterday: str) ->
 
 
 def db_get_activity(guild_id: int, user_id: int) -> tuple[int, int, str | None]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute(
         "SELECT messages, streak, last_active_day FROM guild_activity WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
@@ -546,7 +564,7 @@ def db_get_activity(guild_id: int, user_id: int) -> tuple[int, int, str | None]:
 
 
 def db_week_ranking(guild_id: int) -> list[tuple[int, int]]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     rows = conn.execute(
         "SELECT user_id, week_messages FROM guild_activity "
         "WHERE guild_id = ? AND week_messages > 0 ORDER BY week_messages DESC, user_id ASC",
@@ -557,7 +575,7 @@ def db_week_ranking(guild_id: int) -> list[tuple[int, int]]:
 
 
 def db_zero_week_messages(guild_id: int, user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "UPDATE guild_activity SET week_messages = 0 WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
@@ -567,14 +585,14 @@ def db_zero_week_messages(guild_id: int, user_id: int) -> None:
 
 
 def db_reset_week(guild_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute("UPDATE guild_activity SET week_messages = 0 WHERE guild_id = ?", (guild_id,))
     conn.commit()
     conn.close()
 
 
 def guild_config_get(guild_id: int, key: str) -> str | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute(
         "SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?",
         (guild_id, key),
@@ -584,38 +602,26 @@ def guild_config_get(guild_id: int, key: str) -> str | None:
 
 
 def guild_config_set(guild_id: int, key: str, value: str) -> None:
-    last_error: sqlite3.OperationalError | None = None
-    for attempt in range(5):
-        conn = sqlite3.connect(DB_PATH, timeout=10)
-        try:
-            conn.execute("PRAGMA busy_timeout = 10000")
-            conn.execute(
-                """
-                INSERT INTO guild_settings (guild_id, key, value)
-                VALUES (?, ?, ?)
-                ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
-                """,
-                (guild_id, key, value),
-            )
-            conn.execute(
-                "UPDATE guild_config SET updated_at = ? WHERE guild_id = ?",
-                (datetime.now(timezone.utc).isoformat(), guild_id),
-            )
-            conn.commit()
-            return
-        except sqlite3.OperationalError as exc:
-            last_error = exc
-            if "locked" not in str(exc).lower() or attempt == 4:
-                raise
-            time.sleep(0.15 * (attempt + 1))
-        finally:
-            conn.close()
-    if last_error is not None:
-        raise last_error
+    conn = db_connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO guild_settings (guild_id, key, value)
+            VALUES (?, ?, ?)
+            ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
+            """,
+            (guild_id, key, value),
+        )
+        conn.execute(
+            "UPDATE guild_config SET updated_at = ? WHERE guild_id = ?",
+            (datetime.now(timezone.utc).isoformat(), guild_id),
+        )
+    finally:
+        conn.close()
 
 
 def guild_resource_get(guild_id: int, resource_type: str, config_key: str) -> int | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute(
         "SELECT resource_id FROM guild_resources WHERE guild_id = ? AND resource_type = ? AND config_key = ?",
         (guild_id, resource_type, config_key),
@@ -625,7 +631,7 @@ def guild_resource_get(guild_id: int, resource_type: str, config_key: str) -> in
 
 
 def guild_resource_set(guild_id: int, resource_type: str, config_key: str, resource_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         """
         INSERT INTO guild_resources (guild_id, resource_type, config_key, resource_id)
@@ -640,7 +646,7 @@ def guild_resource_set(guild_id: int, resource_type: str, config_key: str, resou
 
 
 def guild_is_initialized(guild_id: int) -> bool:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute(
         "SELECT initialized FROM guild_config WHERE guild_id = ?",
         (guild_id,),
@@ -650,7 +656,7 @@ def guild_is_initialized(guild_id: int) -> bool:
 
 
 def guild_mark_initialized(guild_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         """
         INSERT INTO guild_config (guild_id, initialized, setup_version, updated_at)
@@ -664,14 +670,14 @@ def guild_mark_initialized(guild_id: int) -> None:
 
 
 def db_meta_get(key: str) -> str | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     conn.close()
     return row[0] if row else None
 
 
 def db_meta_set(key: str, value: str) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT INTO meta (key, value) VALUES (?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -1084,7 +1090,7 @@ async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     guild_config_set(guild.id, "orientation_created_role_ids", "[]")
 
     # Limpia únicamente referencias antiguas de configuración. Nunca borra roles.
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         """
         DELETE FROM guild_resources
@@ -1648,7 +1654,7 @@ async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> N
 async def check_pending_verifications() -> None:
     """Red de seguridad: si el bot se reinició, retoma verificaciones pendientes
     cuyo timer ya venció o está por vencer (ambos flujos: Sin Verificar y Tentad@)."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT guild_id, user_id, tentado_at, sin_verificado_at, verify_pending_at FROM guild_members "
@@ -2331,16 +2337,20 @@ class HeraldoOrientationSetupView(discord.ui.View):
             await interaction.response.send_message("❌ No pude resolver este servidor.", ephemeral=True)
             return
 
+        # Responde a Discord antes de cualquier acceso a SQLite. Así la interacción
+        # nunca expira aunque la base esté momentáneamente ocupada.
+        await interaction.response.defer(ephemeral=True)
+
         roles = [guild.get_role(int(value)) for value in values]
         roles = [role for role in roles if role is not None]
         if not (ORIENTATION_MIN_ROLES <= len(roles) <= ORIENTATION_MAX_ROLES):
-            await interaction.response.send_message("❌ Selecciona entre 1 y 6 roles.", ephemeral=True)
+            await interaction.followup.send("❌ Selecciona entre 1 y 6 roles.", ephemeral=True)
             return
 
         me = guild.me
         blocked = [role.mention for role in roles if me is None or role >= me.top_role or role.managed]
         if blocked:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ No puedo asignar estos roles por jerarquía o porque son administrados por una integración: "
                 + ", ".join(blocked),
                 ephemeral=True,
@@ -2364,7 +2374,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             bindings.append({"role_id": role.id, "emoji": emoji})
 
         if missing_emoji:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Estos roles no contienen un emoji utilizable: "
                 + ", ".join(missing_emoji)
                 + ". Añade un emoji al nombre del rol (o un emoji Unicode de rol) y vuelve a seleccionarlos.",
@@ -2372,7 +2382,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             )
             return
         if duplicate_emoji:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Cada Reaction Role necesita un emoji diferente. Revisa: "
                 + ", ".join(duplicate_emoji),
                 ephemeral=True,
@@ -2380,7 +2390,6 @@ class HeraldoOrientationSetupView(discord.ui.View):
             return
 
         previous = get_orientation_bindings(self.guild_id)
-        await interaction.response.defer(ephemeral=True)
         try:
             set_orientation_bindings(self.guild_id, bindings)
             guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
@@ -4014,7 +4023,7 @@ def log_template_set(
 
 def log_template_reset(guild_id: int, category: str, event_key: str | None = None) -> None:
     scope = f"event.{event_key}" if event_key else category
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "DELETE FROM guild_settings WHERE guild_id = ? AND key LIKE ?",
         (guild_id, f"log_template.{scope}.%"),
@@ -6376,7 +6385,7 @@ _hp_veteran_hits: list[tuple[datetime, int]] = []
 # --- Persistencia -----------------------------------------------------------
 
 def honeypot_db_init() -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "CREATE TABLE IF NOT EXISTS honeypot_channels ("
         "channel_id INTEGER PRIMARY KEY, warning_message_id INTEGER)"
@@ -6493,7 +6502,7 @@ def hp_trap_ids(guild_id: int) -> set[int]:
 
 
 def hp_traps(guild_id: int) -> dict[int, int | None]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     rows = conn.execute(
         "SELECT channel_id, warning_message_id FROM guild_honeypot_channels WHERE guild_id = ?",
         (guild_id,),
@@ -6512,7 +6521,7 @@ def hp_traps(guild_id: int) -> dict[int, int | None]:
 
 
 def hp_add_trap(guild_id: int, channel_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT OR IGNORE INTO guild_honeypot_channels (guild_id, channel_id) VALUES (?, ?)",
         (guild_id, channel_id),
@@ -6522,7 +6531,7 @@ def hp_add_trap(guild_id: int, channel_id: int) -> None:
 
 
 def hp_remove_trap(guild_id: int, channel_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "DELETE FROM guild_honeypot_channels WHERE guild_id = ? AND channel_id = ?",
         (guild_id, channel_id),
@@ -6532,7 +6541,7 @@ def hp_remove_trap(guild_id: int, channel_id: int) -> None:
 
 
 def hp_set_warning_message(guild_id: int, channel_id: int, message_id: int | None) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "UPDATE guild_honeypot_channels SET warning_message_id = ? WHERE guild_id = ? AND channel_id = ?",
         (message_id, guild_id, channel_id),
@@ -6542,7 +6551,7 @@ def hp_set_warning_message(guild_id: int, channel_id: int, message_id: int | Non
 
 
 def hp_exempt_ids(guild_id: int, kind: str) -> set[int]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     rows = conn.execute(
         "SELECT target_id FROM guild_honeypot_exempt WHERE guild_id = ? AND kind = ?",
         (guild_id, kind),
@@ -6561,7 +6570,7 @@ def hp_exempt_ids(guild_id: int, kind: str) -> set[int]:
 
 
 def hp_exempt_add(guild_id: int, kind: str, target_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT OR IGNORE INTO guild_honeypot_exempt (guild_id, kind, target_id) VALUES (?, ?, ?)",
         (guild_id, kind, target_id),
@@ -6571,7 +6580,7 @@ def hp_exempt_add(guild_id: int, kind: str, target_id: int) -> None:
 
 
 def hp_exempt_remove(guild_id: int, kind: str, target_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "DELETE FROM guild_honeypot_exempt WHERE guild_id = ? AND kind = ? AND target_id = ?",
         (guild_id, kind, target_id),
@@ -6581,7 +6590,7 @@ def hp_exempt_remove(guild_id: int, kind: str, target_id: int) -> None:
 
 
 def hp_save_punished(guild_id: int, user_id: int, role_ids: list[int]) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT INTO guild_honeypot_state (guild_id, user_id, role_ids, saved_at) VALUES (?, ?, ?, ?) "
         "ON CONFLICT(guild_id, user_id) DO UPDATE SET role_ids = excluded.role_ids, saved_at = excluded.saved_at",
@@ -6592,7 +6601,7 @@ def hp_save_punished(guild_id: int, user_id: int, role_ids: list[int]) -> None:
 
 
 def hp_get_punished(guild_id: int, user_id: int) -> list[int] | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     row = conn.execute(
         "SELECT role_ids FROM guild_honeypot_state WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
@@ -6602,7 +6611,7 @@ def hp_get_punished(guild_id: int, user_id: int) -> list[int] | None:
 
 
 def hp_clear_punished(guild_id: int, user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "DELETE FROM guild_honeypot_state WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
@@ -6612,7 +6621,7 @@ def hp_clear_punished(guild_id: int, user_id: int) -> None:
 
 
 def condemnation_get(guild_id: int, user_id: int, active_only: bool = True) -> sqlite3.Row | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     query = "SELECT * FROM guild_cases WHERE guild_id = ? AND user_id = ?"
     params = (guild_id, user_id)
@@ -6648,7 +6657,7 @@ def condemnation_save(
 ) -> None:
     when = condemned_at or datetime.now(timezone.utc)
     expires = when + timedelta(minutes=duration_minutes) if duration_minutes else None
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT INTO guild_cases "
         "(guild_id, user_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active) "
@@ -6667,7 +6676,7 @@ def condemnation_save(
 def condemnation_deactivate(
     guild_id: int, user_id: int, *, resolution: str | None = None, resolved_by: int | None = None
 ) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     if resolution == "pardoned":
         conn.execute(
             "UPDATE guild_cases SET active = 0, pardoned_by = ?, pardoned_at = ?, resolution = 'pardoned' "
@@ -6694,7 +6703,7 @@ def condemnation_add_saved_roles(guild_id: int, user_id: int, new_ids: list[int]
     for rid in new_ids:
         if rid not in merged:
             merged.append(rid)
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "UPDATE guild_cases SET role_ids = ? WHERE guild_id = ? AND user_id = ? AND active = 1",
         (json.dumps(merged), guild_id, user_id),
@@ -6708,7 +6717,7 @@ def condemnation_is_expired(row: sqlite3.Row) -> bool:
 
 
 def condemnation_list_all_active() -> list[sqlite3.Row]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT * FROM guild_cases WHERE active = 1 AND (expires_at IS NULL OR expires_at > ?)",
@@ -6719,7 +6728,7 @@ def condemnation_list_all_active() -> list[sqlite3.Row]:
 
 
 def condemnation_list(guild_id: int) -> list[sqlite3.Row]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT * FROM guild_cases WHERE active = 1 AND guild_id = ? "
@@ -6817,7 +6826,7 @@ def condemnation_parse_role_ids(value: str) -> list[int]:
 
 def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
                    success: bool, note: str) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT INTO honeypot_triggers (guild_id, user_id, username, channel_id, content, action, success, note, "
         "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -6844,7 +6853,7 @@ def _hp_history_legacy_allowed(guild_id: int) -> bool:
 
 def hp_prune_history(guild_id: int) -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=hp_retention_minutes(guild_id))
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     if _hp_history_legacy_allowed(guild_id):
         conn.execute(
             "DELETE FROM honeypot_triggers WHERE (guild_id = ? OR guild_id = 0) AND triggered_at < ?",
@@ -6860,7 +6869,7 @@ def hp_prune_history(guild_id: int) -> None:
 
 
 def hp_recent_triggers(guild_id: int, limit: int = 10) -> list[sqlite3.Row]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     if _hp_history_legacy_allowed(guild_id):
         rows = conn.execute(
@@ -6877,7 +6886,7 @@ def hp_recent_triggers(guild_id: int, limit: int = 10) -> list[sqlite3.Row]:
 
 
 def hp_total_triggers(guild_id: int) -> int:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     if _hp_history_legacy_allowed(guild_id):
         total = conn.execute(
             "SELECT COUNT(*) FROM honeypot_triggers WHERE success = 1 AND (guild_id = ? OR guild_id = 0)",
@@ -7736,7 +7745,7 @@ def condemnation_template_set(guild_id: int, key: str, value: str) -> None:
 
 
 def condemnation_template_reset(guild_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     for key in CONDEMNATION_TEMPLATE_DEFAULTS:
         conn.execute(
             "DELETE FROM guild_settings WHERE guild_id = ? AND key = ?",
@@ -7878,7 +7887,7 @@ async def condemnation_update_pardoned_card(
         except discord.HTTPException as e:
             print(f"⚠️ No pude eliminar la tarjeta original del expediente {case_id}: {e}")
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = db_connect()
         conn.execute(
             "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
             (new_message.id, member.guild.id, member.id),
@@ -8074,7 +8083,7 @@ async def _condemn_member_inner(
             removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
         )
         if announcement_message_id:
-            conn = sqlite3.connect(DB_PATH)
+            conn = db_connect()
             conn.execute(
                 "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
                 (announcement_message_id, member.guild.id, member.id),
@@ -8175,7 +8184,7 @@ async def release_condemned_member(
 
 async def check_expired_condemnations() -> None:
     now = datetime.now(timezone.utc)
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT * FROM condemnations WHERE active = 1 AND expires_at IS NOT NULL AND expires_at <= ?",
@@ -11338,7 +11347,7 @@ EMBED_PERSON_NOTE = "las variables de persona como `{usuario}` solo se resuelven
 
 
 def _embed_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "CREATE TABLE IF NOT EXISTS custom_embeds ("
         "guild_id INTEGER NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL, "
@@ -11859,7 +11868,7 @@ SUGGESTION_PANEL_BUTTON_DEFAULT = "💡 Crear sugerencia"
 
 
 def suggestion_db_init() -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS suggestions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11924,7 +11933,7 @@ def suggestion_set_owner_enabled(guild_id: int, enabled: bool) -> None:
 
 
 def suggestion_reviewer_ids(guild_id: int) -> list[int]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     rows = conn.execute(
         "SELECT user_id FROM suggestion_reviewers WHERE guild_id = ? ORDER BY user_id",
         (guild_id,),
@@ -11934,7 +11943,7 @@ def suggestion_reviewer_ids(guild_id: int) -> list[int]:
 
 
 def suggestion_add_reviewer(guild_id: int, user_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT OR IGNORE INTO suggestion_reviewers (guild_id, user_id) VALUES (?, ?)",
         (guild_id, user_id),
@@ -11944,7 +11953,7 @@ def suggestion_add_reviewer(guild_id: int, user_id: int) -> None:
 
 
 def suggestion_remove_reviewer(guild_id: int, user_id: int) -> bool:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     cur = conn.execute(
         "DELETE FROM suggestion_reviewers WHERE guild_id = ? AND user_id = ?",
         (guild_id, user_id),
@@ -11955,7 +11964,7 @@ def suggestion_remove_reviewer(guild_id: int, user_id: int) -> bool:
 
 
 def suggestion_get(suggestion_id: int) -> sqlite3.Row | None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     row = conn.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)).fetchone()
     conn.close()
@@ -11963,7 +11972,7 @@ def suggestion_get(suggestion_id: int) -> sqlite3.Row | None:
 
 
 def suggestion_create(guild_id: int, user_id: int, title: str, content: str) -> int:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     cur = conn.execute(
         "INSERT INTO suggestions (guild_id, user_id, title, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
         (guild_id, user_id, title, content, SUGGESTION_STATUS_PENDING, datetime.now(timezone.utc).isoformat()),
@@ -11975,7 +11984,7 @@ def suggestion_create(guild_id: int, user_id: int, title: str, content: str) -> 
 
 
 def suggestion_set_review_message(suggestion_id: int, reviewer_id: int, channel_id: int, message_id: int) -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.execute(
         "INSERT OR REPLACE INTO suggestion_review_messages "
         "(suggestion_id, reviewer_id, channel_id, message_id) VALUES (?, ?, ?, ?)",
@@ -11986,7 +11995,7 @@ def suggestion_set_review_message(suggestion_id: int, reviewer_id: int, channel_
 
 
 def suggestion_review_messages(suggestion_id: int) -> list[sqlite3.Row]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT * FROM suggestion_review_messages WHERE suggestion_id = ?",
@@ -12002,7 +12011,7 @@ def suggestion_decide(
     decided_by: int,
     rejection_reason: str | None = None,
 ) -> bool:
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     cur = conn.execute(
         """UPDATE suggestions
            SET status = ?, decided_by = ?, rejection_reason = ?, decided_at = ?
@@ -12380,7 +12389,7 @@ async def suggestions_startup() -> None:
         bot.add_view(SuggestionPanelView())
 
     # Registra los botones de todas las sugerencias pendientes para que sobrevivan reinicios.
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     conn.row_factory = sqlite3.Row
     pending = conn.execute("SELECT id FROM suggestions WHERE status = 'pending'").fetchall()
     review_messages = conn.execute(
