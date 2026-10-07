@@ -1571,51 +1571,212 @@ class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configura
         )
 
 
+HERALDO_CHANNEL_DEFINITIONS = {
+    "logs": ("📋 Logs", "El Heraldo"),
+    "condemned": ("⚖️ Condenados", "Condenados"),
+    "honeypot": ("🍯 Honeypot", "Honeypot"),
+    "verification": ("✅ Verificación", "Verificación"),
+    "questions": ("💬 Dudas", "Dudas"),
+}
+
+
+def heraldo_channels_summary(guild: discord.Guild) -> str:
+    lines: list[str] = []
+    for key, (label, default_name) in HERALDO_CHANNEL_DEFINITIONS.items():
+        channel_id = get_guild_channel_id(guild.id, key)
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if isinstance(channel, discord.TextChannel):
+            lines.append(f"✅ **{label}:** {channel.mention}")
+            continue
+        exact = next(
+            (c for c in guild.text_channels if c.name.casefold() == default_name.casefold()),
+            None,
+        )
+        if exact is not None:
+            lines.append(f"🟡 **{label}:** existe {exact.mention}, pero todavía no está seleccionado")
+        else:
+            lines.append(f"⚪ **{label}:** no configurado · puedes seleccionar uno o crear **#{default_name}**")
+    return "\n".join(lines)
+
+
 class HeraldoChannelSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
-        definitions = (
-            ("logs", "📋 Logs"),
-            ("condemned", "⚖️ Condenados"),
-            ("honeypot", "🍯 Honeypot"),
-            ("verification", "✅ Verificación"),
-            ("questions", "💬 Dudas"),
+        self.current_key = "logs"
+
+        function_select = discord.ui.Select(
+            placeholder="1. Elige qué canal del sistema configurar",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=label.split(" ", 1)[-1],
+                    value=key,
+                    emoji=label.split(" ", 1)[0],
+                    description=f"Canal para {label.split(' ', 1)[-1].lower()}",
+                )
+                for key, (label, _) in HERALDO_CHANNEL_DEFINITIONS.items()
+            ],
+            row=0,
         )
-        for key, label in definitions:
-            select = discord.ui.ChannelSelect(
-                placeholder=f"Seleccionar canal · {label}",
-                channel_types=[discord.ChannelType.text],
-                min_values=1,
-                max_values=1,
-                row=len(self.children) // 1,
-            )
-            select.callback = self._make_callback(key, label)
-            self.add_item(select)
+        function_select.callback = self.select_function
+        self.function_select = function_select
+        self.add_item(function_select)
+
+        channel_select = discord.ui.ChannelSelect(
+            placeholder="2. Selecciona un canal existente",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+        channel_select.callback = self.select_existing_channel
+        self.channel_select = channel_select
+        self.add_item(channel_select)
+
+        create_button = discord.ui.Button(
+            label="➕ Crear si no existe",
+            style=discord.ButtonStyle.success,
+            row=2,
+        )
+        create_button.callback = self.create_channel_if_missing
+        self.add_item(create_button)
+
+        back_button = discord.ui.Button(
+            label="⬅️ Volver",
+            style=discord.ButtonStyle.secondary,
+            row=2,
+        )
+        back_button.callback = self.back
+        self.add_item(back_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            await interaction.response.send_message(
+                "Este panel de configuración no es tuyo.", ephemeral=True
+            )
             return False
         return True
 
-    def _make_callback(self, key: str, label: str):
-        async def callback(interaction: discord.Interaction) -> None:
-            channel = interaction.data.get("values") if interaction.data else None
-            selected = interaction.guild.get_channel(int(channel[0])) if interaction.guild and channel else None
-            if selected is None:
-                await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
-                return
-            guild_resource_set(self.guild_id, "channel", key, selected.id)
-            if key == "verification":
-                guild_config_set(self.guild_id, "verify_channel_id", str(selected.id))
+    def _label(self) -> str:
+        return HERALDO_CHANNEL_DEFINITIONS[self.current_key][0]
+
+    async def select_function(self, interaction: discord.Interaction) -> None:
+        self.current_key = self.function_select.values[0]
+        label, default_name = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
+        self.channel_select.placeholder = f"2. Selecciona canal para {label.split(' ', 1)[-1]}"
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Canales del sistema**\n\n"
+                + heraldo_channels_summary(interaction.guild)
+                + f"\n\n**Configurando ahora:** {label}\n"
+                f"Selecciona un canal existente o usa **Crear si no existe** para crear **#{default_name}**."
+            ),
+            view=self,
+        )
+
+    async def select_existing_channel(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        selected = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(selected, discord.TextChannel):
             await interaction.response.send_message(
-                f"✅ {label}: {selected.mention} quedó configurado para este servidor.",
+                "❌ No pude localizar ese canal.", ephemeral=True
+            )
+            return
+
+        guild_resource_set(self.guild_id, "channel", self.current_key, selected.id)
+        if self.current_key == "verification":
+            guild_config_set(self.guild_id, "verify_channel_id", str(selected.id))
+
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Canales del sistema**\n\n"
+                + heraldo_channels_summary(interaction.guild)
+                + f"\n\n✅ **{self._label()}** quedó configurado en {selected.mention}."
+            ),
+            view=self,
+        )
+
+    async def create_channel_if_missing(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        label, default_name = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
+
+        saved_id = get_guild_channel_id(guild.id, self.current_key)
+        saved = guild.get_channel(saved_id) if saved_id else None
+        if isinstance(saved, discord.TextChannel):
+            await interaction.response.send_message(
+                f"ℹ️ {label} ya está configurado en {saved.mention}. No creé otro canal.",
                 ephemeral=True,
             )
-        return callback
+            return
 
+        existing = next(
+            (c for c in guild.text_channels if c.name.casefold() == default_name.casefold()),
+            None,
+        )
+        if existing is not None:
+            guild_resource_set(self.guild_id, "channel", self.current_key, existing.id)
+            if self.current_key == "verification":
+                guild_config_set(self.guild_id, "verify_channel_id", str(existing.id))
+            await interaction.response.edit_message(
+                content=(
+                    "🪽 **El Heraldo · Canales del sistema**\n\n"
+                    + heraldo_channels_summary(guild)
+                    + f"\n\n♻️ Encontré {existing.mention} y lo reutilicé para **{label}**. No se creó ningún duplicado."
+                ),
+                view=self,
+            )
+            return
+
+        me = guild.me
+        if me is None or not me.guild_permissions.manage_channels:
+            await interaction.response.send_message(
+                "❌ El canal no existe y El Heraldo no tiene permiso **Gestionar canales** para crearlo.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            created = await guild.create_text_channel(
+                default_name,
+                reason=f"El Heraldo: crear canal del sistema para {label}",
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ Discord rechazó la creación del canal. Revisa el permiso **Gestionar canales**.",
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException:
+            await interaction.response.send_message(
+                "❌ Discord no pudo crear el canal en este momento.", ephemeral=True
+            )
+            return
+
+        guild_resource_set(self.guild_id, "channel", self.current_key, created.id)
+        if self.current_key == "verification":
+            guild_config_set(self.guild_id, "verify_channel_id", str(created.id))
+
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Canales del sistema**\n\n"
+                + heraldo_channels_summary(guild)
+                + f"\n\n➕ Creé {created.mention} y quedó configurado para **{label}**."
+            ),
+            view=self,
+        )
+
+    async def back(self, interaction: discord.Interaction) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Configuración del servidor**\n\n"
+                "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica."
+            ),
+            embed=None,
+            view=HeraldoSetupView(self.guild_id, self.owner_id),
+        )
 
 
 class HeraldoRoleSetupView(discord.ui.View):
@@ -2121,9 +2282,10 @@ class HeraldoSetupView(discord.ui.View):
     async def channels(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=(
-                "🪽 **El Heraldo · Canales**\n\n"
-                "Selecciona el canal que corresponde a cada función. Los canales existentes se reutilizan y quedan guardados por servidor.\n\n"
-                "Canales disponibles: Logs, Condenados, Honeypot, Verificación y Dudas."
+                "🪽 **El Heraldo · Canales del sistema**\n\n"
+                + heraldo_channels_summary(interaction.guild)
+                + "\n\nElige una función. Después puedes **seleccionar un canal existente** "
+                "o **crearlo solo si realmente no existe**."
             ),
             embed=None,
             view=HeraldoChannelSetupView(self.guild_id, self.owner_id),
