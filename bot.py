@@ -1410,9 +1410,6 @@ async def bootstrap_guild_configuration(guild: discord.Guild) -> dict[str, list[
     Los nombres son solo heurísticas de instalación; la operación posterior debe
     utilizar los IDs persistidos en guild_resources/guild_settings.
     """
-    if guild_is_initialized(guild.id):
-        return {}
-
     desired_channels = {
         "logs": "El Heraldo",
         "condemned": "Condenados",
@@ -1422,19 +1419,35 @@ async def bootstrap_guild_configuration(guild: discord.Guild) -> dict[str, list[
         "roles": "Roles",
         "questions": "Dudas",
         "announcements": "Anuncios",
-            }
+    }
     created: dict[str, list[int]] = {"channels": [], "roles": []}
     me = guild.me
-    if me is None or not me.guild_permissions.manage_channels:
+    if me is None:
         return created
 
+    # La instalación es deliberadamente idempotente: /heraldo_setup también sirve
+    # para reparar la estructura después de que un canal/rol haya sido eliminado.
+    # Primero respetamos el ID guardado; solo si ya no existe buscamos por nombre.
     existing_channels = {c.name.casefold(): c for c in guild.text_channels}
     for key, default_name in desired_channels.items():
-        channel = existing_channels.get(default_name.casefold())
+        channel = None
+        saved_id = guild_resource_get(guild.id, "channel", key)
+        if saved_id:
+            candidate = guild.get_channel(saved_id)
+            if isinstance(candidate, discord.TextChannel):
+                channel = candidate
         if channel is None:
+            channel = existing_channels.get(default_name.casefold())
+        if channel is None:
+            if not me.guild_permissions.manage_channels:
+                continue
             try:
-                channel = await guild.create_text_channel(default_name, reason="El Heraldo: instalación de plantilla base")
+                channel = await guild.create_text_channel(
+                    default_name,
+                    reason="El Heraldo: instalación/reparación de plantilla base",
+                )
                 created["channels"].append(channel.id)
+                existing_channels[channel.name.casefold()] = channel
             except discord.Forbidden:
                 continue
         guild_resource_set(guild.id, "channel", key, channel.id)
@@ -1447,15 +1460,29 @@ async def bootstrap_guild_configuration(guild: discord.Guild) -> dict[str, list[
         }
         existing_roles = {r.name.casefold(): r for r in guild.roles}
         for key, default_name in desired_roles.items():
-            role = existing_roles.get(default_name.casefold())
+            role = None
+            saved_id = guild_resource_get(guild.id, "role", key)
+            if saved_id:
+                candidate = guild.get_role(saved_id)
+                if candidate is not None:
+                    role = candidate
+            if role is None:
+                role = existing_roles.get(default_name.casefold())
             if role is None:
                 try:
-                    role = await guild.create_role(name=default_name, reason="El Heraldo: instalación de plantilla base")
+                    role = await guild.create_role(
+                        name=default_name,
+                        reason="El Heraldo: instalación/reparación de plantilla base",
+                    )
                     created["roles"].append(role.id)
+                    existing_roles[role.name.casefold()] = role
                 except discord.Forbidden:
                     continue
             guild_resource_set(guild.id, "role", key, role.id)
 
+    # Solo se marca como inicializado después de ejecutar el proceso completo.
+    # En una ejecución posterior se vuelve a comprobar todo, por lo que una
+    # eliminación accidental puede repararse sin borrar ni duplicar recursos.
     guild_mark_initialized(guild.id)
     return created
 
