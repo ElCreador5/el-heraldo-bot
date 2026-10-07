@@ -4519,7 +4519,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
 
     await log_embed(
         guild, "✅ Verificación de edad",
-        f"{member.mention} (`{member.id}`) pulsó el botón y recibió {role.mention}.",
+        f"{member.mention} (`{member.id}`) se verificó correctamente.",
         discord.Color.green(),
     )
 
