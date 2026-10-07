@@ -150,24 +150,13 @@ CONDEMNED_EMOJI = "☠️"
 CONDEMNATION_MAX_MINUTES = 10 * 365 * 24 * 60
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
-# --- Orientación administrada / Reaction Roles -----------------------------
-# Este módulo NO usa mensajes existentes. El Heraldo crea y mantiene una tarjeta
-# propia, sus roles y sus reacciones. Los emojis son Unicode para que sobrevivan
-# reinicios sin depender de IDs de emojis personalizados.
-# Roles que El Heraldo crea y conserva mientras el módulo está activo.
-# Solo los cuatro definidos en ORIENTATION_ROLE_DEFINITIONS reciben reacciones.
-ORIENTATION_MANAGED_ROLE_DEFINITIONS = (
-    ("orientation_rr_hetero", "Hétero 🍑"),
-    ("orientation_rr_curioso", "Curios@ 👀"),
-    ("orientation_rr_gay", "Gay 🥒"),
-    ("orientation_rr_bisex", "Bisex-🚻"),
-    ("orientation_role_chica_trans", "Chica Trans 🌶️"),
-    ("orientation_role_chico_trans", "Chico Trans 👠"),
-    ("orientation_role_chica_hetero", "Chica + Hetero 🍓"),
-    ("orientation_role_chico_hetero", "Chico + Hetero 🍆"),
-    ("orientation_role_chicos", "Chicos 🚹"),
-    ("orientation_role_chicas", "Chicas ♀️"),
-)
+# --- Orientación / Reaction Roles ------------------------------------------
+# El Heraldo NO crea, renombra ni elimina roles. El administrador selecciona
+# entre 1 y 6 roles ya existentes y define un emoji para cada uno.
+ORIENTATION_MIN_ROLES = 1
+ORIENTATION_MAX_ROLES = 6
+ORIENTATION_FALLBACK_EMOJIS = ("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣")
+# Definiciones antiguas conservadas únicamente para migrar instalaciones previas.
 ORIENTATION_ROLE_DEFINITIONS = (
     ("orientation_rr_hetero", "Hetero", "🍑"),
     ("orientation_rr_curioso", "Curios@", "👀"),
@@ -782,20 +771,8 @@ def get_condenado_role_id(guild_id: int) -> int:
 
 
 def get_eval_role_ids(guild_id: int) -> set[int]:
-    """Roles que actualmente satisfacen la verificación de orientación."""
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
-        """
-        SELECT resource_id
-        FROM guild_resources
-        WHERE guild_id = ?
-          AND resource_type = 'role'
-          AND (config_key LIKE 'eval_%' OR config_key LIKE 'orientation_rr_%')
-        """,
-        (guild_id,),
-    ).fetchall()
-    conn.close()
-    return {int(row[0]) for row in rows}
+    """Roles seleccionados que satisfacen la verificación de orientación."""
+    return {int(item["role_id"]) for item in get_orientation_bindings(guild_id)}
 
 
 def orientation_enabled(guild_id: int) -> bool:
@@ -814,40 +791,60 @@ def get_orientation_message_channel_id(guild_id: int) -> int:
     return guild_setting_int(guild_id, "orientation_message_channel_id", 0)
 
 
-def orientation_created_role_ids(guild_id: int) -> set[int]:
-    raw = guild_config_get(guild_id, "orientation_created_role_ids") or "[]"
-    try:
-        values = json.loads(raw)
-        return {int(value) for value in values}
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return set()
+def _orientation_emoji_key(value: str) -> str:
+    return value.replace("\ufe0f", "").strip()
 
 
-def set_orientation_created_role_ids(guild_id: int, role_ids: set[int]) -> None:
-    guild_config_set(guild_id, "orientation_created_role_ids", json.dumps(sorted(role_ids)))
+def _orientation_guess_emoji(role_name: str, fallback: str) -> str:
+    """Intenta reutilizar un emoji visible del nombre; si no, usa uno numérico."""
+    for char in reversed(role_name):
+        if unicodedata.category(char) in {"So", "Sk"} and not char.isspace():
+            return char
+    return fallback
 
 
-def get_orientation_role_name(guild_id: int, key: str, default_name: str) -> str:
-    """Nombre configurable de un rol administrado de orientación."""
-    configured = guild_config_get(guild_id, f"orientation_role_name_{key}")
-    name = (configured or default_name).strip()
-    return name[:100] if name else default_name
+def get_orientation_bindings(guild_id: int) -> list[dict[str, object]]:
+    raw = guild_config_get(guild_id, "orientation_role_bindings")
+    if raw is not None:
+        try:
+            parsed = json.loads(raw)
+            result: list[dict[str, object]] = []
+            for item in parsed:
+                role_id = int(item.get("role_id", 0))
+                emoji = str(item.get("emoji", "")).strip()
+                if role_id and emoji:
+                    result.append({"role_id": role_id, "emoji": emoji})
+            return result[:ORIENTATION_MAX_ROLES]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+
+    # Migración suave desde la versión anterior: conserva los cuatro enlaces
+    # existentes como selección inicial, sin volver a administrar esos roles.
+    migrated: list[dict[str, object]] = []
+    for index, (key, _label, emoji) in enumerate(ORIENTATION_ROLE_DEFINITIONS):
+        role_id = guild_resource_get(guild_id, "role", key)
+        if role_id:
+            migrated.append({
+                "role_id": int(role_id),
+                "emoji": emoji or ORIENTATION_FALLBACK_EMOJIS[index],
+            })
+    return migrated[:ORIENTATION_MAX_ROLES]
 
 
-def orientation_managed_role_names(guild_id: int) -> dict[str, str]:
-    return {
-        key: get_orientation_role_name(guild_id, key, default_name)
-        for key, default_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS
-    }
+def set_orientation_bindings(guild_id: int, bindings: list[dict[str, object]]) -> None:
+    clean = [
+        {"role_id": int(item["role_id"]), "emoji": str(item["emoji"]).strip()}
+        for item in bindings[:ORIENTATION_MAX_ROLES]
+        if int(item.get("role_id", 0)) and str(item.get("emoji", "")).strip()
+    ]
+    guild_config_set(guild_id, "orientation_role_bindings", json.dumps(clean, ensure_ascii=False))
 
 
 def orientation_role_for_emoji(guild: discord.Guild, emoji: str) -> discord.Role | None:
-    normalized = emoji.replace("\ufe0f", "")
-    for key, _name, role_emoji in ORIENTATION_ROLE_DEFINITIONS:
-        if role_emoji.replace("\ufe0f", "") != normalized:
-            continue
-        role_id = guild_resource_get(guild.id, "role", key)
-        return guild.get_role(role_id) if role_id else None
+    normalized = _orientation_emoji_key(emoji)
+    for binding in get_orientation_bindings(guild.id):
+        if _orientation_emoji_key(str(binding["emoji"])) == normalized:
+            return guild.get_role(int(binding["role_id"]))
     return None
 
 
@@ -877,18 +874,17 @@ def get_orientation_embed_footer(guild: discord.Guild) -> str:
 
 
 def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
-    default_names = dict(ORIENTATION_MANAGED_ROLE_DEFINITIONS)
-    option_lines = [
-        f"{emoji}  {get_orientation_role_name(guild.id, key, default_names[key])}"
-        for key, _label, emoji in ORIENTATION_ROLE_DEFINITIONS
-    ]
-    description = (
-        get_orientation_embed_intro(guild.id).strip()
-        + "\n\n"
-        + "\n".join(option_lines)
-        + "\n\n"
-        + get_orientation_embed_details(guild.id).strip()
-    )
+    option_lines = []
+    for binding in get_orientation_bindings(guild.id):
+        role = guild.get_role(int(binding["role_id"]))
+        if role is not None:
+            option_lines.append(f"{binding['emoji']}  {role.name}")
+
+    description = get_orientation_embed_intro(guild.id).strip()
+    if option_lines:
+        description += "\n\n" + "\n".join(option_lines)
+    description += "\n\n" + get_orientation_embed_details(guild.id).strip()
+
     embed = discord.Embed(
         title=get_orientation_embed_title(guild.id),
         description=description,
@@ -907,33 +903,33 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
     enabled = orientation_enabled(guild.id)
     channel = guild.get_channel(get_orientation_channel_id(guild.id))
     roles = []
-    default_names = dict(ORIENTATION_MANAGED_ROLE_DEFINITIONS)
-    for key, _name, emoji in ORIENTATION_ROLE_DEFINITIONS:
-        configured_name = get_orientation_role_name(guild.id, key, default_names[key])
-        role_id = guild_resource_get(guild.id, "role", key)
-        role = guild.get_role(role_id) if role_id else None
-        roles.append(f"{emoji} {role.mention if role else f'**{configured_name}** · pendiente'}")
+    for binding in get_orientation_bindings(guild.id):
+        role = guild.get_role(int(binding["role_id"]))
+        emoji = str(binding["emoji"])
+        roles.append(f"{emoji} {role.mention if role else '**Rol eliminado**'}")
+
+    role_text = "\n".join(roles) if roles else "**No hay roles seleccionados.**"
     return (
         f"Estado: **{'Activo' if enabled else 'Desactivado'}**\n"
         f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
-        f"Tarjeta administrada: **{'Sí' if enabled else 'No'}**\n\n"
-        + "\n".join(roles)
+        f"Tarjeta administrada: **{'Sí' if enabled else 'No'}**\n"
+        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\n\n"
+        + role_text
         + "\n\n**Cómo funciona:** El Heraldo establece un sistema para la selección de roles "
-          "obligatorios (roles de orientación sexual por defecto). Estos roles complementan la "
-          "verificación, ayudan a garantizar participación dentro del servidor y sirven como una "
-          "señal adicional de que el miembro es humano.\n\n"
-          "• Al activarse, después de verificar su edad, el miembro debe seleccionar uno de estos "
-          "roles en el canal destinado a orientación antes de que venza el temporizador de **10 minutos**. "
-          "Estos roles pueden complementarse con los roles propios de tu servidor.\n"
+          "obligatorios usando **roles que ya existen en tu servidor**. Puedes seleccionar de **1 a 6** "
+          "roles y definir un emoji para cada uno. El Heraldo no crea, renombra ni elimina esos roles. "
+          "Estos roles complementan la verificación, ayudan a garantizar participación dentro del servidor "
+          "y sirven como una señal adicional de que el miembro es humano.\n\n"
+          "• Después de verificar su edad, el miembro debe seleccionar uno de los roles configurados "
+          "antes de que venza el temporizador de **10 minutos**.\n"
           "• Si no selecciona ninguno dentro del plazo, El Heraldo lo expulsa y envía una invitación "
           "de recuperación de **un solo uso** para darle una oportunidad de volver a ingresar.\n"
-          "• Puedes configurar los permisos de estos roles para personalizar qué canales ve cada miembro "
-          "según su preferencia."
+          "• Los permisos de los roles siguen siendo completamente tuyos y pueden personalizar la vista del servidor."
     )
 
 
 async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
-    """Crea o repara roles, tarjeta y reacciones del módulo de orientación."""
+    """Sincroniza la tarjeta y reacciones usando roles existentes seleccionados."""
     if not orientation_enabled(guild.id):
         return False, "El módulo de orientación está desactivado."
 
@@ -961,59 +957,34 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     if missing:
         return False, "Faltan permisos: **" + ", ".join(missing) + "**."
 
-    created_ids = orientation_created_role_ids(guild.id)
+    bindings = get_orientation_bindings(guild.id)
+    if not (ORIENTATION_MIN_ROLES <= len(bindings) <= ORIENTATION_MAX_ROLES):
+        return False, "Selecciona entre **1 y 6 roles existentes** antes de activar el sistema."
+
+    seen_roles: set[int] = set()
+    seen_emojis: set[str] = set()
     managed_roles: list[tuple[discord.Role, str]] = []
-
-    # La configuración antigua de eval_* deja de ser la fuente de verdad al activar
-    # este módulo. Se eliminan solo los enlaces de configuración, nunca roles ajenos.
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "DELETE FROM guild_resources WHERE guild_id = ? AND resource_type = 'role' AND config_key LIKE 'eval_%'",
-        (guild.id,),
-    )
-    conn.commit()
-    conn.close()
-
-    reaction_by_key = {key: emoji for key, _label, emoji in ORIENTATION_ROLE_DEFINITIONS}
-    for key, default_role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
-        role_name = get_orientation_role_name(guild.id, key, default_role_name)
-        role = None
-        saved_id = guild_resource_get(guild.id, "role", key)
-        if saved_id:
-            role = guild.get_role(saved_id)
-
+    for binding in bindings:
+        role_id = int(binding["role_id"])
+        emoji = str(binding["emoji"]).strip()
+        emoji_key = _orientation_emoji_key(emoji)
+        role = guild.get_role(role_id)
         if role is None:
-            # Si el rol fue borrado manualmente, primero intenta reutilizar uno con el
-            # mismo nombre; de lo contrario lo recrea y registra el nuevo ID.
-            role = next((item for item in guild.roles if item.name.casefold() == role_name.casefold()), None)
+            return False, f"Uno de los roles configurados ya no existe (`{role_id}`). Selecciónalo de nuevo."
+        if role_id in seen_roles:
+            return False, f"El rol {role.mention} está repetido en la configuración."
+        if emoji_key in seen_emojis:
+            return False, f"El emoji **{emoji}** está repetido. Cada rol necesita uno distinto."
+        if not role.is_assignable():
+            return False, f"No puedo asignar {role.mention}. Coloca el rol de El Heraldo por encima de ese rol."
+        seen_roles.add(role_id)
+        seen_emojis.add(emoji_key)
+        managed_roles.append((role, emoji))
 
-        if role is None:
-            try:
-                role = await guild.create_role(
-                    name=role_name,
-                    reason="El Heraldo: rol administrado del sistema de orientación",
-                )
-                created_ids.add(role.id)
-            except (discord.Forbidden, discord.HTTPException):
-                return False, f"No pude crear el rol **{role_name}**."
-
-        # Si el Heraldo creó el rol en una versión anterior, conserva el ID pero
-        # sincroniza su nombre con la definición canónica actual.
-        if role.id in created_ids and role.name != role_name:
-            try:
-                role = await role.edit(
-                    name=role_name,
-                    reason="El Heraldo: sincronización de rol administrado de orientación",
-                )
-            except (discord.Forbidden, discord.HTTPException):
-                return False, f"No pude actualizar el rol administrado **{role_name}**."
-
-        guild_resource_set(guild.id, "role", key, role.id)
-        emoji = reaction_by_key.get(key)
-        if emoji is not None:
-            managed_roles.append((role, emoji))
-
-    set_orientation_created_role_ids(guild.id, created_ids)
+    # Persiste cualquier configuración migrada de la versión anterior y deja de
+    # considerar los roles como recursos creados por El Heraldo.
+    set_orientation_bindings(guild.id, bindings)
+    guild_config_set(guild.id, "orientation_created_role_ids", "[]")
 
     message = None
     old_channel_id = get_orientation_message_channel_id(guild.id)
@@ -1064,7 +1035,7 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
 
 
 async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
-    """Desactiva el módulo y limpia únicamente los recursos que administra."""
+    """Desactiva el módulo sin modificar ningún rol del servidor."""
     guild_config_set(guild.id, "orientation_enabled", "0")
 
     message_id = get_orientation_message_id(guild.id)
@@ -1077,18 +1048,12 @@ async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
 
-    created_ids = orientation_created_role_ids(guild.id)
-    failed_roles: list[str] = []
-    for key, default_role_name in ORIENTATION_MANAGED_ROLE_DEFINITIONS:
-        role_name = get_orientation_role_name(guild.id, key, default_role_name)
-        role_id = guild_resource_get(guild.id, "role", key)
-        role = guild.get_role(role_id) if role_id else None
-        if role is not None and role.id in created_ids:
-            try:
-                await role.delete(reason="El Heraldo: sistema de orientación desactivado")
-            except (discord.Forbidden, discord.HTTPException):
-                failed_roles.append(role_name)
+    guild_config_set(guild.id, "orientation_message_id", "0")
+    guild_config_set(guild.id, "orientation_message_channel_id", "0")
+    guild_config_set(guild.id, "orientation_role_bindings", "[]")
+    guild_config_set(guild.id, "orientation_created_role_ids", "[]")
 
+    # Limpia únicamente referencias antiguas de configuración. Nunca borra roles.
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         """
@@ -1100,13 +1065,7 @@ async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     )
     conn.commit()
     conn.close()
-    guild_config_set(guild.id, "orientation_message_id", "0")
-    guild_config_set(guild.id, "orientation_message_channel_id", "0")
-    guild_config_set(guild.id, "orientation_created_role_ids", "[]")
-
-    if failed_roles:
-        return False, "El módulo se desactivó, pero no pude borrar: **" + ", ".join(failed_roles) + "**."
-    return True, "Orientación desactivada y recursos administrados limpiados."
+    return True, "Orientación desactivada. La tarjeta y sus vínculos fueron limpiados; los roles del servidor no se modificaron."
 
 
 def get_recovery_channel_id(guild_id: int) -> int:
@@ -2209,110 +2168,70 @@ class HeraldoRoleSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
-class OrientationRoleNamesModal(discord.ui.Modal):
+class OrientationEmojiModal(discord.ui.Modal):
     def __init__(self, guild: discord.Guild, page: int) -> None:
         if page not in (1, 2):
-            raise ValueError("Página de nombres de orientación inválida")
-        super().__init__(title=f"Editar nombres de roles · {page}/2")
+            raise ValueError("Página de emojis de orientación inválida")
+        super().__init__(title=f"Emojis de orientación · {page}/2")
         self.guild_id = guild.id
-        start = 0 if page == 1 else 5
-        self.definitions = ORIENTATION_MANAGED_ROLE_DEFINITIONS[start:start + 5]
+        self.page = page
+        self.bindings = get_orientation_bindings(guild.id)
+        start = 0 if page == 1 else 3
+        self.indexes = list(range(start, min(start + 3, len(self.bindings))))
         self.inputs: list[discord.ui.TextInput] = []
 
-        for key, default_name in self.definitions:
+        for index in self.indexes:
+            binding = self.bindings[index]
+            role = guild.get_role(int(binding["role_id"]))
+            label = role.name if role else f"Rol {index + 1}"
             field = discord.ui.TextInput(
-                label=default_name[:45],
-                default=get_orientation_role_name(guild.id, key, default_name),
+                label=label[:45],
+                default=str(binding["emoji"]),
                 required=True,
                 max_length=100,
+                placeholder="Pega un emoji, por ejemplo 🍑",
             )
             self.inputs.append(field)
             self.add_item(field)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        values: list[tuple[str, str]] = []
-        seen: set[str] = set()
-        for (key, _default_name), field in zip(self.definitions, self.inputs):
-            name = str(field).strip()
-            if not name:
-                await interaction.response.send_message(
-                    "❌ Ningún nombre de rol puede quedar vacío.",
-                    ephemeral=True,
-                )
-                return
-            normalized = name.casefold()
-            if normalized in seen:
-                await interaction.response.send_message(
-                    "❌ No repitas el mismo nombre dentro de esta página.",
-                    ephemeral=True,
-                )
-                return
-            seen.add(normalized)
-            values.append((key, name))
-
-        guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message("❌ No pude resolver este servidor.", ephemeral=True)
-            return
-
-        me = guild.me
-        blocked: list[str] = []
-        for key, name in values:
-            role_id = guild_resource_get(self.guild_id, "role", key)
-            role = guild.get_role(role_id) if role_id else None
-            if role is not None and role.name != name:
-                if me is None or role >= me.top_role:
-                    blocked.append(role.name)
-
-        if blocked:
+        if not self.indexes:
             await interaction.response.send_message(
-                "❌ No puedo renombrar estos roles por jerarquía: **"
-                + ", ".join(blocked)
-                + "**. Coloca el rol de El Heraldo por encima e inténtalo de nuevo.",
+                "ℹ️ No hay roles en esta página. Selecciona primero los roles.",
                 ephemeral=True,
             )
             return
 
+        previous = [dict(item) for item in self.bindings]
+        updated = [dict(item) for item in self.bindings]
+        for index, field in zip(self.indexes, self.inputs):
+            emoji = str(field).strip()
+            if not emoji:
+                await interaction.response.send_message("❌ El emoji no puede quedar vacío.", ephemeral=True)
+                return
+            updated[index]["emoji"] = emoji
+
+        keys = [_orientation_emoji_key(str(item["emoji"])) for item in updated]
+        if len(keys) != len(set(keys)):
+            await interaction.response.send_message(
+                "❌ Cada rol necesita un emoji diferente.",
+                ephemeral=True,
+            )
+            return
+
+        set_orientation_bindings(self.guild_id, updated)
         await interaction.response.defer(ephemeral=True)
-
-        renamed: list[tuple[discord.Role, str]] = []
-        try:
-            for key, name in values:
-                role_id = guild_resource_get(self.guild_id, "role", key)
-                role = guild.get_role(role_id) if role_id else None
-                if role is not None and role.name != name:
-                    old_name = role.name
-                    role = await role.edit(
-                        name=name,
-                        reason="El Heraldo: nombre de rol de orientación actualizado desde configuración",
-                    )
-                    renamed.append((role, old_name))
-        except (discord.Forbidden, discord.HTTPException):
-            # Intenta devolver los roles ya modificados a su nombre anterior para evitar
-            # una configuración parcialmente aplicada.
-            for role, old_name in reversed(renamed):
-                try:
-                    await role.edit(
-                        name=old_name,
-                        reason="El Heraldo: reversión de edición incompleta de orientación",
-                    )
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
-            await interaction.followup.send(
-                "❌ Discord rechazó uno de los cambios. No guardé la configuración; revisa permisos y jerarquía.",
-                ephemeral=True,
-            )
-            return
-
-        for key, name in values:
-            guild_config_set(self.guild_id, f"orientation_role_name_{key}", name)
-
-        note = "Nombres guardados."
         if orientation_enabled(self.guild_id):
-            ok, sync_note = await ensure_orientation_system(guild)
-            note = sync_note if ok else f"Guardé y renombré los roles, pero la tarjeta necesita atención: {sync_note}"
-
-        await interaction.followup.send(f"✅ {note}", ephemeral=True)
+            ok, note = await ensure_orientation_system(interaction.guild)
+            if not ok:
+                set_orientation_bindings(self.guild_id, previous)
+                await ensure_orientation_system(interaction.guild)
+                await interaction.followup.send(
+                    f"❌ No pude usar esa configuración de emojis: {note}",
+                    ephemeral=True,
+                )
+                return
+        await interaction.followup.send("✅ Emojis actualizados.", ephemeral=True)
 
 
 class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientación"):
@@ -2403,6 +2322,15 @@ class HeraldoOrientationSetupView(discord.ui.View):
         channel_select.callback = self.save_channel
         self.add_item(channel_select)
 
+        role_select = discord.ui.RoleSelect(
+            placeholder="Selecciona de 1 a 6 roles existentes",
+            min_values=ORIENTATION_MIN_ROLES,
+            max_values=ORIENTATION_MAX_ROLES,
+            row=1,
+        )
+        role_select.callback = self.save_roles
+        self.add_item(role_select)
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
@@ -2422,12 +2350,84 @@ class HeraldoOrientationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="✅ Activar / reparar", style=discord.ButtonStyle.success, row=1)
+    async def save_roles(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("❌ No pude resolver este servidor.", ephemeral=True)
+            return
+
+        roles = [guild.get_role(int(value)) for value in values]
+        roles = [role for role in roles if role is not None]
+        if not (ORIENTATION_MIN_ROLES <= len(roles) <= ORIENTATION_MAX_ROLES):
+            await interaction.response.send_message("❌ Selecciona entre 1 y 6 roles.", ephemeral=True)
+            return
+
+        me = guild.me
+        blocked = [role.mention for role in roles if me is None or role >= me.top_role or role.managed]
+        if blocked:
+            await interaction.response.send_message(
+                "❌ No puedo asignar estos roles por jerarquía o porque son administrados por una integración: "
+                + ", ".join(blocked),
+                ephemeral=True,
+            )
+            return
+
+        previous_by_role = {
+            int(item["role_id"]): str(item["emoji"])
+            for item in get_orientation_bindings(self.guild_id)
+        }
+        used: set[str] = set()
+        bindings: list[dict[str, object]] = []
+        for index, role in enumerate(roles):
+            emoji = previous_by_role.get(role.id)
+            if not emoji:
+                emoji = _orientation_guess_emoji(role.name, ORIENTATION_FALLBACK_EMOJIS[index])
+            key = _orientation_emoji_key(emoji)
+            if key in used:
+                emoji = ORIENTATION_FALLBACK_EMOJIS[index]
+                key = _orientation_emoji_key(emoji)
+            used.add(key)
+            bindings.append({"role_id": role.id, "emoji": emoji})
+
+        previous = get_orientation_bindings(self.guild_id)
+        set_orientation_bindings(self.guild_id, bindings)
+        guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
+
+        if orientation_enabled(self.guild_id):
+            await interaction.response.defer(ephemeral=True)
+            ok, note = await ensure_orientation_system(guild)
+            if not ok:
+                set_orientation_bindings(self.guild_id, previous)
+                await ensure_orientation_system(guild)
+                await interaction.followup.send(f"❌ No pude aplicar la selección: {note}", ephemeral=True)
+                return
+            await interaction.edit_original_response(
+                content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + "\n\n✅ Roles actualizados.",
+                embed=None,
+                view=self,
+            )
+            return
+
+        await interaction.response.edit_message(
+            content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + "\n\n✅ Roles seleccionados.",
+            embed=None,
+            view=self,
+        )
+
+    @discord.ui.button(label="✅ Activar / reparar", style=discord.ButtonStyle.success, row=2)
     async def activate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         channel = interaction.guild.get_channel(get_orientation_channel_id(self.guild_id))
         if not isinstance(channel, discord.TextChannel):
             await interaction.response.send_message(
                 "❌ Primero selecciona el canal donde El Heraldo publicará la tarjeta de orientación.",
+                ephemeral=True,
+            )
+            return
+        bindings = get_orientation_bindings(self.guild_id)
+        if not (ORIENTATION_MIN_ROLES <= len(bindings) <= ORIENTATION_MAX_ROLES):
+            await interaction.response.send_message(
+                "❌ Primero selecciona entre **1 y 6 roles existentes**.",
                 ephemeral=True,
             )
             return
@@ -2447,7 +2447,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=2)
     async def deactivate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not orientation_enabled(self.guild_id):
             await interaction.response.send_message("ℹ️ El sistema de orientación ya está desactivado.", ephemeral=True)
@@ -2464,19 +2464,25 @@ class HeraldoOrientationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="📝 Editar tarjeta", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="📝 Editar tarjeta", style=discord.ButtonStyle.secondary, row=3)
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
-    @discord.ui.button(label="🏷️ Nombres 1/2", style=discord.ButtonStyle.secondary, row=2)
-    async def edit_role_names_1(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(OrientationRoleNamesModal(interaction.guild, 1))
+    @discord.ui.button(label="😀 Emojis 1/2", style=discord.ButtonStyle.secondary, row=3)
+    async def edit_emojis_1(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not get_orientation_bindings(self.guild_id):
+            await interaction.response.send_message("❌ Selecciona primero los roles.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OrientationEmojiModal(interaction.guild, 1))
 
-    @discord.ui.button(label="🏷️ Nombres 2/2", style=discord.ButtonStyle.secondary, row=2)
-    async def edit_role_names_2(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(OrientationRoleNamesModal(interaction.guild, 2))
+    @discord.ui.button(label="😀 Emojis 2/2", style=discord.ButtonStyle.secondary, row=3)
+    async def edit_emojis_2(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if len(get_orientation_bindings(self.guild_id)) <= 3:
+            await interaction.response.send_message("ℹ️ No tienes roles en la segunda página.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OrientationEmojiModal(interaction.guild, 2))
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -2519,8 +2525,9 @@ async def orientation_reaction_add(payload: discord.RawReactionActionEvent) -> N
         # usuario para que mensaje, roles y estado visible siempre coincidan.
         message = await channel.fetch_message(payload.message_id)
         chosen = str(payload.emoji).replace("\ufe0f", "")
-        for _key, _name, emoji in ORIENTATION_ROLE_DEFINITIONS:
-            if emoji.replace("\ufe0f", "") != chosen:
+        for binding in get_orientation_bindings(guild.id):
+            emoji = str(binding["emoji"])
+            if _orientation_emoji_key(emoji) != chosen:
                 try:
                     await message.remove_reaction(emoji, member)
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException):
@@ -2562,19 +2569,15 @@ async def orientation_reaction_remove(payload: discord.RawReactionActionEvent) -
 async def orientation_role_deleted(role: discord.Role) -> None:
     if not orientation_enabled(role.guild.id):
         return
-    configured = {
-        guild_resource_get(role.guild.id, "role", key)
-        for key, _name in ORIENTATION_MANAGED_ROLE_DEFINITIONS
-    }
-    if role.id not in configured:
+    configured_ids = {int(item["role_id"]) for item in get_orientation_bindings(role.guild.id)}
+    if role.id not in configured_ids:
         return
-    await asyncio.sleep(1)
-    ok, note = await ensure_orientation_system(role.guild)
     await log_embed(
         role.guild,
-        "🧭 Orientación reparada" if ok else "⚠️ Orientación necesita atención",
-        note,
-        discord.Color.green() if ok else discord.Color.orange(),
+        "⚠️ Rol de orientación eliminado",
+        "Se eliminó un rol vinculado a la tarjeta de orientación. El Heraldo no lo recreará: "
+        "selecciona otro rol existente desde **/heraldo setup** y vuelve a sincronizar el módulo.",
+        discord.Color.orange(),
     )
 
 
