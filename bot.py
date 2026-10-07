@@ -7244,15 +7244,14 @@ class HeraldoSetupView(discord.ui.View):
             await interaction.response.send_message("Selecciona un módulo.", ephemeral=True)
             return
         self.selected_module = values[0]
-        await interaction.response.defer()
+        # ACK de actualización inmediata: evita el estado de carga de un defer.
+        await interaction.response.edit_message(view=self)
 
     @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        # Responder en menos de tres segundos antes de construir la vista destino.
-        await interaction.response.defer()
         selected = self.selected_module
         if selected is None:
-            await interaction.followup.send(
+            await interaction.response.send_message(
                 "Selecciona primero un módulo en el menú desplegable.",
                 ephemeral=True,
             )
@@ -7292,10 +7291,11 @@ class HeraldoSetupView(discord.ui.View):
             )
             view = HeraldoPendingSetupModuleView(self.guild_id, self.owner_id, "Idioma")
         else:
-            await interaction.followup.send("Módulo no válido.", ephemeral=True)
+            await interaction.response.send_message("Módulo no válido.", ephemeral=True)
             return
 
-        await interaction.edit_original_response(content=content, embed=None, view=view)
+        # Una sola respuesta de actualización, sin defer + segunda llamada HTTP.
+        await interaction.response.edit_message(content=content, embed=None, view=view)
 
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
