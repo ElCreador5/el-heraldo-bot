@@ -1663,7 +1663,7 @@ async def heraldo_setup(interaction: discord.Interaction) -> None:
     )
 
 
-@bot.tree.command(name="heraldo_config", description="Consulta la configuración general de El Heraldo.")
+@bot.tree.command(name="heraldo_setup", description="Consulta la configuración general de El Heraldo.")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
 async def heraldo_config(interaction: discord.Interaction) -> None:
@@ -2322,7 +2322,7 @@ async def verify_texts(interaction: discord.Interaction) -> None:
     await interaction.response.send_modal(VerifyTextsModal(interaction.guild.id))
 
 
-@bot.tree.command(name="verify_config", description="Ver o cambiar la configuración de la verificación por botón.")
+@bot.tree.command(name="verify_setup", description="Ver o cambiar la configuración de la verificación por botón.")
 @discord.app_commands.describe(
     rol="Rol que se otorga al verificarse",
     timeout="Tiempo para verificarse desde que entra (usa d, h y m; por ejemplo 5m, 1h o 1d)",
@@ -2690,7 +2690,7 @@ def template_config_summary(guild_id: int, now_utc: datetime) -> str:
     )
 
 
-@bot.tree.command(name="template_config", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
+@bot.tree.command(name="template_setup", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
 @discord.app_commands.describe(
     frecuencia="Cada cuánto se hace la copia",
     hora="Hora del día (0-23, hora de RD)",
@@ -5107,7 +5107,7 @@ async def condenados(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@bot.tree.command(name="condenar_config", description="Configurar el canal donde se anuncian las nuevas condenas.")
+@bot.tree.command(name="condenar_setup", description="Configurar el canal donde se anuncian las nuevas condenas.")
 @discord.app_commands.describe(canal="Canal de texto para los avisos de condena; vacío = ver configuración")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
