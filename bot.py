@@ -262,7 +262,7 @@ async def log_embed(
     print(f"{title} — {description}")
     if guild is None:
         return
-    channel = guild.get_channel(get_log_channel_id())
+    channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is None:
         return
     embed = discord.Embed(
@@ -669,8 +669,48 @@ def set_motw_schedule(weekday: int, hour: int) -> None:
     db_meta_set("motw_hour", str(hour))
 
 
-def get_log_channel_id() -> int:
+def get_guild_role_id(guild_id: int, key: str, fallback: int = 0) -> int:
+    value = guild_resource_get(guild_id, "role", key)
+    return value if value is not None else fallback
+
+
+def get_guild_channel_id(guild_id: int, key: str, fallback: int = 0) -> int:
+    value = guild_resource_get(guild_id, "channel", key)
+    return value if value is not None else fallback
+
+
+def get_sin_verificado_role_id(guild_id: int) -> int:
+    return get_guild_role_id(guild_id, "sin_verificar")
+
+
+def get_tentado_role_id(guild_id: int) -> int:
+    return get_guild_role_id(guild_id, "tentado")
+
+
+def get_condenado_role_id(guild_id: int) -> int:
+    return get_guild_role_id(guild_id, "condenado")
+
+
+def get_eval_role_ids(guild_id: int) -> set[int]:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT resource_id FROM guild_resources WHERE guild_id = ? AND resource_type = 'role' AND config_key LIKE 'eval_%'",
+        (guild_id,),
+    ).fetchall()
+    conn.close()
+    return {int(row[0]) for row in rows}
+
+
+def get_recovery_channel_id(guild_id: int) -> int:
+    return get_guild_channel_id(guild_id, "recovery")
+
+
+def get_log_channel_id(guild_id: int | None = None) -> int:
     """Canal elegido con /heraldo_log_channel; si no hay, el LOG_CHANNEL_ID por defecto."""
+    if guild_id is not None:
+        configured = get_guild_channel_id(guild_id, "logs")
+        if configured:
+            return configured
     value = db_meta_get("log_channel_id")
     return int(value) if value is not None else LOG_CHANNEL_ID
 
@@ -683,7 +723,14 @@ def verify_enabled() -> bool:
     return db_meta_get("verify_enabled") == "1"
 
 
-def get_verify_role_id() -> int:
+def get_verify_role_id(guild_id: int | None = None) -> int:
+    if guild_id is not None:
+        configured = guild_config_get(guild_id, "verify_role_id")
+        if configured:
+            return int(configured)
+        tentado = get_tentado_role_id(guild_id)
+        if tentado:
+            return tentado
     value = db_meta_get("verify_role_id")
     return int(value) if value is not None else TENTADO_ROLE_ID
 
@@ -819,6 +866,27 @@ async def on_ready() -> None:
     for guild in bot.guilds:
         try:
             await bootstrap_guild_configuration(guild)
+            # Migra recursos heredados del servidor actual únicamente si existen allí.
+            legacy_roles = {
+                "sin_verificar": SIN_VERIFICAR_ROLE_ID,
+                "tentado": TENTADO_ROLE_ID,
+                "condenado": 0,
+            }
+            for key, role_id in legacy_roles.items():
+                if role_id and guild.get_role(role_id):
+                    if guild_resource_get(guild.id, "role", key) is None:
+                        guild_resource_set(guild.id, "role", key, role_id)
+            for idx, role_id in enumerate(sorted(EVAL_ROLE_IDS), 1):
+                if guild.get_role(role_id) and guild_resource_get(guild.id, "role", f"eval_{idx}") is None:
+                    guild_resource_set(guild.id, "role", f"eval_{idx}", role_id)
+            legacy_channels = {
+                "logs": LOG_CHANNEL_ID,
+                "recovery": RECOVERY_CHANNEL_ID,
+                "condemned": CONDEMNED_CHANNEL_ID,
+            }
+            for key, channel_id in legacy_channels.items():
+                if channel_id and guild.get_channel(channel_id) and guild_resource_get(guild.id, "channel", key) is None:
+                    guild_resource_set(guild.id, "channel", key, channel_id)
         except Exception:
             traceback.print_exc()
 
@@ -1035,13 +1103,13 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         return
 
     # Flujos normales de verificación; una condena activa ya salió por arriba.
-    if SIN_VERIFICAR_ROLE_ID in after_role_ids and SIN_VERIFICAR_ROLE_ID not in before_role_ids:
+    if get_sin_verificado_role_id(after.guild.id) in after_role_ids and get_sin_verificado_role_id(after.guild.id) not in before_role_ids:
         now = datetime.now(timezone.utc)
         db_set_sin_verificado(after.id, now)
         asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
         print(f"⏳ {after} recibió Sin Verificar — respaldo de 300s armado.")
 
-    if TENTADO_ROLE_ID in after_role_ids and TENTADO_ROLE_ID not in before_role_ids:
+    if get_tentado_role_id(after.guild.id) in after_role_ids and get_tentado_role_id(after.guild.id) not in before_role_ids:
         now = datetime.now(timezone.utc)
         db_set_tentado(after.id, now)
         asyncio.create_task(schedule_check(after.guild.id, after.id, now))
@@ -1069,7 +1137,7 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
         db_clear_sin_verificado(user_id)  # ya lo expulsaron — nada que hacer
         return
 
-    if SIN_VERIFICAR_ROLE_ID not in {r.id for r in member.roles}:
+    if get_sin_verificado_role_id(guild_id) not in {r.id for r in member.roles}:
         db_clear_sin_verificado(user_id)  # ya verificó a tiempo
         return
 
@@ -1161,7 +1229,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
         return "castigado"
 
     role_ids = {r.id for r in member.roles}
-    if role_ids & EVAL_ROLE_IDS:
+    if role_ids & get_eval_role_ids(guild.id):
         db_clear_tentado(user_id)  # se verificó a tiempo
         if report:
             await log_embed(guild, "✅ Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
@@ -1213,7 +1281,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     embed.add_field(name="Resultado", value="✅ Expulsado" if kicked else "⚠️ Falló — revisa jerarquía de roles", inline=True)
     embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
 
-    channel = member.guild.get_channel(get_log_channel_id())
+    channel = member.guild.get_channel(get_log_channel_id(member.guild.id))
     if channel is not None:
         try:
             await channel.send(embed=embed)
@@ -1223,7 +1291,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
 
 async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
     """Devuelve True si el DM se envió con éxito."""
-    channel = member.guild.get_channel(RECOVERY_CHANNEL_ID)
+    channel = member.guild.get_channel(get_recovery_channel_id(member.guild.id))
     invite_url = ""
     if channel is not None:
         try:
@@ -1265,6 +1333,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild) -> dict[str, list[
         "roles": "Roles",
         "questions": "Dudas",
         "announcements": "Anuncios",
+        "recovery": "Recuperación",
     }
     created: dict[str, list[int]] = {"channels": [], "roles": []}
     me = guild.me
@@ -1361,14 +1430,14 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
         if member.bot or condemnation_get(member.id) is not None:
             continue  # los condenados quedan fuera de toda evaluación
         role_ids = {r.id for r in member.roles}
-        if TENTADO_ROLE_ID in role_ids:
+        if get_tentado_role_id(guild.id) in role_ids:
             status = await evaluate_member(guild.id, member.id, report=False)
             if status == "verificado":
                 verified += 1
             elif status == "expulsado":
                 expelled.append(member)
             await asyncio.sleep(1)  # evitar ráfagas contra el rate limit de Discord
-        elif SIN_VERIFICAR_ROLE_ID in role_ids:
+        elif get_sin_verificado_role_id(guild.id) in role_ids:
             db_clear_sin_verificado(member.id)
             try:
                 await member.kick(reason="No se verificó")
@@ -1456,6 +1525,7 @@ async def heraldo_log_channel(interaction: discord.Interaction, canal: discord.T
         return
 
     set_log_channel_id(canal.id)
+    guild_resource_set(interaction.guild.id, "channel", "logs", canal.id)
     await interaction.response.send_message(
         f"✅ Los logs de El Heraldo ahora se publicarán en {canal.mention}.",
         ephemeral=True,
@@ -1537,7 +1607,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         await interaction.followup.send("☠️ Estás condenado: no puedes verificarte mientras la condena esté activa.", ephemeral=True)
         return
 
-    role = guild.get_role(get_verify_role_id())
+    role = guild.get_role(get_verify_role_id(guild.id))
     if role is None:
         await interaction.followup.send("⚠️ La verificación no está configurada todavía. Avisa a un administrador.", ephemeral=True)
         await log_embed(
@@ -1548,7 +1618,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         return
 
     role_ids = {r.id for r in member.roles}
-    if role.id in role_ids or role_ids & EVAL_ROLE_IDS:
+    if role.id in role_ids or role_ids & get_eval_role_ids(guild.id):
         await interaction.followup.send("✅ ¡Ya estás verificado!", ephemeral=True)
         return
 
@@ -1575,7 +1645,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
 
     db_clear_verify_pending(member.id)
     # Quien se verifica deja de estar "Sin Verificar" (si no, el respaldo de 300 s lo expulsaría).
-    sin_role = guild.get_role(SIN_VERIFICAR_ROLE_ID)
+    sin_role = guild.get_role(get_sin_verificado_role_id(guild.id))
     if sin_role is not None and sin_role in member.roles:
         try:
             await member.remove_roles(sin_role, reason="Verificación de edad (botón de El Heraldo)")
@@ -1640,7 +1710,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
 
     role_ids = {r.id for r in member.roles}
     db_clear_verify_pending(user_id)
-    if get_verify_role_id() in role_ids or role_ids & EVAL_ROLE_IDS:
+    if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
         return  # se verificó a tiempo (o un admin le dio un rol de orientación)
 
     action = get_verify_action()
@@ -1772,7 +1842,7 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     if not isinstance(target, discord.TextChannel):
         await interaction.response.send_message("Úsalo en un canal de texto o elige uno con la opción `canal`.", ephemeral=True)
         return
-    role = guild.get_role(get_verify_role_id())
+    role = guild.get_role(get_verify_role_id(guild.id))
     if role is None:
         await interaction.response.send_message("❌ El rol de verificación no existe. Elige uno con `/verify_config`.", ephemeral=True)
         return
@@ -1910,7 +1980,7 @@ async def verify_dm_texts(
 @discord.app_commands.guild_only()
 async def verify_dm_preview(interaction: discord.Interaction) -> None:
     guild = interaction.guild
-    log_channel = guild.get_channel(get_log_channel_id())
+    log_channel = guild.get_channel(get_log_channel_id(guild.id))
     if log_channel is None:
         await interaction.response.send_message(
             "❌ No encontré el canal de logs configurado. Configúralo con `/heraldo_log_channel`.",
@@ -1989,7 +2059,7 @@ async def verify_config(
             await interaction.response.send_message(f"❌ No guardé nada: {rol.mention} {problem}.", ephemeral=True)
             return
     if activado:
-        effective_role = rol or guild.get_role(get_verify_role_id())
+        effective_role = rol or guild.get_role(get_verify_role_id(guild.id))
         if effective_role is None:
             await interaction.response.send_message(
                 "❌ No activé la verificación: el rol de verificación no existe. Elige uno con `rol`.",
@@ -2014,6 +2084,7 @@ async def verify_config(
     changes: list[str] = []
     if rol is not None:
         db_meta_set("verify_role_id", str(rol.id))
+    guild_config_set(interaction.guild.id, "verify_role_id", str(rol.id))
         changes.append(f"rol → {rol.mention}")
     if timeout_seconds is not None:
         db_meta_set("verify_timeout", str(timeout_seconds))
@@ -2028,7 +2099,7 @@ async def verify_config(
     warnings: list[str] = []
     if get_verify_timeout() > SIN_VERIFICAR_WINDOW.total_seconds():
         warnings.append("⚠️ El respaldo de Sin Verificar sigue en 300 s: quien tenga ese rol será expulsado antes que este timeout.")
-    if get_verify_role_id() != TENTADO_ROLE_ID:
+    if get_verify_role_id(guild.id) != get_tentado_role_id(guild.id):
         warnings.append("⚠️ El timer de orientación (10 min) solo se arma con Tentad@; con otro rol no se activará.")
 
     await interaction.response.send_message(
@@ -3108,7 +3179,7 @@ def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None
         return "es el canal de logs del Heraldo"
     if channel.id == get_motw_channel_id():
         return "es el canal del Miembro de la Semana"
-    if channel.id == RECOVERY_CHANNEL_ID:
+    if channel.id == get_recovery_channel_id(channel.guild.id):
         return "es el canal de recuperación"
     ref = db_meta_get("verify_panel_ref")
     if ref:
@@ -4309,11 +4380,11 @@ async def release_condemned_member(
     # Si entre los roles originales estaban los de verificación, vuelven a su flujo normal
     # desde cero; mientras la condena estuvo activa nunca corrió ninguna evaluación.
     restored_ids = {r.id for r in restore}
-    if TENTADO_ROLE_ID in restored_ids:
+    if get_tentado_role_id(member.guild.id) in restored_ids:
         now = datetime.now(timezone.utc)
         db_set_tentado(member.id, now)
         asyncio.create_task(schedule_check(member.guild.id, member.id, now))
-    if SIN_VERIFICAR_ROLE_ID in restored_ids:
+    if get_sin_verificado_role_id(member.guild.id) in restored_ids:
         now = datetime.now(timezone.utc)
         db_set_sin_verificado(member.id, now)
         asyncio.create_task(schedule_sin_verificado_check(member.guild.id, member.id, now))
@@ -4695,6 +4766,7 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
         )
         return
     set_condemnation_channel_id(canal.id)
+    guild_resource_set(interaction.guild.id, "channel", "condemned", canal.id)
     await interaction.response.send_message(f"✅ Los avisos de condena se publicarán en {canal.mention}.", ephemeral=True)
     await log_embed(interaction.guild, "⚙️ Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
 
