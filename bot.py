@@ -38,10 +38,10 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      de mayoría de edad, no una comprobación.
    - Con la verificación activada, quien no la complete dentro de `timeout` (configurable
      en días/horas/minutos) desde que entra sufre la acción configurada.
-   - /verify_config (rol, timeout, acción, activar) y /verify_texts (mensaje del
+   - /verify_setup (rol, timeout, acción, activar) y /verify_texts (mensaje del
      panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
-6. COPIA DE SEGURIDAD DE LA PLANTILLA (/template_config, /template_sync)
+6. COPIA DE SEGURIDAD DE LA PLANTILLA (/template_setup, /template_sync)
    - Sincroniza la plantilla del servidor (roles, canales y permisos) con su estado
      actual, como una copia de seguridad: cada día, semana o mes, o cada intervalo
      configurable en días/horas/minutos, con
@@ -61,7 +61,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - Quien tenga una condena activa no puede usar el botón de verificación; al reiniciar, el Heraldo
      reconcilia el rol con la base de datos (libera o reaplica según corresponda).
    - Los cambios de rol del propio Heraldo no vuelven a disparar el proceso (guardia con periodo de gracia).
-   - Aviso privado al condenado y anuncio opcional en el canal configurado con /condenar_config.
+   - Aviso privado al condenado y anuncio opcional en el canal configurado con /condenar_setup.
 
 8. PURGA (/purge)
    - Borra mensajes de un usuario sin límites: todos, sus N más recientes o un rango de tiempo
@@ -74,7 +74,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - Pausa las invitaciones del servidor mientras dure (y las reabre solo si las pausó el Heraldo),
      purga los mensajes de los sancionados desde que entraron y avisa en el canal de logs con ping opcional.
    - Filtro opcional de edad de cuenta; staff y bots nunca se sancionan. El estado sobrevive reinicios.
-   - /raid config, /raid status, /raid start (manual), /raid end (con opción de liberar a los condenados).
+   - /raid setup, /raid status, /raid start (manual), /raid end (con opción de liberar a los condenados).
 
 10. VARIABLES (/variables)
    - Los textos personalizables aceptan {usuario}, {servidor}, {servericon}, {miembros}, {canal},
@@ -144,7 +144,7 @@ EVAL_ROLE_IDS = {
 }
 RECOVERY_CHANNEL_ID = 1522863826545016913  # canal donde se genera el invite de recuperación
 LOG_CHANNEL_ID = 1549052747117240381  # canal de logs por defecto (cambiable con /heraldo_log_channel)
-CONDEMNED_CHANNEL_ID = 0  # configurable con /condenar_config; 0 = sin canal de avisos
+CONDEMNED_CHANNEL_ID = 0  # configurable con /condenar_setup; 0 = sin canal de avisos
 CONDEMNED_EMOJI = "☠️"
 CONDEMNATION_MAX_MINUTES = 10 * 365 * 24 * 60
 VERIFICATION_WINDOW = timedelta(minutes=10)
@@ -188,7 +188,7 @@ MOTW_WEEKDAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sá
 
 # --- Verificación por botón (/verify) ---
 # Rol, timeout, acción, textos y activación se guardan en la DB y se cambian con
-# /verify_config y /verify_texts; estos son solo los valores por defecto.
+# /verify_setup y /verify_texts; estos son solo los valores por defecto.
 VERIFY_BUTTON_ID = "heraldo_verify"
 VERIFY_TIMEOUT_DEFAULT = 299  # segundos desde que entra
 VERIFY_ACTION_DEFAULT = "kick"
@@ -210,7 +210,7 @@ VERIFY_DANGEROUS_PERMS = (
     ("mention_everyone", "Mencionar a todos"),
 )
 
-# --- Copia de seguridad de la plantilla del servidor (/template_config) ---
+# --- Copia de seguridad de la plantilla del servidor (/template_setup) ---
 # Valores por defecto; la configuración real se guarda en la DB. Hora local de STREAK_TZ.
 TEMPLATE_MODE_LABELS = {
     "off": "Desactivada",
@@ -1039,7 +1039,7 @@ async def on_guild_join(guild: discord.Guild) -> None:
         await log_embed(
             guild,
             "🪽 El Heraldo está listo para configurarse",
-            "No se crearon canales ni roles automáticamente. Usa /heraldo_config para "
+            "No se crearon canales ni roles automáticamente. Usa /heraldo_setup para "
             "decidir si quieres permitir la creación de recursos faltantes.",
             discord.Color.blurple(),
         )
@@ -1408,7 +1408,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
     """Detecta/reutiliza la estructura base y, opcionalmente, crea lo que falte.
 
     Por defecto NO crea canales ni roles. La creación automática solo se habilita
-    cuando el administrador la activa desde /heraldo_config. Así, añadir el bot a
+    cuando el administrador la activa desde /heraldo_setup. Así, añadir el bot a
     un servidor existente nunca crea recursos inesperados.
     """
     desired_channels = {
@@ -1663,9 +1663,6 @@ async def heraldo_setup(interaction: discord.Interaction) -> None:
     )
 
 
-@bot.tree.command(name="heraldo_setup", description="Consulta la configuración general de El Heraldo.")
-@app_commands.default_permissions(administrator=True)
-@app_commands.guild_only()
 async def heraldo_config(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     if guild is None:
@@ -2148,12 +2145,12 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
         return
     role = guild.get_role(get_verify_role_id(guild.id))
     if role is None:
-        await interaction.response.send_message("❌ El rol de verificación no existe. Elige uno con `/verify_config`.", ephemeral=True)
+        await interaction.response.send_message("❌ El rol de verificación no existe. Elige uno con `/verify_setup`.", ephemeral=True)
         return
     problem = verify_role_problem(role, guild)
     if problem:
         await interaction.response.send_message(
-            f"❌ No publiqué el panel: el rol {role.mention} {problem}. Elige otro con `/verify_config`.",
+            f"❌ No publiqué el panel: el rol {role.mention} {problem}. Elige otro con `/verify_setup`.",
             ephemeral=True,
         )
         return
@@ -2178,7 +2175,7 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     guild_config_set(guild.id, "verify_panel_ref", f"{target.id}:{message.id}")
     await interaction.followup.send(
         f"✅ Panel publicado en {target.mention}. Cuando quieras que el timeout empiece a aplicarse, "
-        f"usa `/verify_config activado:True`.",
+        f"usa `/verify_setup activado:True`.",
         ephemeral=True,
     )
     await log_embed(
@@ -2441,7 +2438,7 @@ verify_dm_preview.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
-# Copia de seguridad de la plantilla del servidor (/template_config, /template_sync)
+# Copia de seguridad de la plantilla del servidor (/template_setup, /template_sync)
 # ---------------------------------------------------------------------------
 
 def _meta_int(key: str, default: int) -> int:
@@ -4522,7 +4519,7 @@ async def condemnation_sync_roles(
     guild = member.guild
     punish_role = guild.get_role(role_id or hp_punish_role_id())
     if punish_role is None:
-        return False, [], "No hay rol Condenado configurado; usa `/honeypot config rol_castigo` para elegirlo."
+        return False, [], "No hay rol Condenado configurado; usa `/honeypot setup rol_castigo` para elegirlo."
     problem = hp_role_problem(punish_role, guild)
     if problem:
         return False, [], f"El rol Condenado {problem}."
@@ -4933,7 +4930,7 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
             guild, "⏸️ Honeypot pausado (protección contra fallos)",
             f"{HONEYPOT_MISFIRE_THRESHOLD}+ miembros con más de 30 días en el servidor escribieron en la trampa en "
             f"pocos minutos: probablemente apunta a un canal que tu comunidad usa de verdad.\n"
-            f"Revisa los canales trampa con `/honeypot config` y reactiva con `/honeypot resume`. "
+            f"Revisa los canales trampa con `/honeypot setup` y reactiva con `/honeypot resume`. "
             f"Este último mensaje ({member.mention}) **no** fue castigado.",
             discord.Color.red(),
         )
@@ -5522,7 +5519,7 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
         )
 
 
-@honeypot_group.command(name="config", description="Ver o cambiar la configuración del honeypot.")
+@honeypot_group.command(name="setup", description="Ver o cambiar la configuración del honeypot.")
 @discord.app_commands.describe(
     activado="Activar o desactivar el honeypot",
     accion="Qué hacer con quien caiga en la trampa",
@@ -5689,7 +5686,7 @@ async def honeypot_create(interaction: discord.Interaction) -> None:
     err = await hp_sync_warning(channel)
     await interaction.followup.send(
         f"✅ Creé {channel.mention} y lo añadí como trampa." + (f"\n⚠️ {err}" if err else "")
-        + "\nActívalo con `/honeypot config activado:True` (empieza con `accion: Solo registrar` si quieres probar).",
+        + "\nActívalo con `/honeypot setup activado:True` (empieza con `accion: Solo registrar` si quieres probar).",
         ephemeral=True,
     )
     await log_embed(guild, "🍯 Canal trampa creado", f"{interaction.user.mention} creó {channel.mention}.")
@@ -6948,7 +6945,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
     if raid_is_active(guild.id) and until:
         lines.append(f"• El modo raid termina <t:{int(until.timestamp())}:R>")
     if raid_action() == "condemn" and guild.get_role(condemnation_role_id()) is None:
-        lines.append("⚠️ La acción es Condenar pero no hay rol Condenado: configúralo con `/honeypot config rol_castigo`.")
+        lines.append("⚠️ La acción es Condenar pero no hay rol Condenado: configúralo con `/honeypot setup rol_castigo`.")
     return "\n".join(lines)
 
 
@@ -6960,7 +6957,7 @@ raid_group = HoneypotGroup(
 )
 
 
-@raid_group.command(name="config", description="Ver o cambiar la configuración de la protección anti-raid.")
+@raid_group.command(name="setup", description="Ver o cambiar la configuración de la protección anti-raid.")
 @discord.app_commands.describe(
     activado="Activar o desactivar la protección anti-raid",
     ingresos=f"Cuántos ingresos disparan el raid ({RAID_THRESHOLD_MIN} a {RAID_THRESHOLD_MAX})",
@@ -7007,7 +7004,7 @@ async def raid_config(
             and (activado or accion is not None):
         await interaction.response.send_message(
             "❌ No guardé nada: la acción «Condenar» necesita el rol Condenado. "
-            "Configúralo con `/honeypot config rol_castigo` o elige otra acción.",
+            "Configúralo con `/honeypot setup rol_castigo` o elige otra acción.",
             ephemeral=True,
         )
         return
@@ -8707,7 +8704,7 @@ async def suggestions_panel(interaction: discord.Interaction, canal: discord.Tex
     await interaction.followup.send(f"✅ Panel de sugerencias configurado en {canal.mention}.", ephemeral=True)
 
 
-@suggestions_group.command(name="config", description="Elegir si el creador del servidor también recibe las sugerencias por DM.")
+@suggestions_group.command(name="setup", description="Elegir si el creador del servidor también recibe las sugerencias por DM.")
 @discord.app_commands.describe(dueno="Sí = el dueño/creador recibe las sugerencias; No = solo destinatarios añadidos")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def suggestions_config(interaction: discord.Interaction, dueno: bool) -> None:
