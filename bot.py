@@ -850,8 +850,11 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
         f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
         f"Tarjeta administrada: **{'Sí' if enabled else 'No'}**\n\n"
         + "\n".join(roles)
-        + "\n\nMientras esté activo, El Heraldo repara automáticamente la tarjeta, "
-          "las reacciones y cualquier rol administrado que sea eliminado."
+        + "\n\n**Cómo funciona:** reacciona con el emoji de la orientación que te represente "
+          "y El Heraldo te asignará su rol correspondiente. Solo puedes mantener una orientación "
+          "a la vez: si eliges otra, la anterior se sustituye automáticamente. Si retiras tu "
+          "reacción, también se retira ese rol. Si termina el tiempo configurado sin que tengas "
+          "ningún rol de orientación válido, se aplicará la sanción establecida para este sistema."
     )
 
 
