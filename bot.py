@@ -6781,6 +6781,43 @@ class HeraldoCasesSetupView(discord.ui.View):
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
+class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Duración predeterminada"):
+    duration = discord.ui.TextInput(
+        label="Duración (0 = indefinida)",
+        placeholder="Ej.: 30m, 12h, 2d, 1d 12h o 0",
+        required=True,
+        max_length=80,
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        current = condemnation_default_duration_minutes(guild_id)
+        self.duration.default = format_duration(current) if current is not None else "0"
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        raw = str(self.duration).strip()
+        if raw.casefold() in {"0", "indefinida", "indefinido", "permanente", "hasta retirar"}:
+            minutes = None
+            setting = "indefinida"
+        else:
+            try:
+                minutes = parse_duration(raw, 1, get_condemnation_max_minutes(self.guild_id))
+            except ValueError as exc:
+                await interaction.response.send_message(f"❌ Duración inválida: {exc}", ephemeral=True)
+                return
+            setting = f"{minutes}m"
+
+        set_condemnation_default_duration(setting, self.guild_id)
+        label = format_duration(minutes) if minutes is not None else "Indefinida"
+        await interaction.response.send_message(
+            f"✅ Duración predeterminada actualizada a **{label}**. "
+            "Se aplicará a las condenas nuevas sin duración explícita; "
+            "no altera las condenas existentes. Vuelve a abrir el panel para ver el valor actualizado.",
+            ephemeral=True,
+        )
+
+
 class HeraldoCondemnationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -6827,7 +6864,8 @@ class HeraldoCondemnationSetupView(discord.ui.View):
         return (
             "⚖️ **El Heraldo · Moderation · Condenas**\n\n"
             f"Canal de condenados: {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
-            f"Rol Condenado: {role.mention if role else 'no configurado'}"
+            f"Rol Condenado: {role.mention if role else 'no configurado'}\n"
+            f"Duración predeterminada: **{format_duration(condemnation_default_duration_minutes(guild.id)) if condemnation_default_duration_minutes(guild.id) is not None else 'Indefinida'}**"
             + _pending_config_text(items)
         )
 
@@ -6861,6 +6899,10 @@ class HeraldoCondemnationSetupView(discord.ui.View):
             return
         self.pending_role_id = role.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Duración", style=discord.ButtonStyle.secondary, row=2)
+    async def duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoCondemnationDurationModal(self.guild_id))
 
     @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=2)
     async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
