@@ -7209,7 +7209,7 @@ class HeraldoSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
-        self.selected_module: str | None = "automod"
+        self.selected_module: str | None = None
 
         select = discord.ui.Select(
             placeholder="Selecciona el módulo que deseas configurar",
@@ -7222,7 +7222,6 @@ class HeraldoSetupView(discord.ui.View):
                     value=key,
                     description=description,
                     emoji=emoji,
-                    default=key == "automod",
                 )
                 for key, label, description, emoji in self.MODULES
             ],
