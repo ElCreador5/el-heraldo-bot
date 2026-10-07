@@ -7167,42 +7167,60 @@ def format_flex_duration(seconds: int) -> str:
 
 # --- Configuración (DB) ---
 
-def raid_enabled() -> bool:
-    v = db_meta_get("raid_enabled")
-    return RAID_ENABLED_DEFAULT if v is None else v == "1"
+def raid_setting_get(guild_id: int, key: str) -> str | None:
+    value = guild_config_get(guild_id, key)
+    if value is not None:
+        return value
+    legacy_owner = db_meta_get("verify_legacy_guild_id")
+    if legacy_owner is None or legacy_owner == str(guild_id):
+        return db_meta_get(key)
+    return None
 
 
-def raid_threshold() -> int:
-    return _meta_int("raid_threshold", RAID_THRESHOLD_DEFAULT)
+def raid_setting_int(guild_id: int, key: str, fallback: int) -> int:
+    value = raid_setting_get(guild_id, key)
+    try:
+        return int(value) if value is not None else fallback
+    except (TypeError, ValueError):
+        return fallback
 
 
-def raid_window_seconds() -> int:
-    return _meta_int("raid_window_seconds", RAID_WINDOW_DEFAULT)
+def raid_enabled(guild_id: int) -> bool:
+    value = raid_setting_get(guild_id, "raid_enabled")
+    return RAID_ENABLED_DEFAULT if value is None else value == "1"
 
 
-def raid_duration_seconds() -> int:
-    return _meta_int("raid_duration_seconds", RAID_DURATION_DEFAULT)
+def raid_threshold(guild_id: int) -> int:
+    return raid_setting_int(guild_id, "raid_threshold", RAID_THRESHOLD_DEFAULT)
 
 
-def raid_min_age_seconds() -> int:
-    return _meta_int("raid_min_age_seconds", 0)
+def raid_window_seconds(guild_id: int) -> int:
+    return raid_setting_int(guild_id, "raid_window_seconds", RAID_WINDOW_DEFAULT)
 
 
-def raid_action() -> str:
-    v = db_meta_get("raid_action")
-    return v if v in RAID_ACTION_LABELS else RAID_ACTION_DEFAULT
+def raid_duration_seconds(guild_id: int) -> int:
+    return raid_setting_int(guild_id, "raid_duration_seconds", RAID_DURATION_DEFAULT)
 
 
-def raid_lock_invites_enabled() -> bool:
-    return db_meta_get("raid_lock_invites") != "0"  # por defecto activado
+def raid_min_age_seconds(guild_id: int) -> int:
+    return raid_setting_int(guild_id, "raid_min_age_seconds", 0)
 
 
-def raid_purge_enabled() -> bool:
-    return db_meta_get("raid_purge") != "0"  # por defecto activado
+def raid_action(guild_id: int) -> str:
+    value = raid_setting_get(guild_id, "raid_action")
+    return value if value in RAID_ACTION_LABELS else RAID_ACTION_DEFAULT
 
 
-def raid_ping_role_id() -> int:
-    return _meta_int("raid_ping_role", 0)
+def raid_lock_invites_enabled(guild_id: int) -> bool:
+    return raid_setting_get(guild_id, "raid_lock_invites") != "0"
+
+
+def raid_purge_enabled(guild_id: int) -> bool:
+    return raid_setting_get(guild_id, "raid_purge") != "0"
+
+
+def raid_ping_role_id(guild_id: int) -> int:
+    return raid_setting_int(guild_id, "raid_ping_role", 0)
 
 
 # --- Estado por servidor ---
@@ -7235,7 +7253,7 @@ def raid_is_active(guild_id: int) -> bool:
 
 def raid_is_suspicious(member: discord.Member) -> bool:
     """Con edad mínima configurada, solo se actúa sobre cuentas más nuevas que ese tiempo."""
-    min_age = raid_min_age_seconds()
+    min_age = raid_min_age_seconds(member.guild.id)
     if min_age <= 0:
         return True
     return (datetime.now(timezone.utc) - member.created_at).total_seconds() < min_age
@@ -7247,7 +7265,7 @@ async def raid_alert(guild: discord.Guild, title: str, description: str, color: 
     channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is None:
         return
-    role = guild.get_role(raid_ping_role_id()) if raid_ping_role_id() else None
+    role = guild.get_role(raid_ping_role_id(guild.id)) if raid_ping_role_id(guild.id) else None
     embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now(timezone.utc))
     try:
         await channel.send(
@@ -7297,13 +7315,13 @@ async def raid_act_on_member(member: discord.Member) -> bool:
     (condenado, expulsado o baneado)."""
     guild = member.guild
     stats = _raid_stats.setdefault(guild.id, {
-        "started": datetime.now(timezone.utc), "trigger": "—", "action": raid_action(),
+        "started": datetime.now(timezone.utc), "trigger": "—", "action": raid_action(guild.id),
         "acted": 0, "failed": 0, "skipped": 0, "logged": 0, "purged": 0, "ids": [],
     })
     if member.bot or hp_is_exempt(member) or not raid_is_suspicious(member):
         stats["skipped"] += 1
         return False
-    action = raid_action()
+    action = raid_action(guild.id)
     reason = "Raid Protection: ingreso masivo de miembros"
     if action == "log":
         stats["logged"] += 1
@@ -7331,7 +7349,7 @@ async def raid_act_on_member(member: discord.Member) -> bool:
         return False
     stats["acted"] += 1
     stats["ids"].append(member.id)
-    if raid_purge_enabled() and action in ("condemn", "kick"):
+    if raid_purge_enabled(guild.id) and action in ("condemn", "kick"):
         asyncio.create_task(_raid_purge_member(member, stats))
     return True
 
@@ -7340,20 +7358,20 @@ async def raid_start(
     guild: discord.Guild, *, trigger: str, suspects: list[int], started_by: discord.abc.User | None = None,
 ) -> set[int]:
     """Activa el modo raid y actúa sobre los sospechosos. Devuelve los ids que salieron del flujo normal."""
-    duration = raid_duration_seconds()
+    duration = raid_duration_seconds(guild.id)
     now = datetime.now(timezone.utc)
     # Marcar el raid como activo ANTES de cualquier await: los ingresos simultáneos ya lo ven activo.
     _raid_set_until(guild.id, now + timedelta(seconds=duration))
     _raid_stats[guild.id] = {
-        "started": now, "trigger": trigger, "action": raid_action(),
+        "started": now, "trigger": trigger, "action": raid_action(guild.id),
         "acted": 0, "failed": 0, "skipped": 0, "logged": 0, "purged": 0, "ids": [],
     }
-    lock_note = await raid_lock_invites(guild) if raid_lock_invites_enabled() else "—"
+    lock_note = await raid_lock_invites(guild) if raid_lock_invites_enabled(guild.id) else "—"
     await raid_alert(
         guild, "🛡️ RAID DETECTADO — modo raid activado",
         f"**Motivo:** {trigger}\n"
         f"**Duración:** {format_flex_duration(duration)} (termina <t:{int((now + timedelta(seconds=duration)).timestamp())}:R>)\n"
-        f"**Acción sobre los sospechosos:** {RAID_ACTION_LABELS[raid_action()]}\n"
+        f"**Acción sobre los sospechosos:** {RAID_ACTION_LABELS[raid_action(guild.id)]}\n"
         f"**Invitaciones:** {lock_note}\n"
         f"**Activó:** {started_by.mention if started_by else 'El Heraldo (automático)'}",
         discord.Color.red(),
@@ -7409,11 +7427,11 @@ async def raid_end(
 async def raid_handle_join(member: discord.Member) -> bool:
     """Se llama en cada ingreso. Devuelve True si el miembro ya fue sancionado y debe saltarse
     el flujo normal de verificación."""
-    if not raid_enabled():
+    if not raid_enabled(member.guild.id):
         return False
     guild = member.guild
     now = time.monotonic()
-    window = raid_window_seconds()
+    window = raid_window_seconds(guild.id)
     joins = _raid_joins.setdefault(guild.id, deque())
     joins.append((now, member.id))
     while joins and now - joins[0][0] > window:
@@ -7421,11 +7439,11 @@ async def raid_handle_join(member: discord.Member) -> bool:
 
     if raid_is_active(guild.id):
         return await raid_act_on_member(member)
-    if len(joins) < raid_threshold():
+    if len(joins) < raid_threshold(guild.id):
         return False
     suspects = [uid for _, uid in joins]
     joins.clear()
-    trigger = f"{len(suspects)} ingresos en {format_flex_duration(window)} (umbral: {raid_threshold()})"
+    trigger = f"{len(suspects)} ingresos en {format_flex_duration(window)} (umbral: {raid_threshold(guild.id)})"
     acted = await raid_start(guild, trigger=trigger, suspects=suspects)
     return member.id in acted
 
@@ -7446,23 +7464,23 @@ async def raid_expiry_loop() -> None:
 # --- Comandos ---
 
 def raid_config_summary(guild: discord.Guild) -> str:
-    role = guild.get_role(raid_ping_role_id()) if raid_ping_role_id() else None
-    min_age = raid_min_age_seconds()
+    role = guild.get_role(raid_ping_role_id(guild.id)) if raid_ping_role_id(guild.id) else None
+    min_age = raid_min_age_seconds(member.guild.id)
     state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
     until = raid_until(guild.id)
     lines = [
-        f"🛡️ **Raid Protection** — {'✅ activada' if raid_enabled() else '❌ desactivada'} · {state}",
-        f"• Disparo: **{raid_threshold()}** ingresos en **{format_flex_duration(raid_window_seconds())}**",
-        f"• Duración del modo raid: **{format_flex_duration(raid_duration_seconds())}**",
-        f"• Acción: **{RAID_ACTION_LABELS[raid_action()]}**",
+        f"🛡️ **Raid Protection** — {'✅ activada' if raid_enabled(guild.id) else '❌ desactivada'} · {state}",
+        f"• Disparo: **{raid_threshold(guild.id)}** ingresos en **{format_flex_duration(raid_window_seconds(guild.id))}**",
+        f"• Duración del modo raid: **{format_flex_duration(raid_duration_seconds(guild.id))}**",
+        f"• Acción: **{RAID_ACTION_LABELS[raid_action(guild.id)]}**",
         f"• Filtro de edad de cuenta: **{'cuentas de menos de ' + format_flex_duration(min_age) if min_age else 'sin filtro (todos los ingresos del raid)'}**",
-        f"• Pausar invitaciones: **{'sí' if raid_lock_invites_enabled() else 'no'}**",
-        f"• Purgar mensajes de los sancionados: **{'sí' if raid_purge_enabled() else 'no'}**",
+        f"• Pausar invitaciones: **{'sí' if raid_lock_invites_enabled(guild.id) else 'no'}**",
+        f"• Purgar mensajes de los sancionados: **{'sí' if raid_purge_enabled(guild.id) else 'no'}**",
         f"• Rol de alerta: {role.mention if role else '**ninguno**'}",
     ]
     if raid_is_active(guild.id) and until:
         lines.append(f"• El modo raid termina <t:{int(until.timestamp())}:R>")
-    if raid_action() == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None:
+    if raid_action(guild.id) == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None:
         lines.append("⚠️ La acción es Condenar pero no hay rol Condenado: configúralo con `/honeypot setup rol_castigo`.")
     return "\n".join(lines)
 
@@ -7516,8 +7534,8 @@ async def raid_config(
     except ValueError as e:
         await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
         return
-    effective_action = accion.value if accion is not None else raid_action()
-    effective_enabled = activado if activado is not None else raid_enabled()
+    effective_action = accion.value if accion is not None else raid_action(guild.id)
+    effective_enabled = activado if activado is not None else raid_enabled(guild.id)
     if effective_enabled and effective_action == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None \
             and (activado or accion is not None):
         await interaction.response.send_message(
@@ -7529,31 +7547,31 @@ async def raid_config(
 
     changes: list[str] = []
     if activado is not None:
-        db_meta_set("raid_enabled", "1" if activado else "0")
+        guild_config_set(guild.id, "raid_enabled", "1" if activado else "0")
         changes.append("activada" if activado else "desactivada")
     if ingresos is not None:
-        db_meta_set("raid_threshold", str(ingresos))
+        guild_config_set(guild.id, "raid_threshold", str(ingresos))
         changes.append(f"ingresos → {ingresos}")
     if ventana_s is not None:
-        db_meta_set("raid_window_seconds", str(ventana_s))
+        guild_config_set(guild.id, "raid_window_seconds", str(ventana_s))
         changes.append(f"ventana → {format_flex_duration(ventana_s)}")
     if duracion_s is not None:
-        db_meta_set("raid_duration_seconds", str(duracion_s))
+        guild_config_set(guild.id, "raid_duration_seconds", str(duracion_s))
         changes.append(f"duración → {format_flex_duration(duracion_s)}")
     if accion is not None:
-        db_meta_set("raid_action", accion.value)
+        guild_config_set(guild.id, "raid_action", accion.value)
         changes.append(f"acción → {accion.name}")
     if edad_s is not None:
-        db_meta_set("raid_min_age_seconds", str(edad_s))
+        guild_config_set(guild.id, "raid_min_age_seconds", str(edad_s))
         changes.append(f"edad de cuenta → {format_flex_duration(edad_s) if edad_s else 'sin filtro'}")
     if pausar_invitaciones is not None:
-        db_meta_set("raid_lock_invites", "1" if pausar_invitaciones else "0")
+        guild_config_set(guild.id, "raid_lock_invites", "1" if pausar_invitaciones else "0")
         changes.append("pausar invitaciones: " + ("sí" if pausar_invitaciones else "no"))
     if purgar is not None:
-        db_meta_set("raid_purge", "1" if purgar else "0")
+        guild_config_set(guild.id, "raid_purge", "1" if purgar else "0")
         changes.append("purgar: " + ("sí" if purgar else "no"))
     if ping_rol is not None:
-        db_meta_set("raid_ping_role", str(ping_rol.id))
+        guild_config_set(guild.id, "raid_ping_role", str(ping_rol.id))
         changes.append(f"rol de alerta → {ping_rol.mention}")
     await interaction.response.send_message(
         "✅ Guardado: " + "; ".join(changes) + "\n\n" + raid_config_summary(guild), ephemeral=True,
@@ -7581,7 +7599,7 @@ async def raid_start_command(interaction: discord.Interaction) -> None:
     await interaction.response.defer(ephemeral=True)
     await raid_start(guild, trigger=f"activado a mano por {interaction.user}", suspects=[], started_by=interaction.user)
     await interaction.followup.send(
-        f"✅ Modo raid activado por {format_flex_duration(raid_duration_seconds())}: "
+        f"✅ Modo raid activado por {format_flex_duration(raid_duration_seconds(guild.id))}: "
         "los ingresos de ahora en adelante recibirán la acción configurada.", ephemeral=True,
     )
 
