@@ -5862,6 +5862,15 @@ class CondemnationTemplateEditorView(discord.ui.View):
         )
 
 
+    @discord.ui.button(label="🏠 Heraldo setup", style=discord.ButtonStyle.secondary, row=2)
+    async def back_to_heraldo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🪽 **El Heraldo · Configuración del servidor**\n\nElige una sección para modificarla.",
+            embed=None,
+            view=HeraldoSetupView(interaction.guild.id, self.owner_id),
+        )
+
+
 @bot.tree.command(
     name="condenar_template",
     description="Abrir el formulario profesional de la tarjeta de condenados.",
