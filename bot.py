@@ -7905,61 +7905,64 @@ def _chan_mention(channel) -> str:
 
 # (grupo, nombre, alias, descripción, resolutor)
 VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "usuario", ("user", "nombre", "name"),
-     "nombre visible", _vm(lambda m: _safe(m.display_name))),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "mencion", ("mention", "ping"),
-     "@mención", _vm(lambda m: m.mention)),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "usuarioid", ("userid", "id"),
-     "ID de usuario", _vm(lambda m: str(m.id))),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "tag", ("username", "handle"),
-     "nombre de usuario (@tag)", _vm(lambda m: _safe(m.name))),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "avatar", ("pfp", "foto"),
-     "URL de su avatar", _vm(lambda m: m.display_avatar.url)),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "cuenta", ("created", "cuentacreada"),
-     "fecha de creación de su cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "D"))),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "cuentahace", ("accountago", "antiguedad"),
-     "hace cuánto creó la cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "R"))),
-    ("👤 Persona (solo en mensajes dirigidos a alguien)", "ingreso", ("joined", "entro"),
-     "fecha en que entró al servidor",
+    ("👤 Usuario", "usuario_nombre", ("usuario", "user", "nombre", "name"),
+     "nombre visible del usuario", _vm(lambda m: _safe(m.display_name))),
+    ("👤 Usuario", "usuario_mencion", ("mencion", "mention", "ping"),
+     "@mención del usuario", _vm(lambda m: m.mention)),
+    ("👤 Usuario", "usuario_id", ("usuarioid", "userid", "id"),
+     "ID del usuario", _vm(lambda m: str(m.id))),
+    ("👤 Usuario", "usuario_tag", ("tag", "username", "handle"),
+     "nombre de usuario / tag", _vm(lambda m: _safe(m.name))),
+    ("👤 Usuario", "usuario_avatar_url", ("avatar", "pfp", "foto"),
+     "URL del avatar del usuario", _vm(lambda m: m.display_avatar.url)),
+    ("👤 Usuario", "usuario_fecha_creacion", ("cuenta", "created", "cuentacreada"),
+     "fecha de creación de la cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "D"))),
+    ("👤 Usuario", "usuario_antiguedad", ("cuentahace", "accountago", "antiguedad"),
+     "tiempo transcurrido desde que creó la cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "R"))),
+    ("👤 Usuario", "usuario_fecha_ingreso", ("ingreso", "joined", "entro"),
+     "fecha en que el usuario entró al servidor",
      _vm(lambda m: discord.utils.format_dt(m.joined_at, "D") if getattr(m, "joined_at", None) else "")),
-    ("🏠 Servidor", "servidor", ("server", "guild", "servername"),
+
+    ("🏠 Servidor", "servidor_nombre", ("servidor", "server", "guild", "servername"),
      "nombre del servidor", _vg(lambda g: _safe(g.name))),
-    ("🏠 Servidor", "servidorid", ("serverid", "guildid"),
+    ("🏠 Servidor", "servidor_id", ("servidorid", "serverid", "guildid"),
      "ID del servidor", _vg(lambda g: str(g.id))),
-    ("🏠 Servidor", "servericon", ("guildicon", "iconoservidor", "icono", "icon"),
-     "URL del icono (úsala en imagen/miniatura/icono del pie)", _vg(lambda g: g.icon.url if g.icon else "")),
-    ("🏠 Servidor", "serverbanner", ("guildbanner", "bannerservidor", "banner"),
+    ("🏠 Servidor", "servidor_icono_url", ("servericon", "guildicon", "iconoservidor", "icono", "icon"),
+     "URL del icono del servidor", _vg(lambda g: g.icon.url if g.icon else "")),
+    ("🏠 Servidor", "servidor_banner_url", ("serverbanner", "guildbanner", "bannerservidor", "banner"),
      "URL del banner del servidor", _vg(lambda g: g.banner.url if g.banner else "")),
-    ("🏠 Servidor", "miembros", ("members", "membercount", "usuarios"),
-     "cantidad de miembros", _vg(lambda g: str(g.member_count or len(g.members)))),
-    ("🏠 Servidor", "boosts", ("boostcount",),
-     "cantidad de boosts", _vg(lambda g: str(g.premium_subscription_count))),
-    ("🏠 Servidor", "nivelboost", ("boostlevel", "premiumtier"),
-     "nivel de boost", _vg(lambda g: str(g.premium_tier))),
-    ("🏠 Servidor", "dueno", ("owner", "dueño"),
-     "@mención del dueño", _vg(lambda g: f"<@{g.owner_id}>")),
-    ("🏠 Servidor", "creado", ("servercreated", "guildcreated"),
+    ("🏠 Servidor", "servidor_miembros", ("miembros", "members", "membercount", "usuarios"),
+     "cantidad de miembros del servidor", _vg(lambda g: str(g.member_count or len(g.members)))),
+    ("🏠 Servidor", "servidor_boosts", ("boosts", "boostcount"),
+     "cantidad de boosts del servidor", _vg(lambda g: str(g.premium_subscription_count))),
+    ("🏠 Servidor", "servidor_nivel_boost", ("nivelboost", "boostlevel", "premiumtier"),
+     "nivel de boost del servidor", _vg(lambda g: str(g.premium_tier))),
+    ("🏠 Servidor", "servidor_dueno_mencion", ("dueno", "dueño", "owner"),
+     "@mención del propietario del servidor", _vg(lambda g: f"<@{g.owner_id}>")),
+    ("🏠 Servidor", "servidor_fecha_creacion", ("creado", "servercreated", "guildcreated"),
      "fecha de creación del servidor", _vg(lambda g: discord.utils.format_dt(g.created_at, "D"))),
-    ("🏠 Servidor", "reglas", ("rules",),
-     "canal de reglas de Discord", _vg(lambda g: _chan_mention(g.rules_channel))),
-    ("🏠 Servidor", "sistema", ("system", "systemchannel"),
-     "canal de mensajes del sistema", _vg(lambda g: _chan_mention(g.system_channel))),
-    ("💬 Canal (donde se publica el mensaje)", "canal", ("channel", "aqui", "here"),
-     "#mención del canal", _vc(lambda ch: ch.mention)),
-    ("💬 Canal (donde se publica el mensaje)", "canalid", ("channelid",),
-     "ID del canal", _vc(lambda ch: str(ch.id))),
-    ("💬 Canal (donde se publica el mensaje)", "canalnombre", ("channelname",),
-     "nombre del canal", _vc(lambda ch: _safe(ch.name))),
-    ("🕒 Tiempo y texto", "fecha", ("date",),
-     "fecha de hoy", lambda c: discord.utils.format_dt(_vn(), "D")),
-    ("🕒 Tiempo y texto", "hora", ("time",),
+    ("🏠 Servidor", "servidor_canal_reglas", ("reglas", "rules"),
+     "mención del canal de reglas configurado en Discord", _vg(lambda g: _chan_mention(g.rules_channel))),
+    ("🏠 Servidor", "servidor_canal_sistema", ("sistema", "system", "systemchannel"),
+     "mención del canal de sistema configurado en Discord", _vg(lambda g: _chan_mention(g.system_channel))),
+
+    ("💬 Canal actual", "canal_mencion", ("canal", "channel", "aqui", "here"),
+     "#mención del canal donde se publica", _vc(lambda ch: ch.mention)),
+    ("💬 Canal actual", "canal_id", ("canalid", "channelid"),
+     "ID del canal donde se publica", _vc(lambda ch: str(ch.id))),
+    ("💬 Canal actual", "canal_nombre", ("canalnombre", "channelname"),
+     "nombre del canal donde se publica", _vc(lambda ch: _safe(ch.name))),
+
+    ("🕒 Fecha y hora", "fecha_actual", ("fecha", "date"),
+     "fecha actual", lambda c: discord.utils.format_dt(_vn(), "D")),
+    ("🕒 Fecha y hora", "hora_actual", ("hora", "time"),
      "hora actual", lambda c: discord.utils.format_dt(_vn(), "t")),
-    ("🕒 Tiempo y texto", "ahora", ("now",),
-     "fecha y hora completas", lambda c: discord.utils.format_dt(_vn(), "F")),
-    ("🕒 Tiempo y texto", "timestamp", ("unix",),
-     "marca de tiempo Unix", lambda c: str(int(_vn().timestamp()))),
-    ("🕒 Tiempo y texto", "salto", ("nl", "br"),
-     "salto de línea (útil en campos de una sola línea)", lambda c: "\n"),
+    ("🕒 Fecha y hora", "fecha_hora_actual", ("ahora", "now"),
+     "fecha y hora actuales completas", lambda c: discord.utils.format_dt(_vn(), "F")),
+    ("🕒 Fecha y hora", "timestamp_unix", ("timestamp", "unix"),
+     "marca de tiempo Unix actual", lambda c: str(int(_vn().timestamp()))),
+    ("📝 Texto", "salto_linea", ("salto", "nl", "br"),
+     "salto de línea", lambda c: "\n"),
 ]
 
 _VAR_INDEX: dict[str, object] = {}
@@ -8025,11 +8028,11 @@ def _var_resolve(name: str, ctx: VarContext) -> str | None:
     if ":" in raw:
         prefix, _, rest = raw.partition(":")
         kind = _var_key(prefix)
-        if kind in ("canal", "channel", "c"):
+        if kind in ("canal", "channel", "c", "canalmencion", "mencioncanal"):
             return _lookup_channel(rest, ctx.guild)
         if kind in ("rol", "role", "r", "mencionrol", "rolmencion"):
             return _lookup_role(rest, ctx.guild)
-        if kind in ("usuario", "user", "miembro", "member", "u"):
+        if kind in ("usuario", "user", "miembro", "member", "u", "usuariomencion", "mencionusuario"):
             return _lookup_member(rest, ctx.guild)
         if kind in ("emoji", "e"):
             return _lookup_emoji(rest, ctx.guild)
@@ -8083,10 +8086,10 @@ def variables_embeds() -> list[discord.Embed]:
     embed = discord.Embed(
         title="🧩 Variables de El Heraldo",
         description=(
-            "Escríbelas con `{nombre}` o `${nombre}` en cualquier texto personalizable del Heraldo "
-            "(panel y DM de verificación, aviso del honeypot…). No importan mayúsculas, tildes ni "
-            "separadores: `{servericon}` = `{server_icon}` = `{Server.Icon}`.\n"
-            "Si una variable no existe o no aplica en ese texto, se deja tal cual para que veas el error."
+            "Escríbelas con `{nombre}` o `${nombre}` en cualquier texto personalizable del Heraldo. "
+            "Los nombres principales son explícitos y en español; los nombres antiguos siguen funcionando como alias.\n"
+            "No importan mayúsculas, tildes ni separadores. Si una variable no existe o no aplica, "
+            "se deja tal cual para que puedas detectar el error."
         ),
         color=discord.Color.blurple(),
     )
@@ -8095,13 +8098,13 @@ def variables_embeds() -> list[discord.Embed]:
     embed.add_field(
         name="🔎 Buscar cosas del servidor por nombre o ID",
         value=(
-            "`{#reglas}` → mención del canal · `{#123456789}` → canal por ID\n"
-            "`{@Moderador}` → mención del rol (o del miembro con ese nombre)\n"
-            "`{mencionrol:Moderador}` → mención explícita de un rol por nombre o ID\n"
+            "`{canal_mencion:reglas}` → mención de un canal por nombre o ID\n"
+            "`{rol_mencion:Moderador}` → mención de un rol por nombre o ID\n"
+            "`{usuario_mencion:Nombre}` → mención de un miembro por nombre o ID\n"
             "`{emoji:fuego}` → emoji personalizado del servidor\n"
-            "Más explícitas: `{canal:nombre}` · `{rol:nombre}` · `{mencionrol:nombre}` · `{usuario:nombre}`\n"
-            "Ejemplo: `Bienvenid@ {usuario} a {servidor}, lee {#reglas}` · "
-            "`<#{canalid}>` · imagen: `{servericon}`"
+            "Atajos compatibles: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\n"
+            "Ejemplo: `Hola {usuario_mencion}, lee {canal_mencion:reglas}` · "
+            "imagen: `{servidor_icono_url}`"
         ),
         inline=False,
     )
