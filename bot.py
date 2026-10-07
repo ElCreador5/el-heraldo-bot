@@ -692,19 +692,11 @@ _startup_done = False
 
 
 @bot.event
-async def setup_hook() -> None:
-    # Las vistas persistentes deben registrarse antes de que el bot empiece a
-    # recibir interacciones. Así el botón funciona incluso después de un reinicio.
-    bot.add_view(CondemnationPardonView())
-    print("🕊️ Vista persistente de perdón registrada.")
-
-
 @bot.event
 async def on_ready() -> None:
     global _startup_done
     if _startup_done:
         return  # on_ready se repite en cada reconexión: no resincronizar comandos ni relanzar tareas
-    _startup_done = True
     db_init()
     honeypot_db_init()
     # Sistema de sugerencias: registra las vistas persistentes y recupera el panel/revisiones pendientes.
@@ -714,6 +706,8 @@ async def on_ready() -> None:
         traceback.print_exc()
     if not any(isinstance(view, VerifyView) for view in bot.persistent_views):
         bot.add_view(VerifyView())
+    if not any(isinstance(view, CondemnationPardonView) for view in bot.persistent_views):
+        bot.add_view(CondemnationPardonView())
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
@@ -750,6 +744,7 @@ async def on_ready() -> None:
         print("ℹ️ Miembro de la Semana desactivado: configura MOTW_CHANNEL_ID o usa /motw_set_channel.")
     if not template_backup_loop.is_running():
         template_backup_loop.start()
+    _startup_done = True
     print(f"El Heraldo conectado como {bot.user}")
 
 
