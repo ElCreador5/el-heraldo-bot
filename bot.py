@@ -3412,7 +3412,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         if self.pending_excluded is not None:
             await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de ejecutar Sync now.", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(thinking=True)
         assigned, skipped, errors = await sync_join_roles(interaction.guild)
         msg = f"Sync terminado. {assigned} miembro(s) recibieron roles; {skipped} no necesitaron cambios."
         if errors:
@@ -11518,10 +11518,15 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
             pending_key=pending_key,
         )
         try:
-            prompt = await channel.send(
-                f"{actor.mention}, indica el motivo obligatorio antes de condenar a {target.mention}.",
+            prompt = await actor.send(
+                f"**Condenar por reacción**\n"
+                f"Servidor: **{guild.name}**\n"
+                f"Miembro: **{target}** (`{target.id}`)\n"
+                f"Canal: {message.channel.mention}\n"
+                f"[Abrir mensaje]({message.jump_url})\n\n"
+                "La razón es obligatoria. Pulsa **Indicar razón** para continuar.",
                 view=view,
-                allowed_mentions=discord.AllowedMentions(users=[actor, target], roles=False, everyone=False),
+                allowed_mentions=discord.AllowedMentions.none(),
             )
             view.prompt_message = prompt
         except discord.HTTPException:
@@ -11603,16 +11608,22 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         view = self.parent_view
-        if interaction.guild is None or interaction.guild.id != view.guild_id or interaction.user.id != view.actor_id:
-            await interaction.response.send_message("Este proceso de condena no te pertenece.", ephemeral=True)
+        if interaction.user.id != view.actor_id:
+            await interaction.response.send_message("Este proceso de condena no te pertenece.")
             return
-        actor = interaction.guild.get_member(view.actor_id)
+        guild = bot.get_guild(view.guild_id)
+        if guild is None:
+            await interaction.response.send_message("Ya no puedo acceder al servidor donde se inició esta condena.")
+            _reaction_condemn_pending.discard(view.pending_key)
+            return
+        actor = guild.get_member(view.actor_id)
         if actor is None or not moderation_is_staff(actor):
-            await interaction.response.send_message("Ya no tienes permisos suficientes para aplicar esta condena.", ephemeral=True)
+            await interaction.response.send_message("Ya no tienes permisos suficientes para aplicar esta condena.")
+            _reaction_condemn_pending.discard(view.pending_key)
             return
-        channel = interaction.guild.get_channel_or_thread(view.channel_id)
+        channel = guild.get_channel_or_thread(view.channel_id)
         if channel is None or not hasattr(channel, "fetch_message"):
-            await interaction.response.send_message("El mensaje original ya no está disponible.", ephemeral=True)
+            await interaction.response.send_message("El mensaje original ya no está disponible.")
             _reaction_condemn_pending.discard(view.pending_key)
             return
         try:
@@ -11621,21 +11632,21 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
             await interaction.response.send_message("El mensaje original ya no está disponible.", ephemeral=True)
             _reaction_condemn_pending.discard(view.pending_key)
             return
-        target = interaction.guild.get_member(view.target_id)
+        target = guild.get_member(view.target_id)
         if target is None or target.bot or target.id != message.author.id:
-            await interaction.response.send_message("El miembro objetivo ya no está disponible.", ephemeral=True)
+            await interaction.response.send_message("El miembro objetivo ya no está disponible.")
             _reaction_condemn_pending.discard(view.pending_key)
             return
         reason = str(self.reason).strip()
         if not reason:
-            await interaction.response.send_message("La razón es obligatoria.", ephemeral=True)
+            await interaction.response.send_message("La razón es obligatoria.")
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         ok, note = await condemn_member(
             target,
             reason=reason,
-            duration_minutes=condemnation_default_duration_minutes(interaction.guild.id),
+            duration_minutes=condemnation_default_duration_minutes(guild.id),
             purge_spec=HONEYPOT_PURGE_DEFAULT,
             origin="reaction",
             applied_by=actor,
@@ -11644,14 +11655,14 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
         )
         _reaction_condemn_pending.discard(view.pending_key)
         if ok:
-            await interaction.followup.send(f"Condena aplicada a {target.mention}. {note}", ephemeral=True)
+            await interaction.followup.send(f"Condena aplicada a **{target}**. {note}")
             if view.prompt_message is not None:
                 try:
                     await view.prompt_message.delete()
                 except discord.HTTPException:
                     pass
         else:
-            await interaction.followup.send(f"No pude aplicar la condena: {note}", ephemeral=True)
+            await interaction.followup.send(f"No pude aplicar la condena: {note}")
 
 
 class ReactionCondemnReasonView(discord.ui.View):
@@ -11670,7 +11681,7 @@ class ReactionCondemnReasonView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.actor_id:
-            await interaction.response.send_message("Solo el moderador que inició esta condena puede continuar.", ephemeral=True)
+            await interaction.response.send_message("Solo el moderador que inició esta condena puede continuar.")
             return False
         return True
 
