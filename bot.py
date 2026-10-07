@@ -9534,6 +9534,21 @@ SUGGESTION_STATUS_PENDING = "pending"
 SUGGESTION_STATUS_ACCEPTED = "accepted"
 SUGGESTION_STATUS_REJECTED = "rejected"
 
+SUGGESTION_PANEL_TITLE_DEFAULT = "EL ORÁCULO ESCUCHA"
+SUGGESTION_PANEL_DESCRIPTION_DEFAULT = (
+    "Toda alma tiene algo que pedir, y este paraíso está dispuesto a escuchar.\n\n"
+    "¿Tienes una idea para mejorar este mundo? ¿Alguna inquietud? Un canal que falta, "
+    "un evento que sueñas ver, una regla que merece cambiar — El Oráculo la recibe.\n\n"
+    "**¿Cómo invocar tu deseo?**\n"
+    "Pulsa **💡 Crear sugerencia** y completa el formulario privado.\n\n"
+    "Tu propuesta será enviada directamente a quienes gobiernan este paraíso. "
+    "El canal no se llenará con las sugerencias.\n\n"
+    "No hay deseo demasiado pequeño, ni pecado demasiado grande de proponer."
+)
+SUGGESTION_PANEL_COLOR_DEFAULT = "4F5BDC"
+SUGGESTION_PANEL_IMAGE_DEFAULT = ""
+SUGGESTION_PANEL_BUTTON_DEFAULT = "💡 Crear sugerencia"
+
 
 def suggestion_db_init() -> None:
     conn = sqlite3.connect(DB_PATH)
@@ -9692,31 +9707,35 @@ def suggestion_decide(
 
 
 def suggestion_panel_embed(guild: discord.Guild) -> discord.Embed:
+    title = guild_config_get(guild.id, "suggestion_panel_title") or SUGGESTION_PANEL_TITLE_DEFAULT
+    description = guild_config_get(guild.id, "suggestion_panel_description") or SUGGESTION_PANEL_DESCRIPTION_DEFAULT
+    color_raw = (guild_config_get(guild.id, "suggestion_panel_color") or SUGGESTION_PANEL_COLOR_DEFAULT).strip().lstrip("#")
+    image_url = (guild_config_get(guild.id, "suggestion_panel_image") or SUGGESTION_PANEL_IMAGE_DEFAULT).strip()
+    try:
+        color = discord.Color(int(color_raw, 16))
+    except (TypeError, ValueError):
+        color = discord.Color.blurple()
+
     embed = discord.Embed(
-        title="EL ORÁCULO ESCUCHA",
-        description=(
-            "Toda alma tiene algo que pedir, y este paraíso está dispuesto a escuchar.\n\n"
-            "¿Tienes una idea para mejorar este mundo? ¿Alguna inquietud? Un canal que falta, "
-            "un evento que sueñas ver, una regla que merece cambiar — El Oráculo la recibe.\n\n"
-            "**¿Cómo invocar tu deseo?**\n"
-            "Pulsa **💡 Crear sugerencia** y completa el formulario privado.\n\n"
-            "Tu propuesta será enviada directamente a quienes gobiernan este paraíso. "
-            "El canal no se llenará con las sugerencias.\n\n"
-            "No hay deseo demasiado pequeño, ni pecado demasiado grande de proponer."
-        ),
-        color=discord.Color.blurple(),
+        title=title[:256],
+        description=description[:4096],
+        color=color,
     )
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    if image_url and re.match(r"^https?://", image_url, re.IGNORECASE):
+        embed.set_image(url=image_url)
     return embed
 
 
 class SuggestionPanelView(discord.ui.View):
-    def __init__(self) -> None:
+    def __init__(self, guild_id: int | None = None) -> None:
         super().__init__(timeout=None)
+        label = SUGGESTION_PANEL_BUTTON_DEFAULT
+        if guild_id is not None:
+            label = guild_config_get(guild_id, "suggestion_panel_button_label") or label
         button = discord.ui.Button(
-            label="💡 Crear sugerencia",
+            label=label[:80],
             style=discord.ButtonStyle.primary,
             custom_id=SUGGESTION_PANEL_BUTTON_ID,
         )
@@ -9979,7 +9998,7 @@ async def _suggestion_interaction_reply(interaction: discord.Interaction, text: 
 
 
 async def suggestion_publish_panel(guild: discord.Guild, channel: discord.TextChannel) -> discord.Message:
-    message = await channel.send(embed=suggestion_panel_embed(guild), view=SuggestionPanelView())
+    message = await channel.send(embed=suggestion_panel_embed(guild), view=SuggestionPanelView(guild.id))
     suggestion_set_channel_id(guild.id, channel.id)
     suggestion_set_panel_message_id(guild.id, message.id)
     try:
@@ -10001,7 +10020,7 @@ async def suggestion_ensure_panel(guild: discord.Guild) -> None:
         try:
             message = await channel.fetch_message(panel_id)
             # Refresca el contenido/vista sin crear mensajes duplicados.
-            await message.edit(embed=suggestion_panel_embed(guild), view=SuggestionPanelView())
+            await message.edit(embed=suggestion_panel_embed(guild), view=SuggestionPanelView(guild.id))
             return
         except discord.NotFound:
             pass
@@ -10141,6 +10160,159 @@ async def suggestions_group_error(interaction: discord.Interaction, error: disco
 
 
 bot.tree.add_command(suggestions_group)
+
+
+# ---------------------------------------------------------------------------
+# 15. CENTRO DE MENSAJES — editor unificado de paneles persistentes
+# ---------------------------------------------------------------------------
+# Inspirado en el flujo de "Messages" de Sapphire: un único lugar para abrir los
+# editores de los mensajes/paneles visuales que sí tiene sentido personalizar.
+# Se excluyen deliberadamente paneles informativos generados a partir del estado
+# real del bot, como /variables, diagnósticos, listas de comandos y resúmenes.
+
+
+class SuggestionPanelEditorModal(discord.ui.Modal, title="Mensajes · Panel de sugerencias"):
+    title_input = discord.ui.TextInput(label="Título", required=True, max_length=256)
+    description_input = discord.ui.TextInput(
+        label="Descripción",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=4000,
+    )
+    color_input = discord.ui.TextInput(
+        label="Color HEX",
+        required=True,
+        max_length=7,
+        placeholder="4F5BDC",
+    )
+    image_input = discord.ui.TextInput(
+        label="Imagen grande (URL, opcional)",
+        required=False,
+        max_length=500,
+        placeholder="https://…",
+    )
+    button_input = discord.ui.TextInput(
+        label="Texto del botón",
+        required=True,
+        max_length=80,
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.title_input.default = guild_config_get(guild_id, "suggestion_panel_title") or SUGGESTION_PANEL_TITLE_DEFAULT
+        self.description_input.default = guild_config_get(guild_id, "suggestion_panel_description") or SUGGESTION_PANEL_DESCRIPTION_DEFAULT
+        self.color_input.default = guild_config_get(guild_id, "suggestion_panel_color") or SUGGESTION_PANEL_COLOR_DEFAULT
+        self.image_input.default = guild_config_get(guild_id, "suggestion_panel_image") or SUGGESTION_PANEL_IMAGE_DEFAULT
+        self.button_input.default = guild_config_get(guild_id, "suggestion_panel_button_label") or SUGGESTION_PANEL_BUTTON_DEFAULT
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color = str(self.color_input).strip().lstrip("#")
+        image = str(self.image_input).strip()
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message(
+                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
+                ephemeral=True,
+            )
+            return
+        if image and not re.match(r"^https?://", image, re.IGNORECASE):
+            await interaction.response.send_message(
+                "❌ La imagen debe ser una URL que empiece por `http://` o `https://`.",
+                ephemeral=True,
+            )
+            return
+
+        guild_config_set(self.guild_id, "suggestion_panel_title", str(self.title_input).strip())
+        guild_config_set(self.guild_id, "suggestion_panel_description", str(self.description_input).strip())
+        guild_config_set(self.guild_id, "suggestion_panel_color", color.upper())
+        guild_config_set(self.guild_id, "suggestion_panel_image", image)
+        guild_config_set(self.guild_id, "suggestion_panel_button_label", str(self.button_input).strip())
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await suggestion_ensure_panel(interaction.guild)
+            note = "El panel publicado también fue actualizado."
+        except Exception:
+            traceback.print_exc()
+            note = "La configuración se guardó, pero no pude refrescar el panel publicado."
+        await interaction.followup.send(f"✅ Panel de sugerencias guardado. {note}", ephemeral=True)
+
+
+class HeraldoMessagesView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor de mensajes no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="✅ Verificación", style=discord.ButtonStyle.primary, row=0)
+    async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
+
+    @discord.ui.button(label="💡 Sugerencias", style=discord.ButtonStyle.primary, row=0)
+    async def suggestions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(SuggestionPanelEditorModal(self.guild_id))
+
+    @discord.ui.button(label="🍯 Honeypot", style=discord.ButtonStyle.primary, row=0)
+    async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+
+    @discord.ui.button(label="☠️ Condenas", style=discord.ButtonStyle.secondary, row=1)
+    async def condemnations(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "☠️ **Mensajes · Tarjeta de condenados**\n"
+                "Edita la apariencia y las etiquetas de la tarjeta persistente de condena."
+            ),
+            embed=condemnation_template_preview(interaction.guild, interaction.user),
+            view=CondemnationTemplateEditorView(self.owner_id),
+        )
+
+    @discord.ui.button(label="🧩 Embeds personalizados", style=discord.ButtonStyle.secondary, row=1)
+    async def custom_embeds(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        names = embed_names(self.guild_id)
+        if names:
+            available = ", ".join(f"`{name}`" for name, _ in names[:20])
+            text = (
+                "🧩 **Embeds personalizados**\n"
+                f"Guardados: {available}\n\n"
+                "Usa `/embed editar` para abrir uno o `/embed crear` para crear otro."
+            )
+        else:
+            text = "🧩 No hay embeds personalizados guardados. Crea el primero con `/embed crear`."
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=2)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content="Centro de mensajes cerrado.", view=None)
+
+
+@bot.tree.command(
+    name="mensajes",
+    description="Editar los paneles y mensajes visuales personalizables de El Heraldo.",
+)
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+async def mensajes_command(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(
+        "📝 **El Heraldo · Centro de mensajes**\n\n"
+        "Desde aquí puedes editar los paneles persistentes que sí admiten personalización. "
+        "Los cambios siguen separados por servidor y, cuando existe un panel ya publicado, "
+        "se actualiza sin crear duplicados.\n\n"
+        "**No aparecen aquí** paneles que solo muestran información real del bot o del servidor, "
+        "como Variables, comandos, diagnósticos, estados y listados.",
+        view=HeraldoMessagesView(interaction.guild.id, interaction.user.id),
+        ephemeral=True,
+    )
+
+
+mensajes_command.error(verify_command_error)
 
 # ---------------------------------------------------------------------------
 
