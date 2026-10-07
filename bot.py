@@ -3133,11 +3133,13 @@ class JoinRolesUserIdModal(discord.ui.Modal, title="Join Roles · Usuario espec�
         )
 
 
+
 class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(guild_id, owner_id)
         self.selected_user_id: int | None = None
         self.selected_role_ids: list[int] = []
+        self.pending_remove_after: bool | None = None
 
         role_select = discord.ui.RoleSelect(
             placeholder="Roles adicionales para ese User ID",
@@ -3148,6 +3150,22 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         role_select.callback = self.select_roles
         self.add_item(role_select)
 
+    def _content(self, guild: discord.Guild) -> str:
+        items: list[str] = []
+        if self.selected_user_id is not None and self.selected_role_ids:
+            roles = [guild.get_role(role_id) for role_id in self.selected_role_ids]
+            items.append(
+                f"Usuario <@{self.selected_user_id}> → "
+                + ", ".join(role.mention for role in roles if role is not None)
+            )
+        if self.pending_remove_after is not None:
+            items.append(f"Remove after join → {'sí' if self.pending_remove_after else 'no'}")
+        return (
+            "🚪 **El Heraldo · Join Roles · User specific roles**\n\n"
+            + join_roles_users_summary(guild)
+            + _pending_config_text(items)
+        )
+
     @discord.ui.button(label="Definir User ID", style=discord.ButtonStyle.primary, row=0)
     async def set_user_id(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesUserIdModal(self))
@@ -3155,59 +3173,62 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
     async def select_roles(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         self.selected_role_ids = [int(value) for value in values]
-        await interaction.response.defer()
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Guardar usuario", style=discord.ButtonStyle.success, row=2)
     async def save_user(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_user_id is None or not self.selected_role_ids:
-            await interaction.response.send_message(
-                "❌ Selecciona primero un usuario y uno o más roles.", ephemeral=True
-            )
+            await interaction.response.send_message("Selecciona primero un usuario y uno o más roles.", ephemeral=True)
             return
         roles = [interaction.guild.get_role(role_id) for role_id in self.selected_role_ids]
         roles = [role for role in roles if role is not None]
         me = interaction.guild.me
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
-            await interaction.response.send_message(
-                "❌ No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True
-            )
+            await interaction.response.send_message("No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True)
             return
         set_join_specific_user_roles(self.guild_id, self.selected_user_id, [role.id for role in roles])
-        await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
-            view=self,
-        )
+        self.selected_role_ids = []
+        await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nUsuario guardado.", view=self)
 
     @discord.ui.button(label="Quitar usuario", style=discord.ButtonStyle.danger, row=2)
     async def remove_user(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_user_id is None:
-            await interaction.response.send_message("❌ Selecciona primero un usuario.", ephemeral=True)
+            await interaction.response.send_message("Selecciona primero un usuario.", ephemeral=True)
             return
         existed = remove_join_specific_user(self.guild_id, self.selected_user_id)
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n"
-            + join_roles_users_summary(interaction.guild)
-            + ("\n\n✅ Usuario eliminado de la lista." if existed else "\n\nℹ️ Ese usuario no estaba en la lista."),
+            content=self._content(interaction.guild)
+            + ("\n\nUsuario eliminado de la lista." if existed else "\n\nEse usuario no estaba en la lista."),
             view=self,
         )
 
     @discord.ui.button(label="Remove after join", style=discord.ButtonStyle.secondary, row=3)
     async def remove_after(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = not join_roles_remove_specific_after_join(self.guild_id)
-        guild_config_set(self.guild_id, "join_roles_specific_remove_after_join", "1" if enabled else "0")
-        await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
-            view=self,
-        )
+        current = self.pending_remove_after if self.pending_remove_after is not None else join_roles_remove_specific_after_join(self.guild_id)
+        self.pending_remove_after = not current
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_remove_after is None:
+            await interaction.response.send_message("No hay cambios de configuración pendientes.", ephemeral=True)
+            return
+        guild_config_set(self.guild_id, "join_roles_specific_remove_after_join", "1" if self.pending_remove_after else "0")
+        self.pending_remove_after = None
+        await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_remove_after = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
         )
-
 
 
 class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
@@ -3445,11 +3466,15 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientaci
         await interaction.followup.send(f"✅ {note}", ephemeral=True)
 
 
+
 class HeraldoOrientationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.pending_channel_id: int | None = None
+        self.pending_bindings: list[dict[str, object]] | None = None
+        self.pending_enabled: bool | None = None
 
         channel_select = discord.ui.ChannelSelect(
             placeholder="Selecciona el canal de roles/orientación",
@@ -3458,7 +3483,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             max_values=1,
             row=0,
         )
-        channel_select.callback = self.save_channel
+        channel_select.callback = self.select_channel
         self.add_item(channel_select)
 
         role_select = discord.ui.RoleSelect(
@@ -3467,7 +3492,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             max_values=ORIENTATION_MAX_ROLES,
             row=1,
         )
-        role_select.callback = self.save_roles
+        role_select.callback = self.select_roles
         self.add_item(role_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -3476,54 +3501,42 @@ class HeraldoOrientationSetupView(discord.ui.View):
             return False
         return True
 
-    async def save_channel(self, interaction: discord.Interaction) -> None:
+    def _content(self, guild: discord.Guild) -> str:
+        items: list[str] = []
+        if self.pending_channel_id is not None:
+            channel = guild.get_channel(self.pending_channel_id)
+            items.append(f"Canal → {channel.mention if channel else self.pending_channel_id}")
+        if self.pending_bindings is not None:
+            roles = [guild.get_role(int(item["role_id"])) for item in self.pending_bindings]
+            items.append("Roles → " + ", ".join(role.mention for role in roles if role is not None))
+        if self.pending_enabled is not None:
+            items.append(f"Orientación → {'activa' if self.pending_enabled else 'desactivada'}")
+        return "🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
+
+    async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
             return
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-        await interaction.response.defer(ephemeral=True)
-        try:
-            guild_config_set(self.guild_id, "orientation_channel_id", str(channel.id))
-        except sqlite3.OperationalError as exc:
-            await interaction.followup.send(
-                f"❌ No pude guardar el canal porque la base de datos sigue ocupada: {exc}",
-                ephemeral=True,
-            )
-            return
-
-        await interaction.edit_original_response(
-            content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(interaction.guild),
-            embed=None,
-            view=self,
-        )
-
-    async def save_roles(self, interaction: discord.Interaction) -> None:
+    async def select_roles(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("❌ No pude resolver este servidor.", ephemeral=True)
+            await interaction.response.send_message("No pude resolver este servidor.", ephemeral=True)
             return
-
-        # Responde a Discord antes de cualquier acceso a SQLite. Así la interacción
-        # nunca expira aunque la base esté momentáneamente ocupada.
-        await interaction.response.defer(ephemeral=True)
-
         roles = [guild.get_role(int(value)) for value in values]
         roles = [role for role in roles if role is not None]
         if not (ORIENTATION_MIN_ROLES <= len(roles) <= ORIENTATION_MAX_ROLES):
-            await interaction.followup.send("❌ Selecciona entre 1 y 6 roles.", ephemeral=True)
+            await interaction.response.send_message("Selecciona entre 1 y 6 roles.", ephemeral=True)
             return
-
         me = guild.me
         blocked = [role.mention for role in roles if me is None or role >= me.top_role or role.managed]
         if blocked:
-            await interaction.followup.send(
-                "❌ No puedo asignar estos roles por jerarquía o porque son administrados por una integración: "
-                + ", ".join(blocked),
-                ephemeral=True,
-            )
+            await interaction.response.send_message("No puedo administrar estos roles: " + ", ".join(blocked), ephemeral=True)
             return
 
         used: set[str] = set()
@@ -3541,114 +3554,91 @@ class HeraldoOrientationSetupView(discord.ui.View):
                 continue
             used.add(key)
             bindings.append({"role_id": role.id, "emoji": emoji})
-
         if missing_emoji:
-            await interaction.followup.send(
-                "❌ Estos roles no contienen un emoji utilizable: "
-                + ", ".join(missing_emoji)
-                + ". Añade un emoji al nombre del rol (o un emoji Unicode de rol) y vuelve a seleccionarlos.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("Estos roles no contienen un emoji utilizable: " + ", ".join(missing_emoji), ephemeral=True)
             return
         if duplicate_emoji:
-            await interaction.followup.send(
-                "❌ Cada Reaction Role necesita un emoji diferente. Revisa: "
-                + ", ".join(duplicate_emoji),
-                ephemeral=True,
-            )
+            await interaction.response.send_message("Cada Reaction Role necesita un emoji diferente: " + ", ".join(duplicate_emoji), ephemeral=True)
             return
-
-        previous = get_orientation_bindings(self.guild_id)
-        try:
-            set_orientation_bindings(self.guild_id, bindings)
-            guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
-        except sqlite3.OperationalError as exc:
-            await interaction.followup.send(
-                f"❌ No pude guardar los roles porque la base de datos sigue ocupada: {exc}",
-                ephemeral=True,
-            )
-            return
-
-        if orientation_enabled(self.guild_id):
-            ok, note = await ensure_orientation_system(guild)
-            if not ok:
-                set_orientation_bindings(self.guild_id, previous)
-                await ensure_orientation_system(guild)
-                await interaction.followup.send(f"❌ No pude aplicar la selección: {note}", ephemeral=True)
-                return
-            await interaction.edit_original_response(
-                content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + "\n\n✅ Roles actualizados.",
-                embed=None,
-                view=self,
-            )
-            return
-
-        await interaction.edit_original_response(
-            content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + "\n\n✅ Roles seleccionados.",
-            embed=None,
-            view=self,
-        )
+        self.pending_bindings = bindings
+        await interaction.response.edit_message(content=self._content(guild), view=self)
 
     @discord.ui.button(label="Activar / reparar", style=discord.ButtonStyle.success, row=2)
     async def activate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
-
-        channel = interaction.guild.get_channel(get_orientation_channel_id(self.guild_id))
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.followup.send(
-                "❌ Primero selecciona el canal donde El Heraldo publicará la tarjeta de orientación.",
-                ephemeral=True,
-            )
-            return
-        bindings = get_orientation_bindings(self.guild_id)
-        if not (ORIENTATION_MIN_ROLES <= len(bindings) <= ORIENTATION_MAX_ROLES):
-            await interaction.followup.send(
-                "❌ Primero selecciona entre **1 y 6 roles existentes**.",
-                ephemeral=True,
-            )
-            return
-
-        try:
-            guild_config_set(self.guild_id, "orientation_enabled", "1")
-        except sqlite3.OperationalError as exc:
-            await interaction.followup.send(
-                f"❌ No pude activar el sistema porque la base de datos sigue ocupada: {exc}",
-                ephemeral=True,
-            )
-            return
-        ok, note = await ensure_orientation_system(interaction.guild)
-        if not ok:
-            guild_config_set(self.guild_id, "orientation_enabled", "0")
-        await interaction.edit_original_response(
-            content=(
-                "🧭 **El Heraldo · Roles de orientación**\n\n"
-                + orientation_setup_summary(interaction.guild)
-                + f"\n\n{'✅' if ok else '❌'} {note}"
-            ),
-            embed=None,
-            view=self,
-        )
+        self.pending_enabled = True
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Desactivar", style=discord.ButtonStyle.danger, row=2)
     async def deactivate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
-        if not orientation_enabled(self.guild_id):
-            await interaction.followup.send("ℹ️ El sistema de orientación ya está desactivado.", ephemeral=True)
-            return
-        ok, note = await disable_orientation_system(interaction.guild)
-        await interaction.edit_original_response(
-            content=(
-                "🧭 **El Heraldo · Roles de orientación**\n\n"
-                + orientation_setup_summary(interaction.guild)
-                + f"\n\n{'✅' if ok else '⚠️'} {note}"
-            ),
-            embed=None,
-            view=self,
-        )
+        self.pending_enabled = False
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Editar tarjeta", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Editar tarjeta", style=discord.ButtonStyle.secondary, row=2)
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_channel_id is None and self.pending_bindings is None and self.pending_enabled is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        prospective_channel_id = self.pending_channel_id or get_orientation_channel_id(self.guild_id)
+        prospective_bindings = self.pending_bindings if self.pending_bindings is not None else get_orientation_bindings(self.guild_id)
+        prospective_enabled = self.pending_enabled if self.pending_enabled is not None else orientation_enabled(self.guild_id)
+        if prospective_enabled:
+            channel = guild.get_channel(prospective_channel_id)
+            if not isinstance(channel, discord.TextChannel):
+                await interaction.response.send_message("Selecciona primero un canal de orientación.", ephemeral=True)
+                return
+            if not (ORIENTATION_MIN_ROLES <= len(prospective_bindings) <= ORIENTATION_MAX_ROLES):
+                await interaction.response.send_message("Selecciona primero entre 1 y 6 roles.", ephemeral=True)
+                return
+
+        await interaction.response.defer(ephemeral=True)
+        old_channel_id = get_orientation_channel_id(self.guild_id)
+        old_bindings = get_orientation_bindings(self.guild_id)
+        old_enabled = orientation_enabled(self.guild_id)
+        try:
+            if self.pending_channel_id is not None:
+                guild_config_set(self.guild_id, "orientation_channel_id", str(self.pending_channel_id))
+            if self.pending_bindings is not None:
+                set_orientation_bindings(self.guild_id, self.pending_bindings)
+                guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
+            if self.pending_enabled is not None:
+                guild_config_set(self.guild_id, "orientation_enabled", "1" if self.pending_enabled else "0")
+
+            if prospective_enabled:
+                ok, note = await ensure_orientation_system(guild)
+            elif old_enabled:
+                ok, note = await disable_orientation_system(guild)
+            else:
+                ok, note = True, "Configuración guardada."
+
+            if not ok:
+                guild_config_set(self.guild_id, "orientation_channel_id", str(old_channel_id or 0))
+                set_orientation_bindings(self.guild_id, old_bindings)
+                guild_config_set(self.guild_id, "orientation_enabled", "1" if old_enabled else "0")
+                if old_enabled:
+                    await ensure_orientation_system(guild)
+                await interaction.followup.send(f"No pude aplicar los cambios: {note}", ephemeral=True)
+                return
+        except (sqlite3.OperationalError, discord.HTTPException) as exc:
+            await interaction.followup.send(f"No pude guardar los cambios: {exc}", ephemeral=True)
+            return
+
+        self.pending_channel_id = None
+        self.pending_bindings = None
+        self.pending_enabled = None
+        await interaction.edit_original_response(content=self._content(guild) + f"\n\nCambios guardados. {note}", embed=None, view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_channel_id = None
+        self.pending_bindings = None
+        self.pending_enabled = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), embed=None, view=self)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -9077,7 +9067,7 @@ class CondemnationPardonView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="🕊️ Perdonar",
+        label="Perdonar",
         style=discord.ButtonStyle.success,
         custom_id="heraldo:condemnation:pardon",
     )
@@ -13128,25 +13118,28 @@ class EmbedChannelPicker(discord.ui.View):
         await interaction.edit_original_response(content=result, view=None)
 
 
+
 class EmbedEditorView(discord.ui.View):
     def __init__(self, owner_id: int, guild_id: int, name: str, data: dict) -> None:
         super().__init__(timeout=900)
         self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
-        self.toggle_time.label = "🕒 Fecha: " + ("sí" if data.get("timestamp") else "no")
+        self.pending_timestamp: bool | None = None
+        self.pending_remove_index: int | None = None
+        self.toggle_time.label = "Fecha: " + ("sí" if data.get("timestamp") else "no")
         fields = data.get("fields", [])
         if fields:
             options = [
-                discord.SelectOption(label=f"{i + 1}. {f['name']}"[:100], value=str(i), description=f["value"][:100] or None)
-                for i, f in enumerate(fields[:25])
+                discord.SelectOption(label=f"{i + 1}. {field['name']}"[:100], value=str(i), description=field["value"][:100] or None)
+                for i, field in enumerate(fields[:25])
             ]
-            select = discord.ui.Select(placeholder="🗑️ Quitar un campo…", options=options, row=1)
-            select.callback = self.remove_field
+            select = discord.ui.Select(placeholder="Quitar un campo…", options=options, row=1)
+            select.callback = self.select_remove_field
             self.remove_select = select
             self.add_item(select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Este editor no es tuyo: usa `/embed editar`.", ephemeral=True)
+            await interaction.response.send_message("Este editor no es tuyo: usa /embed editar.", ephemeral=True)
             return False
         return True
 
@@ -13155,7 +13148,7 @@ class EmbedEditorView(discord.ui.View):
         return record[0] if record else None
 
     async def _gone(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(content="❌ Ese embed ya no existe.", embed=None, view=None)
+        await interaction.response.edit_message(content="Ese embed ya no existe.", embed=None, view=None)
 
     @discord.ui.button(label="Contenido", style=discord.ButtonStyle.primary, row=0)
     async def edit_content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -13177,29 +13170,61 @@ class EmbedEditorView(discord.ui.View):
 
     @discord.ui.button(label="Fecha: no", style=discord.ButtonStyle.secondary, row=0)
     async def toggle_time(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        record = embed_get(self.guild_id, self.name)
-        if record is None:
+        data = self._data()
+        if data is None:
             return await self._gone(interaction)
-        data = record[0]
-        data["timestamp"] = not data.get("timestamp")
-        embed_save(self.guild_id, self.name, data)
-        await embed_refresh(interaction, self.name)
+        current = self.pending_timestamp if self.pending_timestamp is not None else bool(data.get("timestamp"))
+        self.pending_timestamp = not current
+        self.toggle_time.label = "Fecha: " + ("sí" if self.pending_timestamp else "no")
+        await interaction.response.edit_message(
+            content=f"Editando {self.name}. Cambio de fecha pendiente; pulsa Guardar cambios.",
+            view=self,
+        )
 
-    async def remove_field(self, interaction: discord.Interaction) -> None:
-        record = embed_get(self.guild_id, self.name)
-        if record is None:
+    async def select_remove_field(self, interaction: discord.Interaction) -> None:
+        data = self._data()
+        if data is None:
             return await self._gone(interaction)
-        data = record[0]
         index = int(self.remove_select.values[0])
-        if 0 <= index < len(data.get("fields", [])):
-            data["fields"].pop(index)
-            embed_save(self.guild_id, self.name, data)
+        if not 0 <= index < len(data.get("fields", [])):
+            await interaction.response.send_message("Ese campo ya no existe.", ephemeral=True)
+            return
+        self.pending_remove_index = index
+        await interaction.response.edit_message(
+            content=f"Editando {self.name}. Se quitará el campo {index + 1} al guardar.",
+            view=self,
+        )
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_timestamp is None and self.pending_remove_index is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        record = embed_get(self.guild_id, self.name)
+        if record is None:
+            return await self._gone(interaction)
+        data = json.loads(json.dumps(record[0]))
+        if self.pending_timestamp is not None:
+            data["timestamp"] = self.pending_timestamp
+        if self.pending_remove_index is not None and 0 <= self.pending_remove_index < len(data.get("fields", [])):
+            data["fields"].pop(self.pending_remove_index)
+        embed_save(self.guild_id, self.name, data)
+        self.pending_timestamp = None
+        self.pending_remove_index = None
         await embed_refresh(interaction, self.name)
 
-    @discord.ui.button(label="Enviar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_timestamp = None
+        self.pending_remove_index = None
+        await embed_refresh(interaction, self.name)
+
+    @discord.ui.button(label="Enviar", style=discord.ButtonStyle.success, row=3)
     async def send_embed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
-            "¿A qué canal lo envío?", view=EmbedChannelPicker(interaction.user.id, self.name), ephemeral=True)
+        if self.pending_timestamp is not None or self.pending_remove_index is not None:
+            await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de enviar.", ephemeral=True)
+            return
+        await interaction.response.send_message("¿A qué canal lo envío?", view=EmbedChannelPicker(interaction.user.id, self.name), ephemeral=True)
 
 
 async def embed_refresh(interaction: discord.Interaction, name: str, new: bool = False) -> None:
