@@ -108,6 +108,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 
 import asyncio
 import contextvars
+import io
 from collections import deque
 import json
 import os
@@ -2133,7 +2134,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
     active_condemnation = condemnation_get(after.guild.id, after.id)
-    condemned_id = condemnation_role_id(active_condemnation)
+    condemned_id = condemnation_role_id(active_condemnation, after.guild.id)
     had_condemned = bool(condemned_id and condemned_id in before_role_ids)
     has_condemned = bool(condemned_id and condemned_id in after_role_ids)
 
@@ -10059,6 +10060,110 @@ def condemnation_protection_reason(member: discord.Member) -> str | None:
     return None
 
 
+
+async def condemnation_fetch_source_message(
+    guild: discord.Guild, source_message_url: str | None,
+) -> discord.Message | None:
+    if not source_message_url:
+        return None
+    match = re.search(r"discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)", source_message_url)
+    if not match or int(match.group(1)) != guild.id:
+        return None
+    channel = guild.get_channel_or_thread(int(match.group(2)))
+    if channel is None or not hasattr(channel, "fetch_message"):
+        return None
+    try:
+        return await channel.fetch_message(int(match.group(3)))
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        return None
+
+
+async def condemnation_archive_evidence(
+    guild: discord.Guild,
+    member: discord.Member,
+    *,
+    source_message_url: str | None,
+    reason: str,
+    applied_by: discord.abc.User | None,
+) -> tuple[str | None, str | None]:
+    """Preserva la prueba antes de cualquier purga.
+
+    La URL del mensaje original se conserva solo como referencia. La evidencia real
+    es una copia del texto y, cuando Discord lo permite, de los adjuntos re-subidos
+    por El Heraldo a Logs (o al canal de condenas como respaldo).
+    """
+    message = await condemnation_fetch_source_message(guild, source_message_url)
+    if message is None:
+        return None, None
+
+    archive_channel = guild.get_channel(get_log_channel_id(guild.id))
+    if not isinstance(archive_channel, discord.TextChannel):
+        archive_channel = guild.get_channel(condemnation_channel_id(guild.id))
+    if not isinstance(archive_channel, discord.TextChannel):
+        return None, (message.content or "(sin texto)")[:2000]
+
+    me = guild.me
+    if me is None:
+        return None, (message.content or "(sin texto)")[:2000]
+    perms = archive_channel.permissions_for(me)
+    if not (perms.view_channel and perms.send_messages and perms.embed_links):
+        return None, (message.content or "(sin texto)")[:2000]
+
+    snapshot_text = (message.content or "(mensaje sin texto)")[:3500]
+    evidence = discord.Embed(
+        title="Evidencia archivada · Condena",
+        description=snapshot_text,
+        color=discord.Color.dark_red(),
+        timestamp=message.created_at,
+    )
+    evidence.add_field(name="Autor original", value=f"{member.mention}\nID: {member.id}", inline=True)
+    evidence.add_field(name="Canal original", value=message.channel.mention, inline=True)
+    evidence.add_field(
+        name="Moderador",
+        value=applied_by.mention if applied_by else "El Heraldo",
+        inline=True,
+    )
+    evidence.add_field(name="Motivo", value=reason[:1024], inline=False)
+    if source_message_url:
+        evidence.add_field(
+            name="Referencia original",
+            value=f"[Mensaje original]({source_message_url}) · puede dejar de existir tras la purga.",
+            inline=False,
+        )
+    evidence.set_footer(text="Copia preservada antes de la purga por El Heraldo")
+
+    files: list[discord.File] = []
+    archived_names: list[str] = []
+    max_size = int(getattr(guild, "filesize_limit", 8 * 1024 * 1024))
+    for attachment in message.attachments[:5]:
+        if attachment.size > max_size:
+            archived_names.append(f"{attachment.filename} (demasiado grande para re-subir)")
+            continue
+        try:
+            data = await attachment.read(use_cached=True)
+            files.append(discord.File(io.BytesIO(data), filename=attachment.filename))
+            archived_names.append(attachment.filename)
+        except (discord.HTTPException, OSError):
+            archived_names.append(f"{attachment.filename} (no se pudo copiar)")
+
+    if archived_names:
+        evidence.add_field(
+            name="Adjuntos preservados",
+            value="\n".join(f"• {name}" for name in archived_names)[:1024],
+            inline=False,
+        )
+
+    try:
+        archived = await archive_channel.send(
+            embed=evidence,
+            files=files,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return archived.jump_url, snapshot_text
+    except discord.HTTPException:
+        return None, snapshot_text
+
+
 async def condemnation_send_pardon_dm(
     member: discord.Member,
     row: sqlite3.Row,
@@ -10100,7 +10205,7 @@ def _build_condemnation_embed(
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
-    include_pardon_button: bool = False,
+    include_pardon_button: bool = False, evidence_url: str | None = None, evidence_text: str | None = None,
 ) -> tuple[discord.Embed, discord.ui.View | None]:
     """Construye la MISMA tarjeta que se usa tanto en el canal de castigo como en el DM."""
     when = when or datetime.now(timezone.utc)
@@ -10141,8 +10246,19 @@ def _build_condemnation_embed(
             role_mentions.append(f"`{role.name}`")
     field("label_roles", ", ".join(role_mentions) if role_mentions else "Ninguno (o no asignable)", False)
 
-    if source_message_url:
-        field("label_message", f"[🔗 Abrir mensaje que originó la condena]({source_message_url})", False)
+    if evidence_url:
+        value = f"[Abrir evidencia preservada]({evidence_url})"
+        if evidence_text:
+            value += "\n" + evidence_text[:700]
+        field("label_message", value, False)
+    elif evidence_text:
+        field("label_message", "**Copia de texto preservada:**\n" + evidence_text[:850], False)
+    elif source_message_url:
+        field(
+            "label_message",
+            f"[Referencia al mensaje original]({source_message_url}) · no se considera evidencia preservada.",
+            False,
+        )
 
     embed.set_footer(text=render(condemnation_template_get(guild.id, "footer"))[:2048])
 
@@ -10291,13 +10407,14 @@ async def condemnation_send_dm(
     applied_by: discord.abc.User | None = None,
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
+    evidence_url: str | None = None, evidence_text: str | None = None,
 ) -> bool:
     """Envía por DM la misma tarjeta de condena, incluido el botón configurable."""
     embed, view = _build_condemnation_embed(
         member.guild, member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
         removed_role_ids=removed_role_ids, when=when, case_id=case_id,
-        include_pardon_button=False,
+        include_pardon_button=False, evidence_url=evidence_url, evidence_text=evidence_text,
     )
     try:
         await member.send(embed=embed, view=view)
@@ -10375,6 +10492,7 @@ async def condemnation_announce(
     duration_minutes: int | None, origin: str, applied_by: discord.abc.User | None,
     *, source_message_url: str | None = None, source_channel_id: int | None = None,
     removed_role_ids: list[int] | None = None, when: datetime | None = None, case_id: str | None = None,
+    evidence_url: str | None = None, evidence_text: str | None = None,
 ) -> int | None:
     channel = guild.get_channel(condemnation_channel_id(guild.id))
     if not isinstance(channel, discord.TextChannel):
@@ -10383,7 +10501,7 @@ async def condemnation_announce(
         guild, member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
         removed_role_ids=removed_role_ids, when=when, case_id=case_id,
-        include_pardon_button=True,
+        include_pardon_button=True, evidence_url=evidence_url, evidence_text=evidence_text,
     )
     try:
         message = await channel.send(
@@ -10635,15 +10753,13 @@ async def _condemn_member_inner(
     db_clear_verify_pending(member.guild.id, member.id)
     db_zero_week_messages(member.guild.id, member.id)
 
-    if purge_spec and purge_spec[0] != "none":
-        kind, value = purge_spec
-        after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
-        limit = value if kind == "count" else None
-        asyncio.create_task(run_purge_job(
-            member.guild, member, scope_text=format_purge_spec(kind, value),
-            requested_by=f"☠️ Condena ({condemnation_origin_label(origin)})",
-            after=after, limit=limit, title="☠️ Purga de condena completada",
-        ))
+    evidence_url, evidence_text = await condemnation_archive_evidence(
+        member.guild,
+        member,
+        source_message_url=source_message_url,
+        reason=reason,
+        applied_by=applied_by,
+    )
 
     # Ambos destinos reciben la misma resolución: mismo expediente, fecha y datos.
     condemnation_when = datetime.now(timezone.utc)
@@ -10652,12 +10768,14 @@ async def _condemn_member_inner(
         member, reason, duration_minutes, origin, applied_by,
         source_message_url=source_message_url, source_channel_id=source_channel_id,
         removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
+        evidence_url=evidence_url, evidence_text=evidence_text,
     ) if send_dm else None
     if announce:
         announcement_message_id = await condemnation_announce(
             member.guild, member, reason, duration_minutes, origin, applied_by,
             source_message_url=source_message_url, source_channel_id=source_channel_id,
             removed_role_ids=removed_role_ids, when=condemnation_when, case_id=condemnation_case,
+            evidence_url=evidence_url, evidence_text=evidence_text,
         )
         if announcement_message_id:
             conn = db_connect()
@@ -10674,13 +10792,32 @@ async def _condemn_member_inner(
                 member.guild.id, "CONDEMN", member.id, reason,
                 duration_minutes=duration_minutes,
                 author_id=applied_by.id if applied_by else None,
-                proof=source_message_url,
-                verified_proof=verified,
+                proof=evidence_url or source_message_url,
+                verified_proof=evidence_text or verified,
             )
         except Exception:
             traceback.print_exc()
-    await log_embed(
-        member.guild, "☠️ Condena aplicada",
+    if purge_spec and purge_spec[0] != "none":
+        kind, value = purge_spec
+        after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
+        limit = value if kind == "count" else None
+        asyncio.create_task(
+            run_purge_job(
+                member.guild,
+                member,
+                scope_text=format_purge_spec(kind, value),
+                requested_by=f"Condena ({condemnation_origin_label(origin)})",
+                after=after,
+                limit=limit,
+                title="Purga de condena completada",
+            )
+        )
+
+    # La tarjeta del canal de condenas ya es el aviso principal. Si Logs apunta
+    # al mismo canal, no dupliques el mismo evento con un segundo embed.
+    if get_log_channel_id(member.guild.id) != condemnation_channel_id(member.guild.id):
+        await log_embed(
+            member.guild, "☠️ Condena aplicada",
         f"{member.mention} (`{member.id}`)\n"
         f"Motivo: {reason}\n"
         f"Duración: {format_duration(duration_minutes) if duration_minutes else 'Indefinida'}\n"
@@ -10688,8 +10825,8 @@ async def _condemn_member_inner(
         f"Aplicó: {applied_by.mention if applied_by else 'El Heraldo'}\n"
         f"{role_note}\n"
         f"DM: {'✅ enviado' if dm_ok else '⚠️ no enviado' if dm_ok is not None else '—'}",
-        discord.Color.dark_red(),
-    )
+            discord.Color.dark_red(),
+        )
     return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
 
 
@@ -10821,7 +10958,7 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
         await condemn_member(
             member, reason="El rol Condenado fue otorgado manualmente (detectado al arrancar).",
             duration_minutes=condemnation_default_duration_minutes(guild.id), purge_spec=None, origin="role", applied_by=None,
-            send_dm=False, announce=False,
+            send_dm=True, announce=True,
         )
         await asyncio.sleep(1)
 
@@ -11672,15 +11809,25 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
             source_channel_id=message.channel.id,
         )
         _reaction_condemn_pending.discard(view.pending_key)
-        if ok:
-            await interaction.followup.send(f"Condena aplicada a **{target}**. {note}")
-            if view.prompt_message is not None:
-                try:
-                    await view.prompt_message.delete()
-                except discord.HTTPException:
-                    pass
+        if view.prompt_message is not None:
+            try:
+                await view.prompt_message.edit(
+                    content=(
+                        f"Condena aplicada a **{target}**. {note}"
+                        if ok else f"No pude aplicar la condena: {note}"
+                    ),
+                    view=None,
+                )
+            except discord.HTTPException:
+                await interaction.followup.send(
+                    f"Condena aplicada a **{target}**. {note}"
+                    if ok else f"No pude aplicar la condena: {note}"
+                )
         else:
-            await interaction.followup.send(f"No pude aplicar la condena: {note}")
+            await interaction.followup.send(
+                f"Condena aplicada a **{target}**. {note}"
+                if ok else f"No pude aplicar la condena: {note}"
+            )
 
 
 class ReactionCondemnReasonView(discord.ui.View):
