@@ -1586,6 +1586,101 @@ class HeraldoChannelSetupView(discord.ui.View):
         return callback
 
 
+
+class HeraldoRoleSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        definitions = (
+            ("sin_verificar", "⏳ Sin Verificar"),
+            ("tentado", "🧭 En orientación"),
+            ("condenado", "⚖️ Condenado"),
+        )
+        for key, label in definitions:
+            select = discord.ui.RoleSelect(
+                placeholder=f"Seleccionar rol · {label}",
+                min_values=1,
+                max_values=1,
+                row=len(self.children),
+            )
+            select.callback = self._make_callback(key, label)
+            self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    def _make_callback(self, key: str, label: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            values = interaction.data.get("values") if interaction.data else None
+            role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
+            if role is None:
+                await interaction.response.send_message("❌ No pude localizar ese rol.", ephemeral=True)
+                return
+            guild_resource_set(self.guild_id, "role", key, role.id)
+            await interaction.response.send_message(
+                f"✅ {label}: {role.mention} quedó configurado para este servidor.",
+                ephemeral=True,
+            )
+        return callback
+
+
+class HeraldoOrientationSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        select = discord.ui.RoleSelect(
+            placeholder="Selecciona los roles que cuentan como orientación",
+            min_values=1,
+            max_values=10,
+            row=0,
+        )
+        select.callback = self.save_orientation_roles
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def save_orientation_roles(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        role_ids = [int(value) for value in values]
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "DELETE FROM guild_resources WHERE guild_id = ? AND resource_type = 'role' AND config_key LIKE 'eval_%'",
+            (self.guild_id,),
+        )
+        conn.commit()
+        conn.close()
+        for index, role_id in enumerate(role_ids, 1):
+            guild_resource_set(self.guild_id, "role", f"eval_{index}", role_id)
+        mentions = [interaction.guild.get_role(role_id).mention for role_id in role_ids if interaction.guild and interaction.guild.get_role(role_id)]
+        await interaction.response.send_message(
+            "✅ Roles de orientación guardados para este servidor: " + (", ".join(mentions) if mentions else "ninguno"),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="🧹 Quitar orientación", style=discord.ButtonStyle.danger, row=1)
+    async def clear_orientation(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "DELETE FROM guild_resources WHERE guild_id = ? AND resource_type = 'role' AND config_key LIKE 'eval_%'",
+            (self.guild_id,),
+        )
+        conn.commit()
+        conn.close()
+        await interaction.response.send_message(
+            "✅ La orientación quedó desactivada: sin roles configurados no habrá expulsión por no elegir una preferencia.",
+            ephemeral=True,
+        )
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -1610,11 +1705,31 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoChannelSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="⚙️ Tiempos", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="👥 Roles", style=discord.ButtonStyle.primary, row=0)
+    async def roles(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="🪽 **El Heraldo · Roles del sistema**\n\nSelecciona roles existentes. Nada se crea desde esta sección.",
+            embed=None,
+            view=HeraldoRoleSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="🧭 Orientación", style=discord.ButtonStyle.primary, row=0)
+    async def orientation(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Orientación**\n\n"
+                "Selecciona uno o varios roles que contarán como elección de orientación. "
+                "Si no configuras ninguno, El Heraldo no expulsará a nadie por no elegir una preferencia."
+            ),
+            embed=None,
+            view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="⚙️ Tiempos", style=discord.ButtonStyle.secondary, row=1)
     async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
 
-    @discord.ui.button(label="🛠️ Crear faltantes", style=discord.ButtonStyle.success, row=0)
+    @discord.ui.button(label="🛠️ Crear faltantes", style=discord.ButtonStyle.success, row=1)
     async def create_missing(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         result = await bootstrap_guild_configuration(interaction.guild, create_missing=True)
@@ -1626,7 +1741,7 @@ class HeraldoSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="🔄 Actualizar panel", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="🔄 Actualizar panel", style=discord.ButtonStyle.secondary, row=2)
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=(
@@ -1638,7 +1753,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
