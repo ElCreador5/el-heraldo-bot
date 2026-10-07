@@ -1603,6 +1603,8 @@ def heraldo_setup_home_content() -> str:
     return (
         "🪽 **El Heraldo · Configuración del servidor**\n\n"
         "Elige exactamente qué quieres configurar. Cada botón indica la sección que modifica. "
+        "Usa **Mensajes y paneles** para editar las plantillas visuales y textos persistentes. "
+        "Los paneles de datos reales o dinámicos no se modifican desde ese editor. "
         "Raid Protection usa el canal general de Logs; no crea un canal de alertas separado."
     )
 
@@ -2507,6 +2509,462 @@ class HeraldoRaidSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+
+class VerifyDmEditorContentModal(discord.ui.Modal):
+    """Editor del contenido principal del DM que se envía al verificarse."""
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__(title="DM de verificación · Contenido")
+        self.guild_id = guild_id
+        self.title_input = discord.ui.TextInput(
+            label="Título",
+            default=get_verify_dm_title(guild_id),
+            required=True,
+            max_length=256,
+        )
+        self.field_input = discord.ui.TextInput(
+            label="Nombre del campo",
+            default=get_verify_dm_field_name(guild_id),
+            required=True,
+            max_length=256,
+        )
+        self.body_input = discord.ui.TextInput(
+            label="Mensaje",
+            style=discord.TextStyle.paragraph,
+            default=get_verify_dm_body(guild_id),
+            required=True,
+            max_length=4000,
+        )
+        self.footer_input = discord.ui.TextInput(
+            label="Pie del embed",
+            default=get_verify_dm_footer(guild_id),
+            required=True,
+            max_length=2048,
+        )
+        self.color_input = discord.ui.TextInput(
+            label="Color HEX",
+            default=get_verify_dm_color(guild_id),
+            required=True,
+            max_length=7,
+            placeholder="4F5BDC",
+        )
+        for item in (
+            self.title_input,
+            self.field_input,
+            self.body_input,
+            self.footer_input,
+            self.color_input,
+        ):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color = self.color_input.value.strip().lstrip("#")
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message(
+                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
+                ephemeral=True,
+            )
+            return
+
+        values = {
+            "verify_dm_title": self.title_input.value.strip(),
+            "verify_dm_field_name": self.field_input.value.strip(),
+            "verify_dm_body": self.body_input.value.strip(),
+            "verify_dm_footer": self.footer_input.value.strip(),
+            "verify_dm_color": color.upper(),
+        }
+        if not all(values.values()):
+            await interaction.response.send_message(
+                "❌ Ningún campo puede quedar vacío.",
+                ephemeral=True,
+            )
+            return
+
+        for key, value in values.items():
+            guild_config_set(self.guild_id, key, value)
+
+        await interaction.response.send_message(
+            "✅ Contenido del DM de verificación actualizado.",
+            ephemeral=True,
+        )
+
+
+class VerifyDmEditorVisualModal(discord.ui.Modal):
+    """Editor de la imagen pequeña del pie del DM de verificación."""
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__(title="DM de verificación · Recurso visual")
+        self.guild_id = guild_id
+        self.footer_icon = discord.ui.TextInput(
+            label="Icono del pie (URL o variable)",
+            default=get_verify_dm_footer_icon(guild_id),
+            required=False,
+            max_length=500,
+            placeholder="https://… o {servericon}",
+        )
+        self.add_item(self.footer_icon)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        icon = self.footer_icon.value.strip()
+        if (
+            icon
+            and not re.match(r"^https?://", icon, re.IGNORECASE)
+            and not VAR_PATTERN.search(icon)
+        ):
+            await interaction.response.send_message(
+                "❌ El icono debe ser una URL `http(s)://…` o una variable como `{servericon}`.",
+                ephemeral=True,
+            )
+            return
+
+        guild_config_set(self.guild_id, "verify_dm_footer_icon", icon)
+        await interaction.response.send_message(
+            "✅ Recurso visual del DM actualizado.",
+            ephemeral=True,
+        )
+
+
+class VerifyDmMessageSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Este editor no es tuyo.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=0)
+    async def content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(VerifyDmEditorContentModal(self.guild_id))
+
+    @discord.ui.button(label="🖼️ Recurso visual", style=discord.ButtonStyle.secondary, row=0)
+    async def visual(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(VerifyDmEditorVisualModal(self.guild_id))
+
+    @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=0)
+    async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            "👁️ **Vista previa del DM de verificación**",
+            embed=build_verification_welcome_embed(
+                member=interaction.user if isinstance(interaction.user, discord.Member) else None,
+                guild=interaction.guild,
+            ),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=heraldo_messages_setup_content(),
+            embed=None,
+            view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
+        )
+
+
+class SuggestionPanelContentModal(discord.ui.Modal):
+    def __init__(self, guild_id: int) -> None:
+        super().__init__(title="Sugerencias · Contenido")
+        self.guild_id = guild_id
+        self.title_input = discord.ui.TextInput(
+            label="Título",
+            default=guild_config_get(guild_id, "suggestion_panel_title") or SUGGESTION_PANEL_TITLE_DEFAULT,
+            required=True,
+            max_length=256,
+        )
+        self.description_input = discord.ui.TextInput(
+            label="Descripción",
+            style=discord.TextStyle.paragraph,
+            default=guild_config_get(guild_id, "suggestion_panel_description") or SUGGESTION_PANEL_DESCRIPTION_DEFAULT,
+            required=True,
+            max_length=4000,
+        )
+        self.color_input = discord.ui.TextInput(
+            label="Color HEX",
+            default=guild_config_get(guild_id, "suggestion_panel_color") or SUGGESTION_PANEL_COLOR_DEFAULT,
+            required=True,
+            max_length=7,
+            placeholder="4F5BDC",
+        )
+        for item in (self.title_input, self.description_input, self.color_input):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        title = self.title_input.value.strip()
+        description = self.description_input.value.strip()
+        color = self.color_input.value.strip().lstrip("#")
+        if not title or not description:
+            await interaction.response.send_message(
+                "❌ El título y la descripción no pueden quedar vacíos.",
+                ephemeral=True,
+            )
+            return
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message(
+                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
+                ephemeral=True,
+            )
+            return
+
+        guild_config_set(self.guild_id, "suggestion_panel_title", title)
+        guild_config_set(self.guild_id, "suggestion_panel_description", description)
+        guild_config_set(self.guild_id, "suggestion_panel_color", color.upper())
+
+        await interaction.response.defer(ephemeral=True)
+        await suggestion_ensure_panel(interaction.guild)
+        await interaction.followup.send(
+            "✅ Contenido del panel de sugerencias guardado y sincronizado.",
+            ephemeral=True,
+        )
+
+
+class SuggestionPanelVisualModal(discord.ui.Modal):
+    def __init__(self, guild_id: int) -> None:
+        super().__init__(title="Sugerencias · Diseño")
+        self.guild_id = guild_id
+        self.footer_input = discord.ui.TextInput(
+            label="Pie del embed",
+            default=guild_config_get(guild_id, "suggestion_panel_footer") or SUGGESTION_PANEL_FOOTER_DEFAULT,
+            required=False,
+            max_length=2048,
+        )
+        self.button_input = discord.ui.TextInput(
+            label="Texto del botón",
+            default=guild_config_get(guild_id, "suggestion_panel_button_label") or SUGGESTION_PANEL_BUTTON_DEFAULT,
+            required=True,
+            max_length=80,
+        )
+        self.image_input = discord.ui.TextInput(
+            label="Imagen grande (URL o variable)",
+            default=guild_config_get(guild_id, "suggestion_panel_image") or SUGGESTION_PANEL_IMAGE_DEFAULT,
+            required=False,
+            max_length=500,
+            placeholder="https://… o {serverbanner}",
+        )
+        self.thumbnail_input = discord.ui.TextInput(
+            label="Miniatura (URL o variable)",
+            default=guild_config_get(guild_id, "suggestion_panel_thumbnail") or SUGGESTION_PANEL_THUMBNAIL_DEFAULT,
+            required=False,
+            max_length=500,
+            placeholder="https://… o {servericon}",
+        )
+        for item in (
+            self.footer_input,
+            self.button_input,
+            self.image_input,
+            self.thumbnail_input,
+        ):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        button_label = self.button_input.value.strip()
+        image = self.image_input.value.strip()
+        thumbnail = self.thumbnail_input.value.strip()
+
+        if not button_label:
+            await interaction.response.send_message(
+                "❌ El texto del botón no puede quedar vacío.",
+                ephemeral=True,
+            )
+            return
+
+        for label, value in (("imagen", image), ("miniatura", thumbnail)):
+            if (
+                value
+                and not re.match(r"^https?://", value, re.IGNORECASE)
+                and not VAR_PATTERN.search(value)
+            ):
+                await interaction.response.send_message(
+                    f"❌ La {label} debe ser una URL `http(s)://…` o una variable de imagen.",
+                    ephemeral=True,
+                )
+                return
+
+        guild_config_set(self.guild_id, "suggestion_panel_footer", self.footer_input.value.strip())
+        guild_config_set(self.guild_id, "suggestion_panel_button_label", button_label)
+        guild_config_set(self.guild_id, "suggestion_panel_image", image)
+        guild_config_set(self.guild_id, "suggestion_panel_thumbnail", thumbnail)
+
+        await interaction.response.defer(ephemeral=True)
+        await suggestion_ensure_panel(interaction.guild)
+        await interaction.followup.send(
+            "✅ Diseño del panel de sugerencias guardado y sincronizado.",
+            ephemeral=True,
+        )
+
+
+class SuggestionPanelMessageSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=0)
+    async def content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(SuggestionPanelContentModal(self.guild_id))
+
+    @discord.ui.button(label="🎨 Diseño", style=discord.ButtonStyle.secondary, row=0)
+    async def design(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(SuggestionPanelVisualModal(self.guild_id))
+
+    @discord.ui.button(label="🔄 Sincronizar", style=discord.ButtonStyle.secondary, row=0)
+    async def sync(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+        await suggestion_ensure_panel(interaction.guild)
+        await interaction.followup.send(
+            "✅ Panel de sugerencias sincronizado.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=heraldo_messages_setup_content(),
+            embed=None,
+            view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
+        )
+
+
+def heraldo_messages_setup_content() -> str:
+    return (
+        "✉️ **El Heraldo · Mensajes y paneles**\n\n"
+        "Edita los mensajes persistentes y plantillas visuales del servidor desde un solo lugar. "
+        "Los cambios quedan aislados por servidor y los paneles publicados se sincronizan cuando corresponde.\n\n"
+        "**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot y Condenas.\n"
+        "**Excluidos a propósito:** Variables, comandos, listas, estados, perfiles, historiales, "
+        "rankings y cualquier panel cuyo contenido represente datos reales o generados en tiempo real."
+    )
+
+
+class HeraldoMessagesSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+        panel_select = discord.ui.Select(
+            placeholder="Selecciona el panel o mensaje que quieres editar",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label="Verificación",
+                    value="verification",
+                    emoji="✅",
+                    description="Texto del panel, botón y mensaje de éxito.",
+                ),
+                discord.SelectOption(
+                    label="DM de verificación",
+                    value="verify_dm",
+                    emoji="📩",
+                    description="Embed enviado al miembro después de verificarse.",
+                ),
+                discord.SelectOption(
+                    label="Sugerencias",
+                    value="suggestions",
+                    emoji="💡",
+                    description="Título, descripción, color, imágenes y botón.",
+                ),
+                discord.SelectOption(
+                    label="Honeypot",
+                    value="honeypot",
+                    emoji="🍯",
+                    description="Aviso persistente de los canales trampa.",
+                ),
+                discord.SelectOption(
+                    label="Condenas",
+                    value="condemnation",
+                    emoji="☠️",
+                    description="Plantilla de la tarjeta de condenados.",
+                ),
+            ],
+            row=0,
+        )
+        panel_select.callback = self.open_editor
+        self.panel_select = panel_select
+        self.add_item(panel_select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Este panel de configuración no es tuyo.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def open_editor(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        selected = values[0] if values else ""
+
+        if selected == "verification":
+            await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
+            return
+
+        if selected == "verify_dm":
+            await interaction.response.edit_message(
+                content=(
+                    "📩 **DM de verificación**\n\n"
+                    "Edita el contenido y el recurso visual del mensaje privado que recibe "
+                    "una persona después de completar su primera verificación."
+                ),
+                embed=build_verification_welcome_embed(
+                    member=interaction.user if isinstance(interaction.user, discord.Member) else None,
+                    guild=interaction.guild,
+                ),
+                view=VerifyDmMessageSetupView(self.guild_id, self.owner_id),
+            )
+            return
+
+        if selected == "suggestions":
+            await interaction.response.edit_message(
+                content=(
+                    "💡 **Panel de sugerencias**\n\n"
+                    "Puedes editar su contenido visual sin alterar los datos de las sugerencias "
+                    "que ya existen."
+                ),
+                embed=suggestion_panel_embed(interaction.guild),
+                view=SuggestionPanelMessageSetupView(self.guild_id, self.owner_id),
+            )
+            return
+
+        if selected == "honeypot":
+            await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+            return
+
+        if selected == "condemnation":
+            await interaction.response.edit_message(
+                content=(
+                    "☠️ **Editor de la tarjeta de condenados**\n"
+                    "Edita la plantilla usada en nuevas condenas. "
+                    "Los casos históricos no se reescriben."
+                ),
+                embed=condemnation_template_preview(interaction.guild, interaction.user),
+                view=CondemnationTemplateEditorView(self.owner_id),
+            )
+            return
+
+        await interaction.response.send_message(
+            "❌ No pude abrir ese editor.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="⬅️ Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -2603,6 +3061,14 @@ class HeraldoSetupView(discord.ui.View):
             ),
             embed=condemnation_template_preview(interaction.guild, interaction.user),
             view=CondemnationTemplateEditorView(self.owner_id),
+        )
+
+    @discord.ui.button(label="✉️ Mensajes y paneles", style=discord.ButtonStyle.primary, row=2)
+    async def messages(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=heraldo_messages_setup_content(),
+            embed=None,
+            view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="🧪 Revisar configuración", style=discord.ButtonStyle.secondary, row=2)
@@ -9547,6 +10013,8 @@ SUGGESTION_PANEL_DESCRIPTION_DEFAULT = (
 )
 SUGGESTION_PANEL_COLOR_DEFAULT = "4F5BDC"
 SUGGESTION_PANEL_IMAGE_DEFAULT = ""
+SUGGESTION_PANEL_THUMBNAIL_DEFAULT = "{servericon}"
+SUGGESTION_PANEL_FOOTER_DEFAULT = ""
 SUGGESTION_PANEL_BUTTON_DEFAULT = "💡 Crear sugerencia"
 
 
@@ -9707,24 +10175,48 @@ def suggestion_decide(
 
 
 def suggestion_panel_embed(guild: discord.Guild) -> discord.Embed:
+    ctx = VarContext(guild)
     title = guild_config_get(guild.id, "suggestion_panel_title") or SUGGESTION_PANEL_TITLE_DEFAULT
     description = guild_config_get(guild.id, "suggestion_panel_description") or SUGGESTION_PANEL_DESCRIPTION_DEFAULT
-    color_raw = (guild_config_get(guild.id, "suggestion_panel_color") or SUGGESTION_PANEL_COLOR_DEFAULT).strip().lstrip("#")
-    image_url = (guild_config_get(guild.id, "suggestion_panel_image") or SUGGESTION_PANEL_IMAGE_DEFAULT).strip()
+    color_raw = (
+        guild_config_get(guild.id, "suggestion_panel_color")
+        or SUGGESTION_PANEL_COLOR_DEFAULT
+    ).strip().lstrip("#")
+    image_raw = (
+        guild_config_get(guild.id, "suggestion_panel_image")
+        or SUGGESTION_PANEL_IMAGE_DEFAULT
+    ).strip()
+    thumbnail_raw = (
+        guild_config_get(guild.id, "suggestion_panel_thumbnail")
+        or SUGGESTION_PANEL_THUMBNAIL_DEFAULT
+    ).strip()
+    footer_raw = guild_config_get(guild.id, "suggestion_panel_footer")
+    if footer_raw is None:
+        footer_raw = SUGGESTION_PANEL_FOOTER_DEFAULT
+
     try:
         color = discord.Color(int(color_raw, 16))
     except (TypeError, ValueError):
         color = discord.Color.blurple()
 
     embed = discord.Embed(
-        title=title[:256],
-        description=description[:4096],
+        title=render_vars(title, ctx, 256),
+        description=render_vars(description, ctx, 4096),
         color=color,
     )
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-    if image_url and re.match(r"^https?://", image_url, re.IGNORECASE):
+
+    image_url = render_url_var(image_raw, ctx)
+    if image_url:
         embed.set_image(url=image_url)
+
+    thumbnail_url = render_url_var(thumbnail_raw, ctx)
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
+
+    footer_text = render_vars(footer_raw, ctx, 2048, plain=True)
+    if footer_text:
+        embed.set_footer(text=footer_text)
+
     return embed
 
 
