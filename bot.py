@@ -6057,162 +6057,110 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
 
 
 
-class ModerationReportReactionsModal(discord.ui.Modal, title="Moderation · Reacciones de reporte"):
-    mappings = discord.ui.TextInput(
-        label="Emoji | Tipo de reporte",
-        style=discord.TextStyle.paragraph,
-        required=False,
-        max_length=1800,
-        placeholder="📢 | Spam\n🚩 | Contenido inapropiado\n🤓 | Cuenta sospechosa",
-    )
+class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar reporte"):
+    emoji = discord.ui.TextInput(label="Emoji", required=True, max_length=100, placeholder="📢")
+    label = discord.ui.TextInput(label="Nombre del reporte", required=True, max_length=100, placeholder="Spam")
 
-    def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
+    def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int | None = None) -> None:
         super().__init__()
         self.parent_view = parent_view
-        current = parent_view.pending_reactions
-        if current is None:
-            current = moderation_report_reactions(parent_view.guild_id)
-        self.mappings.default = "\n".join(f"{item['emoji']} | {item['label']}" for item in current)
+        self.index = index
+        if index is not None:
+            item = parent_view._working_reactions()[index]
+            self.emoji.default = str(item["emoji"])
+            self.label.default = str(item["label"])
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        parsed: list[dict[str, str]] = []
-        seen: set[str] = set()
-        condemn_key = _moderation_emoji_key(
-            self.parent_view.pending_condemn_emoji or get_condemnation_emoji(self.parent_view.guild_id)
-        )
-        for raw_line in str(self.mappings).splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            if "|" not in line:
-                await interaction.response.send_message(
-                    "Cada línea debe usar el formato emoji | tipo de reporte.", ephemeral=True
-                )
+        emoji = str(self.emoji).strip()
+        label = str(self.label).strip()
+        key = _moderation_emoji_key(emoji)
+        condemn_key = _moderation_emoji_key(self.parent_view.pending_condemn_emoji or get_condemnation_emoji(self.parent_view.guild_id))
+        if key == condemn_key:
+            await interaction.response.send_message("Ese emoji está reservado para la condena directa.", ephemeral=True)
+            return
+        reactions = [dict(item) for item in self.parent_view._working_reactions()]
+        for idx, item in enumerate(reactions):
+            if idx != self.index and _moderation_emoji_key(str(item["emoji"])) == key:
+                await interaction.response.send_message("Ese emoji ya está usado por otro reporte.", ephemeral=True)
                 return
-            emoji, label = (part.strip() for part in line.split("|", 1))
-            key = _moderation_emoji_key(emoji)
-            if not emoji or not label:
-                await interaction.response.send_message("Emoji y tipo de reporte son obligatorios.", ephemeral=True)
+        if self.index is None:
+            if len(reactions) >= MODERATION_REPORT_MAX_REACTIONS:
+                await interaction.response.send_message(f"Ya alcanzaste el máximo de {MODERATION_REPORT_MAX_REACTIONS} reacciones.", ephemeral=True)
                 return
-            if key == condemn_key:
-                await interaction.response.send_message(
-                    "El emoji de condena no puede usarse también como reacción de reporte.", ephemeral=True
-                )
-                return
-            if key in seen:
-                await interaction.response.send_message("No puedes repetir el mismo emoji.", ephemeral=True)
-                return
-            seen.add(key)
-            previous = next(
-                (dict(item) for item in moderation_report_reactions(self.parent_view.guild_id)
-                 if _moderation_emoji_key(str(item["emoji"])) == key),
-                {},
-            )
-            previous.update({"emoji": emoji[:100], "label": label[:100]})
-            parsed.append(previous)
-            if len(parsed) > MODERATION_REPORT_MAX_REACTIONS:
-                await interaction.response.send_message(
-                    f"Puedes configurar hasta {MODERATION_REPORT_MAX_REACTIONS} reacciones de reporte.", ephemeral=True
-                )
-                return
-        self.parent_view.pending_reactions = parsed
+            reactions.append({
+                "emoji": emoji, "label": label, "action": "report",
+                "duration_minutes": None, "threshold": 1, "purge_minutes": None,
+            })
+            self.parent_view.selected_reaction_index = len(reactions) - 1
+        else:
+            reactions[self.index]["emoji"] = emoji
+            reactions[self.index]["label"] = label
+            self.parent_view.selected_reaction_index = self.index
+        self.parent_view.pending_reactions = reactions
+        self.parent_view._rebuild_reaction_select()
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
 
-class ModerationReportActionsModal(discord.ui.Modal, title="Moderation · Acciones automáticas"):
-    rules = discord.ui.TextInput(
-        label="Emoji | acción | duración | reportes | purga",
-        style=discord.TextStyle.paragraph,
-        required=False,
-        max_length=2000,
-        placeholder="📢 | timeout | 30m | 2 | 30m\n🚩 | condemn | 1d | 3 | 30m",
-    )
+class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla del reporte"):
+    action = discord.ui.TextInput(label="Acción", required=True, max_length=20, placeholder="report, timeout, kick, ban o condemn")
+    duration = discord.ui.TextInput(label="Duración del castigo", required=False, max_length=30, placeholder="30m, 1d o -")
+    threshold = discord.ui.TextInput(label="Reportes necesarios", required=True, max_length=2, placeholder="2")
+    purge = discord.ui.TextInput(label="Purga reciente", required=False, max_length=30, placeholder="30m o -")
 
-    def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
+    def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int) -> None:
         super().__init__()
         self.parent_view = parent_view
-        current = parent_view.pending_reactions
-        if current is None:
-            current = moderation_report_reactions(parent_view.guild_id)
-        lines = []
-        for item in current:
-            duration = item.get("duration_minutes")
-            duration_text = format_duration(int(duration)) if duration else "-"
-            purge = item.get("purge_minutes")
-            purge_text = format_duration(int(purge)) if purge else "-"
-            lines.append(
-                f"{item['emoji']} | {item.get('action', 'report')} | {duration_text} | "
-                f"{item.get('threshold', 1)} | {purge_text}"
-            )
-        self.rules.default = "\n".join(lines)
+        self.index = index
+        item = parent_view._working_reactions()[index]
+        self.action.default = str(item.get("action", "report"))
+        duration = item.get("duration_minutes")
+        self.duration.default = format_duration(int(duration)) if duration else "-"
+        self.threshold.default = str(item.get("threshold", 1))
+        purge = item.get("purge_minutes")
+        self.purge.default = format_duration(int(purge)) if purge else "-"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        current = self.parent_view.pending_reactions
-        if current is None:
-            current = moderation_report_reactions(self.parent_view.guild_id)
-        by_emoji = {_moderation_emoji_key(str(item["emoji"])): dict(item) for item in current}
-        for raw_line in str(self.rules).splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            parts = [part.strip() for part in line.split("|")]
-            if len(parts) != 5:
-                await interaction.response.send_message(
-                    "Usa: emoji | acción | duración | reportes | purga.", ephemeral=True
-                )
-                return
-            emoji, action, duration_raw, threshold_raw, purge_raw = parts
-            key = _moderation_emoji_key(emoji)
-            if key not in by_emoji:
-                await interaction.response.send_message(
-                    f"El emoji {emoji} no existe entre las reacciones configuradas.", ephemeral=True
-                )
-                return
-            action = action.lower()
-            if action not in MODERATION_REPORT_ACTIONS:
-                await interaction.response.send_message(
-                    "Acciones válidas: report, timeout, kick, ban, condemn.", ephemeral=True
-                )
-                return
+        action = str(self.action).strip().lower()
+        if action not in MODERATION_REPORT_ACTIONS:
+            await interaction.response.send_message("Acciones válidas: report, timeout, kick, ban o condemn.", ephemeral=True)
+            return
+        try:
+            threshold = int(str(self.threshold).strip())
+            if not 1 <= threshold <= 25:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message("Los reportes necesarios deben estar entre 1 y 25.", ephemeral=True)
+            return
+        duration_raw = str(self.duration).strip().lower()
+        duration_minutes = None
+        if duration_raw not in {"", "-", "0", "none", "indefinida"}:
             try:
-                threshold = int(threshold_raw)
-                if not 1 <= threshold <= 25:
-                    raise ValueError
-            except ValueError:
-                await interaction.response.send_message("El umbral debe ser un número entre 1 y 25.", ephemeral=True)
+                duration_minutes = parse_duration(duration_raw, 1, 28 * 24 * 60)
+            except ValueError as exc:
+                await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
                 return
-            duration_minutes = None
-            if duration_raw not in {"", "-", "0", "none", "indefinida"}:
-                try:
-                    duration_minutes = parse_duration(duration_raw, 1, 28 * 24 * 60)
-                except ValueError as exc:
-                    await interaction.response.send_message(f"Duración inválida para {emoji}: {exc}", ephemeral=True)
-                    return
-            if action == "timeout" and duration_minutes is None:
-                await interaction.response.send_message("Timeout requiere una duración.", ephemeral=True)
+        if action == "timeout" and duration_minutes is None:
+            await interaction.response.send_message("Timeout necesita una duración.", ephemeral=True)
+            return
+        purge_raw = str(self.purge).strip().lower()
+        purge_minutes = None
+        if purge_raw not in {"", "-", "0", "none", "no"}:
+            try:
+                kind, value = parse_purge_spec(purge_raw)
+                if kind != "time":
+                    raise ValueError("Usa una ventana de tiempo, por ejemplo 30m o 2h.")
+                purge_minutes = value
+            except ValueError as exc:
+                await interaction.response.send_message(f"Purga inválida: {exc}", ephemeral=True)
                 return
-            purge_minutes = None
-            if purge_raw.lower() not in {"", "-", "0", "none", "no"}:
-                try:
-                    kind, purge_value = parse_purge_spec(purge_raw)
-                    if kind != "time":
-                        raise ValueError("La purga automática debe expresarse como tiempo, por ejemplo 30m o 2h.")
-                    purge_minutes = purge_value
-                except ValueError as exc:
-                    await interaction.response.send_message(f"Purga inválida para {emoji}: {exc}", ephemeral=True)
-                    return
-            by_emoji[key].update(
-                action=action,
-                duration_minutes=duration_minutes,
-                threshold=threshold,
-                purge_minutes=purge_minutes,
-            )
-        self.parent_view.pending_reactions = list(by_emoji.values())
-        await interaction.response.edit_message(
-            content=self.parent_view._content(interaction.guild),
-            view=self.parent_view,
+        reactions = [dict(item) for item in self.parent_view._working_reactions()]
+        reactions[self.index].update(
+            action=action, duration_minutes=duration_minutes, threshold=threshold, purge_minutes=purge_minutes
         )
-
+        self.parent_view.pending_reactions = reactions
+        self.parent_view.selected_reaction_index = self.index
+        self.parent_view._rebuild_reaction_select()
+        await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
 class ModerationCondemnEmojiModal(discord.ui.Modal, title="Moderation · Emoji de condena"):
     emoji = discord.ui.TextInput(label="Emoji de condena", required=True, max_length=100, placeholder="☠️")
@@ -6243,18 +6191,18 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.pending_channel_id: int | None = None
-        self.pending_reactions: list[dict[str, str]] | None = None
+        self.pending_reactions: list[dict[str, object]] | None = None
         self.pending_condemn_emoji: str | None = None
+        self.selected_reaction_index: int | None = None
 
         channel_select = discord.ui.ChannelSelect(
             placeholder="Seleccionar canal de reportes",
-            channel_types=[discord.ChannelType.text],
-            min_values=1,
-            max_values=1,
-            row=0,
+            channel_types=[discord.ChannelType.text], min_values=1, max_values=1, row=0,
         )
         channel_select.callback = self.select_channel
         self.add_item(channel_select)
+        self.reaction_select: discord.ui.Select | None = None
+        self._rebuild_reaction_select()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
@@ -6262,21 +6210,59 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             return False
         return True
 
+    def _working_reactions(self) -> list[dict[str, object]]:
+        return self.pending_reactions if self.pending_reactions is not None else moderation_report_reactions(self.guild_id)
+
+    def _rebuild_reaction_select(self) -> None:
+        if self.reaction_select is not None:
+            self.remove_item(self.reaction_select)
+        reactions = self._working_reactions()
+        if reactions:
+            options = []
+            for index, item in enumerate(reactions):
+                action = moderation_action_label(str(item.get("action", "report")))
+                options.append(discord.SelectOption(
+                    label=str(item["label"])[:100],
+                    value=str(index),
+                    emoji=str(item["emoji"]),
+                    description=f"{action} · {item.get('threshold', 1)} reporte(s)"[:100],
+                    default=index == self.selected_reaction_index,
+                ))
+            select = discord.ui.Select(placeholder=f"Reacciones configuradas · {len(reactions)}/{MODERATION_REPORT_MAX_REACTIONS}", options=options, row=1)
+            select.callback = self.select_reaction
+        else:
+            select = discord.ui.Select(
+                placeholder=f"Sin reacciones · 0/{MODERATION_REPORT_MAX_REACTIONS}",
+                options=[discord.SelectOption(label="Sin reacciones configuradas", value="-1")],
+                disabled=True, row=1,
+            )
+        self.reaction_select = select
+        self.add_item(select)
+
     def _content(self, guild: discord.Guild) -> str:
         lines: list[str] = []
         if self.pending_channel_id is not None:
             channel = guild.get_channel(self.pending_channel_id)
             lines.append(f"Canal de reportes → {channel.mention if channel else self.pending_channel_id}")
         if self.pending_reactions is not None:
-            value = ", ".join(f"{x['emoji']} {x['label']}" for x in self.pending_reactions) or "ninguna"
-            lines.append(f"Reacciones de reporte → {value}")
+            lines.append(f"Reacciones → {len(self.pending_reactions)}/{MODERATION_REPORT_MAX_REACTIONS}")
         if self.pending_condemn_emoji is not None:
             lines.append(f"Emoji de condena → {self.pending_condemn_emoji}")
-        return (
-            "**El Heraldo · Moderation · Reportes**\n\n"
-            + moderation_reports_summary(guild)
-            + _pending_config_text(lines)
-        )
+        selected = ""
+        if self.selected_reaction_index is not None:
+            reactions = self._working_reactions()
+            if 0 <= self.selected_reaction_index < len(reactions):
+                item = reactions[self.selected_reaction_index]
+                duration = item.get("duration_minutes")
+                purge = item.get("purge_minutes")
+                selected = (
+                    f"\n\n**Seleccionado:** {item['emoji']} **{item['label']}**"
+                    f"\nAcción: {moderation_action_label(str(item.get('action', 'report')))}"
+                    f" · Umbral: {item.get('threshold', 1)}"
+                    f" · Duración: {format_duration(int(duration)) if duration else '—'}"
+                    f" · Purga: {format_duration(int(purge)) if purge else '—'}"
+                )
+        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild) + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -6286,36 +6272,69 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             return
         perms = channel.permissions_for(interaction.guild.me)
         if not perms.view_channel or not perms.send_messages or not perms.embed_links:
-            await interaction.response.send_message(
-                "El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True
-            )
+            await interaction.response.send_message("El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True)
             return
         self.pending_channel_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Editar reacciones", style=discord.ButtonStyle.primary, row=1)
-    async def edit_reactions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(ModerationReportReactionsModal(self))
+    async def select_reaction(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        if not values:
+            return
+        index = int(values[0])
+        if index < 0 or index >= len(self._working_reactions()):
+            await interaction.response.send_message("Esa reacción ya no está disponible.", ephemeral=True)
+            return
+        self.selected_reaction_index = index
+        self._rebuild_reaction_select()
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Acciones automáticas", style=discord.ButtonStyle.secondary, row=1)
-    async def edit_actions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(ModerationReportActionsModal(self))
+    @discord.ui.button(label="Añadir", style=discord.ButtonStyle.primary, row=2)
+    async def add_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if len(self._working_reactions()) >= MODERATION_REPORT_MAX_REACTIONS:
+            await interaction.response.send_message("Ya alcanzaste el máximo de reacciones.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ModerationReactionEditModal(self))
 
-    @discord.ui.button(label="Emoji de condena", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.selected_reaction_index is None:
+            await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ModerationReactionEditModal(self, self.selected_reaction_index))
+
+    @discord.ui.button(label="Regla", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_rule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.selected_reaction_index is None:
+            await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ModerationReactionRuleModal(self, self.selected_reaction_index))
+
+    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
+    async def delete_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.selected_reaction_index is None:
+            await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
+            return
+        reactions = [dict(item) for item in self._working_reactions()]
+        reactions.pop(self.selected_reaction_index)
+        self.pending_reactions = reactions
+        self.selected_reaction_index = None
+        self._rebuild_reaction_select()
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Emoji de condena", style=discord.ButtonStyle.secondary, row=2)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.pending_channel_id is None and self.pending_reactions is None and self.pending_condemn_emoji is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
         if self.pending_reactions is not None:
             condemn_key = _moderation_emoji_key(self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id))
-            if any(_moderation_emoji_key(item["emoji"]) == condemn_key for item in self.pending_reactions):
-                await interaction.response.send_message(
-                    "El emoji de condena no puede coincidir con una reacción de reporte.", ephemeral=True
-                )
+            if any(_moderation_emoji_key(str(item["emoji"])) == condemn_key for item in self.pending_reactions):
+                await interaction.response.send_message("El emoji de condena no puede coincidir con una reacción de reporte.", ephemeral=True)
                 return
         if self.pending_channel_id is not None:
             set_moderation_report_channel_id(self.guild_id, self.pending_channel_id)
@@ -6326,22 +6345,24 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self.pending_channel_id = None
         self.pending_reactions = None
         self.pending_condemn_emoji = None
+        self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_channel_id = None
         self.pending_reactions = None
         self.pending_condemn_emoji = None
+        self.selected_reaction_index = None
+        self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
-
 
 class HeraldoCasesSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
