@@ -2702,7 +2702,7 @@ def condemnation_save(
         "ON CONFLICT(user_id) DO UPDATE SET guild_id=excluded.guild_id, role_ids=excluded.role_ids, "
         "role_id=excluded.role_id, reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
         "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1, "
-        "pardoned_by=NULL, pardoned_at=NULL, resolution=NULL",
+        "pardoned_by=NULL, pardoned_at=NULL, resolution=NULL, announcement_message_id=NULL",
         (user_id, guild_id, role_id, json.dumps(role_ids), reason, duration_minutes, when.isoformat(),
          expires.isoformat() if expires else None, origin, applied_by),
     )
