@@ -7237,14 +7237,14 @@ class HeraldoSetupView(discord.ui.View):
     """Navegación compacta: seleccionar un módulo y luego pulsar Configurar."""
 
     MODULES = (
-        ("automod", "AutoMod", "Protecciones automáticas del servidor", "🛡️"),
-        ("moderation", "Moderation", "Condenas, reportes y casos", "⚖️"),
-        ("join_roles", "Join Roles", "Roles al entrar al servidor", "🚪"),
-        ("reaction_roles", "Reaction Roles", "Configuración de roles por reacción", "🎭"),
-        ("role_connections", "Role Connections", "Conexiones de roles (pendiente)", "🔗"),
-        ("logging", "Logging", "Canal de registros y plantillas", "📋"),
-        ("verification", "Verification", "Verificación y orientación", "✅"),
-        ("language", "Idioma", "Configuración del idioma (pendiente)", "🌐"),
+        ("automod", "AutoMod", "Protecciones automáticas del servidor"),
+        ("moderation", "Moderation", "Condenas, reportes y casos"),
+        ("join_roles", "Join Roles", "Roles al entrar al servidor"),
+        ("reaction_roles", "Reaction Roles", "Configuración de roles por reacción"),
+        ("role_connections", "Role Connections", "Conexiones de roles (pendiente)"),
+        ("logging", "Logging", "Canal de registros y plantillas"),
+        ("verification", "Verification", "Verificación y orientación"),
+        ("language", "Idioma", "Configuración del idioma (pendiente)"),
     )
 
     def __init__(self, guild_id: int, owner_id: int) -> None:
@@ -7263,9 +7263,8 @@ class HeraldoSetupView(discord.ui.View):
                     label=label,
                     value=key,
                     description=description,
-                    emoji=emoji,
                 )
-                for key, label, description, emoji in self.MODULES
+                for key, label, description in self.MODULES
             ],
         )
         select.callback = self.select_module
