@@ -180,7 +180,7 @@ ORIENTATION_EMBED_DETAILS = (
 # --- Tarjeta de condena ----------------------------------------------------
 # Todo el contenido está persistido en `meta`, por lo que se puede cambiar sin redeploy.
 CONDEMNATION_TEMPLATE_DEFAULTS = {
-    "title": "☠️ RESOLUCIÓN DE CONDENA",
+    "title": "RESOLUCIÓN DE CONDENA",
     "description": "Se ha aplicado una condena a {usuario}. A continuación se detalla el caso registrado.",
     "color": "8B0000",
     "footer": "El Heraldo 🪽 · {servidor}",
@@ -221,9 +221,9 @@ VERIFY_BUTTON_ID = "heraldo_verify"
 VERIFY_TIMEOUT_DEFAULT = 299  # segundos desde que entra
 VERIFY_ACTION_DEFAULT = "kick"
 VERIFY_ACTION_LABELS = {"kick": "Expulsar", "ban": "Banear", "none": "Solo registrar (sin acción)"}
-VERIFY_PANEL_TEXT_DEFAULT = "✅ Pulsa el botón de abajo para confirmar que eres mayor de edad y obtener acceso al servidor."
+VERIFY_PANEL_TEXT_DEFAULT = "Pulsa el botón de abajo para confirmar que eres mayor de edad y obtener acceso al servidor."
 VERIFY_BUTTON_LABEL_DEFAULT = "Verificar"
-VERIFY_SUCCESS_TEXT_DEFAULT = "✅ ¡Verificado! Ya tienes acceso al servidor."
+VERIFY_SUCCESS_TEXT_DEFAULT = "¡Verificado! Ya tienes acceso al servidor."
 # Permisos que un rol de verificación NO puede tener: lo otorga un botón que pulsa cualquiera.
 VERIFY_DANGEROUS_PERMS = (
     ("administrator", "Administrador"),
@@ -1007,9 +1007,9 @@ def _join_roles_render(guild: discord.Guild, role_ids: list[int]) -> str:
     for role_id in role_ids:
         role, issue = _join_role_status(guild, role_id)
         if role is None:
-            parts.append(f"⚠️ Rol eliminado (\`{role_id}\`)")
+            parts.append(f"Advertencia: Rol eliminado (\`{role_id}\`)")
         elif issue:
-            parts.append(f"⚠️ {role.mention} — {issue}")
+            parts.append(f"Advertencia: {role.mention} — {issue}")
         else:
             parts.append(role.mention)
     return ", ".join(parts)
@@ -1327,7 +1327,7 @@ async def join_roles_sync_loop() -> None:
             assigned, skipped, errors = await sync_join_roles(guild)
             await log_embed(
                 guild,
-                "🔄 Join Roles · sincronización periódica",
+                "Join Roles · sincronización periódica",
                 f"Asignados a **{assigned}** miembro(s); **{skipped}** sin cambios."
                 + (f" **{len(errors)}** error(es)." if errors else ""),
                 discord.Color.blurple() if not errors else discord.Color.orange(),
@@ -1765,7 +1765,7 @@ VERIFY_DM_TITLE_DEFAULT = "HAS CRUZADO EL UMBRAL"
 VERIFY_DM_BODY_DEFAULT = (
     "Pero antes de que puedas perderte entre las puertas del paraíso, hay dos pasos que separan a los curiosos de los que realmente pertenecen:\n\n"
     "**Verifícate** en el canal de verificación — sin esto, sigues del otro lado del portón.\n\n"
-    "🎭 Luego, elige tus roles de orientación cuando nadie está mirando.\n\n"
+    "Luego, elige tus roles de orientación cuando nadie está mirando.\n\n"
     "Cada rol abre una puerta distinta. Elige bien.\n\n"
     "¿Dudas? Revisa el canal de dudas del servidor."
 )
@@ -1858,7 +1858,7 @@ async def on_ready() -> None:
         try:
             bot.add_view(VerifyView())
         except Exception:
-            print("❌ No se pudo registrar la vista persistente de verificación:")
+            print("Error: No se pudo registrar la vista persistente de verificación:")
             traceback.print_exc()
 
     if _startup_done:
@@ -1869,7 +1869,7 @@ async def on_ready() -> None:
             try:
                 await refresh_invite_cache(guild)
             except Exception:
-                print(f"⚠️ No pude refrescar invitaciones tras reconectar en {guild.name}:")
+                print(f"Advertencia: No pude refrescar invitaciones tras reconectar en {guild.name}:")
                 traceback.print_exc()
         return
 
@@ -1934,7 +1934,7 @@ async def on_ready() -> None:
             if orientation_enabled(guild.id):
                 ok, note = await ensure_orientation_system(guild)
                 if not ok:
-                    print(f"⚠️ Orientación · {guild.name}: {note}")
+                    print(f"Advertencia: Orientación · {guild.name}: {note}")
         except Exception:
             traceback.print_exc()
 
@@ -1952,11 +1952,11 @@ async def on_ready() -> None:
                 message_id=int(message_id),
             )
         print(
-            f"✅ Vistas de perdón restauradas: "
+            f"Vistas de perdón restauradas: "
             f"{sum(1 for row in active_condemnations if row['announcement_message_id'])}"
         )
     except Exception:
-        print("❌ No se pudieron restaurar las vistas de perdón:")
+        print("Error: No se pudieron restaurar las vistas de perdón:")
         traceback.print_exc()
     # Sistema de sugerencias: registra las vistas persistentes y recupera el panel/revisiones pendientes.
     try:
@@ -1971,7 +1971,7 @@ async def on_ready() -> None:
             bot.tree.copy_global_to(guild=guild)
             await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
         except Exception:
-            print(f"⚠️ No se pudieron sincronizar los comandos en {guild.name}:")
+            print(f"Advertencia: No se pudieron sincronizar los comandos en {guild.name}:")
             traceback.print_exc()
     # Los comandos se publican solo por guild: cualquier comando global es un
     # huérfano de versiones anteriores (aparece duplicado en el selector). Se borra.
@@ -1997,11 +1997,11 @@ async def on_ready() -> None:
 
         setup_view_errors = validate_setup_view_layouts(guild.id)
         if setup_view_errors:
-            print(f"❌ Autoprueba /setup falló en {guild.name}:")
+            print(f"Error: Autoprueba /setup falló en {guild.name}:")
             for error in setup_view_errors:
                 print(f"   - {error}")
         else:
-            print(f"✅ Autoprueba /setup correcta en {guild.name}.")
+            print(f"Autoprueba /setup correcta en {guild.name}.")
     if not member_of_the_week_loop.is_running():
         member_of_the_week_loop.start()
     if not join_roles_sync_loop.is_running():
@@ -2019,7 +2019,7 @@ async def on_guild_join(guild: discord.Guild) -> None:
         await bootstrap_guild_configuration(guild, create_missing=False)
         await log_embed(
             guild,
-            "🪽 El Heraldo está listo para configurarse",
+            "El Heraldo está listo para configurarse",
             "No se crearon canales ni roles automáticamente. Usa /setup para "
             "decidir si quieres permitir la creación de recursos faltantes.",
             discord.Color.blurple(),
@@ -2030,7 +2030,7 @@ async def on_guild_join(guild: discord.Guild) -> None:
     try:
         await refresh_invite_cache(guild)
     except Exception:
-        print(f"⚠️ No pude inicializar la caché de invitaciones en {guild.name}:")
+        print(f"Advertencia: No pude inicializar la caché de invitaciones en {guild.name}:")
         traceback.print_exc()
 
     # Los comandos globales se eliminan deliberadamente en on_ready; por eso un
@@ -2039,12 +2039,12 @@ async def on_guild_join(guild: discord.Guild) -> None:
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)
     except Exception:
-        print(f"⚠️ No se pudieron sincronizar los comandos en el nuevo servidor {guild.name}:")
+        print(f"Advertencia: No se pudieron sincronizar los comandos en el nuevo servidor {guild.name}:")
         traceback.print_exc()
 
     setup_view_errors = validate_setup_view_layouts(guild.id)
     if setup_view_errors:
-        print(f"❌ Autoprueba /setup falló en el nuevo servidor {guild.name}:")
+        print(f"Error: Autoprueba /setup falló en el nuevo servidor {guild.name}:")
         for error in setup_view_errors:
             print(f"   - {error}")
 
@@ -2073,10 +2073,10 @@ async def on_member_join(member: discord.Member) -> None:
         try:
             ok, _, note = await condemnation_sync_roles(member, save_snapshot=False, reason="Reingreso con condena activa", role_id=condemnation_role_id(condemnation))
             if not ok:
-                await log_embed(member.guild, "⚠️ No pude reaplicar la condena al reingresar", f"{member.mention}: {note}", discord.Color.orange())
+                await log_embed(member.guild, "Advertencia: No pude reaplicar la condena al reingresar", f"{member.mention}: {note}", discord.Color.orange())
                 return
             await log_embed(
-                member.guild, "☠️ Condena restaurada al reingresar",
+                member.guild, "Condena restaurada al reingresar",
                 f"{member.mention} (`{member.id}`) volvió al servidor con una condena activa. "
                 "Se restauró el rol Condenado y se evitó la evaluación de verificación.",
                 discord.Color.dark_red(),
@@ -2164,7 +2164,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                 role = after.guild.get_role(condemned_id)
                 if role is not None and role in after.roles and role.is_assignable():
                     await after.remove_roles(role, reason=f"Condena no permitida: {protection}")
-                await log_embed(after.guild, "⚠️ Condena rechazada", f"{after.mention}: {protection}.", discord.Color.orange())
+                await log_embed(after.guild, "Advertencia: Condena rechazada", f"{after.mention}: {protection}.", discord.Color.orange())
             else:
                 await condemn_member(
                     after,
@@ -2199,7 +2199,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                 if ok:
                     condemnation_add_saved_roles(after.guild.id, after.id, new_ids)
                 else:
-                    await log_embed(after.guild, "⚠️ No pude re-quitar roles a un condenado", f"{after.mention}: {note}", discord.Color.orange())
+                    await log_embed(after.guild, "Advertencia: No pude re-quitar roles a un condenado", f"{after.mention}: {note}", discord.Color.orange())
             except Exception:
                 traceback.print_exc()
             finally:
@@ -2246,7 +2246,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
             now = datetime.now(timezone.utc)
             db_set_sin_verificado(after.guild.id, after.id, now)
             asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
-            print(f"⏳ {after} recibió Sin Verificar — respaldo armado.")
+            print(f"{after} recibió Sin Verificar — respaldo armado.")
 
     # IMPORTANTE: asignar el rol de verificación/orientación manualmente NO inicia
     # el temporizador. La orientación solo nace cuando El Heraldo procesa una
@@ -2283,14 +2283,14 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
     try:
         await member.kick(reason="No se verificó (respaldo del timeout)")
         await log_embed(
-            guild, "👢 Kick — No se verificó",
+            guild, "Kick — No se verificó",
             f"{member.mention} (`{member.id}`) — no se verificó dentro del tiempo límite. "
             f"(Respaldo: no fue expulsado antes por el timeout.)",
             discord.Color.red(),
         )
     except discord.Forbidden:
         await log_embed(
-            guild, "⚠️ Error al expulsar",
+            guild, "Advertencia: Error al expulsar",
             f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
             discord.Color.dark_red(),
         )
@@ -2317,7 +2317,7 @@ async def check_pending_verifications() -> None:
             "OR verify_pending_at IS NOT NULL"
         ).fetchall()
     except Exception:
-        print("❌ Falló la lectura de verificaciones pendientes:")
+        print("Error: Falló la lectura de verificaciones pendientes:")
         traceback.print_exc()
         return
     finally:
@@ -2354,7 +2354,7 @@ async def check_pending_verifications() -> None:
                     await evaluate_verify_timeout(guild.id, row["user_id"])
         except Exception:
             print(
-                "❌ Verificación pendiente falló "
+                "Error: Verificación pendiente falló "
                 f"(guild={row['guild_id']}, user={row['user_id']}):"
             )
             traceback.print_exc()
@@ -2382,7 +2382,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     if role_ids & get_eval_role_ids(guild.id):
         db_clear_tentado(guild_id, user_id)  # se verificó a tiempo
         if report:
-            await log_embed(guild, "✅ Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
+            await log_embed(guild, "Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
         return "verificado"
 
     await expel(member, report=report)
@@ -2414,7 +2414,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
         return
 
     embed = discord.Embed(
-        title="👢 Kick — Falta de verificación",
+        title="Kick — Falta de verificación",
         color=discord.Color.red() if kicked else discord.Color.dark_red(),
         timestamp=datetime.now(timezone.utc),
     )
@@ -2427,8 +2427,8 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     )
     embed.add_field(name="Falta", value="1ra — se le dio otra oportunidad" if is_first_fault else "2da — sin nueva oportunidad", inline=True)
     if dm_ok is not None:
-        embed.add_field(name="DM de recuperación", value="✅ Enviado" if dm_ok else "⚠️ Falló (DMs cerrados)", inline=True)
-    embed.add_field(name="Resultado", value="✅ Expulsado" if kicked else "⚠️ Falló — revisa jerarquía de roles", inline=True)
+        embed.add_field(name="DM de recuperación", value="Enviado" if dm_ok else "Advertencia: Falló (DMs cerrados)", inline=True)
+    embed.add_field(name="Resultado", value="Expulsado" if kicked else "Advertencia: Falló — revisa jerarquía de roles", inline=True)
     embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
 
     channel = member.guild.get_channel(get_log_channel_id(member.guild.id))
@@ -2451,7 +2451,7 @@ async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
             invite_url = invite.url
         except discord.Forbidden:
             if report:
-                await log_embed(member.guild, "⚠️ Error de invite", "Sin permisos para crear invite de recuperación.", discord.Color.dark_red())
+                await log_embed(member.guild, "Advertencia: Error de invite", "Sin permisos para crear invite de recuperación.", discord.Color.dark_red())
 
     text = DM_TEXT.format(invite_url=invite_url)
     try:
@@ -2587,14 +2587,14 @@ class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configura
             if min(verify_minutes, orientation_minutes, sin_verificar_minutes) < 1:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message("❌ Los tres tiempos deben ser números enteros mayores que 0.", ephemeral=True)
+            await interaction.response.send_message("Error: Los tres tiempos deben ser números enteros mayores que 0.", ephemeral=True)
             return
 
         guild_config_set(self.guild_id, "verify_timeout", str(verify_minutes * 60))
         guild_config_set(self.guild_id, "orientation_timeout_seconds", str(orientation_minutes * 60))
         guild_config_set(self.guild_id, "sin_verificado_timeout_seconds", str(sin_verificar_minutes * 60))
         await interaction.response.send_message(
-            "✅ Tiempos guardados por servidor.\n"
+            "Tiempos guardados por servidor.\n"
             f"• Verificación: **{verify_minutes} min**\n"
             f"• Orientación: **{orientation_minutes} min**\n"
             f"• Respaldo Sin Verificar: **{sin_verificar_minutes} min**",
@@ -2603,11 +2603,11 @@ class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configura
 
 
 HERALDO_CHANNEL_DEFINITIONS = {
-    "logs": ("📋 Logs", "El Heraldo"),
-    "condemned": ("⚖️ Condenados", "Condenados"),
-    "honeypot": ("🍯 Honeypot", "Honeypot"),
-    "verification": ("✅ Verificación", "Verificación"),
-    "questions": ("💬 Dudas", "Dudas"),
+    "logs": ("Logs", "El Heraldo"),
+    "condemned": ("Condenados", "Condenados"),
+    "honeypot": ("Honeypot", "Honeypot"),
+    "verification": ("Verificación", "Verificación"),
+    "questions": ("Dudas", "Dudas"),
 }
 
 
@@ -2617,7 +2617,7 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
         channel_id = get_guild_channel_id(guild.id, key)
         channel = guild.get_channel(channel_id) if channel_id else None
         if isinstance(channel, discord.TextChannel):
-            lines.append(f"✅ **{label}:** {channel.mention}")
+            lines.append(f"**{label}:** {channel.mention}")
             continue
         exact = next(
             (c for c in guild.text_channels if c.name.casefold() == default_name.casefold()),
@@ -2632,7 +2632,7 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
 
 def heraldo_setup_home_content() -> str:
     return (
-        "🪽 **El Heraldo · Configuración**\n\n"
+        "**El Heraldo · Configuración**\n\n"
         "Selecciona un módulo en el menú desplegable y pulsa **Configurar** para abrirlo.\n"
         "Puedes volver a este menú desde las opciones de navegación de cada módulo."
     )
@@ -2712,7 +2712,7 @@ async def _setup_apply_system_channel(
         if publish_messages:
             await log_embed(
                 guild,
-                "⚙️ Canal de logs configurado",
+                "Canal de logs configurado",
                 f"{channel.mention} quedó establecido como canal de logs de El Heraldo.",
                 discord.Color.blurple(),
             )
@@ -2857,7 +2857,7 @@ class HeraldoChannelSetupView(discord.ui.View):
     def _content(self, guild: discord.Guild, notice: str | None = None) -> str:
         label, default_name = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
         text = (
-            "🪽 **El Heraldo · Canales del sistema**\n\n"
+            "**El Heraldo · Canales del sistema**\n\n"
             + heraldo_channels_summary(guild)
             + f"\n\n**Configurando ahora:** {label}\n"
             f"Selecciona un canal existente o usa **Crear si no existe** para crear **#{default_name}**."
@@ -3060,7 +3060,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             self.pending_roles[key] = role.id
             await interaction.response.edit_message(
                 content=(
-                    "🪽 **El Heraldo · Roles del sistema**\n\n"
+                    "**El Heraldo · Roles del sistema**\n\n"
                     "Las selecciones no se aplican hasta pulsar **Guardar cambios**."
                     + self._pending_text(interaction.guild)
                 ),
@@ -3126,7 +3126,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             action = "Creé" if created_now else "Reutilicé"
             await interaction.edit_original_response(
                 content=(
-                    "🪽 **El Heraldo · Roles del sistema**\n\n"
+                    "**El Heraldo · Roles del sistema**\n\n"
                     f"{action} {role.mention} y quedó configurado inmediatamente como **{label}**."
                     + self._pending_text(guild)
                 ),
@@ -3147,7 +3147,7 @@ class HeraldoRoleSetupView(discord.ui.View):
         count = len(self.pending_roles)
         self.pending_roles.clear()
         await interaction.edit_original_response(
-            content=f"🪽 **El Heraldo · Roles del sistema**\n\nGuardados {count} cambio(s).",
+            content=f"**El Heraldo · Roles del sistema**\n\nGuardados {count} cambio(s).",
             view=self,
         )
 
@@ -3155,7 +3155,7 @@ class HeraldoRoleSetupView(discord.ui.View):
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_roles.clear()
         await interaction.response.edit_message(
-            content="🪽 **El Heraldo · Roles del sistema**\n\nCambios pendientes descartados.",
+            content="**El Heraldo · Roles del sistema**\n\nCambios pendientes descartados.",
             view=self,
         )
 
@@ -3184,11 +3184,11 @@ class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Delay"):
                 raise ValueError
         except ValueError:
             await interaction.response.send_message(
-                "❌ El delay debe estar entre 0 y 86400 segundos.", ephemeral=True
+                "Error: El delay debe estar entre 0 y 86400 segundos.", ephemeral=True
             )
             return
         guild_config_set(self.guild_id, "join_roles_delay_seconds", str(seconds))
-        await interaction.response.send_message(f"✅ Delay guardado: **{seconds} s**.", ephemeral=True)
+        await interaction.response.send_message(f"Delay guardado: **{seconds} s**.", ephemeral=True)
 
 
 class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periódico"):
@@ -3211,20 +3211,20 @@ class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periód
                 raise ValueError
             if minutes and minutes < 10:
                 await interaction.response.send_message(
-                    "❌ El intervalo mínimo para Sync periódico es **10 minutos**.",
+                    "Error: El intervalo mínimo para Sync periódico es **10 minutos**.",
                     ephemeral=True,
                 )
                 return
         except ValueError:
             await interaction.response.send_message(
-                "❌ Usa un valor entre 0 y 10080 minutos.", ephemeral=True
+                "Error: Usa un valor entre 0 y 10080 minutos.", ephemeral=True
             )
             return
         guild_config_set(self.guild_id, "join_sync_interval_minutes", str(minutes))
         if minutes:
             set_join_sync_last(self.guild_id)
         await interaction.response.send_message(
-            "✅ Sync periódico " + (f"configurado cada **{minutes} min**." if minutes else "desactivado."),
+            "Sync periódico " + (f"configurado cada **{minutes} min**." if minutes else "desactivado."),
             ephemeral=True,
         )
 
@@ -3248,28 +3248,28 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
     @discord.ui.button(label="Basic setup", style=discord.ButtonStyle.primary, row=0)
     async def basic(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            content="**El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
             view=HeraldoJoinRolesBasicView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="User specific roles", style=discord.ButtonStyle.secondary, row=0)
     async def users(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
+            content="**El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
             view=HeraldoJoinRolesUsersView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="Bot roles", style=discord.ButtonStyle.secondary, row=1)
     async def bots(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
             view=HeraldoJoinRolesBotsView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="Synchronization", style=discord.ButtonStyle.secondary, row=1)
     async def synchronization(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
+            content="**El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
             view=HeraldoJoinRolesSyncView(self.guild_id, self.owner_id),
         )
 
@@ -3318,7 +3318,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             return
         self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Basic setup**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
@@ -3329,7 +3329,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         current = self.pending_screening if self.pending_screening is not None else join_roles_wait_screening(self.guild_id)
         self.pending_screening = not current
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Basic setup**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
@@ -3347,7 +3347,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             return
         self.pending_enabled = True
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Basic setup**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
@@ -3357,7 +3357,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
     async def disable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_enabled = False
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Basic setup**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
@@ -3379,7 +3379,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         self.pending_screening = None
         self.pending_enabled = None
         await interaction.edit_original_response(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Basic setup**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + "\n\nCambios guardados.",
             view=self,
@@ -3391,14 +3391,14 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         self.pending_screening = None
         self.pending_enabled = None
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            content="**El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
             view=self,
         )
 
     @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
         )
 
@@ -3425,12 +3425,12 @@ class JoinRolesUserIdModal(discord.ui.Modal, title="Join Roles · Usuario espec�
                 raise ValueError
         except ValueError:
             await interaction.response.send_message(
-                "❌ Introduce un Discord User ID numérico válido.", ephemeral=True
+                "Error: Introduce un Discord User ID numérico válido.", ephemeral=True
             )
             return
         self.parent_view.selected_user_id = user_id
         await interaction.response.send_message(
-            f"✅ Usuario objetivo guardado: <@{user_id}> (\`{user_id}\`). "
+            f"Usuario objetivo guardado: <@{user_id}> (\`{user_id}\`). "
             "Ahora selecciona sus roles y pulsa **Guardar usuario**.",
             ephemeral=True,
         )
@@ -3464,7 +3464,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         if self.pending_remove_after is not None:
             items.append(f"Remove after join → {'sí' if self.pending_remove_after else 'no'}")
         return (
-            "🚪 **El Heraldo · Join Roles · User specific roles**\n\n"
+            "**El Heraldo · Join Roles · User specific roles**\n\n"
             + join_roles_users_summary(guild)
             + _pending_config_text(items)
         )
@@ -3529,7 +3529,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
     @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
         )
 
@@ -3574,7 +3574,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
             return
         self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild),
+            content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild),
             view=self,
         )
 
@@ -3582,13 +3582,13 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
     async def bot_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_enabled if self.pending_enabled is not None else join_roles_bot_enabled(self.guild_id)
         self.pending_enabled = not current
-        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
     @discord.ui.button(label="Apply delay", style=discord.ButtonStyle.secondary, row=1)
     async def bot_delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_delay if self.pending_delay is not None else join_roles_bot_apply_delay(self.guild_id)
         self.pending_delay = not current
-        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
     @discord.ui.button(label="Different roles", style=discord.ButtonStyle.secondary, row=1)
     async def bot_different(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -3599,7 +3599,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
             await interaction.response.send_message("Selecciona primero uno o más roles alternativos para bots.", ephemeral=True)
             return
         self.pending_different = target
-        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -3616,17 +3616,17 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         if self.pending_different is not None:
             guild_config_set(self.guild_id, "join_roles_bot_use_different", "1" if self.pending_different else "0")
         self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
-        await interaction.edit_original_response(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + "\n\nCambios guardados.", view=self)
+        await interaction.edit_original_response(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + "\n\nCambios guardados.", view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
-        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild), view=self)
 
     @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
         )
 
@@ -3650,7 +3650,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         self.pending_excluded = [int(value) for value in values]
         roles = [interaction.guild.get_role(rid) for rid in self.pending_excluded]
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n"
+            content="**El Heraldo · Join Roles · Synchronization**\n\n"
             + join_roles_sync_summary(interaction.guild)
             + _pending_config_text(["Excluir del Sync → " + (", ".join(r.mention for r in roles if r) or "ninguno")]),
             view=self,
@@ -3680,19 +3680,19 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         set_join_sync_excluded_role_ids(self.guild_id, self.pending_excluded)
         self.pending_excluded = None
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild) + "\n\nCambios guardados.",
+            content="**El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild) + "\n\nCambios guardados.",
             view=self,
         )
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_excluded = None
-        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
 
     @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
+            content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
         )
 
@@ -3744,13 +3744,13 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientaci
 
         if not title or not intro or not details:
             await interaction.response.send_message(
-                "❌ Título y textos de la tarjeta no pueden quedar vacíos.",
+                "Error: Título y textos de la tarjeta no pueden quedar vacíos.",
                 ephemeral=True,
             )
             return
         if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
             await interaction.response.send_message(
-                "❌ El color debe ser HEX de 6 dígitos, por ejemplo `19A7E0`.",
+                "Error: El color debe ser HEX de 6 dígitos, por ejemplo `19A7E0`.",
                 ephemeral=True,
             )
             return
@@ -3766,7 +3766,7 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientaci
         if orientation_enabled(self.guild_id):
             ok, sync_note = await ensure_orientation_system(interaction.guild)
             note = sync_note if ok else f"Guardé el texto, pero no pude actualizar la tarjeta: {sync_note}"
-        await interaction.followup.send(f"✅ {note}", ephemeral=True)
+        await interaction.followup.send(f"{note}", ephemeral=True)
 
 
 
@@ -3814,7 +3814,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             items.append("Roles → " + ", ".join(role.mention for role in roles if role is not None))
         if self.pending_enabled is not None:
             items.append(f"Orientación → {'activa' if self.pending_enabled else 'desactivada'}")
-        return "🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
+        return "**El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -3996,7 +3996,7 @@ async def orientation_reaction_add(payload: discord.RawReactionActionEvent) -> N
     except (discord.Forbidden, discord.HTTPException):
         await log_embed(
             guild,
-            "⚠️ Error de orientación",
+            "Advertencia: Error de orientación",
             f"No pude sincronizar el rol de orientación de {member.mention}. Revisa la jerarquía de roles.",
             discord.Color.orange(),
         )
@@ -4040,7 +4040,7 @@ async def orientation_role_deleted(role: discord.Role) -> None:
 
     if remaining:
         ok, note = await ensure_orientation_system(role.guild)
-        title = "🧭 Orientación actualizada" if ok else "⚠️ Orientación necesita atención"
+        title = "Orientación actualizada" if ok else "Advertencia: Orientación necesita atención"
         description = (
             f"Se eliminó el rol **{role.name}**. El Heraldo retiró su vínculo y su reacción; "
             "no creó ningún rol nuevo.\n\n" + note
@@ -4048,7 +4048,7 @@ async def orientation_role_deleted(role: discord.Role) -> None:
         color = discord.Color.green() if ok else discord.Color.orange()
     else:
         await disable_orientation_system(role.guild)
-        title = "⚠️ Orientación desactivada"
+        title = "Advertencia: Orientación desactivada"
         description = (
             f"Se eliminó **{role.name}**, que era el último rol vinculado. "
             "El módulo se desactivó porque necesita al menos un rol existente."
@@ -4098,14 +4098,14 @@ class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · 
                 raise ValueError
         except ValueError:
             await interaction.response.send_message(
-                "❌ Día debe estar entre 0 y 6, y hora entre 0 y 23.",
+                "Error: Día debe estar entre 0 y 6, y hora entre 0 y 23.",
                 ephemeral=True,
             )
             return
         set_motw_schedule(self.guild_id, weekday, hour)
         motw_mark_current_slot(self.guild_id)
         await interaction.response.send_message(
-            f"✅ Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {hour}:00** (hora RD).",
+            f"Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {hour}:00** (hora RD).",
             ephemeral=True,
         )
 
@@ -4140,7 +4140,7 @@ class HeraldoMotwSetupView(discord.ui.View):
             pending = guild.get_channel(self.pending_channel_id)
             items.append(f"Canal → {pending.mention if pending else self.pending_channel_id}")
         return (
-            "👑 **El Heraldo · Miembro de la Semana**\n\n"
+            "**El Heraldo · Miembro de la Semana**\n\n"
             f"Canal guardado: {current.mention if current else 'no configurado'}\n"
             f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} a las {get_motw_hour(self.guild_id)}:00** (hora RD)"
             + _pending_config_text(items)
@@ -4222,7 +4222,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             items.append(f"Añadir canal trampa → {channel.mention if channel else self.pending_trap_id}")
         if self.pending_enabled is not None:
             items.append(f"Honeypot → {'activo' if self.pending_enabled else 'desactivado'}")
-        return "🍯 **El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
+        return "**El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
 
     async def select_trap(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -4344,7 +4344,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
         channel_id = get_guild_channel_id(guild.id, key)
         channel = guild.get_channel(channel_id) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
-            lines.append(f"❌ **{label}:** no configurado")
+            lines.append(f"Error: **{label}:** no configurado")
             continue
         perms = channel.permissions_for(guild.me)
         missing: list[str] = []
@@ -4370,7 +4370,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
         role_id = get_guild_role_id(guild.id, key)
         role = guild.get_role(role_id) if role_id else None
         if role is None:
-            lines.append(f"❌ **Rol {label}:** no configurado")
+            lines.append(f"Error: **Rol {label}:** no configurado")
             continue
         problem = None
         if role.is_default():
@@ -4444,7 +4444,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
             items.append(f"Canal de verificación → {channel.mention if channel else self.pending_channel_id}")
         if self.pending_enabled is not None:
             items.append(f"Verificación automática → {'activa' if self.pending_enabled else 'desactivada'}")
-        return "✅ **El Heraldo · Verificación**\n\n" + verify_config_summary(guild) + _pending_config_text(items)
+        return "**El Heraldo · Verificación**\n\n" + verify_config_summary(guild) + _pending_config_text(items)
 
     async def select_role(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -4717,7 +4717,7 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
                     "Si usas una proporción de cuentas nuevas, la edad máxima debe ser mayor que 0."
                 )
         except ValueError as e:
-            await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
+            await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
             return
 
         guild_config_set(self.guild_id, "raid_threshold", str(threshold))
@@ -4726,7 +4726,7 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
         guild_config_set(self.guild_id, "raid_new_account_ratio", str(ratio))
         guild_config_set(self.guild_id, "raid_duration_seconds", str(duration_s))
         await interaction.response.send_message(
-            "✅ Detección de Raid Protection actualizada.\n\n"
+            "Detección de Raid Protection actualizada.\n\n"
             + raid_config_summary(interaction.guild),
             ephemeral=True,
         )
@@ -4911,7 +4911,7 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
         color = self.color_input.value.strip().lstrip("#")
         if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
             await interaction.response.send_message(
-                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
+                "Error: El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
                 ephemeral=True,
             )
             return
@@ -4925,7 +4925,7 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
         }
         if not all(values.values()):
             await interaction.response.send_message(
-                "❌ Ningún campo puede quedar vacío.",
+                "Error: Ningún campo puede quedar vacío.",
                 ephemeral=True,
             )
             return
@@ -4934,7 +4934,7 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             guild_config_set(self.guild_id, key, value)
 
         await interaction.response.send_message(
-            "✅ Contenido del DM de verificación actualizado.",
+            "Contenido del DM de verificación actualizado.",
             ephemeral=True,
         )
 
@@ -4962,14 +4962,14 @@ class VerifyDmEditorVisualModal(discord.ui.Modal):
             and not VAR_PATTERN.search(icon)
         ):
             await interaction.response.send_message(
-                "❌ El icono debe ser una URL `http(s)://…` o una variable como `{servericon}`.",
+                "Error: El icono debe ser una URL `http(s)://…` o una variable como `{servericon}`.",
                 ephemeral=True,
             )
             return
 
         guild_config_set(self.guild_id, "verify_dm_footer_icon", icon)
         await interaction.response.send_message(
-            "✅ Recurso visual del DM actualizado.",
+            "Recurso visual del DM actualizado.",
             ephemeral=True,
         )
 
@@ -5050,13 +5050,13 @@ class SuggestionPanelContentModal(discord.ui.Modal):
         color = self.color_input.value.strip().lstrip("#")
         if not title or not description:
             await interaction.response.send_message(
-                "❌ El título y la descripción no pueden quedar vacíos.",
+                "Error: El título y la descripción no pueden quedar vacíos.",
                 ephemeral=True,
             )
             return
         if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
             await interaction.response.send_message(
-                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
+                "Error: El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
                 ephemeral=True,
             )
             return
@@ -5068,7 +5068,7 @@ class SuggestionPanelContentModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True)
         await suggestion_ensure_panel(interaction.guild)
         await interaction.followup.send(
-            "✅ Contenido del panel de sugerencias guardado y sincronizado.",
+            "Contenido del panel de sugerencias guardado y sincronizado.",
             ephemeral=True,
         )
 
@@ -5118,7 +5118,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
 
         if not button_label:
             await interaction.response.send_message(
-                "❌ El texto del botón no puede quedar vacío.",
+                "Error: El texto del botón no puede quedar vacío.",
                 ephemeral=True,
             )
             return
@@ -5130,7 +5130,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
                 and not VAR_PATTERN.search(value)
             ):
                 await interaction.response.send_message(
-                    f"❌ La {label} debe ser una URL `http(s)://…` o una variable de imagen.",
+                    f"Error: La {label} debe ser una URL `http(s)://…` o una variable de imagen.",
                     ephemeral=True,
                 )
                 return
@@ -5143,7 +5143,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
         await interaction.response.defer(ephemeral=True)
         await suggestion_ensure_panel(interaction.guild)
         await interaction.followup.send(
-            "✅ Diseño del panel de sugerencias guardado y sincronizado.",
+            "Diseño del panel de sugerencias guardado y sincronizado.",
             ephemeral=True,
         )
 
@@ -5173,7 +5173,7 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         await suggestion_ensure_panel(interaction.guild)
         await interaction.followup.send(
-            "✅ Panel de sugerencias sincronizado.",
+            "Panel de sugerencias sincronizado.",
             ephemeral=True,
         )
 
@@ -5187,11 +5187,11 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
 
 
 MESSAGE_STUDIO_LABELS = {
-    "verification": "✅ Panel de verificación",
+    "verification": "Panel de verificación",
     "verify_dm": "📩 DM de verificación",
-    "suggestions": "💡 Panel de sugerencias",
-    "honeypot": "🍯 Aviso del Honeypot",
-    "condemnation": "☠️ Tarjeta de condenados",
+    "suggestions": "Panel de sugerencias",
+    "honeypot": "Aviso del Honeypot",
+    "condemnation": "Tarjeta de condenados",
 }
 
 MESSAGE_STUDIO_VARIABLE_CONTEXT = {
@@ -5272,7 +5272,7 @@ def message_studio_content(kind: str, mode: str = "preview", notice: str | None 
         )
     elif mode == "variables":
         body = (
-            f"🧩 **Variables · {label}**\n"
+            f"**Variables · {label}**\n"
             f"{MESSAGE_STUDIO_VARIABLE_CONTEXT.get(kind, '')}\n\n"
             "Consulta el catálogo completo con /list variables. "
             "Una variable que no tenga el contexto necesario queda sin resolver."
@@ -5282,7 +5282,7 @@ def message_studio_content(kind: str, mode: str = "preview", notice: str | None 
             f"👁️ **Preview · {label}**\n"
             "Vista previa con la configuración guardada actualmente."
         )
-    return (f"✅ {notice}\n\n" if notice else "") + body
+    return (f"{notice}\n\n" if notice else "") + body
 
 
 class DefaultMessageStudioView(discord.ui.View):
@@ -5425,21 +5425,21 @@ class DefaultMessageStudioView(discord.ui.View):
 
     def _add_edit_controls(self) -> None:
         if self.kind == "verification":
-            self._action_button("🎨 Visual", self.edit_verification, style=discord.ButtonStyle.primary)
+            self._action_button("Visual", self.edit_verification, style=discord.ButtonStyle.primary)
         elif self.kind == "verify_dm":
-            self._action_button("🎨 Visual", self.edit_verify_dm_content, style=discord.ButtonStyle.primary)
+            self._action_button("Visual", self.edit_verify_dm_content, style=discord.ButtonStyle.primary)
             self._action_button("🖼️ Recurso visual", self.edit_verify_dm_visual)
         elif self.kind == "suggestions":
-            self._action_button("🎨 Visual", self.edit_suggestion_content, style=discord.ButtonStyle.primary)
+            self._action_button("Visual", self.edit_suggestion_content, style=discord.ButtonStyle.primary)
             self._action_button("🖼️ Imagen / botón", self.edit_suggestion_visual)
         elif self.kind == "honeypot":
-            self._action_button("🎨 Visual", self.edit_honeypot, style=discord.ButtonStyle.primary)
+            self._action_button("Visual", self.edit_honeypot, style=discord.ButtonStyle.primary)
         elif self.kind == "condemnation":
-            self._action_button("🎨 Visual", self.edit_condemnation_core, style=discord.ButtonStyle.primary)
+            self._action_button("Visual", self.edit_condemnation_core, style=discord.ButtonStyle.primary)
             self._action_button("🏷️ Etiquetas", self.edit_condemnation_labels)
             self._action_button("🏷️ Más etiquetas", self.edit_condemnation_more, row=2)
-            self._action_button("🔗 Botón", self.edit_condemnation_button, row=2)
-            self._action_button("⏳ Duración", self.edit_condemnation_duration, row=2)
+            self._action_button("Botón", self.edit_condemnation_button, row=2)
+            self._action_button("Duración", self.edit_condemnation_duration, row=2)
 
     async def edit_verification(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
@@ -5509,90 +5509,90 @@ async def open_default_message_studio(
 
 LOG_TEMPLATE_CATEGORIES = {
     "general": ("📜 General", "Logs que no pertenecen a otra categoría."),
-    "verification": ("✅ Verificación", "Verificación, orientación y accesos."),
-    "condemnation": ("☠️ Condenas", "Condenas, liberaciones y perdones."),
-    "honeypot": ("🍯 Honeypot", "Disparos, pausas y acciones del honeypot."),
+    "verification": ("Verificación", "Verificación, orientación y accesos."),
+    "condemnation": ("Condenas", "Condenas, liberaciones y perdones."),
+    "honeypot": ("Honeypot", "Disparos, pausas y acciones del honeypot."),
     "raid": ("Raid Protection", "Detección y acciones de protección contra raids."),
     "purge": ("Purgas", "Purgas manuales y automáticas."),
-    "backup": ("💾 Backups / plantilla", "Copias y sincronización de la plantilla del servidor."),
-    "configuration": ("⚙️ Configuración", "Cambios de canales, roles y configuración."),
-    "suggestions": ("💡 Sugerencias", "Creación y resolución de sugerencias."),
-    "errors": ("⚠️ Errores / avisos", "Errores, permisos insuficientes y advertencias."),
+    "backup": ("Backups / plantilla", "Copias y sincronización de la plantilla del servidor."),
+    "configuration": ("Configuración", "Cambios de canales, roles y configuración."),
+    "suggestions": ("Sugerencias", "Creación y resolución de sugerencias."),
+    "errors": ("Advertencia: Errores / avisos", "Errores, permisos insuficientes y advertencias."),
 }
 
 LOG_EVENT_CATALOG = {
     "general": [
-        ("heraldo_ready", "🪽 El Heraldo está listo para configurarse"),
-        ("manual_check", "🔧 Chequeo manual"),
-        ("mass_check_started", "🔍 Chequeo masivo iniciado"),
+        ("heraldo_ready", "El Heraldo está listo para configurarse"),
+        ("manual_check", "Chequeo manual"),
+        ("mass_check_started", "Chequeo masivo iniciado"),
         ("channel_merge_completed", "🔀 Fusión de canales completada"),
-        ("channel_merge_partial", "⚠️ Fusión de canales parcial"),
+        ("channel_merge_partial", "Advertencia: Fusión de canales parcial"),
     ],
     "verification": [
-        ("verified_path", "✅ Verificado"),
-        ("age_verification", "✅ Verificación de edad"),
-        ("verification_expired", "⏰ Verificación vencida"),
-        ("verification_kick", "👢 Kick — No se verificó"),
-        ("verification_ban", "🔨 Ban — No se verificó"),
-        ("verification_panel_published", "⚙️ Panel de verificación publicado"),
-        ("verification_texts_updated", "⚙️ Textos de verificación actualizados"),
-        ("verification_dm_updated", "⚙️ DM de bienvenida actualizado"),
-        ("verification_updated", "⚙️ Verificación actualizada"),
+        ("verified_path", "Verificado"),
+        ("age_verification", "Verificación de edad"),
+        ("verification_expired", "Verificación vencida"),
+        ("verification_kick", "Kick — No se verificó"),
+        ("verification_ban", "Ban — No se verificó"),
+        ("verification_panel_published", "Panel de verificación publicado"),
+        ("verification_texts_updated", "Textos de verificación actualizados"),
+        ("verification_dm_updated", "DM de bienvenida actualizado"),
+        ("verification_updated", "Verificación actualizada"),
     ],
     "condemnation": [
-        ("condemnation_applied", "☠️ Condena aplicada"),
-        ("condemnation_restored", "☠️ Condena restaurada al reingresar"),
-        ("condemnation_rejected", "⚠️ Condena rechazada"),
-        ("condemnation_reaction_rejected", "⚠️ Condena por reacción rechazada"),
-        ("condemnation_pardoned", "🕊️ Condena perdonada"),
-        ("condemnation_lifted", "🕊️ Condena levantada"),
-        ("condemnation_card_not_deleted", "⚠️ Tarjeta de condena no eliminada"),
+        ("condemnation_applied", "Condena aplicada"),
+        ("condemnation_restored", "Condena restaurada al reingresar"),
+        ("condemnation_rejected", "Advertencia: Condena rechazada"),
+        ("condemnation_reaction_rejected", "Advertencia: Condena por reacción rechazada"),
+        ("condemnation_pardoned", "Condena perdonada"),
+        ("condemnation_lifted", "Condena levantada"),
+        ("condemnation_card_not_deleted", "Advertencia: Tarjeta de condena no eliminada"),
     ],
     "honeypot": [
         ("honeypot_paused", "⏸️ Honeypot pausado (protección contra fallos)"),
-        ("honeypot_trap_deleted", "🍯 Canal trampa eliminado"),
-        ("honeypot_updated", "⚙️ Honeypot actualizado"),
-        ("honeypot_trap_added", "🍯 Canal trampa añadido"),
-        ("honeypot_trap_created", "🍯 Canal trampa creado"),
-        ("honeypot_trap_removed", "🍯 Canal trampa quitado"),
-        ("honeypot_embed_updated", "⚙️ Embed del honeypot actualizado"),
-        ("honeypot_resumed", "▶️ Honeypot reanudado"),
+        ("honeypot_trap_deleted", "Canal trampa eliminado"),
+        ("honeypot_updated", "Honeypot actualizado"),
+        ("honeypot_trap_added", "Canal trampa añadido"),
+        ("honeypot_trap_created", "Canal trampa creado"),
+        ("honeypot_trap_removed", "Canal trampa quitado"),
+        ("honeypot_embed_updated", "Embed del honeypot actualizado"),
+        ("honeypot_resumed", "Honeypot reanudado"),
     ],
-    "raid": [("raid_updated", "⚙️ Raid Protection actualizada")],
+    "raid": [("raid_updated", "Raid Protection actualizada")],
     "purge": [
-        ("purge_failed", "⚠️ Purga fallida"),
+        ("purge_failed", "Advertencia: Purga fallida"),
         ("purge_completed", "Purga completada"),
-        ("honeypot_purge_completed", "🍯 Purga del honeypot completada"),
+        ("honeypot_purge_completed", "Purga del honeypot completada"),
     ],
     "backup": [
-        ("template_backup_failed", "⚠️ Falló la copia de seguridad de la plantilla"),
+        ("template_backup_failed", "Advertencia: Falló la copia de seguridad de la plantilla"),
         ("template_synced_dm_failed", "Plantilla sincronizada (mensaje privado no enviado)"),
-        ("template_backup_updated", "⚙️ Copia de seguridad de la plantilla actualizada"),
+        ("template_backup_updated", "Copia de seguridad de la plantilla actualizada"),
         ("template_synced_manual", "Plantilla sincronizada manualmente"),
     ],
     "configuration": [
-        ("log_channel_updated", "⚙️ Canal de logs actualizado"),
-        ("condemnation_channel_updated", "⚙️ Canal de condenas actualizado"),
-        ("motw_schedule_updated", "⚙️ Horario de Miembro de la Semana actualizado"),
-        ("motw_channel_updated", "⚙️ Canal de Miembro de la Semana actualizado"),
+        ("log_channel_updated", "Canal de logs actualizado"),
+        ("condemnation_channel_updated", "Canal de condenas actualizado"),
+        ("motw_schedule_updated", "Horario de Miembro de la Semana actualizado"),
+        ("motw_channel_updated", "Canal de Miembro de la Semana actualizado"),
     ],
     "suggestions": [
-        ("suggestion_created", "💡 Nueva sugerencia"),
-        ("suggestion_accepted", "✅ Sugerencia aceptada"),
-        ("suggestion_rejected", "❌ Sugerencia rechazada"),
+        ("suggestion_created", "Nueva sugerencia"),
+        ("suggestion_accepted", "Sugerencia aceptada"),
+        ("suggestion_rejected", "Error: Sugerencia rechazada"),
     ],
     "errors": [
-        ("verification_not_configured", "⚠️ Verificación sin configurar"),
-        ("verification_blocked", "⚠️ Verificación bloqueada"),
-        ("verification_error", "⚠️ Error al verificar"),
-        ("verification_timeout_error", "⚠️ Error al aplicar el timeout de verificación"),
-        ("kick_error", "⚠️ Error al expulsar"),
-        ("invite_error", "⚠️ Error de invite"),
-        ("remove_unverified_error", "⚠️ No pude quitar Sin Verificar"),
-        ("welcome_dm_error", "⚠️ No pude enviar el DM de bienvenida"),
-        ("condemnation_roles_error", "⚠️ No pude re-quitar roles a un condenado"),
-        ("condemnation_reapply_error", "⚠️ No pude reaplicar la condena al reingresar"),
-        ("suggestion_dm_error", "⚠️ No pude enviar una sugerencia por DM"),
+        ("verification_not_configured", "Advertencia: Verificación sin configurar"),
+        ("verification_blocked", "Advertencia: Verificación bloqueada"),
+        ("verification_error", "Advertencia: Error al verificar"),
+        ("verification_timeout_error", "Advertencia: Error al aplicar el timeout de verificación"),
+        ("kick_error", "Advertencia: Error al expulsar"),
+        ("invite_error", "Advertencia: Error de invite"),
+        ("remove_unverified_error", "Advertencia: No pude quitar Sin Verificar"),
+        ("welcome_dm_error", "Advertencia: No pude enviar el DM de bienvenida"),
+        ("condemnation_roles_error", "Advertencia: No pude re-quitar roles a un condenado"),
+        ("condemnation_reapply_error", "Advertencia: No pude reaplicar la condena al reingresar"),
+        ("suggestion_dm_error", "Advertencia: No pude enviar una sugerencia por DM"),
     ],
 }
 
@@ -5938,7 +5938,7 @@ class LogTemplateVisualModal(discord.ui.Modal):
         color = self.color_input.value.strip().lstrip("#")
         if color and not re.fullmatch(r"[0-9a-fA-F]{6}", color):
             await interaction.response.send_message(
-                "❌ El color debe ser HEX de 6 caracteres.", ephemeral=True
+                "Error: El color debe ser HEX de 6 caracteres.", ephemeral=True
             )
             return
         for label, value in (
@@ -5947,14 +5947,14 @@ class LogTemplateVisualModal(discord.ui.Modal):
         ):
             if value and "{" not in value and not re.match(r"^https?://", value, re.IGNORECASE):
                 await interaction.response.send_message(
-                    f"❌ La {label} debe ser una URL http(s) o una variable.",
+                    f"Error: La {label} debe ser una URL http(s) o una variable.",
                     ephemeral=True,
                 )
                 return
         timestamp_value = self.timestamp_input.value.strip().lower()
         if timestamp_value not in {"si", "sí", "s", "1", "true", "no", "n", "0", "false"}:
             await interaction.response.send_message(
-                "❌ Timestamp debe ser sí o no.", ephemeral=True
+                "Error: Timestamp debe ser sí o no.", ephemeral=True
             )
             return
         log_template_set(
@@ -5989,7 +5989,7 @@ async def log_template_editor_update(
 ) -> None:
     content = log_template_editor_content(category, event_key, mode="edit")
     if notice:
-        content = f"✅ {notice}\n\n" + content
+        content = f"{notice}\n\n" + content
     view = LogTemplateEditorView(
         interaction.guild.id, owner_id, category, event_key, return_to, mode="edit"
     )
@@ -6028,7 +6028,7 @@ def log_template_editor_content(
     )
     if mode == "variables":
         return (
-            f"🧩 **Variables · {event_label}**\n"
+            f"**Variables · {event_label}**\n"
             f"Módulo: {category_label}\n\n"
             "Variables propias de este log: {titulo_log}, {detalle_log}, "
             "{categoria_log}, {tipo_log}.\n"
@@ -6241,7 +6241,7 @@ class LogTemplateEditorView(discord.ui.View):
         log_template_reset(self.guild_id, self.category, self.event_key)
         await interaction.response.edit_message(
             content=(
-                "✅ Este evento volvió a su plantilla heredada/predeterminada.\n\n"
+                "Este evento volvió a su plantilla heredada/predeterminada.\n\n"
                 + log_template_editor_content(
                     self.category, self.event_key, mode="edit"
                 )
@@ -6276,7 +6276,7 @@ class LogTemplateEditorView(discord.ui.View):
 
 def heraldo_messages_command_content() -> str:
     return (
-        "📝 **El Heraldo · Centro de mensajes**\n\n"
+        "**El Heraldo · Centro de mensajes**\n\n"
         "Desde aquí puedes editar los paneles persistentes que sí admiten personalización. "
         "Los cambios siguen separados por servidor y, cuando existe un panel ya publicado, "
         "se actualiza sin crear duplicados.\n\n"
@@ -6402,7 +6402,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
             return
 
         await interaction.response.send_message(
-            "❌ No pude abrir ese editor.",
+            "Error: No pude abrir ese editor.",
             ephemeral=True,
         )
 
@@ -6804,14 +6804,14 @@ class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Dura
             try:
                 minutes = parse_duration(raw, 1, get_condemnation_max_minutes(self.guild_id))
             except ValueError as exc:
-                await interaction.response.send_message(f"❌ Duración inválida: {exc}", ephemeral=True)
+                await interaction.response.send_message(f"Error: Duración inválida: {exc}", ephemeral=True)
                 return
             setting = f"{minutes}m"
 
         set_condemnation_default_duration(setting, self.guild_id)
         label = format_duration(minutes) if minutes is not None else "Indefinida"
         await interaction.response.send_message(
-            f"✅ Duración predeterminada actualizada a **{label}**. "
+            f"Duración predeterminada actualizada a **{label}**. "
             "Se aplicará a las condenas nuevas sin duración explícita; "
             "no altera las condenas existentes. Vuelve a abrir el panel para ver el valor actualizado.",
             ephemeral=True,
@@ -6862,7 +6862,7 @@ class HeraldoCondemnationSetupView(discord.ui.View):
             pending_role = guild.get_role(self.pending_role_id)
             items.append(f"Rol → {pending_role.mention if pending_role else self.pending_role_id}")
         return (
-            "⚖️ **El Heraldo · Moderation · Condenas**\n\n"
+            "**El Heraldo · Moderation · Condenas**\n\n"
             f"Canal de condenados: {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
             f"Rol Condenado: {role.mention if role else 'no configurado'}\n"
             f"Duración predeterminada: **{format_duration(condemnation_default_duration_minutes(guild.id)) if condemnation_default_duration_minutes(guild.id) is not None else 'Indefinida'}**"
@@ -7355,19 +7355,19 @@ class HeraldoSetupView(discord.ui.View):
     ) -> None:
         # No dejar interacciones silenciosas si falla la navegación.
         print(
-            f"❌ /setup: error en {type(item).__name__} "
+            f"Error: /setup: error en {type(item).__name__} "
             f"(guild={self.guild_id}, module={self.selected_module}): {error!r}"
         )
         traceback.print_exception(type(error), error, error.__traceback__)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(
-                    "❌ Error al abrir la configuración. Revisa los logs de El Heraldo.",
+                    "Error: Error al abrir la configuración. Revisa los logs de El Heraldo.",
                     ephemeral=True,
                 )
             else:
                 await interaction.response.send_message(
-                    "❌ Error al abrir la configuración. Revisa los logs de El Heraldo.",
+                    "Error: Error al abrir la configuración. Revisa los logs de El Heraldo.",
                     ephemeral=True,
                 )
         except discord.HTTPException:
@@ -7405,7 +7405,7 @@ async def heraldo_config(interaction: discord.Interaction) -> None:
     create_missing = guild_config_get(guild.id, "heraldo_auto_create_resources") == "1"
     estado = "activada" if create_missing else "desactivada"
     await interaction.response.send_message(
-        "⚙️ **Configuración general de El Heraldo**\n\n"
+        "**Configuración general de El Heraldo**\n\n"
         f"Creación automática de recursos: **{estado}**.\n"
         "La configuración de canales, roles, verificación, orientación, tiempos, permisos y demás opciones se realiza mediante `/setup`.",
         ephemeral=True,
@@ -7424,7 +7424,7 @@ async def heraldo_check(interaction: discord.Interaction, user: discord.User) ->
 
     await interaction.response.send_message(f"Evaluando a {member}...", ephemeral=True)
     await log_embed(
-        interaction.guild, "🔧 Chequeo manual",
+        interaction.guild, "Chequeo manual",
         f"Solicitado por {interaction.user.mention} sobre {member.mention}.",
         discord.Color.blurple(),
     )
@@ -7445,7 +7445,7 @@ async def heraldo_check_error(interaction: discord.Interaction, error: discord.a
 async def heraldo_check_all(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     await interaction.response.send_message("Revisando a todos los miembros con Tentad@... esto puede tardar un poco.", ephemeral=True)
-    await log_embed(guild, "🔍 Chequeo masivo iniciado", f"Solicitado por {interaction.user.mention}.", discord.Color.blurple())
+    await log_embed(guild, "Chequeo masivo iniciado", f"Solicitado por {interaction.user.mention}.", discord.Color.blurple())
 
     verified = 0
     expelled: list[discord.Member] = []
@@ -7469,18 +7469,18 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
                 expelled_sin_verificar.append(member)
             except discord.Forbidden:
                 await log_embed(
-                    guild, "⚠️ Error al expulsar",
+                    guild, "Advertencia: Error al expulsar",
                     f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
                     discord.Color.dark_red(),
                 )
             await asyncio.sleep(1)
 
     embed = discord.Embed(
-        title="🔍 Chequeo masivo completado",
+        title="Chequeo masivo completado",
         description=(
-            f"✅ **{verified}** verificado(s) a tiempo.\n"
-            f"👢 **{len(expelled)}** expulsado(s) por falta de rol de orientación.\n"
-            f"👢 **{len(expelled_sin_verificar)}** expulsado(s) por no verificarse (Sin Verificar)."
+            f"**{verified}** verificado(s) a tiempo.\n"
+            f"**{len(expelled)}** expulsado(s) por falta de rol de orientación.\n"
+            f"**{len(expelled_sin_verificar)}** expulsado(s) por no verificarse (Sin Verificar)."
         ),
         color=discord.Color.blurple(),
         timestamp=datetime.now(timezone.utc),
@@ -7543,7 +7543,7 @@ async def heraldo_log_channel(interaction: discord.Interaction, canal: discord.T
     ]
     if missing:
         await interaction.response.send_message(
-            f"❌ No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
+            f"Error: No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
             f"**{', '.join(missing)}**. Dáselos y vuelve a intentarlo.",
             ephemeral=True,
         )
@@ -7552,12 +7552,12 @@ async def heraldo_log_channel(interaction: discord.Interaction, canal: discord.T
     set_log_channel_id(canal.id, interaction.guild.id)
     guild_resource_set(interaction.guild.id, "channel", "logs", canal.id)
     await interaction.response.send_message(
-        f"✅ Los logs de El Heraldo ahora se publicarán en {canal.mention}.",
+        f"Los logs de El Heraldo ahora se publicarán en {canal.mention}.",
         ephemeral=True,
     )
     # Ya apunta al canal nuevo: este embed sirve además de prueba de que escribe bien.
     await log_embed(
-        interaction.guild, "⚙️ Canal de logs actualizado",
+        interaction.guild, "Canal de logs actualizado",
         f"{interaction.user.mention} lo cambió a {canal.mention}.",
         discord.Color.blurple(),
     )
@@ -7640,7 +7640,7 @@ async def clear_sin_verificar_after_verification(
     except discord.HTTPException as exc:
         await log_embed(
             guild,
-            "⚠️ No pude quitar Sin Verificar",
+            "Advertencia: No pude quitar Sin Verificar",
             f"{member.mention} ya está verificado, pero no pude quitarle "
             f"{sin_role.mention}: {exc}. Revisa jerarquía y permisos.",
             discord.Color.dark_red(),
@@ -7658,14 +7658,14 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
 
     punish_role_id = hp_punish_role_id(guild.id)
     if condemnation_get(member.guild.id, member.id) is not None or (punish_role_id and any(r.id == punish_role_id for r in member.roles)):
-        await interaction.followup.send("☠️ Estás condenado: no puedes verificarte mientras la condena esté activa.", ephemeral=True)
+        await interaction.followup.send("Estás condenado: no puedes verificarte mientras la condena esté activa.", ephemeral=True)
         return
 
     role = guild.get_role(get_verify_role_id(guild.id))
     if role is None:
-        await interaction.followup.send("⚠️ La verificación no está configurada todavía. Avisa a un administrador.", ephemeral=True)
+        await interaction.followup.send("Advertencia: La verificación no está configurada todavía. Avisa a un administrador.", ephemeral=True)
         await log_embed(
-            guild, "⚠️ Verificación sin configurar",
+            guild, "Advertencia: Verificación sin configurar",
             f"{member.mention} pulsó el botón pero el rol de verificación no existe.",
             discord.Color.dark_red(),
         )
@@ -7677,17 +7677,17 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
             member,
             reason="Limpieza automática: el miembro ya posee el rol de verificación",
         )
-        await interaction.followup.send("✅ ¡Ya estás verificado!", ephemeral=True)
+        await interaction.followup.send("¡Ya estás verificado!", ephemeral=True)
         return
     if role_ids & get_eval_role_ids(guild.id):
-        await interaction.followup.send("✅ Ya completaste la selección de orientación.", ephemeral=True)
+        await interaction.followup.send("Ya completaste la selección de orientación.", ephemeral=True)
         return
 
     problem = verify_role_problem(role, guild)
     if problem:
-        await interaction.followup.send("⚠️ La verificación está mal configurada. Avisa a un administrador.", ephemeral=True)
+        await interaction.followup.send("Advertencia: La verificación está mal configurada. Avisa a un administrador.", ephemeral=True)
         await log_embed(
-            guild, "⚠️ Verificación bloqueada",
+            guild, "Advertencia: Verificación bloqueada",
             f"{member.mention} pulsó el botón, pero el rol {role.mention} {problem}. No se le dio.",
             discord.Color.dark_red(),
         )
@@ -7696,9 +7696,9 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
     try:
         await member.add_roles(role, reason="Verificación de edad (botón de El Heraldo)")
     except discord.HTTPException as e:  # incluye Forbidden (jerarquía o permisos)
-        await interaction.followup.send("❌ No pude darte el rol. Avisa a un administrador.", ephemeral=True)
+        await interaction.followup.send("Error: No pude darte el rol. Avisa a un administrador.", ephemeral=True)
         await log_embed(
-            guild, "⚠️ Error al verificar",
+            guild, "Advertencia: Error al verificar",
             f"No pude darle {role.mention} a {member.mention}: `{e}`. Revisa jerarquía de roles y permisos.",
             discord.Color.dark_red(),
         )
@@ -7713,7 +7713,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
             db_clear_sin_verificado(member.guild.id, member.id)
         except discord.HTTPException as e:
             await log_embed(
-                guild, "⚠️ No pude quitar Sin Verificar",
+                guild, "Advertencia: No pude quitar Sin Verificar",
                 f"{member.mention} se verificó pero no pude quitarle {sin_role.mention}: `{e}`.",
                 discord.Color.dark_red(),
             )
@@ -7740,13 +7740,13 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
     dm_welcome_ok = await send_verification_welcome_dm(member)
     if not dm_welcome_ok:
         await log_embed(
-            guild, "⚠️ No pude enviar el DM de bienvenida",
+            guild, "Advertencia: No pude enviar el DM de bienvenida",
             f"{member.mention} se verificó, pero tiene los DMs cerrados o Discord rechazó el mensaje.",
             discord.Color.orange(),
         )
 
     await log_embed(
-        guild, "✅ Verificación de edad",
+        guild, "Verificación de edad",
         f"{member.mention} (`{member.id}`) se verificó correctamente.",
         discord.Color.green(),
     )
@@ -7790,7 +7790,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
     action = get_verify_action(guild.id)
     if action == "none":
         await log_embed(
-            guild, "⏰ Verificación vencida",
+            guild, "Verificación vencida",
             f"{member.mention} (`{member.id}`) no se verificó en {timeout} s. "
             f"Acción configurada: solo registrar.",
             discord.Color.orange(),
@@ -7803,14 +7803,14 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
             await member.kick(reason="No se verificó dentro del tiempo límite")
     except discord.HTTPException as e:  # incluye Forbidden (jerarquía de roles)
         await log_embed(
-            guild, "⚠️ Error al aplicar el timeout de verificación",
+            guild, "Advertencia: Error al aplicar el timeout de verificación",
             f"No pude {'banear' if action == 'ban' else 'expulsar'} a {member.mention}: `{e}`. "
             f"Revisa la jerarquía de roles.",
             discord.Color.dark_red(),
         )
         return
     await log_embed(
-        guild, "🔨 Ban — No se verificó" if action == "ban" else "👢 Kick — No se verificó",
+        guild, "Ban — No se verificó" if action == "ban" else "Kick — No se verificó",
         f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
         discord.Color.red(),
     )
@@ -7827,7 +7827,7 @@ async def update_verify_panel(guild: discord.Guild) -> str:
         channel_id, message_id = (int(x) for x in ref.split(":"))
         channel = guild.get_channel(channel_id)
         if channel is None:
-            return "⚠️ No encontré el canal del panel; publícalo de nuevo con /verify."
+            return "Advertencia: No encontré el canal del panel; publícalo de nuevo con /verify."
         message = await channel.fetch_message(message_id)
         await message.edit(
             content=render_vars(get_verify_panel_text(guild.id), VarContext(guild, None, channel), 2000),
@@ -7836,15 +7836,15 @@ async def update_verify_panel(guild: discord.Guild) -> str:
         )
         return "El panel publicado ya muestra los textos nuevos."
     except discord.NotFound:
-        return "⚠️ El panel ya no existe (¿lo borraron?); publícalo de nuevo con /verify."
+        return "Advertencia: El panel ya no existe (¿lo borraron?); publícalo de nuevo con /verify."
     except (discord.HTTPException, ValueError) as e:
-        return f"⚠️ No pude actualizar el panel publicado: `{e}`. Publícalo de nuevo con /verify."
+        return f"Advertencia: No pude actualizar el panel publicado: `{e}`. Publícalo de nuevo con /verify."
 
 
 def verify_config_summary(guild: discord.Guild) -> str:
     role_id = get_verify_role_id(guild.id)
     role = guild.get_role(role_id)
-    role_text = role.mention if role else f"⚠️ no encontrado (`{role_id}`)"
+    role_text = role.mention if role else f"Advertencia: no encontrado (`{role_id}`)"
     ref = guild_config_get(guild.id, "verify_panel_ref")
     if ref is None and legacy_fallback_allowed(guild.id):
         ref = db_meta_get("verify_panel_ref")
@@ -7852,11 +7852,11 @@ def verify_config_summary(guild: discord.Guild) -> str:
         channel_id, message_id = ref.split(":")
         panel_text = f"[ir al panel](https://discord.com/channels/{guild.id}/{channel_id}/{message_id})"
     elif ref:
-        panel_text = "⚠️ referencia dañada: publícalo de nuevo con /verify"
+        panel_text = "Advertencia: referencia dañada: publícalo de nuevo con /verify"
     else:
         panel_text = "sin publicar (usa /verify)"
     return (
-        f"**Verificación:** {'✅ activada' if verify_enabled(guild.id) else '⏸️ desactivada'}\n"
+        f"**Verificación:** {'activada' if verify_enabled(guild.id) else '⏸️ desactivada'}\n"
         f"**Rol de verificación:** {role_text}\n"
         f"**Timeout:** {format_duration((get_verify_timeout(guild.id) + 59) // 60)}\n"
         f"**Acción al agotarse:** {VERIFY_ACTION_LABELS[get_verify_action(guild.id)]}\n"
@@ -7896,16 +7896,16 @@ class VerifyTextsModal(discord.ui.Modal):
         label = self.button_label.value.strip()
         success = self.success.value.strip()
         if not (panel and label and success):
-            await interaction.response.send_message("❌ Ningún texto puede quedar vacío; no guardé nada.", ephemeral=True)
+            await interaction.response.send_message("Error: Ningún texto puede quedar vacío; no guardé nada.", ephemeral=True)
             return
         guild_config_set(interaction.guild.id, "verify_panel_text", panel)
         guild_config_set(interaction.guild.id, "verify_button_label", label)
         guild_config_set(interaction.guild.id, "verify_success_text", success)
         await interaction.response.defer(ephemeral=True, thinking=True)
         note = await update_verify_panel(interaction.guild)
-        await interaction.followup.send(f"✅ Textos guardados. {note}", ephemeral=True)
+        await interaction.followup.send(f"Textos guardados. {note}", ephemeral=True)
         await log_embed(
-            interaction.guild, "⚙️ Textos de verificación actualizados",
+            interaction.guild, "Textos de verificación actualizados",
             f"{interaction.user.mention} editó el mensaje del panel, el botón o el mensaje de éxito.",
             discord.Color.blurple(),
         )
@@ -7923,19 +7923,19 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
         return
     role = guild.get_role(get_verify_role_id(guild.id))
     if role is None:
-        await interaction.response.send_message("❌ El rol de verificación no existe. Elige uno con `/verify_setup`.", ephemeral=True)
+        await interaction.response.send_message("Error: El rol de verificación no existe. Elige uno con `/verify_setup`.", ephemeral=True)
         return
     problem = verify_role_problem(role, guild)
     if problem:
         await interaction.response.send_message(
-            f"❌ No publiqué el panel: el rol {role.mention} {problem}. Elige otro con `/verify_setup`.",
+            f"Error: No publiqué el panel: el rol {role.mention} {problem}. Elige otro con `/verify_setup`.",
             ephemeral=True,
         )
         return
     perms = target.permissions_for(guild.me)
     if not (perms.view_channel and perms.send_messages):
         await interaction.response.send_message(
-            f"❌ El Heraldo no puede escribir en {target.mention} (necesita Ver canal y Enviar mensajes).",
+            f"Error: El Heraldo no puede escribir en {target.mention} (necesita Ver canal y Enviar mensajes).",
             ephemeral=True,
         )
         return
@@ -7948,16 +7948,16 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.HTTPException as e:
-        await interaction.followup.send(f"❌ No pude publicar el panel: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"Error: No pude publicar el panel: `{e}`", ephemeral=True)
         return
     guild_config_set(guild.id, "verify_panel_ref", f"{target.id}:{message.id}")
     await interaction.followup.send(
-        f"✅ Panel publicado en {target.mention}. Cuando quieras que el timeout empiece a aplicarse, "
+        f"Panel publicado en {target.mention}. Cuando quieras que el timeout empiece a aplicarse, "
         f"usa `/verify_setup activado:True`.",
         ephemeral=True,
     )
     await log_embed(
-        guild, "⚙️ Panel de verificación publicado",
+        guild, "Panel de verificación publicado",
         f"{interaction.user.mention} lo publicó en {target.mention}.",
         discord.Color.blurple(),
     )
@@ -7996,35 +7996,35 @@ async def verify_dm_texts(
 
     if not titulo or not campo or not mensaje or not footer or not color or not icono_footer:
         await interaction.response.send_message(
-            "❌ No guardé nada: todas las partes del embed son obligatorias.",
+            "Error: No guardé nada: todas las partes del embed son obligatorias.",
             ephemeral=True,
         )
         return
 
     if len(titulo) > 256:
-        await interaction.response.send_message("❌ El título no puede superar 256 caracteres.", ephemeral=True)
+        await interaction.response.send_message("Error: El título no puede superar 256 caracteres.", ephemeral=True)
         return
     if len(campo) > 256:
-        await interaction.response.send_message("❌ El nombre del campo no puede superar 256 caracteres.", ephemeral=True)
+        await interaction.response.send_message("Error: El nombre del campo no puede superar 256 caracteres.", ephemeral=True)
         return
     if len(mensaje) > 4000:
-        await interaction.response.send_message("❌ El mensaje no puede superar 4000 caracteres.", ephemeral=True)
+        await interaction.response.send_message("Error: El mensaje no puede superar 4000 caracteres.", ephemeral=True)
         return
     if len(footer) > 2048:
-        await interaction.response.send_message("❌ El footer no puede superar 2048 caracteres.", ephemeral=True)
+        await interaction.response.send_message("Error: El footer no puede superar 2048 caracteres.", ephemeral=True)
         return
     if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
         await interaction.response.send_message(
-            "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC` o `#4F5BDC`.",
+            "Error: El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC` o `#4F5BDC`.",
             ephemeral=True,
         )
         return
     if len(icono_footer) > 500:
-        await interaction.response.send_message("❌ La URL del icono del footer es demasiado larga.", ephemeral=True)
+        await interaction.response.send_message("Error: La URL del icono del footer es demasiado larga.", ephemeral=True)
         return
     if not re.match(r"^https?://", icono_footer, re.IGNORECASE) and not VAR_PATTERN.search(icono_footer):
         await interaction.response.send_message(
-            "❌ El icono del footer debe ser una URL válida (`https://…`) o una variable como `{servericon}`.",
+            "Error: El icono del footer debe ser una URL válida (`https://…`) o una variable como `{servericon}`.",
             ephemeral=True,
         )
         return
@@ -8041,14 +8041,14 @@ async def verify_dm_texts(
         guild_config_set(interaction.guild.id, key, value)
 
     await interaction.response.send_message(
-        "✅ **DM de bienvenida actualizado correctamente.**\n"
+        "**DM de bienvenida actualizado correctamente.**\n"
         "Las próximas primeras verificaciones recibirán esta nueva versión.\n\n"
         "Usa `/verify_dm_preview` para verla en el canal de logs.",
         ephemeral=True,
     )
     await log_embed(
         interaction.guild,
-        "⚙️ DM de bienvenida actualizado",
+        "DM de bienvenida actualizado",
         f"{interaction.user.mention} actualizó las 6 partes del embed de primera verificación.",
         discord.Color.blurple(),
     )
@@ -8062,14 +8062,14 @@ async def verify_dm_preview(interaction: discord.Interaction) -> None:
     log_channel = guild.get_channel(get_log_channel_id(guild.id))
     if log_channel is None:
         await interaction.response.send_message(
-            "❌ No encontré el canal de logs configurado. Configúralo con `/heraldo_log_channel`.",
+            "Error: No encontré el canal de logs configurado. Configúralo con `/heraldo_log_channel`.",
             ephemeral=True,
         )
         return
     perms = log_channel.permissions_for(guild.me)
     if not (perms.view_channel and perms.send_messages and perms.embed_links):
         await interaction.response.send_message(
-            f"❌ No puedo publicar la vista previa en {log_channel.mention}: necesito Ver canal, Enviar mensajes y Insertar enlaces.",
+            f"Error: No puedo publicar la vista previa en {log_channel.mention}: necesito Ver canal, Enviar mensajes y Insertar enlaces.",
             ephemeral=True,
         )
         return
@@ -8083,10 +8083,10 @@ async def verify_dm_preview(interaction: discord.Interaction) -> None:
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.HTTPException as e:
-        await interaction.response.send_message(f"❌ No pude publicar la vista previa: `{e}`", ephemeral=True)
+        await interaction.response.send_message(f"Error: No pude publicar la vista previa: `{e}`", ephemeral=True)
         return
     await interaction.response.send_message(
-        f"✅ Vista previa publicada en {log_channel.mention}.", ephemeral=True
+        f"Vista previa publicada en {log_channel.mention}.", ephemeral=True
     )
 
 
@@ -8130,25 +8130,25 @@ async def verify_config(
             timeout_minutes = parse_duration(timeout, 1, 28 * 24 * 60)
             timeout_seconds = timeout_minutes * 60
         except ValueError as e:
-            await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
+            await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
             return
     if rol is not None:
         problem = verify_role_problem(rol, guild)
         if problem:
-            await interaction.response.send_message(f"❌ No guardé nada: {rol.mention} {problem}.", ephemeral=True)
+            await interaction.response.send_message(f"Error: No guardé nada: {rol.mention} {problem}.", ephemeral=True)
             return
     if activado:
         effective_role = rol or guild.get_role(get_verify_role_id(guild.id))
         if effective_role is None:
             await interaction.response.send_message(
-                "❌ No activé la verificación: el rol de verificación no existe. Elige uno con `rol`.",
+                "Error: No activé la verificación: el rol de verificación no existe. Elige uno con `rol`.",
                 ephemeral=True,
             )
             return
         problem = verify_role_problem(effective_role, guild)
         if problem:
             await interaction.response.send_message(
-                f"❌ No activé la verificación: {effective_role.mention} {problem}.", ephemeral=True
+                f"Error: No activé la verificación: {effective_role.mention} {problem}.", ephemeral=True
             )
             return
         panel_ref = guild_config_get(guild.id, "verify_panel_ref")
@@ -8156,7 +8156,7 @@ async def verify_config(
             panel_ref = db_meta_get("verify_panel_ref")
         if not panel_ref:
             await interaction.response.send_message(
-                "❌ No activé la verificación: aún no hay panel publicado. Usa `/verify` primero; "
+                "Error: No activé la verificación: aún no hay panel publicado. Usa `/verify` primero; "
                 "si no, nadie podría verificarse y todos los que entren serían sancionados.",
                 ephemeral=True,
             )
@@ -8179,17 +8179,17 @@ async def verify_config(
 
     warnings: list[str] = []
     if get_verify_timeout(guild.id) > get_sin_verificado_window(guild.id).total_seconds():
-        warnings.append("⚠️ El respaldo de Sin Verificar sigue en 300 s: quien tenga ese rol será expulsado antes que este timeout.")
+        warnings.append("Advertencia: El respaldo de Sin Verificar sigue en 300 s: quien tenga ese rol será expulsado antes que este timeout.")
     if get_verify_role_id(guild.id) != get_tentado_role_id(guild.id):
-        warnings.append("⚠️ El timer de orientación (10 min) solo se arma con Tentad@; con otro rol no se activará.")
+        warnings.append("Advertencia: El timer de orientación (10 min) solo se arma con Tentad@; con otro rol no se activará.")
 
     await interaction.response.send_message(
-        "✅ Guardado: " + "; ".join(changes) + "\n\n" + verify_config_summary(guild)
+        "Guardado: " + "; ".join(changes) + "\n\n" + verify_config_summary(guild)
         + ("\n\n" + "\n".join(warnings) if warnings else ""),
         ephemeral=True,
     )
     await log_embed(
-        guild, "⚙️ Verificación actualizada",
+        guild, "Verificación actualizada",
         f"{interaction.user.mention}: " + "; ".join(changes),
         discord.Color.blurple(),
     )
@@ -8245,7 +8245,7 @@ def _joinroles_validate_command_roles(
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def joinroles_status(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
-        "🚪 **El Heraldo · Join Roles**\n\n"
+        "**El Heraldo · Join Roles**\n\n"
         + join_roles_basic_summary(interaction.guild)
         + "\n\n"
         + join_roles_bots_summary(interaction.guild)
@@ -8261,7 +8261,7 @@ async def joinroles_sync_command(interaction: discord.Interaction) -> None:
     await interaction.response.defer(ephemeral=True, thinking=True)
     assigned, skipped, errors = await sync_join_roles(interaction.guild)
     text = (
-        f"✅ Sync terminado. **{assigned}** miembro(s) recibieron Join Roles; "
+        f"Sync terminado. **{assigned}** miembro(s) recibieron Join Roles; "
         f"**{skipped}** no necesitaron cambios."
     )
     if errors:
@@ -8282,7 +8282,7 @@ async def joinroles_add(
     roles = _joinroles_command_roles(rol, rol2, rol3, rol4, rol5)
     issue = _joinroles_validate_command_roles(interaction.guild, roles)
     if issue:
-        await interaction.response.send_message(f"❌ {issue}", ephemeral=True)
+        await interaction.response.send_message(f"Error: {issue}", ephemeral=True)
         return
     current = get_join_role_ids(interaction.guild.id)
     for role in roles:
@@ -8291,7 +8291,7 @@ async def joinroles_add(
     set_join_role_ids(interaction.guild.id, current[:JOIN_ROLES_MAX])
     guild_config_set(interaction.guild.id, "join_roles_enabled", "1")
     await interaction.response.send_message(
-        "✅ Join Roles actualizados:\n" + _join_roles_render(interaction.guild, get_join_role_ids(interaction.guild.id)),
+        "Join Roles actualizados:\n" + _join_roles_render(interaction.guild, get_join_role_ids(interaction.guild.id)),
         ephemeral=True,
     )
 
@@ -8310,7 +8310,7 @@ async def joinroles_remove(
     current = [role_id for role_id in get_join_role_ids(interaction.guild.id) if role_id not in remove_ids]
     set_join_role_ids(interaction.guild.id, current)
     await interaction.response.send_message(
-        "✅ Join Roles actualizados:\n" + _join_roles_render(interaction.guild, current),
+        "Join Roles actualizados:\n" + _join_roles_render(interaction.guild, current),
         ephemeral=True,
     )
 
@@ -8327,11 +8327,11 @@ async def joinroles_user_add(
         if target_id <= 0:
             raise ValueError
     except ValueError:
-        await interaction.response.send_message("❌ Discord User ID inválido.", ephemeral=True)
+        await interaction.response.send_message("Error: Discord User ID inválido.", ephemeral=True)
         return
     issue = _joinroles_validate_command_roles(interaction.guild, [rol])
     if issue:
-        await interaction.response.send_message(f"❌ {issue}", ephemeral=True)
+        await interaction.response.send_message(f"Error: {issue}", ephemeral=True)
         return
     mapping = get_join_specific_roles(interaction.guild.id)
     roles = mapping.get(target_id, [])
@@ -8339,7 +8339,7 @@ async def joinroles_user_add(
         roles.append(rol.id)
     set_join_specific_user_roles(interaction.guild.id, target_id, roles)
     await interaction.response.send_message(
-        f"✅ <@{target_id}> recibirá {rol.mention} cuando ingrese.", ephemeral=True
+        f"<@{target_id}> recibirá {rol.mention} cuando ingrese.", ephemeral=True
     )
 
 
@@ -8355,22 +8355,22 @@ async def joinroles_user_remove(
         if target_id <= 0:
             raise ValueError
     except ValueError:
-        await interaction.response.send_message("❌ Discord User ID inválido.", ephemeral=True)
+        await interaction.response.send_message("Error: Discord User ID inválido.", ephemeral=True)
         return
 
     mapping = get_join_specific_roles(interaction.guild.id)
     if target_id not in mapping:
-        await interaction.response.send_message("ℹ️ Ese User ID no está configurado.", ephemeral=True)
+        await interaction.response.send_message("Información: Ese User ID no está configurado.", ephemeral=True)
         return
     if rol is None:
         remove_join_specific_user(interaction.guild.id, target_id)
-        await interaction.response.send_message("✅ Usuario eliminado de la lista.", ephemeral=True)
+        await interaction.response.send_message("Usuario eliminado de la lista.", ephemeral=True)
         return
 
     roles = [role_id for role_id in mapping[target_id] if role_id != rol.id]
     set_join_specific_user_roles(interaction.guild.id, target_id, roles)
     await interaction.response.send_message(
-        f"✅ {rol.mention} eliminado de los roles específicos de <@{target_id}>.",
+        f"{rol.mention} eliminado de los roles específicos de <@{target_id}>.",
         ephemeral=True,
     )
 
@@ -8552,11 +8552,11 @@ async def sync_server_template(guild: discord.Guild) -> tuple[discord.Template |
 
 def template_report_embed(template: discord.Template, was_dirty: bool | None, trigger: str) -> discord.Embed:
     if was_dirty is True:
-        state = "✅ Había cambios pendientes y ya están sincronizados."
+        state = "Había cambios pendientes y ya están sincronizados."
     elif was_dirty is False:
-        state = "✅ Sin cambios pendientes: la plantilla ya estaba al día."
+        state = "Sin cambios pendientes: la plantilla ya estaba al día."
     else:
-        state = "✅ Sincronizada (Discord no indicó si había cambios)."
+        state = "Sincronizada (Discord no indicó si había cambios)."
     embed = discord.Embed(
         title="Copia de seguridad de la plantilla",
         description=state,
@@ -8576,7 +8576,7 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
     template, was_dirty, error = await sync_server_template(guild)
     if error:
         embed = discord.Embed(
-            title="⚠️ Falló la copia de seguridad de la plantilla",
+            title="Advertencia: Falló la copia de seguridad de la plantilla",
             description=error,
             color=discord.Color.dark_red(),
             timestamp=datetime.now(timezone.utc),
@@ -8595,7 +8595,7 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
         pass  # incluye Forbidden (mensajes privados cerrados)
     # El enlace nunca va al canal de logs: ahí solo queda constancia del fallo o del envío fallido.
     if error:
-        await log_embed(guild, "⚠️ Falló la copia de seguridad de la plantilla", error, discord.Color.dark_red())
+        await log_embed(guild, "Advertencia: Falló la copia de seguridad de la plantilla", error, discord.Color.dark_red())
     elif not sent:
         await log_embed(
             guild, "Plantilla sincronizada (mensaje privado no enviado)",
@@ -8616,7 +8616,7 @@ async def template_backup_loop() -> None:
             if await run_scheduled_template_backup(guild):
                 template_mark_done(guild.id, now)
         except Exception:
-            print(f"❌ Falló la copia programada de plantilla en {guild.name}:")
+            print(f"Error: Falló la copia programada de plantilla en {guild.name}:")
             traceback.print_exc()
 
 
@@ -8677,7 +8677,7 @@ async def template_config(
         try:
             intervalo_minutes = parse_duration(intervalo, 1, 30 * 24 * 60)
         except ValueError as e:
-            await interaction.followup.send(f"❌ No guardé nada: {e}", ephemeral=True)
+            await interaction.followup.send(f"Error: No guardé nada: {e}", ephemeral=True)
             return
 
     changes: list[str] = []
@@ -8714,11 +8714,11 @@ async def template_config(
             note = f"\n\n⚠️ No pude comprobar si hay plantilla: `{e}`"
 
     await interaction.followup.send(
-        "✅ Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(guild.id, now) + note,
+        "Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(guild.id, now) + note,
         ephemeral=True,
     )
     await log_embed(
-        guild, "⚙️ Copia de seguridad de la plantilla actualizada",
+        guild, "Copia de seguridad de la plantilla actualizada",
         f"{interaction.user.mention}: " + "; ".join(changes),
         discord.Color.blurple(),
     )
@@ -8731,21 +8731,21 @@ async def template_sync(interaction: discord.Interaction) -> None:
     await interaction.response.defer(ephemeral=True)
     template, was_dirty, error = await sync_server_template(interaction.guild)
     if error:
-        await interaction.followup.send(f"❌ {error}", ephemeral=True)
+        await interaction.followup.send(f"Error: {error}", ephemeral=True)
         return
     embed = template_report_embed(template, was_dirty, "manual")
     try:
         owner = await bot.fetch_user(interaction.guild.owner_id)
         await owner.send(embed=embed)
         if interaction.user.id == owner.id:
-            confirmation = "✅ Plantilla sincronizada. Te envié el enlace por mensaje privado."
+            confirmation = "Plantilla sincronizada. Te envié el enlace por mensaje privado."
         else:
-            confirmation = "✅ Plantilla sincronizada. El enlace fue enviado por mensaje privado al creador del servidor."
+            confirmation = "Plantilla sincronizada. El enlace fue enviado por mensaje privado al creador del servidor."
         await interaction.followup.send(confirmation, ephemeral=True)
     except discord.HTTPException:
         # El enlace no se publica en el canal ni se entrega a otro administrador.
         await interaction.followup.send(
-            "⚠️ La plantilla se sincronizó, pero no pude enviar el enlace por mensaje privado al creador del servidor. Debe tener los DMs habilitados.",
+            "Advertencia: La plantilla se sincronizó, pero no pude enviar el enlace por mensaje privado al creador del servidor. Debe tener los DMs habilitados.",
             ephemeral=True,
         )
     await log_embed(
@@ -8835,14 +8835,14 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
         roles_text = "Sin roles"
 
     embed = discord.Embed(
-        title=f"📋 Perfil de {target.display_name}",
+        title=f"Perfil de {target.display_name}",
         color=discord.Color.blurple(),
         timestamp=datetime.now(timezone.utc),
     )
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="Usuario", value=discord.utils.escape_markdown(target.name), inline=True)
     embed.add_field(name="Nombre visible", value=discord.utils.escape_markdown(target.display_name), inline=True)
-    embed.add_field(name="💬 Mensajes", value=f"{messages:,}", inline=True)
+    embed.add_field(name="Mensajes", value=f"{messages:,}", inline=True)
     embed.add_field(name="🔥 Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
     embed.add_field(name="Roles", value=roles_text, inline=False)
     embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
@@ -8897,9 +8897,9 @@ async def member_of_the_week_loop() -> None:
             if error is None:
                 guild_config_set(guild.id, "motw_last_slot", slot)
             else:
-                print(f"⚠️ Miembro de la Semana reintentará en {guild.name}: {error}")
+                print(f"Advertencia: Miembro de la Semana reintentará en {guild.name}: {error}")
         except Exception:
-            print(f"❌ Falló Miembro de la Semana en {guild.name}:")
+            print(f"Error: Falló Miembro de la Semana en {guild.name}:")
             traceback.print_exc()
 
 
@@ -8910,7 +8910,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
     (en ese caso NO se reinician los contadores, para no perder la semana)."""
     channel = bot.get_channel(get_motw_channel_id(guild_id))
     if channel is None:
-        print("⚠️ Miembro de la Semana: no encontré el canal de anuncios configurado.")
+        print("Advertencia: Miembro de la Semana: no encontré el canal de anuncios configurado.")
         return "No encontré el canal de anuncios configurado."
     guild = channel.guild
 
@@ -8930,7 +8930,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
 
     if not ranking:
         try:
-            await channel.send("📊 ¡No hubo actividad esta semana!")
+            await channel.send("¡No hubo actividad esta semana!")
         except discord.HTTPException as e:
             print(f"No se pudo escribir en el canal de Miembro de la Semana: {e}")
             return str(e)
@@ -8953,7 +8953,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
             description += " Empató con el segundo lugar y ganó por desempate."
 
     embed = discord.Embed(
-        title="👑 Miembro de la Semana" if reset else "🧪 Miembro de la Semana (prueba)",
+        title="Miembro de la Semana" if reset else "🧪 Miembro de la Semana (prueba)",
         description=description,
         color=discord.Color.gold(),
         timestamp=datetime.now(timezone.utc),
@@ -8984,12 +8984,12 @@ async def motw_set_schedule(interaction: discord.Interaction, dia: discord.app_c
     now = datetime.now(STREAK_TZ)
     next_run = motw_last_scheduled(interaction.guild.id, now) + timedelta(days=7)
     await interaction.response.send_message(
-        f"✅ Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).\n"
+        f"Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).\n"
         f"Próximo anuncio: **{MOTW_WEEKDAY_NAMES[next_run.weekday()]} {next_run.day}/{next_run.month} a las {next_run.hour}:00**.",
         ephemeral=True,
     )
     await log_embed(
-        interaction.guild, "⚙️ Horario de Miembro de la Semana actualizado",
+        interaction.guild, "Horario de Miembro de la Semana actualizado",
         f"{interaction.user.mention} lo cambió a {dia.name} {hora}:00 (hora de RD).",
         discord.Color.blurple(),
     )
@@ -9019,7 +9019,7 @@ async def motw_set_channel(interaction: discord.Interaction, canal: discord.Text
     ]
     if missing:
         await interaction.response.send_message(
-            f"❌ No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
+            f"Error: No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
             f"**{', '.join(missing)}**. Dáselos y vuelve a intentarlo.",
             ephemeral=True,
         )
@@ -9027,11 +9027,11 @@ async def motw_set_channel(interaction: discord.Interaction, canal: discord.Text
 
     set_motw_channel_id(interaction.guild.id, canal.id)
     await interaction.response.send_message(
-        f"✅ Miembro de la Semana se anunciará en {canal.mention}. Usa `/motw_test` para probarlo.",
+        f"Miembro de la Semana se anunciará en {canal.mention}. Usa `/motw_test` para probarlo.",
         ephemeral=True,
     )
     await log_embed(
-        interaction.guild, "⚙️ Canal de Miembro de la Semana actualizado",
+        interaction.guild, "Canal de Miembro de la Semana actualizado",
         f"{interaction.user.mention} lo cambió a {canal.mention}.",
         discord.Color.blurple(),
     )
@@ -9056,13 +9056,13 @@ async def motw_test(interaction: discord.Interaction) -> None:
     error = await announce_member_of_the_week(interaction.guild.id, reset=False)
     if error:
         await interaction.followup.send(
-            f"❌ No pude publicar en el canal de anuncios: `{error}`\n"
+            f"Error: No pude publicar en el canal de anuncios: `{error}`\n"
             "Revisa que el Heraldo tenga permisos de **Ver canal**, **Enviar mensajes** "
             "e **Insertar enlaces** en ese canal.",
             ephemeral=True,
         )
     else:
-        await interaction.followup.send("✅ Anuncio de prueba publicado.", ephemeral=True)
+        await interaction.followup.send("Anuncio de prueba publicado.", ephemeral=True)
 
 
 @motw_test.error
@@ -10086,10 +10086,10 @@ def condemnation_duration_text(row: sqlite3.Row) -> str:
 
 def condemnation_origin_label(origin: str) -> str:
     return {
-        "honeypot": "🍯 Honeypot",
+        "honeypot": "Honeypot",
         "command": "⌨️ Comando",
-        "reaction": "☠️ Reacción",
-        "role": "🎭 Rol otorgado a mano",
+        "reaction": "Reacción",
+        "role": "Rol otorgado a mano",
         "raid": "Raid Protection",
     }.get(origin, origin)
 
@@ -10310,7 +10310,7 @@ def hp_warning_text(guild_id: int) -> str:
 
 def hp_warning_custom(guild_id: int) -> dict[str, str]:
     return {
-        "title": hp_setting_get(guild_id, "honeypot_warning_title") or "⚠️ No escribas en este canal",
+        "title": hp_setting_get(guild_id, "honeypot_warning_title") or "Advertencia: No escribas en este canal",
         "description": hp_setting_get(guild_id, "honeypot_warning_description") or HONEYPOT_WARNING_TEXT_DEFAULT,
         "color": hp_setting_get(guild_id, "honeypot_warning_color") or "F1C40F",
         "image": hp_setting_get(guild_id, "honeypot_warning_image") or "",
@@ -10342,7 +10342,7 @@ def hp_config_summary(guild: discord.Guild) -> str:
     traps = hp_traps(guild.id)
     trap_text = ", ".join(f"<#{cid}>" for cid in traps) or "—"
     ping = f"<@&{hp_ping_role_id(guild.id)}>" if hp_ping_role_id(guild.id) else "—"
-    estado = "✅ Activado" if honeypot_enabled(guild.id) else "❌ Desactivado"
+    estado = "Activado" if honeypot_enabled(guild.id) else "Error: Desactivado"
     if honeypot_paused(guild.id):
         estado += " · ⏸️ **PAUSADO** por protección contra fallos (`/honeypot resume`)"
     lines = [
@@ -10388,7 +10388,7 @@ def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord
             embed.set_footer(text=footer)
         return embed
     return discord.Embed(
-        title="⚠️ No escribas en este canal",
+        title="Advertencia: No escribas en este canal",
         description=render_vars(hp_warning_text(guild_id), ctx, 4096),
         color=discord.Color.gold(),
     )
@@ -10699,7 +10699,7 @@ async def run_purge_job(
     except Exception:
         traceback.print_exc()
         await log_embed(
-            guild, "⚠️ Purga fallida",
+            guild, "Advertencia: Purga fallida",
             f"{requested_by} · {user.mention} · {scope_text}\nOcurrió un error; revisa los logs del bot.",
             discord.Color.red(),
         )
@@ -10725,8 +10725,8 @@ def hp_start_purge(member: discord.Member) -> str | None:
     scope = format_purge_spec(kind, value)
     asyncio.create_task(
         run_purge_job(
-            member.guild, member, scope_text=scope, requested_by="🍯 Honeypot",
-            after=after, limit=limit, title="🍯 Purga del honeypot completada",
+            member.guild, member, scope_text=scope, requested_by="Honeypot",
+            after=after, limit=limit, title="Purga del honeypot completada",
         )
     )
     return f"purga en segundo plano ({scope})"
@@ -10916,7 +10916,7 @@ async def condemnation_send_pardon_dm(
     )
     case_id = condemnation_case_id(member, condemned_at, linked_case)
     embed = discord.Embed(
-        title="🕊️ CONDENA PERDONADA",
+        title="CONDENA PERDONADA",
         description=(
             f"Tu condena del expediente **{case_id}** ha sido levantada. "
             "Tus roles guardados fueron restaurados en la medida permitida por la jerarquía del servidor."
@@ -10931,7 +10931,7 @@ async def condemnation_send_pardon_dm(
     embed.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
     embed.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
     embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
-    embed.add_field(name="Resultado", value=(f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; ⚠️ **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
+    embed.add_field(name="Resultado", value=(f"Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; ⚠️ **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
     embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
     embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽")
     try:
@@ -11053,7 +11053,7 @@ class CondemnationPardonView(discord.ui.View):
         # falla, Discord no mostrará "La aplicación no respondió".
         if interaction.guild is None or interaction.message is None:
             await interaction.response.send_message(
-                "❌ Este botón solo funciona dentro del servidor.",
+                "Error: Este botón solo funciona dentro del servidor.",
                 ephemeral=True,
             )
             return
@@ -11064,7 +11064,7 @@ class CondemnationPardonView(discord.ui.View):
             mentions = interaction.message.mentions
             if not mentions:
                 await interaction.followup.send(
-                    "❌ No pude identificar al condenado asociado a este expediente.",
+                    "Error: No pude identificar al condenado asociado a este expediente.",
                     ephemeral=True,
                 )
                 return
@@ -11078,7 +11078,7 @@ class CondemnationPardonView(discord.ui.View):
 
             if member is None:
                 await interaction.followup.send(
-                    "❌ Ese miembro ya no está disponible en el servidor.",
+                    "Error: Ese miembro ya no está disponible en el servidor.",
                     ephemeral=True,
                 )
                 return
@@ -11086,14 +11086,14 @@ class CondemnationPardonView(discord.ui.View):
             row = condemnation_get(member.guild.id, member.id)
             if row is None:
                 await interaction.followup.send(
-                    "ℹ️ Este expediente ya no tiene una condena activa o ya fue resuelto.",
+                    "Información: Este expediente ya no tiene una condena activa o ya fue resuelto.",
                     ephemeral=True,
                 )
                 return
 
             if member.id in _pardon_inflight:
                 await interaction.followup.send(
-                    "⏳ Este perdón ya se está procesando.",
+                    "Este perdón ya se está procesando.",
                     ephemeral=True,
                 )
                 return
@@ -11124,7 +11124,7 @@ class CondemnationPardonView(discord.ui.View):
                 _pardon_inflight.discard(member.id)
 
             await interaction.followup.send(
-                ("🕊️ " if ok else "❌ ") + note,
+                ("" if ok else "Error: ") + note,
                 ephemeral=True,
             )
         except Exception:
@@ -11132,12 +11132,12 @@ class CondemnationPardonView(discord.ui.View):
             try:
                 if interaction.response.is_done():
                     await interaction.followup.send(
-                        "❌ Ocurrió un error al procesar el perdón. El error quedó registrado en los logs del bot.",
+                        "Error: Ocurrió un error al procesar el perdón. El error quedó registrado en los logs del bot.",
                         ephemeral=True,
                     )
                 else:
                     await interaction.response.send_message(
-                        "❌ Ocurrió un error al procesar el perdón. El error quedó registrado en los logs del bot.",
+                        "Error: Ocurrió un error al procesar el perdón. El error quedó registrado en los logs del bot.",
                         ephemeral=True,
                     )
             except Exception:
@@ -11296,7 +11296,7 @@ async def condemnation_update_pardoned_card(
         pardoned_at = datetime.now(timezone.utc)
 
         resolution = discord.Embed(
-            title="🕊️ CONDENA PERDONADA",
+            title="CONDENA PERDONADA",
             description=(
                 f"El expediente **{case_id}** ha sido resuelto mediante perdón. "
                 "Esta tarjeta registra la resolución del caso."
@@ -11312,7 +11312,7 @@ async def condemnation_update_pardoned_card(
         resolution.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
         resolution.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
 
-        result = f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)"
+        result = f"Condena levantada. **{restored_count}** rol(es) restaurado(s)"
         if lost_count:
             result += f"; ⚠️ **{lost_count}** no se pudieron restaurar."
         else:
@@ -11334,9 +11334,9 @@ async def condemnation_update_pardoned_card(
         except discord.NotFound:
             old_deleted = True
         except discord.Forbidden:
-            print(f"⚠️ No pude eliminar la tarjeta original del expediente {case_id}: faltan permisos.")
+            print(f"Advertencia: No pude eliminar la tarjeta original del expediente {case_id}: faltan permisos.")
         except discord.HTTPException as e:
-            print(f"⚠️ No pude eliminar la tarjeta original del expediente {case_id}: {e}")
+            print(f"Advertencia: No pude eliminar la tarjeta original del expediente {case_id}: {e}")
 
         conn = db_connect()
         conn.execute(
@@ -11349,7 +11349,7 @@ async def condemnation_update_pardoned_card(
         if not old_deleted:
             await log_embed(
                 member.guild,
-                "⚠️ Tarjeta de condena no eliminada",
+                "Advertencia: Tarjeta de condena no eliminada",
                 f"Expediente: {case_id}\nNo pude eliminar la tarjeta original. "
                 f"La tarjeta de resolución sí fue creada: {new_message.jump_url}",
                 discord.Color.orange(),
@@ -11434,11 +11434,11 @@ async def condemn_member(
     if not reason:
         automatic_reasons = {
             "raid": "Protección RAID: ingreso detectado durante un patrón de incursión masiva.",
-            "honeypot": "🍯 Honeypot: el miembro activó un canal trampa de seguridad.",
-            "role": "🎭 El rol Condenado fue otorgado manualmente y activó el motor de condenas.",
-            "reaction": "☠️ Condena aplicada mediante la reacción de moderación.",
+            "honeypot": "Honeypot: el miembro activó un canal trampa de seguridad.",
+            "role": "El rol Condenado fue otorgado manualmente y activó el motor de condenas.",
+            "reaction": "Condena aplicada mediante la reacción de moderación.",
         }
-        reason = automatic_reasons.get(origin, "⚠️ Condena automática de seguridad de El Heraldo.")
+        reason = automatic_reasons.get(origin, "Advertencia: Condena automática de seguridad de El Heraldo.")
     if member.id in _condemn_inflight:
         return False, "Ya hay una condena en proceso para este miembro."
     protection = condemnation_protection_reason(member)
@@ -11582,14 +11582,14 @@ async def _condemn_member_inner(
     # al mismo canal, no dupliques el mismo evento con un segundo embed.
     if get_log_channel_id(member.guild.id) != condemnation_channel_id(member.guild.id):
         await log_embed(
-            member.guild, "☠️ Condena aplicada",
+            member.guild, "Condena aplicada",
         f"{member.mention} (`{member.id}`)\n"
         f"Motivo: {reason}\n"
         f"Duración: {format_duration(duration_minutes) if duration_minutes else 'Indefinida'}\n"
         f"Origen: {condemnation_origin_label(origin)}\n"
         f"Aplicó: {applied_by.mention if applied_by else 'El Heraldo'}\n"
         f"{role_note}\n"
-        f"DM: {'✅ enviado' if dm_ok else '⚠️ no enviado' if dm_ok is not None else '—'}",
+        f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado' if dm_ok is not None else '—'}",
             discord.Color.dark_red(),
         )
     return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
@@ -11672,19 +11672,19 @@ async def release_condemned_member(
         )
         dm_ok = await condemnation_send_pardon_dm(member, row, released_by, len(restore), lost)
         await log_embed(
-            member.guild, "🕊️ Condena perdonada",
+            member.guild, "Condena perdonada",
             f"Expediente: {case_id}\nUsuario: {member.mention} ({member.id})\n"
             f"Motivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\n"
             f"Perdonó: {released_by.mention}\nRoles: {text}\n"
-            f"Tarjeta original: {'✅ cerrada' if card_ok else '⚠️ no cerrada'}\n"
-            f"Tarjeta de resolución: {'✅ creada' if card_ok else '⚠️ no creada'}\n"
-            f"DM: {'✅ enviado' if dm_ok else '⚠️ no enviado'}",
+            f"Tarjeta original: {'cerrada' if card_ok else 'Advertencia: no cerrada'}\n"
+            f"Tarjeta de resolución: {'creada' if card_ok else 'Advertencia: no creada'}\n"
+            f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado'}",
             discord.Color.green(),
         )
         return True, text + (
             "; tarjeta de resolución creada" if card_ok else "; no pude publicar la tarjeta de resolución"
         ) + ("; DM de perdón enviado" if dm_ok else "; DM de perdón no disponible")
-    await log_embed(member.guild, "🕊️ Condena levantada", f"{member.mention} — {text}. Por: {released_by.mention if released_by else 'El Heraldo'}.", discord.Color.green())
+    await log_embed(member.guild, "Condena levantada", f"{member.mention} — {text}. Por: {released_by.mention if released_by else 'El Heraldo'}.", discord.Color.green())
     return True, text
 
 
@@ -11851,7 +11851,7 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
     if attachments:
         evidence += f"\n📎 {attachments} adjunto(s)"
     embed = discord.Embed(
-        title="🍯 Honeypot: miembro atrapado" if success else "🍯 Honeypot: castigo FALLIDO",
+        title="Honeypot: miembro atrapado" if success else "Honeypot: castigo FALLIDO",
         color=discord.Color.orange() if success else discord.Color.red(),
         timestamp=datetime.now(timezone.utc),
     )
@@ -11951,7 +11951,7 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
         return
     hp_remove_trap(channel.guild.id, channel.id)
     await log_embed(
-        channel.guild, "🍯 Canal trampa eliminado",
+        channel.guild, "Canal trampa eliminado",
         f"Se borró `#{channel.name}` en Discord y se quitó del honeypot automáticamente. "
         f"Quedan {len(hp_traps(channel.guild.id))} canal(es) trampa.",
         discord.Color.orange(),
@@ -11982,7 +11982,7 @@ async def condenar(
     guild = interaction.guild
     reason = (motivo or "").strip()[:1000]
     if not reason:
-        await interaction.response.send_message("❌ El motivo de la condena es obligatorio.", ephemeral=True)
+        await interaction.response.send_message("Error: El motivo de la condena es obligatorio.", ephemeral=True)
         return
     duration_minutes: int | None = condemnation_default_duration_minutes(guild.id)
     try:
@@ -11994,12 +11994,12 @@ async def condenar(
                 duration_minutes = parse_duration(raw_duration, 1, get_condemnation_max_minutes(guild.id))
         purge_spec = parse_purge_spec(purga) if purga else HONEYPOT_PURGE_DEFAULT
     except ValueError as e:
-        await interaction.response.send_message(f"❌ No se pudo condenar: {e}", ephemeral=True)
+        await interaction.response.send_message(f"Error: No se pudo condenar: {e}", ephemeral=True)
         return
 
     if miembro.id == interaction.user.id:
         # No es una protección de seguridad; evita una equivocación especialmente fácil con el comando.
-        await interaction.response.send_message("❌ No puedes condenarte a ti mismo con este comando.", ephemeral=True)
+        await interaction.response.send_message("Error: No puedes condenarte a ti mismo con este comando.", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -12012,10 +12012,10 @@ async def condenar(
         applied_by=interaction.user,
     )
     if not ok:
-        await interaction.followup.send(f"❌ No se aplicó la condena: {note}", ephemeral=True)
+        await interaction.followup.send(f"Error: No se aplicó la condena: {note}", ephemeral=True)
         return
     await interaction.followup.send(
-        f"☠️ {miembro.mention} condenado. **Duración:** {format_duration(duration_minutes) if duration_minutes else 'indefinida'} · "
+        f"{miembro.mention} condenado. **Duración:** {format_duration(duration_minutes) if duration_minutes else 'indefinida'} · "
         f"**Purga:** {format_purge_spec(*purge_spec)}.", ephemeral=True,
     )
 
@@ -12035,7 +12035,7 @@ async def condenar_error(interaction: discord.Interaction, error: discord.app_co
 async def liberar(interaction: discord.Interaction, miembro: discord.Member) -> None:
     await interaction.response.defer(ephemeral=True)
     ok, text = await release_condemned_member(miembro, released_by=interaction.user)
-    await interaction.followup.send(("✅ " if ok else "❌ ") + text, ephemeral=True)
+    await interaction.followup.send(("" if ok else "Error: ") + text, ephemeral=True)
 
 
 @liberar.error
@@ -12062,13 +12062,13 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
     missing = [name for name, ok in (("Ver canal", perms.view_channel), ("Enviar mensajes", perms.send_messages), ("Insertar enlaces", perms.embed_links)) if not ok]
     if missing:
         await interaction.response.send_message(
-            f"❌ No guardé el cambio: faltan **{', '.join(missing)}** en {canal.mention}.", ephemeral=True
+            f"Error: No guardé el cambio: faltan **{', '.join(missing)}** en {canal.mention}.", ephemeral=True
         )
         return
     set_condemnation_channel_id(canal.id, interaction.guild.id)
     guild_resource_set(interaction.guild.id, "channel", "condemned", canal.id)
-    await interaction.response.send_message(f"✅ Los avisos de condena se publicarán en {canal.mention}.", ephemeral=True)
-    await log_embed(interaction.guild, "⚙️ Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
+    await interaction.response.send_message(f"Los avisos de condena se publicarán en {canal.mention}.", ephemeral=True)
+    await log_embed(interaction.guild, "Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
 
 
 class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
@@ -12108,7 +12108,7 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
                 int(color, 16)
             except ValueError:
                 await interaction.response.send_message(
-                    "❌ El color debe ser HEX de 6 dígitos, por ejemplo 8B0000.",
+                    "Error: El color debe ser HEX de 6 dígitos, por ejemplo 8B0000.",
                     ephemeral=True,
                 )
                 return
@@ -12177,7 +12177,7 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
         try:
             minutes = parse_duration(value, 1, CONDEMNATION_MAX_MINUTES)
         except ValueError as e:
-            await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
             return
         set_condemnation_default_duration(value, interaction.guild.id)
         await condemnation_template_editor_update(interaction, f"Duración predeterminada: **{format_duration(minutes)}**.", self.return_to)
@@ -12231,7 +12231,7 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
         url = str(self.url_input).strip()
         if url and not re.match(r"^https?://", url, re.IGNORECASE):
             await interaction.response.send_message(
-                "❌ La URL debe comenzar por https:// o http://.",
+                "Error: La URL debe comenzar por https:// o http://.",
                 ephemeral=True,
             )
             return
@@ -12263,7 +12263,7 @@ async def condemnation_template_editor_update(
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message(
-            "❌ Este editor solo funciona dentro de un servidor.",
+            "Error: Este editor solo funciona dentro de un servidor.",
             ephemeral=True,
         )
         return
@@ -12288,12 +12288,12 @@ async def condemnation_template_editor_update(
     embed = condemnation_template_preview(guild, interaction.user)
     view = CondemnationTemplateEditorView(interaction.user.id, return_to=return_to)
     content = (
-        "☠️ **Editor de la tarjeta de condenados**\n"
+        "**Editor de la tarjeta de condenados**\n"
         "Cada sección se modifica mediante un formulario. Los cambios se guardan "
         "automáticamente y la vista previa refleja la configuración actual."
     )
     if notice:
-        content = "✅ " + notice + "\n\n" + content
+        content = "" + notice + "\n\n" + content
 
     try:
         await interaction.response.edit_message(
@@ -12356,7 +12356,7 @@ class CondemnationTemplateEditorView(discord.ui.View):
     @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=1)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.guild is None:
-            await interaction.response.send_message("❌ Solo disponible en un servidor.", ephemeral=True)
+            await interaction.response.send_message("Error: Solo disponible en un servidor.", ephemeral=True)
             return
         await interaction.response.send_message(
             "👁️ **Vista previa actual de la tarjeta de condenados:**",
@@ -12402,14 +12402,14 @@ class CondemnationTemplateEditorView(discord.ui.View):
 async def condenar_template(interaction: discord.Interaction) -> None:
     if interaction.guild is None:
         await interaction.response.send_message(
-            "❌ Este comando solo funciona dentro de un servidor.",
+            "Error: Este comando solo funciona dentro de un servidor.",
             ephemeral=True,
         )
         return
 
     await interaction.response.send_message(
         content=(
-            "☠️ **Editor de la tarjeta de condenados**\n"
+            "**Editor de la tarjeta de condenados**\n"
             "Selecciona una sección para abrir su formulario. Los cambios se guardan "
             "automáticamente y la vista previa se actualiza al terminar cada formulario."
         ),
@@ -12716,7 +12716,7 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
         await interaction.response.defer(ephemeral=True)
         errors = await hp_sync_all_warnings(interaction.guild)
         await interaction.followup.send(
-            "✅ Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
+            "Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
             ephemeral=True,
         )
 
@@ -12754,7 +12754,7 @@ async def honeypot_config(
         return
     if activado and not hp_traps(guild.id):
         await interaction.response.send_message(
-            "❌ No lo activé: añade al menos un canal trampa con `/honeypot add` o `/honeypot create`.",
+            "Error: No lo activé: añade al menos un canal trampa con `/honeypot add` o `/honeypot create`.",
             ephemeral=True,
         )
         return
@@ -12762,13 +12762,13 @@ async def honeypot_config(
     if rol_castigo is not None:
         problem = hp_role_problem(rol_castigo, guild)
         if problem:
-            await interaction.response.send_message(f"❌ No guardé nada: {rol_castigo.mention} {problem}.", ephemeral=True)
+            await interaction.response.send_message(f"Error: No guardé nada: {rol_castigo.mention} {problem}.", ephemeral=True)
             return
     effective_action = accion.value if accion is not None else hp_action(guild.id)
     effective_role_id = rol_castigo.id if rol_castigo is not None else hp_punish_role_id(guild.id)
     if effective_action == "role" and guild.get_role(effective_role_id) is None and (activado or accion is not None):
         await interaction.response.send_message(
-            "❌ No guardé nada: la acción «rol de castigo» necesita un rol. Elígelo con `rol_castigo`.",
+            "Error: No guardé nada: la acción «rol de castigo» necesita un rol. Elígelo con `rol_castigo`.",
             ephemeral=True,
         )
         return
@@ -12785,7 +12785,7 @@ async def honeypot_config(
         if retencion is not None:
             retencion_min = parse_duration(retencion, 1, PURGE_MAX_MINUTES)
     except ValueError as e:
-        await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
+        await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
         return
 
     changes: list[str] = []
@@ -12820,11 +12820,11 @@ async def honeypot_config(
     await interaction.response.defer(ephemeral=True)
     errors = await hp_sync_all_warnings(guild) if aviso is not None else []
     await interaction.followup.send(
-        "✅ Guardado: " + "; ".join(changes) + "\n\n" + hp_config_summary(guild)
+        "Guardado: " + "; ".join(changes) + "\n\n" + hp_config_summary(guild)
         + ("\n\n⚠️ " + "\n".join(errors) if errors else ""),
         ephemeral=True,
     )
-    await log_embed(guild, "⚙️ Honeypot actualizado", f"{interaction.user.mention}: " + "; ".join(changes))
+    await log_embed(guild, "Honeypot actualizado", f"{interaction.user.mention}: " + "; ".join(changes))
 
 
 @honeypot_group.command(name="add", description="Convertir un canal de texto existente en canal trampa.")
@@ -12837,14 +12837,14 @@ async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChan
     reason = hp_protected_channel_reason(canal)
     if reason:
         await interaction.response.send_message(
-            f"❌ No puedo usar {canal.mention} como trampa: {reason}. Elige un canal que nadie use de verdad.",
+            f"Error: No puedo usar {canal.mention} como trampa: {reason}. Elige un canal que nadie use de verdad.",
             ephemeral=True,
         )
         return
     perms = canal.permissions_for(guild.me)
     if not (perms.view_channel and perms.send_messages and perms.manage_messages):
         await interaction.response.send_message(
-            f"❌ El Heraldo necesita Ver canal, Enviar mensajes y Gestionar mensajes en {canal.mention}.",
+            f"Error: El Heraldo necesita Ver canal, Enviar mensajes y Gestionar mensajes en {canal.mention}.",
             ephemeral=True,
         )
         return
@@ -12854,14 +12854,14 @@ async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChan
     err = await hp_sync_warning(canal)
     notes: list[str] = []
     if not (everyone.view_channel and everyone.send_messages):
-        notes.append("⚠️ @everyone no puede ver o escribir ahí: los bots que entren no lo verán y no atrapará nada.")
+        notes.append("Advertencia: @everyone no puede ver o escribir ahí: los bots que entren no lo verán y no atrapará nada.")
     if err:
-        notes.append("⚠️ " + err)
+        notes.append("Advertencia: " + err)
     await interaction.followup.send(
-        f"✅ {canal.mention} añadido como canal trampa." + ("\n" + "\n".join(notes) if notes else ""),
+        f"{canal.mention} añadido como canal trampa." + ("\n" + "\n".join(notes) if notes else ""),
         ephemeral=True,
     )
-    await log_embed(guild, "🍯 Canal trampa añadido", f"{interaction.user.mention} añadió {canal.mention}.")
+    await log_embed(guild, "Canal trampa añadido", f"{interaction.user.mention} añadió {canal.mention}.")
 
 
 @honeypot_group.command(name="create", description="Crear #honeypot ya configurado (visible, con aviso fijado).")
@@ -12882,16 +12882,16 @@ async def honeypot_create(interaction: discord.Interaction) -> None:
             "honeypot", overwrites=overwrites, reason=f"Honeypot creado por {interaction.user}"
         )
     except discord.HTTPException as e:
-        await interaction.followup.send(f"❌ No pude crear el canal: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"Error: No pude crear el canal: `{e}`", ephemeral=True)
         return
     hp_add_trap(guild.id, channel.id)
     err = await hp_sync_warning(channel)
     await interaction.followup.send(
-        f"✅ Creé {channel.mention} y lo añadí como trampa." + (f"\n⚠️ {err}" if err else "")
+        f"Creé {channel.mention} y lo añadí como trampa." + (f"\n⚠️ {err}" if err else "")
         + "\nActívalo con `/honeypot setup activado:True` (empieza con `accion: Solo registrar` si quieres probar).",
         ephemeral=True,
     )
-    await log_embed(guild, "🍯 Canal trampa creado", f"{interaction.user.mention} creó {channel.mention}.")
+    await log_embed(guild, "Canal trampa creado", f"{interaction.user.mention} creó {channel.mention}.")
 
 
 @honeypot_group.command(name="remove", description="Quitar un canal del honeypot (no lo borra).")
@@ -12912,8 +12912,8 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
     if not hp_traps(interaction.guild.id) and honeypot_enabled(interaction.guild.id):
         hp_setting_set(interaction.guild.id, "honeypot_enabled", "0")
         extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
-    await interaction.followup.send(f"✅ {canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
-    await log_embed(interaction.guild, "🍯 Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
+    await interaction.followup.send(f"{canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
+    await log_embed(interaction.guild, "Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
 
 
 class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del aviso"):
@@ -12962,14 +12962,14 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         footer = str(self.footer_input).strip()
 
         if not description:
-            await interaction.response.send_message("❌ La descripción no puede quedar vacía.", ephemeral=True)
+            await interaction.response.send_message("Error: La descripción no puede quedar vacía.", ephemeral=True)
             return
         if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
-            await interaction.response.send_message("❌ El color debe ser HEX de 6 dígitos, por ejemplo `F1C40F`.", ephemeral=True)
+            await interaction.response.send_message("Error: El color debe ser HEX de 6 dígitos, por ejemplo `F1C40F`.", ephemeral=True)
             return
         for label, url in (("imagen", image),):
             if url and not re.match(r"^https?://", url, re.IGNORECASE) and not VAR_PATTERN.search(url):
-                await interaction.response.send_message(f"❌ La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
+                await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
                 return
 
         hp_setting_set(interaction.guild.id, "honeypot_warning_title", title)
@@ -12983,13 +12983,13 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         await interaction.response.defer(ephemeral=True)
         errors = await hp_sync_all_warnings(interaction.guild)
         await interaction.followup.send(
-            "✅ Embed personalizado guardado y aplicado a los avisos fijados."
+            "Embed personalizado guardado y aplicado a los avisos fijados."
             + ("\n" + "\n".join(errors) if errors else ""),
             ephemeral=True,
         )
         await log_embed(
             interaction.guild,
-            "⚙️ Embed del honeypot actualizado",
+            "Embed del honeypot actualizado",
             f"{interaction.user.mention} personalizó título, descripción, color, imagen y pie del aviso.",
             discord.Color.blurple(),
         )
@@ -13021,7 +13021,7 @@ async def honeypot_exempt_add(
     else:
         hp_exempt_add(interaction.guild.id, "member", miembro.id)
         text = f"miembro {miembro.mention}"
-    await interaction.response.send_message(f"✅ Eximido: {text}.", ephemeral=True)
+    await interaction.response.send_message(f"Eximido: {text}.", ephemeral=True)
 
 
 @honeypot_group.command(name="exempt_remove", description="Quitar la exención de un rol o miembro.")
@@ -13040,7 +13040,7 @@ async def honeypot_exempt_remove(
     else:
         hp_exempt_remove(interaction.guild.id, "member", miembro.id)
         text = f"miembro {miembro.mention}"
-    await interaction.response.send_message(f"✅ Exención quitada: {text}.", ephemeral=True)
+    await interaction.response.send_message(f"Exención quitada: {text}.", ephemeral=True)
 
 
 @honeypot_group.command(name="history", description="Ver los últimos miembros atrapados.")
@@ -13053,7 +13053,7 @@ async def honeypot_history(
         await interaction.response.send_message("Aún no ha caído nadie en la trampa.", ephemeral=True)
         return
     embed = discord.Embed(
-        title="🍯 Historial del honeypot",
+        title="Historial del honeypot",
         description=f"**{hp_total_triggers(interaction.guild.id)}** miembros atrapados en total.",
         color=discord.Color.orange(),
     )
@@ -13078,8 +13078,8 @@ async def honeypot_resume(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("El honeypot no está pausado.", ephemeral=True)
         return
     hp_setting_set(interaction.guild.id, "honeypot_paused", "0")
-    await interaction.response.send_message("✅ Honeypot reanudado.", ephemeral=True)
-    await log_embed(interaction.guild, "▶️ Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
+    await interaction.response.send_message("Honeypot reanudado.", ephemeral=True)
+    await log_embed(interaction.guild, "Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
 
 
 @honeypot_group.error
@@ -13141,7 +13141,7 @@ class FusionChannelsView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.executor_id:
             await interaction.response.send_message(
-                "❌ Solo quien inició esta fusión puede confirmarla.", ephemeral=True
+                "Error: Solo quien inició esta fusión puede confirmarla.", ephemeral=True
             )
             return False
         return True
@@ -13152,7 +13152,7 @@ class FusionChannelsView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(
-            content="⏳ Fusión confirmada. Estoy migrando los mensajes; el canal origen no se tocará hasta terminar correctamente.",
+            content="Fusión confirmada. Estoy migrando los mensajes; el canal origen no se tocará hasta terminar correctamente.",
             view=self,
         )
         asyncio.create_task(
@@ -13257,7 +13257,7 @@ async def send_migrated_message(
                 # Solo si algún multimedia no pudo migrarse, dejamos sus enlaces
                 # como respaldo. No usamos embed para el caso normal.
                 await destino.send(
-                    content="\n".join(f"📎 {url}" for url in fallback_urls),
+                    content="\n".join(f"{url}" for url in fallback_urls),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             return len(attachments) - len(fallback_urls), len(fallback_urls)
@@ -13284,7 +13284,7 @@ async def send_migrated_message(
 
         if fallback_urls:
             fallback_text = "\n".join(
-                f"📎 [{a.filename}]({a.url})"
+                f"[{a.filename}]({a.url})"
                 for a in attachments
                 if a.url in fallback_urls
             )
@@ -13339,36 +13339,36 @@ async def execute_channel_merge(
     # Volver a validar antes de tocar nada: el estado/permisos pueden haber cambiado
     # mientras el administrador tenía abierta la confirmación.
     if origen.id == destino.id:
-        await interaction.followup.send("❌ La fusión fue cancelada: origen y destino son el mismo canal.", ephemeral=True)
+        await interaction.followup.send("Error: La fusión fue cancelada: origen y destino son el mismo canal.", ephemeral=True)
         return
 
     me = guild.me
     if me is None:
-        await interaction.followup.send("❌ No pude identificar al Heraldo en el servidor.", ephemeral=True)
+        await interaction.followup.send("Error: No pude identificar al Heraldo en el servidor.", ephemeral=True)
         return
 
     dest_perms = destino.permissions_for(me)
     src_perms = origen.permissions_for(me)
     if not (src_perms.view_channel and src_perms.read_message_history):
-        await interaction.followup.send("❌ No tengo permisos para leer el canal origen.", ephemeral=True)
+        await interaction.followup.send("Error: No tengo permisos para leer el canal origen.", ephemeral=True)
         return
     if not (dest_perms.view_channel and dest_perms.send_messages and dest_perms.embed_links):
-        await interaction.followup.send("❌ No tengo permisos suficientes para escribir embeds en el canal destino.", ephemeral=True)
+        await interaction.followup.send("Error: No tengo permisos suficientes para escribir embeds en el canal destino.", ephemeral=True)
         return
 
     try:
         messages = await collect_fusion_messages(origen)
     except discord.HTTPException as e:
-        await interaction.followup.send(f"❌ No pude leer los mensajes del canal origen: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"Error: No pude leer los mensajes del canal origen: `{e}`", ephemeral=True)
         return
 
     if not messages:
-        await interaction.followup.send("⚠️ El canal origen no contiene mensajes migrables. No hice cambios.", ephemeral=True)
+        await interaction.followup.send("Advertencia: El canal origen no contiene mensajes migrables. No hice cambios.", ephemeral=True)
         return
 
     if len(messages) >= FUSION_MAX_MESSAGES:
         await interaction.followup.send(
-            f"❌ La fusión fue detenida porque el origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
+            f"Error: La fusión fue detenida porque el origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
             "Para evitar una migración incompleta, primero divide el trabajo en una migración por partes.",
             ephemeral=True,
         )
@@ -13380,12 +13380,12 @@ async def execute_channel_merge(
             await destino.edit(name=final_name, reason=f"Fusión de canales solicitada por {interaction.user}")
         except discord.Forbidden:
             await interaction.followup.send(
-                "❌ No pude cambiar el nombre del canal destino. Revisa Gestionar canales y la jerarquía del bot.",
+                "Error: No pude cambiar el nombre del canal destino. Revisa Gestionar canales y la jerarquía del bot.",
                 ephemeral=True,
             )
             return
         except discord.HTTPException as e:
-            await interaction.followup.send(f"❌ No pude cambiar el nombre del canal destino: `{e}`", ephemeral=True)
+            await interaction.followup.send(f"Error: No pude cambiar el nombre del canal destino: `{e}`", ephemeral=True)
             return
 
     migrated = 0
@@ -13394,7 +13394,7 @@ async def execute_channel_merge(
     progress_message = None
     try:
         progress_message = await interaction.followup.send(
-            f"⏳ Migrando **{len(messages):,}** mensajes de {origen.mention} → {destino.mention}…\n"
+            f"Migrando **{len(messages):,}** mensajes de {origen.mention} → {destino.mention}…\n"
             "Esto puede tardar si el canal es grande.",
             ephemeral=True,
             wait=True,
@@ -13417,7 +13417,7 @@ async def execute_channel_merge(
             try:
                 await progress_message.edit(
                     content=(
-                        f"⏳ Migrando canales… **{migrated + failed:,}/{len(messages):,}** procesados. "
+                        f"Migrando canales… **{migrated + failed:,}/{len(messages):,}** procesados. "
                         f"Correctos: {migrated:,} · Fallidos: {failed:,}."
                     )
                 )
@@ -13430,7 +13430,7 @@ async def execute_channel_merge(
         src_perms = origen.permissions_for(me)
         if not src_perms.manage_channels:
             await interaction.followup.send(
-                f"⚠️ Migración completada ({migrated:,}/{len(messages):,}), pero no pude eliminar {origen.mention}: "
+                f"Advertencia: Migración completada ({migrated:,}/{len(messages):,}), pero no pude eliminar {origen.mention}: "
                 "al Heraldo le falta Gestionar canales.",
                 ephemeral=True,
             )
@@ -13440,7 +13440,7 @@ async def execute_channel_merge(
                 deleted_source = True
             except discord.HTTPException:
                 await interaction.followup.send(
-                    f"⚠️ Migración completada, pero no pude eliminar {origen.mention}.", ephemeral=True
+                    f"Advertencia: Migración completada, pero no pude eliminar {origen.mention}.", ephemeral=True
                 )
 
     if failed or attachment_failures:
@@ -13450,14 +13450,14 @@ async def execute_channel_merge(
         if attachment_failures:
             details.append(f"{attachment_failures:,} adjuntos no pudieron migrarse")
         result = (
-            f"⚠️ Fusión parcial: **{migrated:,}/{len(messages):,}** mensajes procesados; "
+            f"Advertencia: Fusión parcial: **{migrated:,}/{len(messages):,}** mensajes procesados; "
             + " · ".join(details)
             + ". El canal origen se conservó por seguridad."
         )
         color = discord.Color.orange()
     else:
         result = (
-            f"✅ Fusión completada: **{migrated:,}** mensajes migrados a {destino.mention}. "
+            f"Fusión completada: **{migrated:,}** mensajes migrados a {destino.mention}. "
             + ("El canal origen fue eliminado." if deleted_source else "El canal origen se conservó.")
         )
         color = discord.Color.green()
@@ -13472,7 +13472,7 @@ async def execute_channel_merge(
 
     await log_embed(
         guild,
-        "🔀 Fusión de canales completada" if not (failed or attachment_failures) else "⚠️ Fusión de canales parcial",
+        "🔀 Fusión de canales completada" if not (failed or attachment_failures) else "Advertencia: Fusión de canales parcial",
         (
             f"{interaction.user.mention} fusionó {origen.mention} → {destino.mention}.\n"
             f"Mensajes: {migrated}/{len(messages)} · Fallidos: {failed} · Adjuntos no migrados: {attachment_failures}.\n"
@@ -13507,30 +13507,30 @@ async def fusionar_canales(
 ) -> None:
     guild = interaction.guild
     if guild is None:
-        await interaction.response.send_message("❌ Este comando solo funciona dentro de un servidor.", ephemeral=True)
+        await interaction.response.send_message("Error: Este comando solo funciona dentro de un servidor.", ephemeral=True)
         return
     if origen.id == destino.id:
-        await interaction.response.send_message("❌ El canal origen y el destino deben ser diferentes.", ephemeral=True)
+        await interaction.response.send_message("Error: El canal origen y el destino deben ser diferentes.", ephemeral=True)
         return
     if origen.guild.id != guild.id or destino.guild.id != guild.id:
-        await interaction.response.send_message("❌ Ambos canales deben pertenecer a este servidor.", ephemeral=True)
+        await interaction.response.send_message("Error: Ambos canales deben pertenecer a este servidor.", ephemeral=True)
         return
     if nombre.value == "personalizado" and not (nombre_personalizado or "").strip():
         await interaction.response.send_message(
-            "❌ Si eliges `Usar nombre personalizado`, debes indicar `nombre_personalizado`.",
+            "Error: Si eliges `Usar nombre personalizado`, debes indicar `nombre_personalizado`.",
             ephemeral=True,
         )
         return
     if nombre.value != "personalizado" and nombre_personalizado:
         await interaction.response.send_message(
-            "❌ `nombre_personalizado` solo se usa cuando `nombre` es `Usar nombre personalizado`.",
+            "Error: `nombre_personalizado` solo se usa cuando `nombre` es `Usar nombre personalizado`.",
             ephemeral=True,
         )
         return
 
     me = guild.me
     if me is None:
-        await interaction.response.send_message("❌ No pude identificar al Heraldo en el servidor.", ephemeral=True)
+        await interaction.response.send_message("Error: No pude identificar al Heraldo en el servidor.", ephemeral=True)
         return
     src_perms = origen.permissions_for(me)
     dst_perms = destino.permissions_for(me)
@@ -13547,7 +13547,7 @@ async def fusionar_canales(
         missing.append("Insertar enlaces (destino)")
     if missing:
         await interaction.response.send_message(
-            "❌ No puedo preparar la fusión porque me faltan: **" + ", ".join(missing) + "**.",
+            "Error: No puedo preparar la fusión porque me faltan: **" + ", ".join(missing) + "**.",
             ephemeral=True,
         )
         return
@@ -13556,18 +13556,18 @@ async def fusionar_canales(
     try:
         messages = await collect_fusion_messages(origen)
     except discord.HTTPException as e:
-        await interaction.followup.send(f"❌ No pude leer el canal origen: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"Error: No pude leer el canal origen: `{e}`", ephemeral=True)
         return
 
     if len(messages) >= FUSION_MAX_MESSAGES:
         await interaction.followup.send(
-            f"❌ El canal origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
+            f"Error: El canal origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
             "La herramienta se detiene antes de iniciar para evitar una migración incompleta.",
             ephemeral=True,
         )
         return
     if not messages:
-        await interaction.followup.send("⚠️ El canal origen está vacío. No hay nada que fusionar.", ephemeral=True)
+        await interaction.followup.send("Advertencia: El canal origen está vacío. No hay nada que fusionar.", ephemeral=True)
         return
 
     final_name = fusion_final_name(origen, destino, nombre.value, nombre_personalizado)
@@ -13584,7 +13584,7 @@ async def fusionar_canales(
     embed.add_field(name="Destino", value=fusion_channel_label(destino), inline=True)
     embed.add_field(name="Mensajes", value=f"**{len(messages):,}**", inline=True)
     embed.add_field(name="Nombre final", value=f"`#{final_name}`", inline=True)
-    embed.add_field(name="Canal origen", value="🗑️ Se eliminará si todo sale bien" if eliminar_origen else "📌 Se conservará", inline=True)
+    embed.add_field(name="Canal origen", value="Se eliminará si todo sale bien" if eliminar_origen else "Se conservará", inline=True)
     embed.add_field(name="Seguridad", value="No se toca el origen hasta terminar la migración.", inline=True)
     embed.set_footer(text="La confirmación solo puede hacerla quien ejecutó el comando.")
 
@@ -13605,12 +13605,12 @@ async def fusionar_canales(
 @fusionar_canales.error
 async def fusionar_canales_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
     if isinstance(error, discord.app_commands.MissingPermissions):
-        await interaction.response.send_message("❌ Necesitas el permiso **Gestionar canales** para usar este comando.", ephemeral=True)
+        await interaction.response.send_message("Error: Necesitas el permiso **Gestionar canales** para usar este comando.", ephemeral=True)
     else:
         if interaction.response.is_done():
-            await interaction.followup.send(f"❌ Error: {error}", ephemeral=True)
+            await interaction.followup.send(f"Error: Error: {error}", ephemeral=True)
         else:
-            await interaction.response.send_message(f"❌ Error: {error}", ephemeral=True)
+            await interaction.response.send_message(f"Error: Error: {error}", ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -13629,7 +13629,7 @@ class PurgeConfirmView(discord.ui.View):
     @discord.ui.button(label="Sí, borrar todo", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.value = True
-        await interaction.response.edit_message(content="⏳ Iniciando purga…", view=None)
+        await interaction.response.edit_message(content="Iniciando purga…", view=None)
         self.stop()
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
@@ -13821,24 +13821,24 @@ async def purge_command(
     guild = interaction.guild
     if todos and not interaction.user.guild_permissions.manage_guild:
         await interaction.response.send_message(
-            "❌ Borrar **todos** los mensajes de alguien requiere el permiso Gestionar servidor. "
+            "Error: Borrar **todos** los mensajes de alguien requiere el permiso Gestionar servidor. "
             "Con Gestionar mensajes puedes usar `cantidad` o un rango.",
             ephemeral=True,
         )
         return
     has_scope = cantidad is not None or desde is not None or hasta is not None
     if todos and has_scope:
-        await interaction.response.send_message("❌ Con `todos` no uses `cantidad`, `desde` ni `hasta`.", ephemeral=True)
+        await interaction.response.send_message("Error: Con `todos` no uses `cantidad`, `desde` ni `hasta`.", ephemeral=True)
         return
     if not todos and not has_scope:
         await interaction.response.send_message(
-            "❌ Indica qué borrar: `todos:True`, una `cantidad`, o un rango con `desde` / `hasta` "
+            "Error: Indica qué borrar: `todos:True`, una `cantidad`, o un rango con `desde` / `hasta` "
             "(también puedes combinar cantidad con rango).",
             ephemeral=True,
         )
         return
     if (guild.id, usuario.id) in _purge_running:
-        await interaction.response.send_message("⏳ Ya hay una purga en curso para ese usuario.", ephemeral=True)
+        await interaction.response.send_message("Ya hay una purga en curso para ese usuario.", ephemeral=True)
         return
 
     now = datetime.now(timezone.utc)
@@ -13849,11 +13849,11 @@ async def purge_command(
         if hasta is not None:
             before = now - timedelta(minutes=parse_duration(hasta, 1, PURGE_MAX_MINUTES))
     except ValueError as e:
-        await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+        await interaction.response.send_message(f"Error: {e}", ephemeral=True)
         return
     if after is not None and before is not None and after >= before:
         await interaction.response.send_message(
-            "❌ `desde` debe ser más antiguo que `hasta` (por ejemplo desde `3d` hasta `1d`).", ephemeral=True
+            "Error: `desde` debe ser más antiguo que `hasta` (por ejemplo desde `3d` hasta `1d`).", ephemeral=True
         )
         return
 
@@ -13878,7 +13878,7 @@ async def purge_command(
     if todos:
         view = PurgeConfirmView(interaction.user.id)
         await interaction.response.send_message(
-            f"⚠️ Vas a borrar **todos** los mensajes de {usuario.mention} que coincidan con **{content_labels[content_type]}** en {where}. No se puede deshacer.",
+            f"Advertencia: Vas a borrar **todos** los mensajes de {usuario.mention} que coincidan con **{content_labels[content_type]}** en {where}. No se puede deshacer.",
             view=view,
             ephemeral=True,
         )
@@ -13889,7 +13889,7 @@ async def purge_command(
         if not view.value:
             return
     else:
-        await interaction.response.send_message("⏳ Iniciando purga…", ephemeral=True)
+        await interaction.response.send_message("Iniciando purga…", ephemeral=True)
 
     last_edit = [0.0]
 
@@ -13897,7 +13897,7 @@ async def purge_command(
         if asyncio.get_event_loop().time() - last_edit[0] < 3:
             return
         last_edit[0] = asyncio.get_event_loop().time()
-        await interaction.edit_original_response(content=f"⏳ Purgando… {done}/{total} canales revisados, {deleted} borrados.")
+        await interaction.edit_original_response(content=f"Purgando… {done}/{total} canales revisados, {deleted} borrados.")
 
     async def job() -> None:
         try:
@@ -13907,9 +13907,9 @@ async def purge_command(
                 content_type=content_type,
             )
         except Exception:
-            text = "❌ La purga falló a mitad de camino; revisa el canal de logs."
+            text = "Error: La purga falló a mitad de camino; revisa el canal de logs."
         else:
-            text = "⏳ Ya había una purga en curso para ese usuario." if result is None else f"✅ {purge_result_text(result)}."
+            text = "Ya había una purga en curso para ese usuario." if result is None else f"{purge_result_text(result)}."
         try:
             await interaction.edit_original_response(content=text)
         except discord.HTTPException:
@@ -14120,12 +14120,12 @@ async def raid_alert(guild: discord.Guild, title: str, description: str, color: 
 async def raid_lock_invites(guild: discord.Guild) -> str:
     try:
         if guild.invites_paused():
-            return "ℹ️ las invitaciones ya estaban pausadas (no las toco)"
+            return "Información: las invitaciones ya estaban pausadas (no las toco)"
         await guild.edit(invites_disabled=True, reason="Raid Protection: modo raid activado")
         db_meta_set(f"raid_invites_locked:{guild.id}", "1")
         return "invitaciones pausadas"
     except (discord.HTTPException, TypeError) as e:
-        return f"⚠️ no pude pausar las invitaciones ({e})"
+        return f"Advertencia: no pude pausar las invitaciones ({e})"
 
 
 async def raid_unlock_invites(guild: discord.Guild) -> str:
@@ -14135,7 +14135,7 @@ async def raid_unlock_invites(guild: discord.Guild) -> str:
     try:
         await guild.edit(invites_disabled=False, reason="Raid Protection: modo raid terminado")
     except (discord.HTTPException, TypeError) as e:
-        return f"⚠️ no pude reabrir las invitaciones ({e}); reábrelas a mano en Ajustes del servidor"
+        return f"Advertencia: no pude reabrir las invitaciones ({e}); reábrelas a mano en Ajustes del servidor"
     db_meta_set(f"raid_invites_locked:{guild.id}", "0")
     return "invitaciones reabiertas"
 
@@ -14260,7 +14260,7 @@ async def raid_end(
     if release:
         lines.append(f"**Condenas del raid liberadas:** {released}" + (f" ({failed_release} fallaron)" if failed_release else ""))
     elif stats and stats["action"] == "condemn" and stats["acted"]:
-        lines.append("ℹ️ Las condenas del raid siguen activas: revísalas con `/condenados` o libéralas con `/raid end liberar:True`.")
+        lines.append("Información: Las condenas del raid siguen activas: revísalas con `/condenados` o libéralas con `/raid end liberar:True`.")
     await raid_alert(guild, "Modo raid terminado", "\n".join(lines), discord.Color.green())
     return "\n".join(lines)
 
@@ -14332,7 +14332,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
     state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
     until = raid_until(guild.id)
     lines = [
-        f"**Raid Protection** — {'✅ activada' if raid_enabled(guild.id) else '❌ desactivada'} · {state}",
+        f"**Raid Protection** — {'activada' if raid_enabled(guild.id) else 'Error: desactivada'} · {state}",
         f"• Disparo: **{raid_threshold(guild.id)}** ingresos en **{format_flex_duration(raid_window_seconds(guild.id))}**",
         f"• Duración del modo raid: **{format_flex_duration(raid_duration_seconds(guild.id))}**",
         f"• Acción: **{RAID_ACTION_LABELS[raid_action(guild.id)]}**",
@@ -14346,7 +14346,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
     if raid_is_active(guild.id) and until:
         lines.append(f"• El modo raid termina <t:{int(until.timestamp())}:R>")
     if raid_action(guild.id) == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None:
-        lines.append("⚠️ La acción es Condenar pero no hay rol Condenado: configúralo con `/honeypot setup rol_castigo`.")
+        lines.append("Advertencia: La acción es Condenar pero no hay rol Condenado: configúralo con `/honeypot setup rol_castigo`.")
     return "\n".join(lines)
 
 
@@ -14402,7 +14402,7 @@ async def raid_config(
         duracion_s = parse_flex_duration(duracion, RAID_DURATION_MIN, RAID_DURATION_MAX) if duracion is not None else None
         edad_s = parse_flex_duration(edad_cuenta, 0, RAID_AGE_MAX) if edad_cuenta is not None else None
     except ValueError as e:
-        await interaction.response.send_message(f"❌ No guardé nada: {e}", ephemeral=True)
+        await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
         return
     effective_action = accion.value if accion is not None else raid_action(guild.id)
     effective_enabled = activado if activado is not None else raid_enabled(guild.id)
@@ -14414,7 +14414,7 @@ async def raid_config(
     )
     if effective_ratio > 0 and effective_age <= 0:
         await interaction.response.send_message(
-            "❌ No guardé nada: para usar una proporción de cuentas nuevas debes configurar "
+            "Error: No guardé nada: para usar una proporción de cuentas nuevas debes configurar "
             "también una edad de cuenta mayor que 0.",
             ephemeral=True,
         )
@@ -14422,7 +14422,7 @@ async def raid_config(
     if effective_enabled and effective_action == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None \
             and (activado or accion is not None):
         await interaction.response.send_message(
-            "❌ No guardé nada: la acción «Condenar» necesita el rol Condenado. "
+            "Error: No guardé nada: la acción «Condenar» necesita el rol Condenado. "
             "Configúralo con `/honeypot setup rol_castigo` o elige otra acción.",
             ephemeral=True,
         )
@@ -14463,9 +14463,9 @@ async def raid_config(
         guild_config_set(guild.id, "raid_ping_role", str(ping_rol.id))
         changes.append(f"rol de alerta → {ping_rol.mention}")
     await interaction.response.send_message(
-        "✅ Guardado: " + "; ".join(changes) + "\n\n" + raid_config_summary(guild), ephemeral=True,
+        "Guardado: " + "; ".join(changes) + "\n\n" + raid_config_summary(guild), ephemeral=True,
     )
-    await log_embed(guild, "⚙️ Raid Protection actualizada", f"{interaction.user.mention}: " + "; ".join(changes))
+    await log_embed(guild, "Raid Protection actualizada", f"{interaction.user.mention}: " + "; ".join(changes))
 
 
 @raid_group.command(name="status", description="Ver si hay un raid activo y la configuración actual.")
@@ -14483,12 +14483,12 @@ async def raid_status(interaction: discord.Interaction) -> None:
 async def raid_start_command(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     if raid_is_active(guild.id):
-        await interaction.response.send_message("ℹ️ El modo raid ya está activo. Usa `/raid status`.", ephemeral=True)
+        await interaction.response.send_message("Información: El modo raid ya está activo. Usa `/raid status`.", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
     await raid_start(guild, trigger=f"activado a mano por {interaction.user}", suspects=[], started_by=interaction.user)
     await interaction.followup.send(
-        f"✅ Modo raid activado por {format_flex_duration(raid_duration_seconds(guild.id))}: "
+        f"Modo raid activado por {format_flex_duration(raid_duration_seconds(guild.id))}: "
         "los ingresos de ahora en adelante recibirán la acción configurada.", ephemeral=True,
     )
 
@@ -14498,11 +14498,11 @@ async def raid_start_command(interaction: discord.Interaction) -> None:
 async def raid_end_command(interaction: discord.Interaction, liberar: bool = False) -> None:
     guild = interaction.guild
     if raid_until(guild.id) is None:
-        await interaction.response.send_message("ℹ️ No hay ningún modo raid activo.", ephemeral=True)
+        await interaction.response.send_message("Información: No hay ningún modo raid activo.", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
     summary = await raid_end(guild, automatic=False, ended_by=interaction.user, release=liberar)
-    await interaction.followup.send("✅ Modo raid terminado.\n\n" + summary, ephemeral=True)
+    await interaction.followup.send("Modo raid terminado.\n\n" + summary, ephemeral=True)
 
 
 @raid_group.error
@@ -14567,21 +14567,21 @@ def _chan_mention(channel) -> str:
 
 # (grupo, nombre, alias, descripción, resolutor)
 VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
-    ("👤 Usuario", "usuario_nombre", ("usuario", "user", "nombre", "name"),
+    ("Usuario", "usuario_nombre", ("usuario", "user", "nombre", "name"),
      "nombre visible del usuario", _vm(lambda m: _safe(m.display_name))),
-    ("👤 Usuario", "usuario_mencion", ("mencion", "mention", "ping"),
+    ("Usuario", "usuario_mencion", ("mencion", "mention", "ping"),
      "@mención del usuario", _vm(lambda m: m.mention)),
-    ("👤 Usuario", "usuario_id", ("usuarioid", "userid", "id"),
+    ("Usuario", "usuario_id", ("usuarioid", "userid", "id"),
      "ID del usuario", _vm(lambda m: str(m.id))),
-    ("👤 Usuario", "usuario_tag", ("tag", "username", "handle"),
+    ("Usuario", "usuario_tag", ("tag", "username", "handle"),
      "nombre de usuario / tag", _vm(lambda m: _safe(m.name))),
-    ("👤 Usuario", "usuario_avatar_url", ("avatar", "pfp", "foto"),
+    ("Usuario", "usuario_avatar_url", ("avatar", "pfp", "foto"),
      "URL del avatar del usuario", _vm(lambda m: m.display_avatar.url)),
-    ("👤 Usuario", "usuario_fecha_creacion", ("cuenta", "created", "cuentacreada"),
+    ("Usuario", "usuario_fecha_creacion", ("cuenta", "created", "cuentacreada"),
      "fecha de creación de la cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "D"))),
-    ("👤 Usuario", "usuario_antiguedad", ("cuentahace", "accountago", "antiguedad"),
+    ("Usuario", "usuario_antiguedad", ("cuentahace", "accountago", "antiguedad"),
      "tiempo transcurrido desde que creó la cuenta", _vm(lambda m: discord.utils.format_dt(m.created_at, "R"))),
-    ("👤 Usuario", "usuario_fecha_ingreso", ("ingreso", "joined", "entro"),
+    ("Usuario", "usuario_fecha_ingreso", ("ingreso", "joined", "entro"),
      "fecha en que el usuario entró al servidor",
      _vm(lambda m: discord.utils.format_dt(m.joined_at, "D") if getattr(m, "joined_at", None) else "")),
 
@@ -14608,11 +14608,11 @@ VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
     ("🏠 Servidor", "servidor_canal_sistema", ("sistema", "system", "systemchannel"),
      "mención del canal de sistema configurado en Discord", _vg(lambda g: _chan_mention(g.system_channel))),
 
-    ("💬 Canal actual", "canal_mencion", ("canal", "channel", "aqui", "here"),
+    ("Canal actual", "canal_mencion", ("canal", "channel", "aqui", "here"),
      "#mención del canal donde se publica", _vc(lambda ch: ch.mention)),
-    ("💬 Canal actual", "canal_id", ("canalid", "channelid"),
+    ("Canal actual", "canal_id", ("canalid", "channelid"),
      "ID del canal donde se publica", _vc(lambda ch: str(ch.id))),
-    ("💬 Canal actual", "canal_nombre", ("canalnombre", "channelname"),
+    ("Canal actual", "canal_nombre", ("canalnombre", "channelname"),
      "nombre del canal donde se publica", _vc(lambda ch: _safe(ch.name))),
 
     ("🕒 Fecha y hora", "fecha_actual", ("fecha", "date"),
@@ -14623,7 +14623,7 @@ VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
      "fecha y hora actuales completas", lambda c: discord.utils.format_dt(_vn(), "F")),
     ("🕒 Fecha y hora", "timestamp_unix", ("timestamp", "unix"),
      "marca de tiempo Unix actual", lambda c: str(int(_vn().timestamp()))),
-    ("📝 Texto", "salto_linea", ("salto", "nl", "br"),
+    ("Texto", "salto_linea", ("salto", "nl", "br"),
      "salto de línea", lambda c: "\n"),
 ]
 
@@ -14746,7 +14746,7 @@ def variables_embeds() -> list[discord.Embed]:
         extra = " / ".join(f"`{{{a}}}`" for a in aliases[:2])
         groups.setdefault(group, []).append(f"`{{{name}}}` — {desc}" + (f" · {extra}" if extra else ""))
     embed = discord.Embed(
-        title="🧩 Variables de El Heraldo",
+        title="Variables de El Heraldo",
         description=(
             "Escríbelas con `{nombre}` o `${nombre}` en cualquier texto personalizable del Heraldo. "
             "Los nombres principales son explícitos y en español; los nombres antiguos siguen funcionando como alias.\n"
@@ -14790,7 +14790,7 @@ async def variables_command(
 ) -> None:
     if texto is None:
         await interaction.response.send_message(
-            "ℹ️ El catálogo de variables se movió a `/list variables`. "
+            "Información: El catálogo de variables se movió a `/list variables`. "
             "Usa este comando con `texto` cuando quieras probar cómo se resuelven.",
             ephemeral=True,
         )
@@ -14824,14 +14824,14 @@ list_group = discord.app_commands.Group(
 async def _list_require_server_owner(interaction: discord.Interaction) -> bool:
     guild = interaction.guild
     if guild is None:
-        await interaction.response.send_message("❌ Este comando solo funciona dentro de un servidor.", ephemeral=True)
+        await interaction.response.send_message("Error: Este comando solo funciona dentro de un servidor.", ephemeral=True)
         return False
     is_bot_owner = await bot.is_owner(interaction.user)
     perms = getattr(interaction.user, "guild_permissions", None)
     is_admin = bool(perms and perms.administrator)
     if interaction.user.id != guild.owner_id and not is_bot_owner and not is_admin:
         await interaction.response.send_message(
-            "❌ Solo el creador del bot, el creador del servidor o un administrador pueden consultar estos listados.",
+            "Error: Solo el creador del bot, el creador del servidor o un administrador pueden consultar estos listados.",
             ephemeral=True,
         )
         return False
@@ -14921,7 +14921,7 @@ async def list_condemned_command(interaction: discord.Interaction) -> None:
     if not rows:
         await interaction.response.send_message(
             embed=discord.Embed(
-                title="☠️ Condenados activos",
+                title="Condenados activos",
                 description="No hay condenas activas.",
                 color=discord.Color.dark_red(),
             ),
@@ -14934,7 +14934,7 @@ async def list_condemned_command(interaction: discord.Interaction) -> None:
         batch = rows[start:start + 25]
         page = start // 25 + 1
         total_pages = (len(rows) + 24) // 25
-        title = "☠️ Condenados activos" if total_pages == 1 else f"☠️ Condenados activos · {page}/{total_pages}"
+        title = "Condenados activos" if total_pages == 1 else f"Condenados activos · {page}/{total_pages}"
         embed = discord.Embed(
             title=title,
             description=f"**{len(rows)}** condena(s) activa(s) en este servidor.",
@@ -14969,7 +14969,7 @@ async def list_embeds_command(interaction: discord.Interaction) -> None:
         for name, count in names
     ]
     embeds = _list_text_embeds(
-        "🧩 Embeds guardados",
+        "Embeds guardados",
         lines,
         empty_text="No hay embeds guardados. Crea uno con `/embed crear`.",
     )
@@ -15407,22 +15407,22 @@ async def embed_send(
 ) -> str:
     record = embed_get(guild.id, name)
     if record is None:
-        return f"❌ No existe un embed llamado `{name}`."
+        return f"Error: No existe un embed llamado `{name}`."
     data, refs = record
     embed, content, _ = build_custom_embed(data, VarContext(guild, member, channel))
     if embed_is_empty(embed):
-        return "❌ El embed está vacío: añade título, descripción o algún campo antes de enviarlo."
+        return "Error: El embed está vacío: añade título, descripción o algún campo antes de enviarlo."
     if len(embed) > 6000:
-        return f"❌ El embed mide {len(embed)} caracteres y Discord permite 6000 como máximo: acórtalo."
+        return f"Error: El embed mide {len(embed)} caracteres y Discord permite 6000 como máximo: acórtalo."
     try:
         message = await channel.send(content=content, embed=embed, allowed_mentions=EMBED_ALLOWED_MENTIONS)
     except discord.Forbidden:
-        return f"❌ No tengo permiso para enviar mensajes o embeds en {channel.mention}."
+        return f"Error: No tengo permiso para enviar mensajes o embeds en {channel.mention}."
     except discord.HTTPException as e:
-        return f"❌ Discord rechazó el embed: {e}"
+        return f"Error: Discord rechazó el embed: {e}"
     refs.append([channel.id, message.id])
     embed_save(guild.id, name, data, refs)
-    return f"✅ Embed `{name}` enviado en {channel.mention}: {message.jump_url}"
+    return f"Embed `{name}` enviado en {channel.mention}: {message.jump_url}"
 
 
 def _clean(value: str | None) -> str:
@@ -15462,10 +15462,10 @@ class EmbedContentModal(discord.ui.Modal):
                 error = str(e)
         error = error or _check_url_field("la imagen", self.e_image.value) or _check_url_field("la miniatura", self.e_thumb.value)
         if error:
-            await interaction.response.send_message(f"❌ No guardé nada: {error}", ephemeral=True)
+            await interaction.response.send_message(f"Error: No guardé nada: {error}", ephemeral=True)
             return
         if self.is_new and embed_get(self.guild_id, self.name) is not None:
-            await interaction.response.send_message(f"❌ Ya existe un embed llamado `{self.name}`.", ephemeral=True)
+            await interaction.response.send_message(f"Error: Ya existe un embed llamado `{self.name}`.", ephemeral=True)
             return
         record = embed_get(self.guild_id, self.name)
         data = record[0] if record else dict(self.data)
@@ -15503,11 +15503,11 @@ class EmbedAuthorFooterModal(discord.ui.Modal):
         error = _check_url_field("el icono del autor", self.e_author_icon.value) \
             or _check_url_field("el icono del pie", self.e_footer_icon.value)
         if error:
-            await interaction.response.send_message(f"❌ No guardé nada: {error}", ephemeral=True)
+            await interaction.response.send_message(f"Error: No guardé nada: {error}", ephemeral=True)
             return
         record = embed_get(self.guild_id, self.name)
         if record is None:
-            await interaction.response.send_message("❌ Ese embed ya no existe.", ephemeral=True)
+            await interaction.response.send_message("Error: Ese embed ya no existe.", ephemeral=True)
             return
         data = record[0]
         data.update(author=_clean(self.e_author.value), author_icon=_clean(self.e_author_icon.value),
@@ -15533,12 +15533,12 @@ class EmbedFieldModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         record = embed_get(self.guild_id, self.name)
         if record is None:
-            await interaction.response.send_message("❌ Ese embed ya no existe.", ephemeral=True)
+            await interaction.response.send_message("Error: Ese embed ya no existe.", ephemeral=True)
             return
         data = record[0]
         fields = data.setdefault("fields", [])
         if len(fields) >= EMBED_MAX_FIELDS:
-            await interaction.response.send_message(f"❌ Un embed admite como máximo {EMBED_MAX_FIELDS} campos.", ephemeral=True)
+            await interaction.response.send_message(f"Error: Un embed admite como máximo {EMBED_MAX_FIELDS} campos.", ephemeral=True)
             return
         inline = _clean(self.f_inline.value).lower() in ("si", "sí", "s", "yes", "y", "true", "1")
         fields.append({"name": _clean(self.f_name.value), "value": _clean(self.f_value.value), "inline": inline})
@@ -15569,7 +15569,7 @@ class EmbedChannelPicker(discord.ui.View):
     async def picked(self, interaction: discord.Interaction) -> None:
         channel = interaction.guild.get_channel(self.select.values[0].id)
         if channel is None:
-            await interaction.response.edit_message(content="❌ No pude encontrar ese canal.", view=None)
+            await interaction.response.edit_message(content="Error: No pude encontrar ese canal.", view=None)
             return
         await interaction.response.defer()
         result = await embed_send(interaction.guild, self.name, channel)
@@ -15690,7 +15690,7 @@ async def embed_refresh(interaction: discord.Interaction, name: str, new: bool =
     guild = interaction.guild
     record = embed_get(guild.id, name)
     if record is None:
-        await interaction.response.send_message("❌ Ese embed ya no existe.", ephemeral=True)
+        await interaction.response.send_message("Error: Ese embed ya no existe.", ephemeral=True)
         return
     data, refs = record
     synced = 0
@@ -15700,13 +15700,13 @@ async def embed_refresh(interaction: discord.Interaction, name: str, new: bool =
     embed, content, unresolved = build_custom_embed(data, VarContext(guild, None, interaction.channel))
     if embed_is_empty(embed):
         embed.description = "*(embed vacío: usa ✏️ Contenido para escribirlo)*"
-    lines = [f"📝 **Editando** `{name}` — vista previa (las variables ya aplicadas)."]
+    lines = [f"**Editando** `{name}` — vista previa (las variables ya aplicadas)."]
     if content:
         lines.append(f"Texto fuera del embed: {content}")
     if synced:
-        lines.append(f"🔄 {synced} mensaje(s) ya enviados se actualizaron.")
+        lines.append(f"{synced} mensaje(s) ya enviados se actualizaron.")
     if unresolved:
-        lines.append("⚠️ Sin resolver: " + " ".join(f"`{u}`" for u in unresolved[:8]) + f" · {EMBED_PERSON_NOTE}.")
+        lines.append("Advertencia: Sin resolver: " + " ".join(f"`{u}`" for u in unresolved[:8]) + f" · {EMBED_PERSON_NOTE}.")
     view = EmbedEditorView(interaction.user.id, guild.id, name, data)
     text = "\n".join(lines)[:1900]
     kwargs = dict(content=text, embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
@@ -15741,10 +15741,10 @@ async def embed_name_autocomplete(interaction: discord.Interaction, current: str
 async def embed_create(interaction: discord.Interaction, nombre: str) -> None:
     name = nombre.strip().lower()
     if not EMBED_NAME_RE.match(name):
-        await interaction.response.send_message("❌ El nombre solo puede tener letras minúsculas sin tildes, números, `-` y `_` (máx. 32).", ephemeral=True)
+        await interaction.response.send_message("Error: El nombre solo puede tener letras minúsculas sin tildes, números, `-` y `_` (máx. 32).", ephemeral=True)
         return
     if embed_get(interaction.guild.id, name) is not None:
-        await interaction.response.send_message(f"❌ Ya existe un embed llamado `{name}`. Edítalo con `/embed editar`.", ephemeral=True)
+        await interaction.response.send_message(f"Error: Ya existe un embed llamado `{name}`. Edítalo con `/embed editar`.", ephemeral=True)
         return
     await interaction.response.send_modal(EmbedContentModal(interaction.guild.id, name, {}, is_new=True))
 
@@ -15755,7 +15755,7 @@ async def embed_create(interaction: discord.Interaction, nombre: str) -> None:
 async def embed_edit(interaction: discord.Interaction, nombre: str) -> None:
     name = nombre.strip().lower()
     if embed_get(interaction.guild.id, name) is None:
-        await interaction.response.send_message(f"❌ No existe un embed llamado `{name}`. Mira `/list embeds`.", ephemeral=True)
+        await interaction.response.send_message(f"Error: No existe un embed llamado `{name}`. Mira `/list embeds`.", ephemeral=True)
         return
     await embed_refresh(interaction, name, new=True)
 
@@ -15781,9 +15781,9 @@ async def embed_send_command(
 async def embed_delete_command(interaction: discord.Interaction, nombre: str) -> None:
     name = nombre.strip().lower()
     if embed_delete(interaction.guild.id, name):
-        await interaction.response.send_message(f"🗑️ Embed `{name}` borrado. Los mensajes ya enviados no se tocan, pero dejarán de actualizarse.", ephemeral=True)
+        await interaction.response.send_message(f"Embed `{name}` borrado. Los mensajes ya enviados no se tocan, pero dejarán de actualizarse.", ephemeral=True)
     else:
-        await interaction.response.send_message(f"❌ No existe un embed llamado `{name}`.", ephemeral=True)
+        await interaction.response.send_message(f"Error: No existe un embed llamado `{name}`.", ephemeral=True)
 
 
 @embed_group.error
@@ -15819,7 +15819,7 @@ SUGGESTION_PANEL_COLOR_DEFAULT = "4F5BDC"
 SUGGESTION_PANEL_IMAGE_DEFAULT = ""
 SUGGESTION_PANEL_THUMBNAIL_DEFAULT = "{servericon}"
 SUGGESTION_PANEL_FOOTER_DEFAULT = ""
-SUGGESTION_PANEL_BUTTON_DEFAULT = "💡 Crear sugerencia"
+SUGGESTION_PANEL_BUTTON_DEFAULT = "Crear sugerencia"
 
 
 def suggestion_db_init() -> None:
@@ -16075,7 +16075,7 @@ class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
 
         if not reviewer_ids:
             await interaction.response.send_message(
-                "⚠️ El sistema de sugerencias todavía no tiene ningún destinatario configurado. Avisa a un administrador.",
+                "Advertencia: El sistema de sugerencias todavía no tiene ningún destinatario configurado. Avisa a un administrador.",
                 ephemeral=True,
             )
             return
@@ -16088,7 +16088,7 @@ class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
         )
 
         embed = discord.Embed(
-            title=f"💡 Nueva sugerencia #{suggestion_id}",
+            title=f"Nueva sugerencia #{suggestion_id}",
             description=self.propuesta.value.strip(),
             color=discord.Color.blurple(),
             timestamp=datetime.now(timezone.utc),
@@ -16108,7 +16108,7 @@ class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
             except discord.HTTPException:
                 await log_embed(
                     guild,
-                    "⚠️ No pude enviar una sugerencia por DM",
+                    "Advertencia: No pude enviar una sugerencia por DM",
                     f"La sugerencia #{suggestion_id} de {interaction.user.mention} no pudo llegar a <@{reviewer_id}>.",
                     discord.Color.orange(),
                 )
@@ -16117,19 +16117,19 @@ class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
             suggestion_decide(suggestion_id, SUGGESTION_STATUS_REJECTED, bot.user.id if bot.user else 0,
                               "No se pudo entregar la sugerencia a ningún destinatario configurado.")
             await interaction.response.send_message(
-                "❌ No pude entregar la sugerencia por mensaje privado. Comprueba que los destinatarios permitan DMs.",
+                "Error: No pude entregar la sugerencia por mensaje privado. Comprueba que los destinatarios permitan DMs.",
                 ephemeral=True,
             )
             return
 
         await interaction.response.send_message(
-            f"✅ Tu sugerencia **#{suggestion_id}** fue enviada de forma privada a {sent} destinatario(s). "
+            f"Tu sugerencia **#{suggestion_id}** fue enviada de forma privada a {sent} destinatario(s). "
             "Cuando sea aceptada o rechazada recibirás la respuesta por DM.",
             ephemeral=True,
         )
         await log_embed(
             guild,
-            "💡 Nueva sugerencia",
+            "Nueva sugerencia",
             f"Sugerencia **#{suggestion_id}** enviada por {interaction.user.mention} a {sent} destinatario(s).",
             discord.Color.blurple(),
         )
@@ -16183,10 +16183,10 @@ class SuggestionReviewView(discord.ui.View):
     async def reject_suggestion(self, interaction: discord.Interaction) -> None:
         row = suggestion_get(self.suggestion_id)
         if row is None:
-            await interaction.response.send_message("❌ Esa sugerencia ya no existe.", ephemeral=True)
+            await interaction.response.send_message("Error: Esa sugerencia ya no existe.", ephemeral=True)
             return
         if row["status"] != SUGGESTION_STATUS_PENDING:
-            await interaction.response.send_message("ℹ️ Esta sugerencia ya fue resuelta.", ephemeral=True)
+            await interaction.response.send_message("Información: Esta sugerencia ya fue resuelta.", ephemeral=True)
             return
         await interaction.response.send_modal(SuggestionRejectModal(self.suggestion_id))
 
@@ -16199,18 +16199,18 @@ async def finalize_suggestion_decision(
 ) -> None:
     row = suggestion_get(suggestion_id)
     if row is None:
-        await _suggestion_interaction_reply(interaction, "❌ Esa sugerencia ya no existe.", ephemeral=True)
+        await _suggestion_interaction_reply(interaction, "Error: Esa sugerencia ya no existe.", ephemeral=True)
         return
     if row["status"] != SUGGESTION_STATUS_PENDING:
-        await _suggestion_interaction_reply(interaction, "ℹ️ Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
+        await _suggestion_interaction_reply(interaction, "Información: Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
         return
     if status == SUGGESTION_STATUS_REJECTED and not (rejection_reason or "").strip():
-        await _suggestion_interaction_reply(interaction, "❌ La razón del rechazo es obligatoria.", ephemeral=True)
+        await _suggestion_interaction_reply(interaction, "Error: La razón del rechazo es obligatoria.", ephemeral=True)
         return
 
     changed = suggestion_decide(suggestion_id, status, interaction.user.id, rejection_reason)
     if not changed:
-        await _suggestion_interaction_reply(interaction, "ℹ️ Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
+        await _suggestion_interaction_reply(interaction, "Información: Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
         return
 
     guild = bot.get_guild(int(row["guild_id"]))
@@ -16249,7 +16249,7 @@ async def finalize_suggestion_decision(
     # Desactiva los botones de TODAS las copias que recibieron los revisores.
     review_rows = suggestion_review_messages(suggestion_id)
     final_embed = discord.Embed(
-        title=f"{'✅ Aceptada' if status == SUGGESTION_STATUS_ACCEPTED else '❌ Rechazada'} — Sugerencia #{suggestion_id}",
+        title=f"{'Aceptada' if status == SUGGESTION_STATUS_ACCEPTED else 'Error: Rechazada'} — Sugerencia #{suggestion_id}",
         description=f"**{row['title']}**\n\n{row['content']}",
         color=decision_color,
         timestamp=datetime.now(timezone.utc),
@@ -16272,16 +16272,16 @@ async def finalize_suggestion_decision(
     if guild is not None:
         await log_embed(
             guild,
-            f"{'✅ Sugerencia aceptada' if status == SUGGESTION_STATUS_ACCEPTED else '❌ Sugerencia rechazada'}",
+            f"{'Sugerencia aceptada' if status == SUGGESTION_STATUS_ACCEPTED else 'Error: Sugerencia rechazada'}",
             f"Sugerencia **#{suggestion_id}** de <@{row['user_id']}> — resuelta por {interaction.user.mention}. "
             + (f"Razón: {rejection_reason.strip()}" if status == SUGGESTION_STATUS_REJECTED else ""),
             decision_color,
         )
 
-    dm_note = "DM enviado al autor." if dm_ok else "⚠️ No pude enviar el DM al autor (puede tener los DMs cerrados)."
+    dm_note = "DM enviado al autor." if dm_ok else "Advertencia: No pude enviar el DM al autor (puede tener los DMs cerrados)."
     await _suggestion_interaction_reply(
         interaction,
-        f"{'✅ Sugerencia aceptada.' if status == SUGGESTION_STATUS_ACCEPTED else '❌ Sugerencia rechazada.'} {dm_note}",
+        f"{'Sugerencia aceptada.' if status == SUGGESTION_STATUS_ACCEPTED else 'Error: Sugerencia rechazada.'} {dm_note}",
         ephemeral=True,
     )
 
@@ -16390,13 +16390,13 @@ async def suggestions_panel(interaction: discord.Interaction, canal: discord.Tex
     ]
     if missing:
         await interaction.response.send_message(
-            f"❌ El Heraldo no tiene en {canal.mention}: **{', '.join(missing)}**.", ephemeral=True
+            f"Error: El Heraldo no tiene en {canal.mention}: **{', '.join(missing)}**.", ephemeral=True
         )
         return
     await interaction.response.defer(ephemeral=True)
     suggestion_set_channel_id(interaction.guild.id, canal.id)
     await suggestion_ensure_panel(interaction.guild)
-    await interaction.followup.send(f"✅ Panel de sugerencias configurado en {canal.mention}.", ephemeral=True)
+    await interaction.followup.send(f"Panel de sugerencias configurado en {canal.mention}.", ephemeral=True)
 
 
 @suggestions_group.command(name="setup", description="Elegir si el creador del servidor también recibe las sugerencias por DM.")
@@ -16406,7 +16406,7 @@ async def suggestions_config(interaction: discord.Interaction, dueno: bool) -> N
     suggestion_set_owner_enabled(interaction.guild.id, dueno)
     owner_text = "incluido" if dueno else "excluido"
     await interaction.response.send_message(
-        f"✅ El dueño del servidor queda **{owner_text}** como destinatario de sugerencias.", ephemeral=True
+        f"El dueño del servidor queda **{owner_text}** como destinatario de sugerencias.", ephemeral=True
     )
 
 
@@ -16415,10 +16415,10 @@ async def suggestions_config(interaction: discord.Interaction, dueno: bool) -> N
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def suggestions_reviewer_add(interaction: discord.Interaction, usuario: discord.Member) -> None:
     if usuario.bot:
-        await interaction.response.send_message("❌ No puedes añadir un bot como revisor.", ephemeral=True)
+        await interaction.response.send_message("Error: No puedes añadir un bot como revisor.", ephemeral=True)
         return
     suggestion_add_reviewer(interaction.guild.id, usuario.id)
-    await interaction.response.send_message(f"✅ {usuario.mention} recibirá las nuevas sugerencias por DM.", ephemeral=True)
+    await interaction.response.send_message(f"{usuario.mention} recibirá las nuevas sugerencias por DM.", ephemeral=True)
 
 
 @suggestions_group.command(name="revisor_remove", description="Quitar una persona de los destinatarios de sugerencias.")
@@ -16427,7 +16427,7 @@ async def suggestions_reviewer_add(interaction: discord.Interaction, usuario: di
 async def suggestions_reviewer_remove(interaction: discord.Interaction, usuario: discord.Member) -> None:
     removed = suggestion_remove_reviewer(interaction.guild.id, usuario.id)
     await interaction.response.send_message(
-        "✅ Revisor eliminado." if removed else "ℹ️ Esa persona no estaba configurada como revisor.",
+        "Revisor eliminado." if removed else "Información: Esa persona no estaba configurada como revisor.",
         ephemeral=True,
     )
 
@@ -16507,13 +16507,13 @@ class SuggestionPanelEditorModal(discord.ui.Modal, title="Mensajes · Panel de s
         image = str(self.image_input).strip()
         if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
             await interaction.response.send_message(
-                "❌ El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
+                "Error: El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC`.",
                 ephemeral=True,
             )
             return
         if image and not re.match(r"^https?://", image, re.IGNORECASE):
             await interaction.response.send_message(
-                "❌ La imagen debe ser una URL que empiece por `http://` o `https://`.",
+                "Error: La imagen debe ser una URL que empiece por `http://` o `https://`.",
                 ephemeral=True,
             )
             return
@@ -16531,7 +16531,7 @@ class SuggestionPanelEditorModal(discord.ui.Modal, title="Mensajes · Panel de s
         except Exception:
             traceback.print_exc()
             note = "La configuración se guardó, pero no pude refrescar el panel publicado."
-        await interaction.followup.send(f"✅ Panel de sugerencias guardado. {note}", ephemeral=True)
+        await interaction.followup.send(f"Panel de sugerencias guardado. {note}", ephemeral=True)
 
 
 class HeraldoMessagesView(discord.ui.View):
@@ -16590,12 +16590,12 @@ class HeraldoMessagesView(discord.ui.View):
         if names:
             available = ", ".join(f"`{name}`" for name, _ in names[:20])
             text = (
-                "🧩 **Embeds personalizados**\n"
+                "**Embeds personalizados**\n"
                 f"Guardados: {available}\n\n"
                 "Usa `/embed editar` para abrir uno o `/embed crear` para crear otro."
             )
         else:
-            text = "🧩 No hay embeds personalizados guardados. Crea el primero con `/embed crear`."
+            text = "No hay embeds personalizados guardados. Crea el primero con `/embed crear`."
         await interaction.response.send_message(text, ephemeral=True)
 
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=2)
@@ -16636,7 +16636,7 @@ if __name__ == "__main__":
             raise
         # MESSAGE_CONTENT_INTENT=1 sin activar el intent en el portal: en vez de quedarse
         # sin conectar, el bot se reinicia sin él (el log del honeypot no mostrará el texto).
-        print("⚠️ El intent Message Content no está activado en el portal de desarrolladores: "
+        print("Advertencia: El intent Message Content no está activado en el portal de desarrolladores: "
               "reiniciando sin él. Actívalo en el portal o quita MESSAGE_CONTENT_INTENT.")
         os.environ["MESSAGE_CONTENT_INTENT"] = "0"
         os.execv(sys.executable, [sys.executable, *sys.argv])
