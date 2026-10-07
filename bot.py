@@ -3119,27 +3119,27 @@ class DefaultMessageStudioView(discord.ui.View):
 
     async def edit_condemnation_core(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
-            CondemnationCoreModal(interaction.guild.id, "studio_messages")
+            CondemnationCoreModal(interaction.guild.id, f"studio:{self.return_to}")
         )
 
     async def edit_condemnation_labels(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
-            CondemnationDetailsModal(interaction.guild.id, "studio_messages")
+            CondemnationDetailsModal(interaction.guild.id, f"studio:{self.return_to}")
         )
 
     async def edit_condemnation_more(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
-            CondemnationMoreDetailsModal(interaction.guild.id, "studio_messages")
+            CondemnationMoreDetailsModal(interaction.guild.id, f"studio:{self.return_to}")
         )
 
     async def edit_condemnation_button(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
-            CondemnationButtonUrlModal(interaction.guild.id, "studio_messages")
+            CondemnationButtonUrlModal(interaction.guild.id, f"studio:{self.return_to}")
         )
 
     async def edit_condemnation_duration(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
-            CondemnationDurationModal(interaction.guild.id, "studio_messages")
+            CondemnationDurationModal(interaction.guild.id, f"studio:{self.return_to}")
         )
 
 
@@ -8001,12 +8001,19 @@ async def condemnation_template_editor_update(
         )
         return
 
-    if return_to == "studio_messages":
+    if return_to == "studio_messages" or return_to.startswith("studio:"):
+        studio_return_to = (
+            return_to.split(":", 1)[1]
+            if return_to.startswith("studio:")
+            else "messages_command"
+        )
+        if studio_return_to not in {"messages_command", "messages_setup"}:
+            studio_return_to = "messages_command"
         await open_default_message_studio(
             interaction,
             "condemnation",
             interaction.user.id,
-            "messages_command",
+            studio_return_to,
             notice=notice,
         )
         return
