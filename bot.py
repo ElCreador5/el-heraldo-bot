@@ -7209,7 +7209,7 @@ class HeraldoSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
-        self.selected_module: str | None = None
+        self.selected_module: str | None = "automod"
 
         select = discord.ui.Select(
             placeholder="Selecciona el módulo que deseas configurar",
@@ -7222,6 +7222,7 @@ class HeraldoSetupView(discord.ui.View):
                     value=key,
                     description=description,
                     emoji=emoji,
+                    default=key == "automod",
                 )
                 for key, label, description, emoji in self.MODULES
             ],
@@ -7237,14 +7238,22 @@ class HeraldoSetupView(discord.ui.View):
         return True
 
     async def select_module(self, interaction: discord.Interaction) -> None:
-        self.selected_module = self.module_select.values[0]
-        await interaction.response.edit_message(view=self)
+        # Confirmar inmediatamente la interacción. No necesitamos editar el embed
+        # cada vez que se cambia el desplegable.
+        values = self.module_select.values
+        if not values:
+            await interaction.response.send_message("Selecciona un módulo.", ephemeral=True)
+            return
+        self.selected_module = values[0]
+        await interaction.response.defer()
 
     @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        # Responder en menos de tres segundos antes de construir la vista destino.
+        await interaction.response.defer()
         selected = self.selected_module
         if selected is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Selecciona primero un módulo en el menú desplegable.",
                 ephemeral=True,
             )
@@ -7284,10 +7293,10 @@ class HeraldoSetupView(discord.ui.View):
             )
             view = HeraldoPendingSetupModuleView(self.guild_id, self.owner_id, "Idioma")
         else:
-            await interaction.response.send_message("Módulo no válido.", ephemeral=True)
+            await interaction.followup.send("Módulo no válido.", ephemeral=True)
             return
 
-        await interaction.response.edit_message(content=content, embed=None, view=view)
+        await interaction.edit_original_response(content=content, embed=None, view=view)
 
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
