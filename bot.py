@@ -2414,11 +2414,7 @@ def template_report_embed(template: discord.Template, was_dirty: bool | None, tr
     return embed
 
 
-async def run_scheduled_template_backup() -> None:
-    guild = bot.get_guild(_meta_int("template_guild_id", 0))
-    if guild is None:
-        print("⚠️ Copia de plantilla: no encontré el servidor configurado.")
-        return
+async def run_scheduled_template_backup(guild: discord.Guild) -> None:
     template, was_dirty, error = await sync_server_template(guild)
     if error:
         embed = discord.Embed(
@@ -2456,23 +2452,26 @@ async def template_backup_loop() -> None:
     la DB, también se recupera si el bot estaba caído a la hora."""
     try:
         now = datetime.now(timezone.utc)
-        if template_due(now):
-            template_mark_done(now)  # se marca antes; si falla, se reintenta en el próximo turno
-            await run_scheduled_template_backup()
+        for guild in bot.guilds:
+            if template_due(guild.id, now):
+                template_mark_done(guild.id, now)
+                await run_scheduled_template_backup(guild)
     except Exception:
         traceback.print_exc()  # que un error no detenga el loop
 
 
-def template_config_summary(now_utc: datetime) -> str:
-    next_run = template_next_run(now_utc)
+def template_config_summary(guild_id: int, now_utc: datetime) -> str:
+    next_run = template_next_run(guild_id, now_utc)
     next_text = (
         f"{discord.utils.format_dt(next_run, 'F')} ({discord.utils.format_dt(next_run, 'R')})"
         if next_run else "—"
     )
-    last = db_meta_get("template_last_run")
-    last_text = discord.utils.format_dt(datetime.fromisoformat(last), "f") if last and get_template_mode() != "off" else "ninguna todavía"
+    last = guild_config_get(guild_id, "template_last_run")
+    if last is None and db_meta_get("template_guild_id") == str(guild_id):
+        last = db_meta_get("template_last_run")
+    last_text = discord.utils.format_dt(datetime.fromisoformat(last), "f") if last and get_template_mode(guild_id) != "off" else "ninguna todavía"
     return (
-        f"**Frecuencia:** {template_schedule_text()}\n"
+        f"**Frecuencia:** {template_schedule_text(guild_id)}\n"
         f"**Próxima copia:** {next_text}\n"
         f"**Última copia programada:** {last_text}\n"
         f"**Enlace por mensaje privado a:** creador/propietario del servidor"
@@ -2508,7 +2507,7 @@ async def template_config(
     guild = interaction.guild
     now = datetime.now(timezone.utc)
     if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, intervalo)):
-        await interaction.response.send_message(template_config_summary(now), ephemeral=True)
+        await interaction.response.send_message(template_config_summary(guild.id, now), ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
 
@@ -2523,31 +2522,31 @@ async def template_config(
 
     changes: list[str] = []
     if frecuencia is not None:
-        db_meta_set("template_mode", frecuencia.value)
+        guild_config_set(guild.id, "template_mode", frecuencia.value)
         changes.append(f"frecuencia → {frecuencia.name}")
     if hora is not None:
-        db_meta_set("template_hour", str(hora))
+        guild_config_set(guild.id, "template_hour", str(hora))
         changes.append(f"hora → {hora}:00")
     if dia_semana is not None:
-        db_meta_set("template_weekday", str(dia_semana.value))
+        guild_config_set(guild.id, "template_weekday", str(dia_semana.value))
         changes.append(f"día de la semana → {dia_semana.name}")
     if dia_mes is not None:
-        db_meta_set("template_monthday", str(dia_mes))
+        guild_config_set(guild.id, "template_monthday", str(dia_mes))
         changes.append(f"día del mes → {dia_mes}")
     if intervalo_minutes is not None:
-        db_meta_set("template_interval_minutes", str(intervalo_minutes))
+        guild_config_set(guild.id, "template_interval_minutes", str(intervalo_minutes))
         changes.append(f"intervalo → {format_duration(intervalo_minutes)}")
-    db_meta_set("template_guild_id", str(guild.id))
-
     # Un cambio de horario solo afecta a la PRÓXIMA copia: da por hecho el turno actual
     # (o reinicia el reloj del intervalo) para que no dispare una copia inmediata.
-    if get_template_mode() == "interval":
-        db_meta_set("template_last_run", now.isoformat())
-    elif get_template_mode() in ("daily", "weekly", "monthly"):
-        db_meta_set("template_last_slot", template_last_slot(get_template_mode(), now.astimezone(STREAK_TZ)).isoformat())
+    if get_template_mode(guild.id) == "interval":
+        guild_config_set(guild.id, "template_last_run", now.isoformat())
+    elif get_template_mode(guild.id) in ("daily", "weekly", "monthly"):
+        slot = template_last_slot(guild.id, get_template_mode(guild.id), now.astimezone(STREAK_TZ))
+        if slot is not None:
+            guild_config_set(guild.id, "template_last_slot", slot.isoformat())
 
     note = ""
-    if get_template_mode() != "off":
+    if get_template_mode(guild.id) != "off":
         try:
             if not await guild.templates():
                 note = "\n\n⚠️ El servidor aún no tiene plantilla: créala en Ajustes del servidor → Plantilla de servidor, o la copia fallará."
@@ -2555,7 +2554,7 @@ async def template_config(
             note = f"\n\n⚠️ No pude comprobar si hay plantilla: `{e}`"
 
     await interaction.followup.send(
-        "✅ Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(now) + note,
+        "✅ Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(guild.id, now) + note,
         ephemeral=True,
     )
     await log_embed(
