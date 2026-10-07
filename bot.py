@@ -1094,8 +1094,14 @@ async def assign_user_specific_roles(member: discord.Member) -> tuple[bool, str]
 
 
 async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
-    if member.bot or not join_roles_enabled(member.guild.id):
+    if member.bot:
         return True, "No aplica."
+
+    has_general = join_roles_enabled(member.guild.id) and bool(get_join_role_ids(member.guild.id))
+    has_specific = member.id in get_join_specific_roles(member.guild.id)
+    if not has_general and not has_specific:
+        return True, "No aplica."
+
     if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
         return True, "Esperando Rules Screening."
 
@@ -1109,7 +1115,10 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
         if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
             return True, "Esperando Rules Screening."
 
-    ok, note = await _assign_join_roles_now(member)
+    if has_general:
+        ok, note = await _assign_join_roles_now(member)
+    else:
+        ok, note = True, "Sin Join Roles generales."
     specific_ok, specific_note = await assign_user_specific_roles(member)
     if not ok:
         return False, note
@@ -1952,13 +1961,13 @@ async def on_member_join(member: discord.Member) -> None:
     except Exception:
         traceback.print_exc()
 
-    if join_roles_enabled(member.guild.id):
+    if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         asyncio.create_task(assign_join_roles(member))
 
     if verify_enabled(member.guild.id):
         waiting_screening = (
-            join_roles_enabled(member.guild.id)
-            and join_roles_wait_screening(member.guild.id)
+            join_roles_wait_screening(member.guild.id)
+            and (join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id))
             and getattr(member, "pending", False)
         )
         if not waiting_screening:
@@ -2068,7 +2077,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
     # Flujos normales de verificación; una condena activa ya salió por arriba.
     # Join Roles que esperan Rules Screening se asignan al completar la pantalla.
     if (
-        join_roles_enabled(after.guild.id)
+        (join_roles_enabled(after.guild.id) or after.id in get_join_specific_roles(after.guild.id))
         and join_roles_wait_screening(after.guild.id)
         and getattr(before, "pending", False)
         and not getattr(after, "pending", False)
