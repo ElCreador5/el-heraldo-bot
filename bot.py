@@ -3412,7 +3412,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         if self.pending_excluded is not None:
             await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de ejecutar Sync now.", ephemeral=True)
             return
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
         assigned, skipped, errors = await sync_join_roles(interaction.guild)
         msg = f"Sync terminado. {assigned} miembro(s) recibieron roles; {skipped} no necesitaron cambios."
         if errors:
@@ -11629,7 +11629,7 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
         try:
             message = await channel.fetch_message(view.message_id)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            await interaction.response.send_message("El mensaje original ya no está disponible.", ephemeral=True)
+            await interaction.response.send_message("El mensaje original ya no está disponible.")
             _reaction_condemn_pending.discard(view.pending_key)
             return
         target = guild.get_member(view.target_id)
@@ -11642,7 +11642,7 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
             await interaction.response.send_message("La razón es obligatoria.")
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.defer(thinking=True)
         ok, note = await condemn_member(
             target,
             reason=reason,
