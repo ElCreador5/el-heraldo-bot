@@ -259,24 +259,32 @@ async def log_embed(
     description: str,
     color: discord.Color = discord.Color.blurple(),
 ) -> None:
-    """Reporta actividad de El Heraldo en el canal de logs como embed. Nunca debe
-    tumbar el flujo principal si falla (canal no encontrado, sin permisos, etc.)."""
+    """Reporta actividad de El Heraldo en el canal de logs como embed configurable.
+    La plantilla visual se edita desde el Centro de Mensajes y nunca debe tumbar
+    el flujo principal si falta configuración o permisos."""
     print(f"{title} — {description}")
     if guild is None:
         return
     channel = guild.get_channel(get_log_channel_id(guild.id))
     if channel is None:
         return
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=color,
-        timestamp=datetime.now(timezone.utc),
-    )
     try:
+        embed = build_log_template_embed(guild, title, description, color)
         await channel.send(embed=embed)
     except discord.Forbidden:
         print("Sin permisos para escribir en el canal de logs")
+    except Exception:
+        traceback.print_exc()
+        try:
+            fallback = discord.Embed(
+                title=title,
+                description=description,
+                color=color,
+                timestamp=datetime.now(timezone.utc),
+            )
+            await channel.send(embed=fallback)
+        except discord.HTTPException:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -2836,6 +2844,406 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
         )
 
 
+LOG_TEMPLATE_CATEGORIES = {
+    "general": ("📜 General", "Logs que no pertenecen a otra categoría."),
+    "verification": ("✅ Verificación", "Verificación, orientación y accesos."),
+    "condemnation": ("☠️ Condenas", "Condenas, liberaciones y perdones."),
+    "honeypot": ("🍯 Honeypot", "Disparos, pausas y acciones del honeypot."),
+    "raid": ("🛡️ Raid Protection", "Detección y acciones de protección contra raids."),
+    "purge": ("🧹 Purgas", "Purgas manuales y automáticas."),
+    "backup": ("💾 Backups / plantilla", "Copias y sincronización de la plantilla del servidor."),
+    "configuration": ("⚙️ Configuración", "Cambios de canales, roles y configuración."),
+    "errors": ("⚠️ Errores / avisos", "Errores, permisos insuficientes y advertencias."),
+}
+
+LOG_TEMPLATE_DEFAULTS = {
+    "title": "{titulo_log}",
+    "description": "{detalle_log}",
+    "footer": "El Heraldo 🪽 · {servidor}",
+    "color": "",
+    "image": "",
+    "thumbnail": "",
+    "timestamp": "1",
+    "fields": "",
+}
+
+
+def _log_template_key(category: str, field: str) -> str:
+    return f"log_template.{category}.{field}"
+
+
+def log_template_get(guild_id: int, category: str, field: str) -> str:
+    if category not in LOG_TEMPLATE_CATEGORIES:
+        category = "general"
+    stored = guild_config_get(guild_id, _log_template_key(category, field))
+    if stored is not None:
+        return stored
+    return LOG_TEMPLATE_DEFAULTS.get(field, "")
+
+
+def log_template_set(guild_id: int, category: str, field: str, value: str) -> None:
+    if category not in LOG_TEMPLATE_CATEGORIES:
+        raise ValueError("Categoría de log no válida")
+    if field not in LOG_TEMPLATE_DEFAULTS:
+        raise ValueError("Campo de plantilla de log no válido")
+    guild_config_set(guild_id, _log_template_key(category, field), value)
+
+
+def log_template_reset(guild_id: int, category: str) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "DELETE FROM guild_settings WHERE guild_id = ? AND key LIKE ?",
+        (guild_id, f"log_template.{category}.%"),
+    )
+    conn.commit()
+    conn.close()
+
+
+def log_event_category(title: str) -> str:
+    raw = unicodedata.normalize("NFKD", title or "")
+    normalized = "".join(ch for ch in raw if not unicodedata.combining(ch)).lower()
+    if any(word in normalized for word in ("error", "fall", "rechaz", "no pude", "sin permisos", "⚠")):
+        return "errors"
+    if any(word in normalized for word in ("conden", "perdon", "liberad")):
+        return "condemnation"
+    if any(word in normalized for word in ("honeypot", "trampa")):
+        return "honeypot"
+    if "raid" in normalized:
+        return "raid"
+    if "purga" in normalized:
+        return "purge"
+    if any(word in normalized for word in ("verific", "orientacion", "sin verificar", "tentad")):
+        return "verification"
+    if any(word in normalized for word in ("plantilla", "template", "copia de seguridad", "backup")):
+        return "backup"
+    if any(word in normalized for word in ("config", "canal", "rol actualizado", "setup")):
+        return "configuration"
+    return "general"
+
+
+def _log_special_vars(text: str, title: str, description: str, category: str) -> str:
+    return (
+        (text or "")
+        .replace("{titulo_log}", title or "")
+        .replace("{detalle_log}", description or "")
+        .replace("{categoria_log}", LOG_TEMPLATE_CATEGORIES.get(category, LOG_TEMPLATE_CATEGORIES["general"])[0])
+    )
+
+
+def _log_render(text: str, guild: discord.Guild, title: str, description: str, category: str, limit: int) -> str:
+    value = _log_special_vars(text, title, description, category)
+    try:
+        return render_vars(value, VarContext(guild, None, None), limit, plain=True)
+    except Exception:
+        return value[:limit]
+
+
+def _log_render_url(text: str, guild: discord.Guild, title: str, description: str, category: str) -> str:
+    value = _log_render(text, guild, title, description, category, 2000).strip()
+    return value if re.match(r"^https?://", value, re.IGNORECASE) else ""
+
+
+def _log_parse_fields(raw: str, guild: discord.Guild, title: str, description: str, category: str) -> list[tuple[str, str, bool]]:
+    result: list[tuple[str, str, bool]] = []
+    for line in (raw or "").splitlines():
+        if not line.strip():
+            continue
+        parts = [part.strip() for part in line.split("|", 2)]
+        if len(parts) < 2:
+            continue
+        name = _log_render(parts[0], guild, title, description, category, 256) or "\u200b"
+        value = _log_render(parts[1], guild, title, description, category, 1024) or "\u200b"
+        inline = len(parts) >= 3 and parts[2].lower() in {"1", "si", "sí", "true", "inline"}
+        result.append((name, value, inline))
+        if len(result) >= 10:
+            break
+    return result
+
+
+def build_log_template_embed(
+    guild: discord.Guild,
+    title: str,
+    description: str,
+    original_color: discord.Color,
+    *,
+    category: str | None = None,
+) -> discord.Embed:
+    category = category if category in LOG_TEMPLATE_CATEGORIES else log_event_category(title)
+    custom_color = log_template_get(guild.id, category, "color").strip().lstrip("#")
+    color_value = original_color
+    if custom_color and re.fullmatch(r"[0-9a-fA-F]{6}", custom_color):
+        color_value = discord.Color(int(custom_color, 16))
+
+    embed = discord.Embed(
+        title=_log_render(log_template_get(guild.id, category, "title"), guild, title, description, category, 256) or None,
+        description=_log_render(log_template_get(guild.id, category, "description"), guild, title, description, category, 4096) or None,
+        color=color_value,
+        timestamp=datetime.now(timezone.utc) if log_template_get(guild.id, category, "timestamp") != "0" else None,
+    )
+    footer = _log_render(log_template_get(guild.id, category, "footer"), guild, title, description, category, 2048).strip()
+    if footer:
+        embed.set_footer(text=footer)
+    image = _log_render_url(log_template_get(guild.id, category, "image"), guild, title, description, category)
+    if image:
+        embed.set_image(url=image)
+    thumbnail = _log_render_url(log_template_get(guild.id, category, "thumbnail"), guild, title, description, category)
+    if thumbnail:
+        embed.set_thumbnail(url=thumbnail)
+    for name, value, inline in _log_parse_fields(
+        log_template_get(guild.id, category, "fields"), guild, title, description, category
+    ):
+        embed.add_field(name=name, value=value, inline=inline)
+    return embed
+
+
+def log_template_preview(guild: discord.Guild, category: str) -> discord.Embed:
+    label = LOG_TEMPLATE_CATEGORIES.get(category, LOG_TEMPLATE_CATEGORIES["general"])[0]
+    return build_log_template_embed(
+        guild,
+        "🧪 Evento de ejemplo",
+        f"Este es un detalle dinámico de ejemplo para comprobar la plantilla de {label}.",
+        discord.Color.blurple(),
+        category=category,
+    )
+
+
+class LogTemplateContentModal(discord.ui.Modal):
+    def __init__(self, guild_id: int, category: str, owner_id: int, return_to: str) -> None:
+        super().__init__(title=f"Logs · {LOG_TEMPLATE_CATEGORIES[category][0]}"[:45])
+        self.guild_id = guild_id
+        self.category = category
+        self.owner_id = owner_id
+        self.return_to = return_to
+        self.title_input = discord.ui.TextInput(
+            label="Título",
+            default=log_template_get(guild_id, category, "title"),
+            required=False,
+            max_length=256,
+            placeholder="{titulo_log}",
+        )
+        self.description_input = discord.ui.TextInput(
+            label="Descripción",
+            style=discord.TextStyle.paragraph,
+            default=log_template_get(guild_id, category, "description"),
+            required=False,
+            max_length=4000,
+            placeholder="{detalle_log}",
+        )
+        self.footer_input = discord.ui.TextInput(
+            label="Footer",
+            default=log_template_get(guild_id, category, "footer"),
+            required=False,
+            max_length=2048,
+        )
+        self.fields_input = discord.ui.TextInput(
+            label="Campos extra · Nombre | Valor | inline",
+            style=discord.TextStyle.paragraph,
+            default=log_template_get(guild_id, category, "fields"),
+            required=False,
+            max_length=4000,
+            placeholder="Servidor | {servidor}\nCategoría | {categoria_log} | inline",
+        )
+        for item in (self.title_input, self.description_input, self.footer_input, self.fields_input):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        log_template_set(self.guild_id, self.category, "title", self.title_input.value.strip() or "{titulo_log}")
+        log_template_set(self.guild_id, self.category, "description", self.description_input.value.strip() or "{detalle_log}")
+        log_template_set(self.guild_id, self.category, "footer", self.footer_input.value.strip())
+        log_template_set(self.guild_id, self.category, "fields", self.fields_input.value.strip())
+        await log_template_editor_update(interaction, self.owner_id, self.category, self.return_to, "Contenido actualizado.")
+
+
+class LogTemplateVisualModal(discord.ui.Modal):
+    def __init__(self, guild_id: int, category: str, owner_id: int, return_to: str) -> None:
+        super().__init__(title=f"Logs · Diseño · {LOG_TEMPLATE_CATEGORIES[category][0]}"[:45])
+        self.guild_id = guild_id
+        self.category = category
+        self.owner_id = owner_id
+        self.return_to = return_to
+        self.color_input = discord.ui.TextInput(
+            label="Color HEX · vacío = color del evento",
+            default=log_template_get(guild_id, category, "color"),
+            required=False,
+            max_length=7,
+            placeholder="5865F2",
+        )
+        self.image_input = discord.ui.TextInput(
+            label="Imagen grande · URL o variable",
+            default=log_template_get(guild_id, category, "image"),
+            required=False,
+            max_length=2000,
+        )
+        self.thumbnail_input = discord.ui.TextInput(
+            label="Miniatura · URL o variable",
+            default=log_template_get(guild_id, category, "thumbnail"),
+            required=False,
+            max_length=2000,
+        )
+        self.timestamp_input = discord.ui.TextInput(
+            label="Timestamp · sí/no",
+            default="sí" if log_template_get(guild_id, category, "timestamp") != "0" else "no",
+            required=True,
+            max_length=3,
+        )
+        for item in (self.color_input, self.image_input, self.thumbnail_input, self.timestamp_input):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color = self.color_input.value.strip().lstrip("#")
+        if color and not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message("❌ El color debe ser HEX de 6 caracteres.", ephemeral=True)
+            return
+        for label, value in (("imagen", self.image_input.value.strip()), ("miniatura", self.thumbnail_input.value.strip())):
+            if value and "{" not in value and not re.match(r"^https?://", value, re.IGNORECASE):
+                await interaction.response.send_message(
+                    f"❌ La {label} debe ser una URL http(s) o una variable.",
+                    ephemeral=True,
+                )
+                return
+        timestamp_value = self.timestamp_input.value.strip().lower()
+        if timestamp_value not in {"si", "sí", "s", "1", "true", "no", "n", "0", "false"}:
+            await interaction.response.send_message("❌ Timestamp debe ser sí o no.", ephemeral=True)
+            return
+        log_template_set(self.guild_id, self.category, "color", color)
+        log_template_set(self.guild_id, self.category, "image", self.image_input.value.strip())
+        log_template_set(self.guild_id, self.category, "thumbnail", self.thumbnail_input.value.strip())
+        log_template_set(self.guild_id, self.category, "timestamp", "0" if timestamp_value in {"no", "n", "0", "false"} else "1")
+        await log_template_editor_update(interaction, self.owner_id, self.category, self.return_to, "Diseño actualizado.")
+
+
+async def log_template_editor_update(
+    interaction: discord.Interaction,
+    owner_id: int,
+    category: str,
+    return_to: str,
+    notice: str | None = None,
+) -> None:
+    content = log_template_editor_content(category)
+    if notice:
+        content = f"✅ {notice}\n\n" + content
+    view = LogTemplateEditorView(interaction.guild.id, owner_id, category, return_to)
+    try:
+        await interaction.response.edit_message(
+            content=content,
+            embed=log_template_preview(interaction.guild, category),
+            view=view,
+        )
+    except discord.HTTPException:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                content=content,
+                embed=log_template_preview(interaction.guild, category),
+                view=view,
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                content=content,
+                embed=log_template_preview(interaction.guild, category),
+                view=view,
+                ephemeral=True,
+            )
+
+
+def log_template_editor_content(category: str) -> str:
+    label, description = LOG_TEMPLATE_CATEGORIES.get(category, LOG_TEMPLATE_CATEGORIES["general"])
+    return (
+        f"📜 **Logs · {label}**\n"
+        f"{description}\n\n"
+        "Variables especiales: {titulo_log}, {detalle_log}, {categoria_log}. "
+        "También admite las variables generales del Heraldo."
+    )
+
+
+class LogTemplateEditorView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, category: str = "general", return_to: str = "messages_setup") -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.category = category if category in LOG_TEMPLATE_CATEGORIES else "general"
+        self.return_to = return_to
+
+        selector = discord.ui.Select(
+            placeholder="Elige la categoría de logs",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=label.split(" ", 1)[-1],
+                    value=key,
+                    emoji=label.split(" ", 1)[0],
+                    description=description[:100],
+                    default=(key == self.category),
+                )
+                for key, (label, description) in LOG_TEMPLATE_CATEGORIES.items()
+            ],
+            row=0,
+        )
+        selector.callback = self.change_category
+        self.add_item(selector)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor de logs no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def change_category(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        category = values[0] if values and values[0] in LOG_TEMPLATE_CATEGORIES else "general"
+        self.category = category
+        await interaction.response.edit_message(
+            content=log_template_editor_content(category),
+            embed=log_template_preview(interaction.guild, category),
+            view=LogTemplateEditorView(self.guild_id, self.owner_id, category, self.return_to),
+        )
+
+    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=1)
+    async def content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(
+            LogTemplateContentModal(self.guild_id, self.category, self.owner_id, self.return_to)
+        )
+
+    @discord.ui.button(label="🎨 Diseño", style=discord.ButtonStyle.secondary, row=1)
+    async def visual(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(
+            LogTemplateVisualModal(self.guild_id, self.category, self.owner_id, self.return_to)
+        )
+
+    @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=1)
+    async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            f"👁️ Vista previa de **{LOG_TEMPLATE_CATEGORIES[self.category][0]}**",
+            embed=log_template_preview(interaction.guild, self.category),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="↩️ Restaurar", style=discord.ButtonStyle.danger, row=2)
+    async def reset(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        log_template_reset(self.guild_id, self.category)
+        await interaction.response.edit_message(
+            content="✅ Plantilla restaurada.\n\n" + log_template_editor_content(self.category),
+            embed=log_template_preview(interaction.guild, self.category),
+            view=LogTemplateEditorView(self.guild_id, self.owner_id, self.category, self.return_to),
+        )
+
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.return_to == "messages_command":
+            await interaction.response.edit_message(
+                content=heraldo_messages_command_content(),
+                embed=None,
+                view=HeraldoMessagesView(self.guild_id, self.owner_id),
+            )
+            return
+        await interaction.response.edit_message(
+            content=heraldo_messages_setup_content(),
+            embed=None,
+            view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
+        )
+
+
 def heraldo_messages_command_content() -> str:
     return (
         "📝 **El Heraldo · Centro de mensajes**\n\n"
@@ -2852,7 +3260,7 @@ def heraldo_messages_setup_content() -> str:
         "✉️ **El Heraldo · Mensajes y paneles**\n\n"
         "Edita los mensajes persistentes y plantillas visuales del servidor desde un solo lugar. "
         "Los cambios quedan aislados por servidor y los paneles publicados se sincronizan cuando corresponde.\n\n"
-        "**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot y Condenas.\n"
+        "**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot, Condenas y Logs.\n"
         "**Excluidos a propósito:** Variables, comandos, listas, estados, perfiles, historiales, "
         "rankings y cualquier panel cuyo contenido represente datos reales o generados en tiempo real."
     )
@@ -2898,6 +3306,12 @@ class HeraldoMessagesSetupView(discord.ui.View):
                     value="condemnation",
                     emoji="☠️",
                     description="Plantilla de la tarjeta de condenados.",
+                ),
+                discord.SelectOption(
+                    label="Logs",
+                    value="logs",
+                    emoji="📜",
+                    description="Plantillas visuales de los registros del Heraldo.",
                 ),
             ],
             row=0,
@@ -2963,6 +3377,14 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 ),
                 embed=condemnation_template_preview(interaction.guild, interaction.user),
                 view=CondemnationTemplateEditorView(self.owner_id, return_to="messages_setup"),
+            )
+            return
+
+        if selected == "logs":
+            await interaction.response.edit_message(
+                content=log_template_editor_content("general"),
+                embed=log_template_preview(interaction.guild, "general"),
+                view=LogTemplateEditorView(self.guild_id, self.owner_id, "general", "messages_setup"),
             )
             return
 
@@ -10796,6 +11218,14 @@ class HeraldoMessagesView(discord.ui.View):
             ),
             embed=condemnation_template_preview(interaction.guild, interaction.user),
             view=CondemnationTemplateEditorView(self.owner_id, return_to="messages_command"),
+        )
+
+    @discord.ui.button(label="📜 Logs", style=discord.ButtonStyle.secondary, row=1)
+    async def logs(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=log_template_editor_content("general"),
+            embed=log_template_preview(interaction.guild, "general"),
+            view=LogTemplateEditorView(self.guild_id, self.owner_id, "general", "messages_command"),
         )
 
     @discord.ui.button(label="🧩 Embeds personalizados", style=discord.ButtonStyle.secondary, row=1)
