@@ -3645,11 +3645,11 @@ async def log_template_editor_update(
     return_to: str,
     notice: str | None = None,
 ) -> None:
-    content = log_template_editor_content(category, event_key)
+    content = log_template_editor_content(category, event_key, mode="edit")
     if notice:
         content = f"✅ {notice}\n\n" + content
     view = LogTemplateEditorView(
-        interaction.guild.id, owner_id, category, event_key, return_to
+        interaction.guild.id, owner_id, category, event_key, return_to, mode="edit"
     )
     try:
         await interaction.response.edit_message(
@@ -3674,17 +3674,34 @@ async def log_template_editor_update(
             )
 
 
-def log_template_editor_content(category: str, event_key: str | None = None) -> str:
+def log_template_editor_content(
+    category: str,
+    event_key: str | None = None,
+    *,
+    mode: str = "preview",
+) -> str:
     event_key, event_label = _log_catalog_event(category, event_key)
     category_label, description = LOG_TEMPLATE_CATEGORIES.get(
         category, LOG_TEMPLATE_CATEGORIES["general"]
     )
+    if mode == "variables":
+        return (
+            f"🧩 **Variables · {event_label}**\n"
+            f"Módulo: {category_label}\n\n"
+            "Variables propias de este log: {titulo_log}, {detalle_log}, "
+            "{categoria_log}, {tipo_log}.\n"
+            "El renderer de logs usa contexto del servidor; los datos concretos del evento "
+            "se conservan dentro de {titulo_log} y {detalle_log}."
+        )
+    if mode == "edit":
+        return (
+            f"✏️ **Edit · {event_label}**\n"
+            f"Módulo: {category_label}\n{description}\n\n"
+            "Edita únicamente esta plantilla. Los demás eventos mantienen su configuración."
+        )
     return (
-        f"📜 **Logs · {category_label}**\n"
-        f"Editando: **{event_label}**\n"
-        f"{description}\n\n"
-        "Cada evento tiene su propia plantilla independiente. "
-        "Variables especiales: {titulo_log}, {detalle_log}, {categoria_log}, {tipo_log}."
+        f"👁️ **Preview · {event_label}**\n"
+        f"Módulo: {category_label}\n{description}"
     )
 
 
@@ -3696,6 +3713,7 @@ class LogTemplateEditorView(discord.ui.View):
         category: str = "general",
         event_key: str | None = None,
         return_to: str = "messages_setup",
+        mode: str = "preview",
     ) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
@@ -3703,6 +3721,7 @@ class LogTemplateEditorView(discord.ui.View):
         self.category = category if category in LOG_TEMPLATE_CATEGORIES else "general"
         self.event_key, _ = _log_catalog_event(self.category, event_key)
         self.return_to = return_to
+        self.mode = mode if mode in {"preview", "edit", "variables"} else "preview"
 
         category_select = discord.ui.Select(
             placeholder="1. Elige el módulo de logs",
@@ -3740,6 +3759,58 @@ class LogTemplateEditorView(discord.ui.View):
         event_select.callback = self.change_event
         self.add_item(event_select)
 
+        preview_btn = discord.ui.Button(
+            label="👁️ Preview",
+            style=discord.ButtonStyle.primary if self.mode == "preview" else discord.ButtonStyle.secondary,
+            disabled=self.mode == "preview",
+            row=2,
+        )
+        preview_btn.callback = self.show_preview
+        self.add_item(preview_btn)
+
+        edit_btn = discord.ui.Button(
+            label="✏️ Edit",
+            style=discord.ButtonStyle.primary if self.mode == "edit" else discord.ButtonStyle.secondary,
+            disabled=self.mode == "edit",
+            row=2,
+        )
+        edit_btn.callback = self.show_edit
+        self.add_item(edit_btn)
+
+        vars_btn = discord.ui.Button(
+            label="🧩 Variables",
+            style=discord.ButtonStyle.primary if self.mode == "variables" else discord.ButtonStyle.secondary,
+            disabled=self.mode == "variables",
+            row=2,
+        )
+        vars_btn.callback = self.show_variables
+        self.add_item(vars_btn)
+
+        back_btn = discord.ui.Button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+        back_btn.callback = self.back
+        self.add_item(back_btn)
+
+        if self.mode == "edit":
+            content_btn = discord.ui.Button(
+                label="🎨 Visual", style=discord.ButtonStyle.primary, row=3
+            )
+            content_btn.callback = self.edit_content
+            self.add_item(content_btn)
+
+            design_btn = discord.ui.Button(
+                label="🖼️ Diseño", style=discord.ButtonStyle.secondary, row=3
+            )
+            design_btn.callback = self.edit_design
+            self.add_item(design_btn)
+
+            reset_btn = discord.ui.Button(
+                label="↩️ Restaurar este evento",
+                style=discord.ButtonStyle.danger,
+                row=3,
+            )
+            reset_btn.callback = self.reset_event
+            self.add_item(reset_btn)
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
@@ -3747,6 +3818,34 @@ class LogTemplateEditorView(discord.ui.View):
             )
             return False
         return True
+
+    async def _render(
+        self,
+        interaction: discord.Interaction,
+        *,
+        category: str | None = None,
+        event_key: str | None = None,
+        mode: str | None = None,
+    ) -> None:
+        category = category or self.category
+        event_key, _ = _log_catalog_event(category, event_key or self.event_key)
+        mode = mode or self.mode
+        await interaction.response.edit_message(
+            content=log_template_editor_content(category, event_key, mode=mode),
+            embed=(
+                None
+                if mode == "variables"
+                else log_template_preview(interaction.guild, category, event_key)
+            ),
+            view=LogTemplateEditorView(
+                self.guild_id,
+                self.owner_id,
+                category,
+                event_key,
+                self.return_to,
+                mode=mode,
+            ),
+        )
 
     async def change_category(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -3756,100 +3855,69 @@ class LogTemplateEditorView(discord.ui.View):
             else "general"
         )
         event_key, _ = _log_catalog_event(category, None)
-        await interaction.response.edit_message(
-            content=log_template_editor_content(category, event_key),
-            embed=log_template_preview(interaction.guild, category, event_key),
-            view=LogTemplateEditorView(
-                self.guild_id, self.owner_id, category, event_key, self.return_to
-            ),
-        )
+        await self._render(interaction, category=category, event_key=event_key)
 
     async def change_event(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         event_key, _ = _log_catalog_event(
             self.category, values[0] if values else None
         )
-        await interaction.response.edit_message(
-            content=log_template_editor_content(self.category, event_key),
-            embed=log_template_preview(interaction.guild, self.category, event_key),
-            view=LogTemplateEditorView(
-                self.guild_id, self.owner_id,
-                self.category, event_key, self.return_to,
-            ),
-        )
+        await self._render(interaction, event_key=event_key)
 
-    @discord.ui.button(label="✏️ Visual", style=discord.ButtonStyle.primary, row=2)
-    async def content(
-        self, interaction: discord.Interaction, button: discord.ui.Button,
-    ) -> None:
+    async def show_preview(self, interaction: discord.Interaction) -> None:
+        await self._render(interaction, mode="preview")
+
+    async def show_edit(self, interaction: discord.Interaction) -> None:
+        await self._render(interaction, mode="edit")
+
+    async def show_variables(self, interaction: discord.Interaction) -> None:
+        await self._render(interaction, mode="variables")
+
+    async def edit_content(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
             LogTemplateContentModal(
-                self.guild_id, self.category, self.event_key,
-                self.owner_id, self.return_to,
+                self.guild_id,
+                self.category,
+                self.event_key,
+                self.owner_id,
+                self.return_to,
             )
         )
 
-    @discord.ui.button(label="🎨 Diseño", style=discord.ButtonStyle.secondary, row=2)
-    async def visual(
-        self, interaction: discord.Interaction, button: discord.ui.Button,
-    ) -> None:
+    async def edit_design(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
             LogTemplateVisualModal(
-                self.guild_id, self.category, self.event_key,
-                self.owner_id, self.return_to,
+                self.guild_id,
+                self.category,
+                self.event_key,
+                self.owner_id,
+                self.return_to,
             )
         )
 
-    @discord.ui.button(label="👁️ Preview", style=discord.ButtonStyle.secondary, row=2)
-    async def preview(
-        self, interaction: discord.Interaction, button: discord.ui.Button,
-    ) -> None:
-        _, event_label = _log_catalog_event(self.category, self.event_key)
-        await interaction.response.send_message(
-            f"👁️ Vista previa de **{event_label}**",
-            embed=log_template_preview(
-                interaction.guild, self.category, self.event_key
-            ),
-            ephemeral=True,
-        )
-
-    @discord.ui.button(label="🧩 Variables", style=discord.ButtonStyle.secondary, row=3)
-    async def variables(
-        self, interaction: discord.Interaction, button: discord.ui.Button,
-    ) -> None:
-        await interaction.response.send_message(
-            "Variables del log actual:\n"
-            "{titulo_log} · título original del evento\n"
-            "{detalle_log} · datos dinámicos originales\n"
-            "{categoria_log} · módulo del log\n"
-            "{tipo_log} · clave técnica del evento\n\n"
-            "También puedes usar las variables generales de /list variables.",
-            ephemeral=True,
-        )
-
-    @discord.ui.button(label="↩️ Restaurar", style=discord.ButtonStyle.danger, row=3)
-    async def reset(
-        self, interaction: discord.Interaction, button: discord.ui.Button,
-    ) -> None:
+    async def reset_event(self, interaction: discord.Interaction) -> None:
         log_template_reset(self.guild_id, self.category, self.event_key)
         await interaction.response.edit_message(
             content=(
-                "✅ Este mensaje volvió a su plantilla heredada/predeterminada.\n\n"
-                + log_template_editor_content(self.category, self.event_key)
+                "✅ Este evento volvió a su plantilla heredada/predeterminada.\n\n"
+                + log_template_editor_content(
+                    self.category, self.event_key, mode="edit"
+                )
             ),
             embed=log_template_preview(
                 interaction.guild, self.category, self.event_key
             ),
             view=LogTemplateEditorView(
-                self.guild_id, self.owner_id,
-                self.category, self.event_key, self.return_to,
+                self.guild_id,
+                self.owner_id,
+                self.category,
+                self.event_key,
+                self.return_to,
+                mode="edit",
             ),
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
-    async def back(
-        self, interaction: discord.Interaction, button: discord.ui.Button,
-    ) -> None:
+    async def back(self, interaction: discord.Interaction) -> None:
         if self.return_to == "messages_command":
             await interaction.response.edit_message(
                 content=heraldo_messages_command_content(),
