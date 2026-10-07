@@ -7243,8 +7243,17 @@ class HeraldoSetupView(discord.ui.View):
         if not values:
             await interaction.response.send_message("Selecciona un módulo.", ephemeral=True)
             return
-        self.selected_module = values[0]
-        # ACK de actualización inmediata: evita el estado de carga de un defer.
+        selected = values[0]
+        if selected not in {item[0] for item in self.MODULES}:
+            await interaction.response.send_message("Módulo no válido.", ephemeral=True)
+            return
+        self.selected_module = selected
+        # Discord reconstruye el desplegable después de edit_message. Debemos
+        # marcar la opción escogida en el propio componente; de lo contrario
+        # el cliente vuelve a mostrar el placeholder aunque el estado interno
+        # guarde correctamente la selección.
+        for option in self.module_select.options:
+            option.default = option.value == selected
         await interaction.response.edit_message(view=self)
 
     @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
