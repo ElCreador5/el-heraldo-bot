@@ -1399,7 +1399,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     embed.add_field(name="Usuario", value=f"{member.mention} (`{member.id}`)", inline=False)
     embed.add_field(
         name="Razón",
-        value="No definió su rol dentro de los 10 min tras recibir **Tentad@**.",
+        value="No definió su orientación.",
         inline=False,
     )
     embed.add_field(name="Falta", value="1ra — se le dio otra oportunidad" if is_first_fault else "2da — sin nueva oportunidad", inline=True)
