@@ -193,7 +193,7 @@ CONDEMNATION_TEMPLATE_DEFAULTS = {
     "label_where": "Dónde ocurrió",
     "label_duration": "Duración",
     "label_roles": "Roles retirados",
-    "button_label": "🔎 Ver información del caso",
+    "button_label": "Consultar expediente",
     "button_url": "",
 }
 
@@ -1023,7 +1023,7 @@ def join_roles_basic_summary(guild: discord.Guild) -> str:
         "### Additional Options\n"
         f"Rules Screening: **{'Esperar' if join_roles_wait_screening(guild.id) else 'No esperar'}**\n"
         f"Delay: **{get_join_roles_delay(guild.id)} s**\n\n"
-        "Los roles configurados se asignan a cada usuario nuevo. Los avisos ⚠️ indican "
+        "Los roles configurados se asignan a cada usuario nuevo. Las advertencias indican "
         "problemas de jerarquía, roles eliminados o roles que Discord no permite asignar."
     )
 
@@ -2429,7 +2429,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     if dm_ok is not None:
         embed.add_field(name="DM de recuperación", value="Enviado" if dm_ok else "Advertencia: Falló (DMs cerrados)", inline=True)
     embed.add_field(name="Resultado", value="Expulsado" if kicked else "Advertencia: Falló — revisa jerarquía de roles", inline=True)
-    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
 
     channel = member.guild.get_channel(get_log_channel_id(member.guild.id))
     if channel is not None:
@@ -2624,7 +2624,7 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
             None,
         )
         if exact is not None:
-            lines.append(f"🟡 **{label}:** existe {exact.mention}, pero todavía no está seleccionado")
+            lines.append(f"**{label}:** existe {exact.mention}, pero todavía no está seleccionado")
         else:
             lines.append(f"⚪ **{label}:** no configurado · puedes seleccionar uno o crear **#{default_name}**")
     return "\n".join(lines)
@@ -4357,7 +4357,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
         if key == "honeypot" and not perms.manage_messages:
             missing.append("Gestionar mensajes")
         lines.append(
-            f"{'✅' if not missing else '⚠️'} **{label}:** {channel.mention}"
+            f"**{label}:** {channel.mention}"
             + (f" · faltan: {', '.join(missing)}" if missing else "")
         )
 
@@ -4380,7 +4380,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
         elif role >= guild.me.top_role:
             problem = "está al mismo nivel o por encima del rol del Heraldo"
         lines.append(
-            f"{'✅' if problem is None else '⚠️'} **Rol {label}:** {role.mention}"
+            f"**Rol {label}:** {role.mention}"
             + (f" · {problem}" if problem else "")
         )
     return "\n".join(lines)
@@ -5000,7 +5000,7 @@ class VerifyDmMessageSetupView(discord.ui.View):
     @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=0)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
-            "👁️ **Vista previa del DM de verificación**",
+            "**Vista previa del DM de verificación**",
             embed=build_verification_welcome_embed(
                 member=interaction.user if isinstance(interaction.user, discord.Member) else None,
                 guild=interaction.guild,
@@ -5188,7 +5188,7 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
 
 MESSAGE_STUDIO_LABELS = {
     "verification": "Panel de verificación",
-    "verify_dm": "📩 DM de verificación",
+    "verify_dm": "DM de verificación",
     "suggestions": "Panel de sugerencias",
     "honeypot": "Aviso del Honeypot",
     "condemnation": "Tarjeta de condenados",
@@ -5279,7 +5279,7 @@ def message_studio_content(kind: str, mode: str = "preview", notice: str | None 
         )
     else:
         body = (
-            f"👁️ **Preview · {label}**\n"
+            f"**Vista previa · {label}**\n"
             "Vista previa con la configuración guardada actualmente."
         )
     return (f"{notice}\n\n" if notice else "") + body
@@ -5428,16 +5428,16 @@ class DefaultMessageStudioView(discord.ui.View):
             self._action_button("Visual", self.edit_verification, style=discord.ButtonStyle.primary)
         elif self.kind == "verify_dm":
             self._action_button("Visual", self.edit_verify_dm_content, style=discord.ButtonStyle.primary)
-            self._action_button("🖼️ Recurso visual", self.edit_verify_dm_visual)
+            self._action_button("Recurso visual", self.edit_verify_dm_visual)
         elif self.kind == "suggestions":
             self._action_button("Visual", self.edit_suggestion_content, style=discord.ButtonStyle.primary)
-            self._action_button("🖼️ Imagen / botón", self.edit_suggestion_visual)
+            self._action_button("Imagen y botón", self.edit_suggestion_visual)
         elif self.kind == "honeypot":
             self._action_button("Visual", self.edit_honeypot, style=discord.ButtonStyle.primary)
         elif self.kind == "condemnation":
             self._action_button("Visual", self.edit_condemnation_core, style=discord.ButtonStyle.primary)
-            self._action_button("🏷️ Etiquetas", self.edit_condemnation_labels)
-            self._action_button("🏷️ Más etiquetas", self.edit_condemnation_more, row=2)
+            self._action_button("Etiquetas", self.edit_condemnation_labels)
+            self._action_button("Más etiquetas", self.edit_condemnation_more, row=2)
             self._action_button("Botón", self.edit_condemnation_button, row=2)
             self._action_button("Duración", self.edit_condemnation_duration, row=2)
 
@@ -5508,7 +5508,7 @@ async def open_default_message_studio(
 
 
 LOG_TEMPLATE_CATEGORIES = {
-    "general": ("📜 General", "Logs que no pertenecen a otra categoría."),
+    "general": ("General", "Logs que no pertenecen a otra categoría."),
     "verification": ("Verificación", "Verificación, orientación y accesos."),
     "condemnation": ("Condenas", "Condenas, liberaciones y perdones."),
     "honeypot": ("Honeypot", "Disparos, pausas y acciones del honeypot."),
@@ -5525,7 +5525,7 @@ LOG_EVENT_CATALOG = {
         ("heraldo_ready", "El Heraldo está listo para configurarse"),
         ("manual_check", "Chequeo manual"),
         ("mass_check_started", "Chequeo masivo iniciado"),
-        ("channel_merge_completed", "🔀 Fusión de canales completada"),
+        ("channel_merge_completed", "Fusión de canales completada"),
         ("channel_merge_partial", "Advertencia: Fusión de canales parcial"),
     ],
     "verification": [
@@ -6042,7 +6042,7 @@ def log_template_editor_content(
             "Edita únicamente esta plantilla. Los demás eventos mantienen su configuración."
         )
     return (
-        f"👁️ **Preview · {event_label}**\n"
+        f"**Vista previa · {event_label}**\n"
         f"Módulo: {category_label}\n{description}"
     )
 
@@ -6310,37 +6310,31 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
-                    emoji="✅",
                     description="Texto del panel, botón y mensaje de éxito.",
                 ),
                 discord.SelectOption(
                     label="DM de verificación",
                     value="verify_dm",
-                    emoji="📩",
                     description="Embed enviado al miembro después de verificarse.",
                 ),
                 discord.SelectOption(
                     label="Sugerencias",
                     value="suggestions",
-                    emoji="💡",
                     description="Título, descripción, color, imágenes y botón.",
                 ),
                 discord.SelectOption(
                     label="Honeypot",
                     value="honeypot",
-                    emoji="🍯",
                     description="Aviso persistente de los canales trampa.",
                 ),
                 discord.SelectOption(
                     label="Condenas",
                     value="condemnation",
-                    emoji="☠️",
                     description="Plantilla de la tarjeta de condenados.",
                 ),
                 discord.SelectOption(
                     label="Logs",
                     value="logs",
-                    emoji="📜",
                     description="Plantillas visuales de los registros del Heraldo.",
                 ),
             ],
@@ -8077,7 +8071,7 @@ async def verify_dm_preview(interaction: discord.Interaction) -> None:
             member=interaction.user if isinstance(interaction.user, discord.Member) else None, guild=guild,
         )
         await log_channel.send(
-            content=f"🔎 **Vista previa del DM de bienvenida** — solicitada por {interaction.user.mention}",
+            content=f"**Vista previa del DM de bienvenida** — solicitada por {interaction.user.mention}",
             embed=embed,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -8567,7 +8561,7 @@ def template_report_embed(template: discord.Template, was_dirty: bool | None, tr
     embed.add_field(name="Última sincronización", value=discord.utils.format_dt(synced_at, "f"), inline=True)
     embed.add_field(name="Usos", value=str(template.uses), inline=True)
     embed.add_field(name="Disparada por", value=trigger, inline=True)
-    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
     return embed
 
 
@@ -8842,9 +8836,9 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
     embed.add_field(name="Usuario", value=discord.utils.escape_markdown(target.name), inline=True)
     embed.add_field(name="Nombre visible", value=discord.utils.escape_markdown(target.display_name), inline=True)
     embed.add_field(name="Mensajes", value=f"{messages:,}", inline=True)
-    embed.add_field(name="🔥 Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
+    embed.add_field(name="Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
     embed.add_field(name="Roles", value=roles_text, inline=False)
-    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
 
     await interaction.response.send_message(embed=embed)
 
@@ -8958,7 +8952,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         timestamp=datetime.now(timezone.utc),
     )
     embed.set_thumbnail(url=winner.display_avatar.url)
-    embed.set_footer(text="Paraíso Morboso 2026 © - El Heraldo 🪽")
+    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
     try:
         await channel.send(embed=embed)
     except discord.HTTPException as e:
@@ -10930,7 +10924,7 @@ async def condemnation_send_pardon_dm(
     embed.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
     embed.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
     embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
-    embed.add_field(name="Resultado", value=(f"Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; ⚠️ **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
+    embed.add_field(name="Resultado", value=(f"Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
     embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
     embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽")
     try:
@@ -10972,7 +10966,7 @@ def _build_condemnation_embed(
 
     field("label_case", f"`{case_id}`", True)
     field("label_user", f"{member.mention}\n`{member}`", True)
-    field("label_by", applied_by.mention if applied_by else "🤖 El Heraldo", True)
+    field("label_by", applied_by.mention if applied_by else "El Heraldo", True)
     field("label_reason", reason, False)
     field("label_when", f"{discord.utils.format_dt(when, 'F')}\n{discord.utils.format_dt(when, 'R')}", True)
 
@@ -11313,7 +11307,7 @@ async def condemnation_update_pardoned_card(
 
         result = f"Condena levantada. **{restored_count}** rol(es) restaurado(s)"
         if lost_count:
-            result += f"; ⚠️ **{lost_count}** no se pudieron restaurar."
+            result += f"; **{lost_count}** no se pudieron restaurar."
         else:
             result += "."
         resolution.add_field(name="Resultado", value=result, inline=False)
@@ -11848,7 +11842,7 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
         evidence = ("(sin texto)" if attachments or os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
                     else "(no disponible: activa MESSAGE_CONTENT_INTENT=1 y el intent en el portal)")
     if attachments:
-        evidence += f"\n📎 {attachments} adjunto(s)"
+        evidence += f"\n{attachments} adjunto(s)"
     embed = discord.Embed(
         title="Honeypot: miembro atrapado" if success else "Honeypot: castigo FALLIDO",
         color=discord.Color.orange() if success else discord.Color.red(),
@@ -12358,7 +12352,7 @@ class CondemnationTemplateEditorView(discord.ui.View):
             await interaction.response.send_message("Error: Solo disponible en un servidor.", ephemeral=True)
             return
         await interaction.response.send_message(
-            "👁️ **Vista previa actual de la tarjeta de condenados:**",
+            "**Vista previa actual de la tarjeta de condenados:**",
             embed=condemnation_template_preview(interaction.guild, interaction.user),
             ephemeral=True,
         )
@@ -12820,7 +12814,7 @@ async def honeypot_config(
     errors = await hp_sync_all_warnings(guild) if aviso is not None else []
     await interaction.followup.send(
         "Guardado: " + "; ".join(changes) + "\n\n" + hp_config_summary(guild)
-        + ("\n\n⚠️ " + "\n".join(errors) if errors else ""),
+        + ("\n\nAdvertencia: " + "\n".join(errors) if errors else ""),
         ephemeral=True,
     )
     await log_embed(guild, "Honeypot actualizado", f"{interaction.user.mention}: " + "; ".join(changes))
@@ -12886,7 +12880,7 @@ async def honeypot_create(interaction: discord.Interaction) -> None:
     hp_add_trap(guild.id, channel.id)
     err = await hp_sync_warning(channel)
     await interaction.followup.send(
-        f"Creé {channel.mention} y lo añadí como trampa." + (f"\n⚠️ {err}" if err else "")
+        f"Creé {channel.mention} y lo añadí como trampa." + (f"\nAdvertencia: {err}" if err else "")
         + "\nActívalo con `/honeypot setup activado:True` (empieza con `accion: Solo registrar` si quieres probar).",
         ephemeral=True,
     )
@@ -12910,7 +12904,7 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
     extra = ""
     if not hp_traps(interaction.guild.id) and honeypot_enabled(interaction.guild.id):
         hp_setting_set(interaction.guild.id, "honeypot_enabled", "0")
-        extra = "\nℹ️ Era el último canal trampa: desactivé el honeypot."
+        extra = "\nInformación: Era el último canal trampa: desactivé el honeypot."
     await interaction.followup.send(f"{canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
     await log_embed(interaction.guild, "Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
 
@@ -13471,7 +13465,7 @@ async def execute_channel_merge(
 
     await log_embed(
         guild,
-        "🔀 Fusión de canales completada" if not (failed or attachment_failures) else "Advertencia: Fusión de canales parcial",
+        "Fusión de canales completada" if not (failed or attachment_failures) else "Advertencia: Fusión de canales parcial",
         (
             f"{interaction.user.mention} fusionó {origen.mention} → {destino.mention}.\n"
             f"Mensajes: {migrated}/{len(messages)} · Fallidos: {failed} · Adjuntos no migrados: {attachment_failures}.\n"
@@ -14328,7 +14322,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
     role = guild.get_role(raid_ping_role_id(guild.id)) if raid_ping_role_id(guild.id) else None
     min_age = raid_min_age_seconds(guild.id)
     ratio = raid_new_account_ratio(guild.id)
-    state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
+    state = "**Modo raid activo**" if raid_is_active(guild.id) else "Sin modo raid activo"
     until = raid_until(guild.id)
     lines = [
         f"**Raid Protection** — {'activada' if raid_enabled(guild.id) else 'Error: desactivada'} · {state}",
@@ -14584,27 +14578,27 @@ VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
      "fecha en que el usuario entró al servidor",
      _vm(lambda m: discord.utils.format_dt(m.joined_at, "D") if getattr(m, "joined_at", None) else "")),
 
-    ("🏠 Servidor", "servidor_nombre", ("servidor", "server", "guild", "servername"),
+    ("Servidor", "servidor_nombre", ("servidor", "server", "guild", "servername"),
      "nombre del servidor", _vg(lambda g: _safe(g.name))),
-    ("🏠 Servidor", "servidor_id", ("servidorid", "serverid", "guildid"),
+    ("Servidor", "servidor_id", ("servidorid", "serverid", "guildid"),
      "ID del servidor", _vg(lambda g: str(g.id))),
-    ("🏠 Servidor", "servidor_icono_url", ("servericon", "guildicon", "iconoservidor", "icono", "icon"),
+    ("Servidor", "servidor_icono_url", ("servericon", "guildicon", "iconoservidor", "icono", "icon"),
      "URL del icono del servidor", _vg(lambda g: g.icon.url if g.icon else "")),
-    ("🏠 Servidor", "servidor_banner_url", ("serverbanner", "guildbanner", "bannerservidor", "banner"),
+    ("Servidor", "servidor_banner_url", ("serverbanner", "guildbanner", "bannerservidor", "banner"),
      "URL del banner del servidor", _vg(lambda g: g.banner.url if g.banner else "")),
-    ("🏠 Servidor", "servidor_miembros", ("miembros", "members", "membercount", "usuarios"),
+    ("Servidor", "servidor_miembros", ("miembros", "members", "membercount", "usuarios"),
      "cantidad de miembros del servidor", _vg(lambda g: str(g.member_count or len(g.members)))),
-    ("🏠 Servidor", "servidor_boosts", ("boosts", "boostcount"),
+    ("Servidor", "servidor_boosts", ("boosts", "boostcount"),
      "cantidad de boosts del servidor", _vg(lambda g: str(g.premium_subscription_count))),
-    ("🏠 Servidor", "servidor_nivel_boost", ("nivelboost", "boostlevel", "premiumtier"),
+    ("Servidor", "servidor_nivel_boost", ("nivelboost", "boostlevel", "premiumtier"),
      "nivel de boost del servidor", _vg(lambda g: str(g.premium_tier))),
-    ("🏠 Servidor", "servidor_dueno_mencion", ("dueno", "dueño", "owner"),
+    ("Servidor", "servidor_dueno_mencion", ("dueno", "dueño", "owner"),
      "@mención del propietario del servidor", _vg(lambda g: f"<@{g.owner_id}>")),
-    ("🏠 Servidor", "servidor_fecha_creacion", ("creado", "servercreated", "guildcreated"),
+    ("Servidor", "servidor_fecha_creacion", ("creado", "servercreated", "guildcreated"),
      "fecha de creación del servidor", _vg(lambda g: discord.utils.format_dt(g.created_at, "D"))),
-    ("🏠 Servidor", "servidor_canal_reglas", ("reglas", "rules"),
+    ("Servidor", "servidor_canal_reglas", ("reglas", "rules"),
      "mención del canal de reglas configurado en Discord", _vg(lambda g: _chan_mention(g.rules_channel))),
-    ("🏠 Servidor", "servidor_canal_sistema", ("sistema", "system", "systemchannel"),
+    ("Servidor", "servidor_canal_sistema", ("sistema", "system", "systemchannel"),
      "mención del canal de sistema configurado en Discord", _vg(lambda g: _chan_mention(g.system_channel))),
 
     ("Canal actual", "canal_mencion", ("canal", "channel", "aqui", "here"),
@@ -14614,13 +14608,13 @@ VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
     ("Canal actual", "canal_nombre", ("canalnombre", "channelname"),
      "nombre del canal donde se publica", _vc(lambda ch: _safe(ch.name))),
 
-    ("🕒 Fecha y hora", "fecha_actual", ("fecha", "date"),
+    ("Fecha y hora", "fecha_actual", ("fecha", "date"),
      "fecha actual", lambda c: discord.utils.format_dt(_vn(), "D")),
-    ("🕒 Fecha y hora", "hora_actual", ("hora", "time"),
+    ("Fecha y hora", "hora_actual", ("hora", "time"),
      "hora actual", lambda c: discord.utils.format_dt(_vn(), "t")),
-    ("🕒 Fecha y hora", "fecha_hora_actual", ("ahora", "now"),
+    ("Fecha y hora", "fecha_hora_actual", ("ahora", "now"),
      "fecha y hora actuales completas", lambda c: discord.utils.format_dt(_vn(), "F")),
-    ("🕒 Fecha y hora", "timestamp_unix", ("timestamp", "unix"),
+    ("Fecha y hora", "timestamp_unix", ("timestamp", "unix"),
      "marca de tiempo Unix actual", lambda c: str(int(_vn().timestamp()))),
     ("Texto", "salto_linea", ("salto", "nl", "br"),
      "salto de línea", lambda c: "\n"),
@@ -14757,7 +14751,7 @@ def variables_embeds() -> list[discord.Embed]:
     for group, lines in groups.items():
         embed.add_field(name=group, value="\n".join(lines)[:1024], inline=False)
     embed.add_field(
-        name="🔎 Buscar cosas del servidor por nombre o ID",
+        name="Buscar recursos del servidor por nombre o ID",
         value=(
             "`{canal_mencion:reglas}` → mención de un canal por nombre o ID\n"
             "`{rol_mencion:Moderador}` → mención de un rol por nombre o ID\n"
@@ -14798,7 +14792,7 @@ async def variables_command(
     result, unresolved = render_vars_report(texto, ctx, limit=1800)
     note = ""
     if unresolved:
-        note = "\n\n⚠️ Sin resolver (revisa el nombre o si aplica ahí): " + " ".join(f"`{u}`" for u in unresolved[:10])
+        note = "\n\nAdvertencia: Sin resolver (revisa el nombre o si aplica ahí): " + " ".join(f"`{u}`" for u in unresolved[:10])
     await interaction.response.send_message(
         f"**Resultado:**\n{result}{note}", ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
@@ -14897,7 +14891,7 @@ async def list_commands_command(interaction: discord.Interaction) -> None:
         return
     lines = _list_command_lines()
     embeds = _list_text_embeds(
-        "📚 Comandos de El Heraldo",
+        "Comandos de El Heraldo",
         lines,
         empty_text="No hay comandos registrados.",
     )
@@ -15809,7 +15803,7 @@ SUGGESTION_PANEL_DESCRIPTION_DEFAULT = (
     "¿Tienes una idea para mejorar este mundo? ¿Alguna inquietud? Un canal que falta, "
     "un evento que sueñas ver, una regla que merece cambiar — El Oráculo la recibe.\n\n"
     "**¿Cómo invocar tu deseo?**\n"
-    "Pulsa **💡 Crear sugerencia** y completa el formulario privado.\n\n"
+    "Pulsa **Crear sugerencia** y completa el formulario privado.\n\n"
     "Tu propuesta será enviada directamente a quienes gobiernan este paraíso. "
     "El canal no se llenará con las sugerencias.\n\n"
     "No hay deseo demasiado pequeño, ni pecado demasiado grande de proponer."
@@ -16222,7 +16216,7 @@ async def finalize_suggestion_decision(
     decision_word = "aceptada" if status == SUGGESTION_STATUS_ACCEPTED else "rechazada"
     decision_color = discord.Color.green() if status == SUGGESTION_STATUS_ACCEPTED else discord.Color.red()
     result_embed = discord.Embed(
-        title=f"{'✅' if status == SUGGESTION_STATUS_ACCEPTED else '❌'} Tu sugerencia #{suggestion_id} fue {decision_word}",
+        title=f"Tu sugerencia #{suggestion_id} fue {decision_word}",
         description=f"**{row['title']}**",
         color=decision_color,
         timestamp=datetime.now(timezone.utc),
