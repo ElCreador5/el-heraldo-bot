@@ -1222,35 +1222,32 @@ async def check_pending_verifications() -> None:
     conn.close()
 
     now = datetime.now(timezone.utc)
-    verify_window = timedelta(seconds=get_verify_timeout(guild_id))
     for row in rows:
+        guild = next((g for g in bot.guilds if g.get_member(row["user_id"])), None)
+        if guild is None:
+            if row["tentado_at"] is not None:
+                db_clear_tentado(row["user_id"])
+            if row["sin_verificado_at"] is not None:
+                db_clear_sin_verificado(row["user_id"])
+            if row["verify_pending_at"] is not None:
+                db_clear_verify_pending(row["user_id"])
+            continue
+
         if row["tentado_at"] is not None:
             tentado_at = datetime.fromisoformat(row["tentado_at"])
             if now >= tentado_at + get_orientation_window(guild.id):
-                for guild in bot.guilds:
-                    if guild.get_member(row["user_id"]):
-                        await evaluate_member(guild.id, row["user_id"])
-                        break
-                else:
-                    db_clear_tentado(row["user_id"])  # ya no está en ningún servidor
+                await evaluate_member(guild.id, row["user_id"])
+
         if row["sin_verificado_at"] is not None:
             sin_verificado_at = datetime.fromisoformat(row["sin_verificado_at"])
             if now >= sin_verificado_at + get_sin_verificado_window(guild.id):
-                for guild in bot.guilds:
-                    if guild.get_member(row["user_id"]):
-                        await evaluate_sin_verificado(guild.id, row["user_id"])
-                        break
-                else:
-                    db_clear_sin_verificado(row["user_id"])
+                await evaluate_sin_verificado(guild.id, row["user_id"])
+
         if row["verify_pending_at"] is not None:
             verify_pending_at = datetime.fromisoformat(row["verify_pending_at"])
+            verify_window = timedelta(seconds=get_verify_timeout(guild.id))
             if now >= verify_pending_at + verify_window:
-                for guild in bot.guilds:
-                    if guild.get_member(row["user_id"]):
-                        await evaluate_verify_timeout(guild.id, row["user_id"])
-                        break
-                else:
-                    db_clear_verify_pending(row["user_id"])  # ya no está en ningún servidor
+                await evaluate_verify_timeout(guild.id, row["user_id"])
 
 
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
