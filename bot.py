@@ -1070,7 +1070,7 @@ async def on_guild_join(guild: discord.Guild) -> None:
         await log_embed(
             guild,
             "🪽 El Heraldo está listo para configurarse",
-            "No se crearon canales ni roles automáticamente. Usa /heraldo_setup para "
+            "No se crearon canales ni roles automáticamente. Usa /setup para "
             "decidir si quieres permitir la creación de recursos faltantes.",
             discord.Color.blurple(),
         )
@@ -1438,7 +1438,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
     """Detecta/reutiliza la estructura base y, opcionalmente, crea lo que falte.
 
     Por defecto NO crea canales ni roles. La creación automática solo se habilita
-    cuando el administrador la activa desde /heraldo_setup. Así, añadir el bot a
+    cuando el administrador la activa desde /setup. Así, añadir el bot a
     un servidor existente nunca crea recursos inesperados.
     """
     desired_channels = {
@@ -1455,7 +1455,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
     if me is None:
         return created
 
-    # La instalación es deliberadamente idempotente: /heraldo_setup también sirve
+    # La instalación es deliberadamente idempotente: /setup también sirve
     # para reparar la estructura después de que un canal/rol haya sido eliminado.
     # Primero respetamos el ID guardado; solo si ya no existe buscamos por nombre.
     existing_channels = {c.name.casefold(): c for c in guild.text_channels}
@@ -2591,10 +2591,10 @@ class HeraldoSetupView(discord.ui.View):
         await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
 
 
-@bot.tree.command(name="heraldo_setup", description="Configura las opciones generales de El Heraldo en este servidor.")
+@bot.tree.command(name="setup", description="Configura las opciones generales de El Heraldo en este servidor.")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
-async def heraldo_setup(interaction: discord.Interaction) -> None:
+async def setup(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("Este comando solo puede usarse dentro de un servidor.", ephemeral=True)
@@ -2620,7 +2620,7 @@ async def heraldo_config(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         "⚙️ **Configuración general de El Heraldo**\n\n"
         f"Creación automática de recursos: **{estado}**.\n"
-        "La configuración de canales, roles, verificación, orientación, tiempos, permisos y demás opciones se realiza mediante `/heraldo_setup`.",
+        "La configuración de canales, roles, verificación, orientación, tiempos, permisos y demás opciones se realiza mediante `/setup`.",
         ephemeral=True,
     )
 
