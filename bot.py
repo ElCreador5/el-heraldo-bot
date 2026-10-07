@@ -584,21 +584,34 @@ def guild_config_get(guild_id: int, key: str) -> str | None:
 
 
 def guild_config_set(guild_id: int, key: str, value: str) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
-        INSERT INTO guild_settings (guild_id, key, value)
-        VALUES (?, ?, ?)
-        ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
-        """,
-        (guild_id, key, value),
-    )
-    conn.execute(
-        "UPDATE guild_config SET updated_at = ? WHERE guild_id = ?",
-        (datetime.now(timezone.utc).isoformat(), guild_id),
-    )
-    conn.commit()
-    conn.close()
+    last_error: sqlite3.OperationalError | None = None
+    for attempt in range(5):
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        try:
+            conn.execute("PRAGMA busy_timeout = 10000")
+            conn.execute(
+                """
+                INSERT INTO guild_settings (guild_id, key, value)
+                VALUES (?, ?, ?)
+                ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
+                """,
+                (guild_id, key, value),
+            )
+            conn.execute(
+                "UPDATE guild_config SET updated_at = ? WHERE guild_id = ?",
+                (datetime.now(timezone.utc).isoformat(), guild_id),
+            )
+            conn.commit()
+            return
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            if "locked" not in str(exc).lower() or attempt == 4:
+                raise
+            time.sleep(0.15 * (attempt + 1))
+        finally:
+            conn.close()
+    if last_error is not None:
+        raise last_error
 
 
 def guild_resource_get(guild_id: int, resource_type: str, config_key: str) -> int | None:
@@ -2294,8 +2307,18 @@ class HeraldoOrientationSetupView(discord.ui.View):
         if not isinstance(channel, discord.TextChannel):
             await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
             return
-        guild_config_set(self.guild_id, "orientation_channel_id", str(channel.id))
-        await interaction.response.edit_message(
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            guild_config_set(self.guild_id, "orientation_channel_id", str(channel.id))
+        except sqlite3.OperationalError as exc:
+            await interaction.followup.send(
+                f"❌ No pude guardar el canal porque la base de datos sigue ocupada: {exc}",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.edit_original_response(
             content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(interaction.guild),
             embed=None,
             view=self,
@@ -2357,11 +2380,18 @@ class HeraldoOrientationSetupView(discord.ui.View):
             return
 
         previous = get_orientation_bindings(self.guild_id)
-        set_orientation_bindings(self.guild_id, bindings)
-        guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
+        await interaction.response.defer(ephemeral=True)
+        try:
+            set_orientation_bindings(self.guild_id, bindings)
+            guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
+        except sqlite3.OperationalError as exc:
+            await interaction.followup.send(
+                f"❌ No pude guardar los roles porque la base de datos sigue ocupada: {exc}",
+                ephemeral=True,
+            )
+            return
 
         if orientation_enabled(self.guild_id):
-            await interaction.response.defer(ephemeral=True)
             ok, note = await ensure_orientation_system(guild)
             if not ok:
                 set_orientation_bindings(self.guild_id, previous)
@@ -2375,7 +2405,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             )
             return
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content="🧭 **El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + "\n\n✅ Roles seleccionados.",
             embed=None,
             view=self,
@@ -2398,8 +2428,15 @@ class HeraldoOrientationSetupView(discord.ui.View):
             )
             return
 
-        guild_config_set(self.guild_id, "orientation_enabled", "1")
         await interaction.response.defer(ephemeral=True)
+        try:
+            guild_config_set(self.guild_id, "orientation_enabled", "1")
+        except sqlite3.OperationalError as exc:
+            await interaction.followup.send(
+                f"❌ No pude activar el sistema porque la base de datos sigue ocupada: {exc}",
+                ephemeral=True,
+            )
+            return
         ok, note = await ensure_orientation_system(interaction.guild)
         if not ok:
             guild_config_set(self.guild_id, "orientation_enabled", "0")
