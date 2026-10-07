@@ -772,25 +772,59 @@ def get_sin_verificado_role_id(guild_id: int) -> int:
 JOIN_ROLES_MAX = 25
 
 
-def get_join_role_ids(guild_id: int) -> list[int]:
-    raw = guild_config_get(guild_id, "join_role_ids")
+def _joinroles_load_id_list(guild_id: int, key: str) -> list[int]:
+    raw = guild_config_get(guild_id, key)
     if not raw:
-        legacy_role = get_guild_role_id(guild_id, "sin_verificar")
-        return [legacy_role] if legacy_role else []
+        return []
     try:
         values = json.loads(raw)
-        return [int(value) for value in values if int(value) > 0][:JOIN_ROLES_MAX]
+        result: list[int] = []
+        for value in values:
+            role_id = int(value)
+            if role_id > 0 and role_id not in result:
+                result.append(role_id)
+        return result[:JOIN_ROLES_MAX]
     except (TypeError, ValueError, json.JSONDecodeError):
         return []
 
 
-def set_join_role_ids(guild_id: int, role_ids: list[int]) -> None:
+def _joinroles_save_id_list(guild_id: int, key: str, role_ids: list[int]) -> None:
     unique: list[int] = []
     for role_id in role_ids:
         role_id = int(role_id)
         if role_id > 0 and role_id not in unique:
             unique.append(role_id)
-    guild_config_set(guild_id, "join_role_ids", json.dumps(unique[:JOIN_ROLES_MAX]))
+    guild_config_set(guild_id, key, json.dumps(unique[:JOIN_ROLES_MAX]))
+
+
+def get_join_role_ids(guild_id: int) -> list[int]:
+    raw = guild_config_get(guild_id, "join_role_ids")
+    if raw is None:
+        # Migración suave: el antiguo rol Sin Verificar pasa a ser el primer
+        # Join Role sin que el administrador tenga que configurarlo de nuevo.
+        legacy_role = get_guild_role_id(guild_id, "sin_verificar")
+        return [legacy_role] if legacy_role else []
+    return _joinroles_load_id_list(guild_id, "join_role_ids")
+
+
+def set_join_role_ids(guild_id: int, role_ids: list[int]) -> None:
+    _joinroles_save_id_list(guild_id, "join_role_ids", role_ids)
+
+
+def get_join_bot_role_ids(guild_id: int) -> list[int]:
+    return _joinroles_load_id_list(guild_id, "join_bot_role_ids")
+
+
+def set_join_bot_role_ids(guild_id: int, role_ids: list[int]) -> None:
+    _joinroles_save_id_list(guild_id, "join_bot_role_ids", role_ids)
+
+
+def get_join_sync_excluded_role_ids(guild_id: int) -> list[int]:
+    return _joinroles_load_id_list(guild_id, "join_sync_excluded_role_ids")
+
+
+def set_join_sync_excluded_role_ids(guild_id: int, role_ids: list[int]) -> None:
+    _joinroles_save_id_list(guild_id, "join_sync_excluded_role_ids", role_ids)
 
 
 def get_join_roles_delay(guild_id: int) -> int:
@@ -808,57 +842,255 @@ def join_roles_enabled(guild_id: int) -> bool:
     return value == "1"
 
 
-def join_roles_summary(guild: discord.Guild) -> str:
-    roles = [guild.get_role(role_id) for role_id in get_join_role_ids(guild.id)]
-    roles = [role for role in roles if role is not None]
-    role_text = ", ".join(role.mention for role in roles) if roles else "**Ninguno**"
-    return (
-        f"Estado: **{'Activo' if join_roles_enabled(guild.id) else 'Desactivado'}**\n"
-        f"Join Roles: {role_text}\n"
-        f"Esperar Rules Screening: **{'Sí' if join_roles_wait_screening(guild.id) else 'No'}**\n"
-        f"Delay: **{get_join_roles_delay(guild.id)} s**\n\n"
-        "**Cómo funciona:** los roles seleccionados se asignan automáticamente a cada miembro nuevo. "
-        "Si uno de ellos es el rol de sistema **Sin Verificar**, El Heraldo lo retira automáticamente "
-        "cuando el miembro obtiene el rol de verificación."
+def join_roles_bot_enabled(guild_id: int) -> bool:
+    return guild_config_get(guild_id, "join_roles_bot_enabled") == "1"
+
+
+def join_roles_bot_use_different(guild_id: int) -> bool:
+    return guild_config_get(guild_id, "join_roles_bot_use_different") == "1"
+
+
+def join_roles_bot_apply_delay(guild_id: int) -> bool:
+    return guild_config_get(guild_id, "join_roles_bot_apply_delay") == "1"
+
+
+def join_roles_remove_specific_after_join(guild_id: int) -> bool:
+    return guild_config_get(guild_id, "join_roles_specific_remove_after_join") == "1"
+
+
+def get_join_sync_interval_minutes(guild_id: int) -> int:
+    return max(0, guild_setting_int(guild_id, "join_sync_interval_minutes", 0))
+
+
+def get_join_sync_last(guild_id: int) -> datetime | None:
+    raw = guild_config_get(guild_id, "join_sync_last")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def set_join_sync_last(guild_id: int, when: datetime | None = None) -> None:
+    guild_config_set(
+        guild_id,
+        "join_sync_last",
+        (when or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(),
     )
 
 
-async def _assign_join_roles_now(member: discord.Member, *, synchronization: bool = False) -> tuple[bool, str]:
-    if member.bot or not join_roles_enabled(member.guild.id):
-        return True, "No aplica."
+def get_join_specific_roles(guild_id: int) -> dict[int, list[int]]:
+    raw = guild_config_get(guild_id, "join_specific_roles")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        result: dict[int, list[int]] = {}
+        for user_id_raw, role_ids_raw in parsed.items():
+            user_id = int(user_id_raw)
+            roles: list[int] = []
+            for role_id_raw in role_ids_raw:
+                role_id = int(role_id_raw)
+                if role_id > 0 and role_id not in roles:
+                    roles.append(role_id)
+            if user_id > 0 and roles:
+                result[user_id] = roles[:JOIN_ROLES_MAX]
+        return result
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
 
-    role_ids = get_join_role_ids(member.guild.id)
-    roles: list[discord.Role] = []
-    verify_role_id = get_verify_role_id(member.guild.id)
-    already_verified = verify_role_id and verify_role_id in {role.id for role in member.roles}
-    sin_role_id = get_sin_verificado_role_id(member.guild.id)
 
-    row = db_get(member.guild.id, member.id) if synchronization else None
+def set_join_specific_roles(guild_id: int, mapping: dict[int, list[int]]) -> None:
+    serializable = {
+        str(int(user_id)): [int(role_id) for role_id in role_ids[:JOIN_ROLES_MAX]]
+        for user_id, role_ids in mapping.items()
+        if int(user_id) > 0 and role_ids
+    }
+    guild_config_set(guild_id, "join_specific_roles", json.dumps(serializable))
+
+
+def set_join_specific_user_roles(guild_id: int, user_id: int, role_ids: list[int]) -> None:
+    mapping = get_join_specific_roles(guild_id)
+    clean: list[int] = []
+    for role_id in role_ids:
+        role_id = int(role_id)
+        if role_id > 0 and role_id not in clean:
+            clean.append(role_id)
+    if clean:
+        mapping[int(user_id)] = clean[:JOIN_ROLES_MAX]
+    else:
+        mapping.pop(int(user_id), None)
+    set_join_specific_roles(guild_id, mapping)
+
+
+def remove_join_specific_user(guild_id: int, user_id: int) -> bool:
+    mapping = get_join_specific_roles(guild_id)
+    existed = int(user_id) in mapping
+    mapping.pop(int(user_id), None)
+    set_join_specific_roles(guild_id, mapping)
+    return existed
+
+
+def _join_role_status(guild: discord.Guild, role_id: int) -> tuple[discord.Role | None, str | None]:
+    role = guild.get_role(int(role_id))
+    if role is None:
+        return None, "rol eliminado"
+    me = guild.me
+    if role.managed:
+        return role, "rol administrado por Discord/integración"
+    if me is None or role >= me.top_role:
+        return role, "El Heraldo debe estar por encima de este rol"
+    return role, None
+
+
+def _join_roles_render(guild: discord.Guild, role_ids: list[int]) -> str:
+    if not role_ids:
+        return "**Ninguno**"
+    parts: list[str] = []
+    for role_id in role_ids:
+        role, issue = _join_role_status(guild, role_id)
+        if role is None:
+            parts.append(f"⚠️ Rol eliminado (\`{role_id}\`)")
+        elif issue:
+            parts.append(f"⚠️ {role.mention} — {issue}")
+        else:
+            parts.append(role.mention)
+    return ", ".join(parts)
+
+
+def join_roles_basic_summary(guild: discord.Guild) -> str:
+    return (
+        "### Basic setup\n"
+        f"Estado: **{'Activo' if join_roles_enabled(guild.id) else 'Desactivado'}**\n"
+        f"Roles: {_join_roles_render(guild, get_join_role_ids(guild.id))}\n\n"
+        "### Additional Options\n"
+        f"Rules Screening: **{'Esperar' if join_roles_wait_screening(guild.id) else 'No esperar'}**\n"
+        f"Delay: **{get_join_roles_delay(guild.id)} s**\n\n"
+        "Los roles configurados se asignan a cada usuario nuevo. Los avisos ⚠️ indican "
+        "problemas de jerarquía, roles eliminados o roles que Discord no permite asignar."
+    )
+
+
+def join_roles_users_summary(guild: discord.Guild) -> str:
+    mapping = get_join_specific_roles(guild.id)
+    lines: list[str] = []
+    for user_id, role_ids in list(mapping.items())[:15]:
+        lines.append(f"<@{user_id}> (\`{user_id}\`) → {_join_roles_render(guild, role_ids)}")
+    if len(mapping) > 15:
+        lines.append(f"… y **{len(mapping) - 15}** usuario(s) más.")
+    return (
+        "### User specific roles\n"
+        + ("\n".join(lines) if lines else "**No hay usuarios configurados.**")
+        + "\n\n"
+        f"Remove user from list after join: **{'Sí' if join_roles_remove_specific_after_join(guild.id) else 'No'}**\n\n"
+        "Estos roles se añaden **además** de los Join Roles generales cuando ese ID vuelve a entrar."
+    )
+
+
+def join_roles_bots_summary(guild: discord.Guild) -> str:
+    use_different = join_roles_bot_use_different(guild.id)
+    effective_ids = get_join_bot_role_ids(guild.id) if use_different else get_join_role_ids(guild.id)
+    return (
+        "### Bot roles\n"
+        f"Assign Join Roles for bots: **{'Sí' if join_roles_bot_enabled(guild.id) else 'No'}**\n"
+        f"Apply assignment delay for bots: **{'Sí' if join_roles_bot_apply_delay(guild.id) else 'No'}**\n"
+        f"Use different roles for bots: **{'Sí' if use_different else 'No'}**\n"
+        f"Roles efectivos: {_join_roles_render(guild, effective_ids)}"
+    )
+
+
+def _join_member_sync_excluded(member: discord.Member) -> bool:
+    excluded = set(get_join_sync_excluded_role_ids(member.guild.id))
+    return bool(excluded.intersection(role.id for role in member.roles))
+
+
+def _join_member_required_general_roles(member: discord.Member, *, synchronization: bool) -> list[discord.Role]:
+    guild = member.guild
+    verify_role_id = get_verify_role_id(guild.id)
+    already_verified = bool(verify_role_id and verify_role_id in {role.id for role in member.roles})
+    sin_role_id = get_sin_verificado_role_id(guild.id)
+    row = db_get(guild.id, member.id) if synchronization else None
     verification_pending = bool(row and row["verify_pending_at"]) if row is not None else False
 
-    for role_id in role_ids:
-        role = member.guild.get_role(role_id)
+    roles: list[discord.Role] = []
+    for role_id in get_join_role_ids(guild.id):
+        role = guild.get_role(role_id)
         if role is None:
             continue
         if already_verified and role.id == sin_role_id:
             continue
-        # Sync no convierte miembros antiguos en "Sin Verificar": ese rol de estado
-        # solo se repara si el miembro ya estaba realmente pendiente de verificación.
         if synchronization and role.id == sin_role_id and not verification_pending:
             continue
-        if role in member.roles:
-            continue
-        if role.managed or not role.is_assignable():
-            return False, f"No puedo asignar {role.mention}; revisa jerarquía y permisos."
         roles.append(role)
+    return roles
 
-    if not roles:
-        return True, "No había roles pendientes."
+
+async def _joinroles_add_roles(
+    member: discord.Member,
+    role_ids: list[int],
+    *,
+    reason: str,
+) -> tuple[bool, int, str]:
+    roles_to_add: list[discord.Role] = []
+    for role_id in role_ids:
+        role, issue = _join_role_status(member.guild, role_id)
+        if role is None:
+            continue
+        if issue:
+            return False, 0, f"{role.mention}: {issue}."
+        if role not in member.roles:
+            roles_to_add.append(role)
+
+    if not roles_to_add:
+        return True, 0, "No había roles pendientes."
     try:
-        await member.add_roles(*roles, reason="El Heraldo · Join Roles")
-        return True, f"Asignados {len(roles)} Join Role(s)."
+        await member.add_roles(*roles_to_add, reason=reason)
+        return True, len(roles_to_add), f"Asignados {len(roles_to_add)} rol(es)."
     except discord.HTTPException as exc:
-        return False, f"Discord rechazó la asignación: {exc}."
+        return False, 0, f"Discord rechazó la asignación: {exc}."
+
+
+async def _assign_join_roles_now(
+    member: discord.Member,
+    *,
+    synchronization: bool = False,
+) -> tuple[bool, str]:
+    if member.bot or not join_roles_enabled(member.guild.id):
+        return True, "No aplica."
+    if synchronization and _join_member_sync_excluded(member):
+        return True, "Excluido de sincronización."
+
+    role_ids = [role.id for role in _join_member_required_general_roles(member, synchronization=synchronization)]
+    ok, count, note = await _joinroles_add_roles(
+        member,
+        role_ids,
+        reason="El Heraldo · Join Roles" + (" · sincronización" if synchronization else ""),
+    )
+    if ok and count:
+        return True, f"Asignados {count} Join Role(s)."
+    return ok, note
+
+
+async def assign_user_specific_roles(member: discord.Member) -> tuple[bool, str]:
+    if member.bot:
+        return True, "No aplica."
+    mapping = get_join_specific_roles(member.guild.id)
+    role_ids = mapping.get(member.id, [])
+    if not role_ids:
+        return True, "Sin roles específicos."
+
+    ok, count, note = await _joinroles_add_roles(
+        member,
+        role_ids,
+        reason="El Heraldo · User specific Join Roles",
+    )
+    if ok and join_roles_remove_specific_after_join(member.guild.id):
+        remove_join_specific_user(member.guild.id, member.id)
+    if ok and count:
+        return True, f"Asignados {count} rol(es) específicos."
+    return ok, note
 
 
 async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
@@ -876,13 +1108,61 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
         member = refreshed
         if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
             return True, "Esperando Rules Screening."
-    return await _assign_join_roles_now(member)
+
+    ok, note = await _assign_join_roles_now(member)
+    specific_ok, specific_note = await assign_user_specific_roles(member)
+    if not ok:
+        return False, note
+    if not specific_ok:
+        return False, specific_note
+    return True, f"{note} {specific_note}".strip()
+
+
+async def assign_bot_join_roles(member: discord.Member) -> tuple[bool, str]:
+    if not member.bot or not join_roles_bot_enabled(member.guild.id):
+        return True, "No aplica."
+
+    if join_roles_bot_apply_delay(member.guild.id):
+        delay = get_join_roles_delay(member.guild.id)
+        if delay > 0:
+            await asyncio.sleep(delay)
+            refreshed = member.guild.get_member(member.id)
+            if refreshed is None:
+                return True, "El bot ya no está en el servidor."
+            member = refreshed
+
+    role_ids = (
+        get_join_bot_role_ids(member.guild.id)
+        if join_roles_bot_use_different(member.guild.id)
+        else get_join_role_ids(member.guild.id)
+    )
+    ok, count, note = await _joinroles_add_roles(
+        member,
+        role_ids,
+        reason="El Heraldo · Bot Join Roles",
+    )
+    if ok and count:
+        return True, f"Asignados {count} Bot Join Role(s)."
+    return ok, note
+
+
+def approximate_missing_join_roles(guild: discord.Guild) -> int:
+    missing = 0
+    for member in guild.members:
+        if member.bot or _join_member_sync_excluded(member):
+            continue
+        required = _join_member_required_general_roles(member, synchronization=True)
+        member_ids = {role.id for role in member.roles}
+        if any(role.id not in member_ids for role in required):
+            missing += 1
+    return missing
 
 
 async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
     assigned = 0
     skipped = 0
     errors: list[str] = []
+
     async for member in guild.fetch_members(limit=None):
         if member.bot:
             continue
@@ -895,8 +1175,36 @@ async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
         else:
             errors.append(f"{member}: {note}")
         await asyncio.sleep(0.15)
+
+    set_join_sync_last(guild.id)
     return assigned, skipped, errors
 
+
+def join_roles_sync_summary(guild: discord.Guild) -> str:
+    last = get_join_sync_last(guild.id)
+    interval = get_join_sync_interval_minutes(guild.id)
+    excluded = get_join_sync_excluded_role_ids(guild.id)
+    last_text = discord.utils.format_dt(last, "R") if last else "**Nunca**"
+    return (
+        "### Synchronization\n"
+        f"Approx. missing Join Roles: **{approximate_missing_join_roles(guild)}**\n"
+        f"Last synchronization: {last_text}\n"
+        f"Exclude roles from sync: {_join_roles_render(guild, excluded)}\n"
+        f"Schedule regular sync: **{f'cada {interval} min' if interval else 'Desactivado'}**\n\n"
+        "Sync now asigna los Join Roles generales configurados a todos los usuarios elegibles. "
+        "Los miembros que tengan cualquiera de los roles excluidos permanecen sin cambios."
+    )
+
+
+def join_roles_summary(guild: discord.Guild) -> str:
+    return (
+        "El módulo replica la estructura funcional de Join Roles: configuración general, "
+        "roles específicos por usuario, roles para bots y sincronización.\n\n"
+        f"**Join Roles generales:** {len(get_join_role_ids(guild.id))}\n"
+        f"**Usuarios específicos:** {len(get_join_specific_roles(guild.id))}\n"
+        f"**Bot roles:** {'Activo' if join_roles_bot_enabled(guild.id) else 'Desactivado'}\n"
+        f"**Sync periódico:** {'Activo' if get_join_sync_interval_minutes(guild.id) else 'Desactivado'}"
+    )
 
 
 def get_sin_verificado_window(guild_id: int) -> timedelta:
