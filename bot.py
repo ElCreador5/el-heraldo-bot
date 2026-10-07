@@ -183,7 +183,7 @@ CONDEMNATION_TEMPLATE_DEFAULTS = {
     "title": "RESOLUCIÓN DE CONDENA",
     "description": "Se ha aplicado una condena a {usuario}. A continuación se detalla el caso registrado.",
     "color": "8B0000",
-    "footer": "El Heraldo 🪽 · {servidor}",
+    "footer": "El Heraldo · {servidor}",
     "label_case": "Expediente",
     "label_message": "Evidencia / mensaje",
     "label_user": "Condenado",
@@ -1770,7 +1770,7 @@ VERIFY_DM_BODY_DEFAULT = (
     "¿Dudas? Revisa el canal de dudas del servidor."
 )
 VERIFY_DM_FIELD_NAME_DEFAULT = "Este no es un lugar cualquiera"
-VERIFY_DM_FOOTER_DEFAULT = "© Paraíso Morboso 🍑🍆🥛"
+VERIFY_DM_FOOTER_DEFAULT = "Paraíso Morboso"
 VERIFY_DM_COLOR_DEFAULT = "4F5BDC"
 VERIFY_DM_FOOTER_ICON_DEFAULT = "https://media.discordapp.net/attachments/1548766637866360852/1548771260476162189/39d74668-f12d-4979-bcc3-9b6826f2e8d5.png?ex=6ac49d63&is=6ac34be3&hm=b939835c020aeea2d422d7057213117b1744d4f95d37d180e8f"
 
@@ -5599,7 +5599,7 @@ LOG_EVENT_CATALOG = {
 LOG_TEMPLATE_DEFAULTS = {
     "title": "{titulo_log}",
     "description": "{detalle_log}",
-    "footer": "El Heraldo 🪽 · {servidor}",
+    "footer": "El Heraldo · {servidor}",
     "color": "",
     "image": "",
     "thumbnail": "",
@@ -8952,7 +8952,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
             description += " Empató con el segundo lugar y ganó por desempate."
 
     embed = discord.Embed(
-        title="Miembro de la Semana" if reset else "🧪 Miembro de la Semana (prueba)",
+        title="Miembro de la Semana" if reset else "Miembro de la Semana (prueba)",
         description=description,
         color=discord.Color.gold(),
         timestamp=datetime.now(timezone.utc),
@@ -11318,7 +11318,7 @@ async def condemnation_update_pardoned_card(
             result += "."
         resolution.add_field(name="Resultado", value=result, inline=False)
         resolution.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
-        resolution.set_footer(text=f"{member.guild.name} · El Heraldo 🪽 · Resolución {case_id}")
+        resolution.set_footer(text=f"{member.guild.name} · El Heraldo · Resolución {case_id}")
 
         new_message = await channel.send(
             content=member.mention,
@@ -13279,7 +13279,7 @@ async def send_migrated_message(
                 inline=False,
             )
 
-        embed.set_footer(text=f"Migrado por El Heraldo 🪽 · {index}/{total} · ID {message.id}")
+        embed.set_footer(text=f"Migrado por El Heraldo · {index}/{total} · ID {message.id}")
 
         if fallback_urls:
             fallback_text = "\n".join(
@@ -13572,7 +13572,7 @@ async def fusionar_canales(
     final_name = fusion_final_name(origen, destino, nombre.value, nombre_personalizado)
     final_name = fusion_clean_name(final_name)
     embed = discord.Embed(
-        title="🔀 Vista previa de fusión de canales",
+        title="Vista previa de fusión de canales",
         description=(
             "Revisa cuidadosamente esta operación. **Los mensajes se recrearán en el destino; Discord no permite moverlos directamente.**\n\n"
             "El canal origen solo se eliminará si activaste esa opción y **todos** los mensajes se migran correctamente."
