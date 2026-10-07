@@ -57,7 +57,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /liberar devuelve los roles guardados; /list condenados muestra motivo, origen, inicio y caducidad.
    - Las condenas tienen duración opcional, sobreviven reinicios y sobreviven a una salida/reentrada.
    - /honeypot release deja de existir para evitar dos motores de liberación distintos.
-   - La reacción ☠️ solo la procesan administradores.
+   - La reacción de condena solo la procesan moderadores/administradores y exige una razón en un formulario antes de aplicar la sanción.
    - Quien tenga una condena activa no puede usar el botón de verificación; al reiniciar, el Heraldo
      reconcilia el rol con la base de datos (libera o reaplica según corresponda).
    - Los cambios de rol del propio Heraldo no vuelven a disparar el proceso (guardia con periodo de gracia).
@@ -6000,6 +6000,210 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
     return errors
 
 
+
+class ModerationReportReactionsModal(discord.ui.Modal, title="Moderation · Reacciones de reporte"):
+    mappings = discord.ui.TextInput(
+        label="Emoji | Tipo de reporte",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=1800,
+        placeholder="📢 | Spam\n🚩 | Contenido inapropiado\n🤓 | Cuenta sospechosa",
+    )
+
+    def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
+        super().__init__()
+        self.parent_view = parent_view
+        current = parent_view.pending_reactions
+        if current is None:
+            current = moderation_report_reactions(parent_view.guild_id)
+        self.mappings.default = "\n".join(f"{item['emoji']} | {item['label']}" for item in current)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        parsed: list[dict[str, str]] = []
+        seen: set[str] = set()
+        condemn_key = _moderation_emoji_key(
+            self.parent_view.pending_condemn_emoji or get_condemnation_emoji(self.parent_view.guild_id)
+        )
+        for raw_line in str(self.mappings).splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if "|" not in line:
+                await interaction.response.send_message(
+                    "Cada línea debe usar el formato emoji | tipo de reporte.", ephemeral=True
+                )
+                return
+            emoji, label = (part.strip() for part in line.split("|", 1))
+            key = _moderation_emoji_key(emoji)
+            if not emoji or not label:
+                await interaction.response.send_message("Emoji y tipo de reporte son obligatorios.", ephemeral=True)
+                return
+            if key == condemn_key:
+                await interaction.response.send_message(
+                    "El emoji de condena no puede usarse también como reacción de reporte.", ephemeral=True
+                )
+                return
+            if key in seen:
+                await interaction.response.send_message("No puedes repetir el mismo emoji.", ephemeral=True)
+                return
+            seen.add(key)
+            parsed.append({"emoji": emoji[:100], "label": label[:100]})
+            if len(parsed) > MODERATION_REPORT_MAX_REACTIONS:
+                await interaction.response.send_message(
+                    f"Puedes configurar hasta {MODERATION_REPORT_MAX_REACTIONS} reacciones de reporte.", ephemeral=True
+                )
+                return
+        self.parent_view.pending_reactions = parsed
+        await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
+
+
+class ModerationCondemnEmojiModal(discord.ui.Modal, title="Moderation · Emoji de condena"):
+    emoji = discord.ui.TextInput(label="Emoji de condena", required=True, max_length=100, placeholder="☠️")
+
+    def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
+        super().__init__()
+        self.parent_view = parent_view
+        self.emoji.default = parent_view.pending_condemn_emoji or get_condemnation_emoji(parent_view.guild_id)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        emoji = str(self.emoji).strip()
+        if not emoji:
+            await interaction.response.send_message("El emoji no puede estar vacío.", ephemeral=True)
+            return
+        report_mappings = self.parent_view.pending_reactions
+        if report_mappings is None:
+            report_mappings = moderation_report_reactions(self.parent_view.guild_id)
+        if any(_moderation_emoji_key(item["emoji"]) == _moderation_emoji_key(emoji) for item in report_mappings):
+            await interaction.response.send_message("Ese emoji ya está configurado para un reporte normal.", ephemeral=True)
+            return
+        self.parent_view.pending_condemn_emoji = emoji
+        await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
+
+
+class HeraldoUserReportsSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.pending_channel_id: int | None = None
+        self.pending_reactions: list[dict[str, str]] | None = None
+        self.pending_condemn_emoji: str | None = None
+
+        channel_select = discord.ui.ChannelSelect(
+            placeholder="Seleccionar canal de reportes",
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        channel_select.callback = self.select_channel
+        self.add_item(channel_select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    def _content(self, guild: discord.Guild) -> str:
+        lines: list[str] = []
+        if self.pending_channel_id is not None:
+            channel = guild.get_channel(self.pending_channel_id)
+            lines.append(f"Canal de reportes → {channel.mention if channel else self.pending_channel_id}")
+        if self.pending_reactions is not None:
+            value = ", ".join(f"{x['emoji']} {x['label']}" for x in self.pending_reactions) or "ninguna"
+            lines.append(f"Reacciones de reporte → {value}")
+        if self.pending_condemn_emoji is not None:
+            lines.append(f"Emoji de condena → {self.pending_condemn_emoji}")
+        return (
+            "**El Heraldo · Moderation · Reportes de usuarios**\n\n"
+            + moderation_reports_summary(guild)
+            + _pending_config_text(lines)
+        )
+
+    async def select_channel(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else []
+        channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not perms.view_channel or not perms.send_messages or not perms.embed_links:
+            await interaction.response.send_message(
+                "El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True
+            )
+            return
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Editar reacciones", style=discord.ButtonStyle.primary, row=1)
+    async def edit_reactions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(ModerationReportReactionsModal(self))
+
+    @discord.ui.button(label="Emoji de condena", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_channel_id is None and self.pending_reactions is None and self.pending_condemn_emoji is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        if self.pending_reactions is not None:
+            condemn_key = _moderation_emoji_key(self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id))
+            if any(_moderation_emoji_key(item["emoji"]) == condemn_key for item in self.pending_reactions):
+                await interaction.response.send_message(
+                    "El emoji de condena no puede coincidir con una reacción de reporte.", ephemeral=True
+                )
+                return
+        if self.pending_channel_id is not None:
+            set_moderation_report_channel_id(self.guild_id, self.pending_channel_id)
+        if self.pending_reactions is not None:
+            set_moderation_report_reactions(self.guild_id, self.pending_reactions)
+        if self.pending_condemn_emoji is not None:
+            guild_config_set(self.guild_id, "condemnation_emoji", self.pending_condemn_emoji)
+        self.pending_channel_id = None
+        self.pending_reactions = None
+        self.pending_condemn_emoji = None
+        await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_channel_id = None
+        self.pending_reactions = None
+        self.pending_condemn_emoji = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
+            view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
+        )
+
+
+class HeraldoModerationSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Reportes de usuarios", style=discord.ButtonStyle.primary, row=0)
+    async def user_reports(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
+
+    @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+
 class HeraldoSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -6099,6 +6303,14 @@ class HeraldoSetupView(discord.ui.View):
             ),
             embed=None,
             view=HeraldoMotwSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="Moderation", style=discord.ButtonStyle.primary, row=2)
+    async def moderation(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
+            embed=None,
+            view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="Tarjeta de condena", style=discord.ButtonStyle.secondary, row=2)
@@ -8248,6 +8460,98 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
     return CONDEMNED_EMOJI
 
 
+
+MODERATION_REPORT_MAX_REACTIONS = 10
+_moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
+_reaction_condemn_pending: set[tuple[int, int]] = set()
+
+
+def _moderation_emoji_key(value: str) -> str:
+    return str(value).replace("\ufe0f", "").strip()
+
+
+def moderation_report_reactions(guild_id: int) -> list[dict[str, str]]:
+    raw = guild_config_get(guild_id, "moderation_report_reactions")
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        emoji = str(item.get("emoji", "")).strip()
+        label = str(item.get("label", "")).strip()
+        key = _moderation_emoji_key(emoji)
+        if not emoji or not label or key in seen:
+            continue
+        seen.add(key)
+        result.append({"emoji": emoji[:100], "label": label[:100]})
+        if len(result) >= MODERATION_REPORT_MAX_REACTIONS:
+            break
+    return result
+
+
+def set_moderation_report_reactions(guild_id: int, reactions: list[dict[str, str]]) -> None:
+    clean: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in reactions:
+        emoji = str(item.get("emoji", "")).strip()
+        label = str(item.get("label", "")).strip()
+        key = _moderation_emoji_key(emoji)
+        if not emoji or not label or key in seen:
+            continue
+        seen.add(key)
+        clean.append({"emoji": emoji[:100], "label": label[:100]})
+        if len(clean) >= MODERATION_REPORT_MAX_REACTIONS:
+            break
+    guild_config_set(guild_id, "moderation_report_reactions", json.dumps(clean, ensure_ascii=False))
+
+
+def moderation_report_channel_id(guild_id: int) -> int:
+    return guild_setting_int(guild_id, "moderation_report_channel_id", 0)
+
+
+def set_moderation_report_channel_id(guild_id: int, channel_id: int) -> None:
+    guild_config_set(guild_id, "moderation_report_channel_id", str(channel_id))
+
+
+def moderation_report_type_for_emoji(guild_id: int, emoji: str) -> str | None:
+    key = _moderation_emoji_key(emoji)
+    for item in moderation_report_reactions(guild_id):
+        if _moderation_emoji_key(item["emoji"]) == key:
+            return item["label"]
+    return None
+
+
+def moderation_is_staff(member: discord.Member) -> bool:
+    perms = member.guild_permissions
+    return bool(
+        perms.administrator
+        or perms.moderate_members
+        or perms.manage_messages
+        or perms.kick_members
+        or perms.ban_members
+    )
+
+
+def moderation_reports_summary(guild: discord.Guild) -> str:
+    channel_id = moderation_report_channel_id(guild.id)
+    channel = guild.get_channel(channel_id) if channel_id else None
+    mappings = moderation_report_reactions(guild.id)
+    mapping_text = "\n".join(f"• {item['emoji']} → **{item['label']}**" for item in mappings) or "• Sin reacciones configuradas"
+    return (
+        f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
+        f"**Reacciones de reporte:**\n{mapping_text}\n"
+        f"**Reacción para condenar:** {get_condemnation_emoji(guild.id)}\n\n"
+        "Los reportes normales solo notifican al equipo de moderación. "
+        "La reacción de condena solo puede ser usada por moderadores y exige una razón antes de aplicar el rol de castigo."
+    )
+
+
 def get_condemnation_max_minutes(guild_id: int | None = None) -> int:
     if guild_id is not None:
         return guild_setting_int(guild_id, "condemnation_max_minutes", CONDEMNATION_MAX_MINUTES)
@@ -10321,12 +10625,12 @@ async def condenar_template(interaction: discord.Interaction) -> None:
 
 
 @bot.listen("on_raw_reaction_add")
-async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None:
-    # Con o sin selector de variación (U+FE0F) el cráneo es el mismo emoji.
-    if payload.guild_id is None or str(payload.emoji).replace("\ufe0f", "") != get_condemnation_emoji(payload.guild_id).replace("\ufe0f", ""):
+async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> None:
+    if payload.guild_id is None or payload.user_id == getattr(bot.user, "id", None):
         return
+
     guild = bot.get_guild(payload.guild_id)
-    if guild is None or payload.user_id == bot.user.id:
+    if guild is None:
         return
     actor = payload.member or guild.get_member(payload.user_id)
     if actor is None:
@@ -10334,8 +10638,16 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
             actor = await guild.fetch_member(payload.user_id)
         except discord.HTTPException:
             return
-    if not actor.guild_permissions.administrator:
-        return  # solo los administradores pueden condenar con la reacción
+    if actor.bot:
+        return
+
+    emoji = str(payload.emoji)
+    condemn_emoji = get_condemnation_emoji(guild.id)
+    is_condemn = _moderation_emoji_key(emoji) == _moderation_emoji_key(condemn_emoji)
+    report_type = moderation_report_type_for_emoji(guild.id, emoji)
+    if not is_condemn and report_type is None:
+        return
+
     channel = guild.get_channel_or_thread(payload.channel_id)
     if channel is None or not hasattr(channel, "fetch_message"):
         return
@@ -10346,22 +10658,178 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
     target = message.author
     if not isinstance(target, discord.Member) or target.bot:
         return
-    if target.id == actor.id:
+
+    if is_condemn:
+        if not moderation_is_staff(actor) or target.id == actor.id:
+            return
+        if condemnation_get(guild.id, target.id) is not None:
+            return
+        pending_key = (guild.id, message.id)
+        if pending_key in _reaction_condemn_pending:
+            return
+        _reaction_condemn_pending.add(pending_key)
+        view = ReactionCondemnReasonView(
+            guild_id=guild.id,
+            actor_id=actor.id,
+            channel_id=message.channel.id,
+            message_id=message.id,
+            target_id=target.id,
+            pending_key=pending_key,
+        )
+        try:
+            prompt = await channel.send(
+                f"{actor.mention}, indica el motivo obligatorio antes de condenar a {target.mention}.",
+                view=view,
+                allowed_mentions=discord.AllowedMentions(users=[actor, target], roles=False, everyone=False),
+            )
+            view.prompt_message = prompt
+        except discord.HTTPException:
+            _reaction_condemn_pending.discard(pending_key)
         return
-    if condemnation_get(guild.id, target.id) is not None:
+
+    report_channel = guild.get_channel(moderation_report_channel_id(guild.id))
+    if not isinstance(report_channel, discord.TextChannel):
         return
-    ok, note = await condemn_member(
-        target,
-        reason=f"Condena por reacción ☠️ al mensaje {message.jump_url}",
-        duration_minutes=condemnation_default_duration_minutes(guild.id),
-        purge_spec=HONEYPOT_PURGE_DEFAULT,
-        origin="reaction",
-        applied_by=actor,
-        source_message_url=message.jump_url,
-        source_channel_id=message.channel.id,
+
+    now = time.monotonic()
+    dedupe_key = (guild.id, message.id, actor.id, _moderation_emoji_key(emoji))
+    last = _moderation_report_dedupe.get(dedupe_key)
+    if last is not None and now - last < 3600:
+        return
+    _moderation_report_dedupe[dedupe_key] = now
+    if len(_moderation_report_dedupe) > 5000:
+        cutoff = now - 3600
+        for key, stamp in list(_moderation_report_dedupe.items()):
+            if stamp < cutoff:
+                _moderation_report_dedupe.pop(key, None)
+
+    embed = discord.Embed(
+        title="Reporte de usuario por reacción",
+        description=f"**Tipo:** {report_type}",
+        color=discord.Color.orange(),
+        timestamp=datetime.now(timezone.utc),
     )
-    if not ok:
-        await log_embed(guild, "⚠️ Condena por reacción rechazada", f"{actor.mention} reaccionó con ☠️ a {message.jump_url}: {note}", discord.Color.orange())
+    embed.add_field(name="Reportado", value=f"{target.mention}\nID: {target.id}", inline=True)
+    embed.add_field(name="Reportó", value=f"{actor.mention}\nID: {actor.id}", inline=True)
+    embed.add_field(name="Dónde", value=message.channel.mention, inline=True)
+    content = (message.content or "(mensaje sin texto)")[:1500]
+    embed.add_field(name="Mensaje", value=content, inline=False)
+    if message.attachments:
+        attachments = "\n".join(a.url for a in message.attachments[:5])
+        embed.add_field(name="Adjuntos", value=attachments[:1024], inline=False)
+    embed.add_field(name="Referencia", value=f"[Abrir mensaje]({message.jump_url})", inline=False)
+    try:
+        await report_channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        _moderation_report_dedupe.pop(dedupe_key, None)
+
+
+class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción"):
+    reason = discord.ui.TextInput(
+        label="Razón de la condena",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        min_length=3,
+        max_length=1000,
+        placeholder="Explica obligatoriamente por qué se aplica la condena.",
+    )
+
+    def __init__(self, view: "ReactionCondemnReasonView") -> None:
+        super().__init__()
+        self.parent_view = view
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        view = self.parent_view
+        if interaction.guild is None or interaction.guild.id != view.guild_id or interaction.user.id != view.actor_id:
+            await interaction.response.send_message("Este proceso de condena no te pertenece.", ephemeral=True)
+            return
+        actor = interaction.guild.get_member(view.actor_id)
+        if actor is None or not moderation_is_staff(actor):
+            await interaction.response.send_message("Ya no tienes permisos suficientes para aplicar esta condena.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel_or_thread(view.channel_id)
+        if channel is None or not hasattr(channel, "fetch_message"):
+            await interaction.response.send_message("El mensaje original ya no está disponible.", ephemeral=True)
+            _reaction_condemn_pending.discard(view.pending_key)
+            return
+        try:
+            message = await channel.fetch_message(view.message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            await interaction.response.send_message("El mensaje original ya no está disponible.", ephemeral=True)
+            _reaction_condemn_pending.discard(view.pending_key)
+            return
+        target = interaction.guild.get_member(view.target_id)
+        if target is None or target.bot or target.id != message.author.id:
+            await interaction.response.send_message("El miembro objetivo ya no está disponible.", ephemeral=True)
+            _reaction_condemn_pending.discard(view.pending_key)
+            return
+        reason = str(self.reason).strip()
+        if not reason:
+            await interaction.response.send_message("La razón es obligatoria.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ok, note = await condemn_member(
+            target,
+            reason=reason,
+            duration_minutes=condemnation_default_duration_minutes(interaction.guild.id),
+            purge_spec=HONEYPOT_PURGE_DEFAULT,
+            origin="reaction",
+            applied_by=actor,
+            source_message_url=message.jump_url,
+            source_channel_id=message.channel.id,
+        )
+        _reaction_condemn_pending.discard(view.pending_key)
+        if ok:
+            await interaction.followup.send(f"Condena aplicada a {target.mention}. {note}", ephemeral=True)
+            if view.prompt_message is not None:
+                try:
+                    await view.prompt_message.delete()
+                except discord.HTTPException:
+                    pass
+        else:
+            await interaction.followup.send(f"No pude aplicar la condena: {note}", ephemeral=True)
+
+
+class ReactionCondemnReasonView(discord.ui.View):
+    def __init__(
+        self, *, guild_id: int, actor_id: int, channel_id: int, message_id: int,
+        target_id: int, pending_key: tuple[int, int],
+    ) -> None:
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.actor_id = actor_id
+        self.channel_id = channel_id
+        self.message_id = message_id
+        self.target_id = target_id
+        self.pending_key = pending_key
+        self.prompt_message: discord.Message | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.actor_id:
+            await interaction.response.send_message("Solo el moderador que inició esta condena puede continuar.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Indicar razón", style=discord.ButtonStyle.danger)
+    async def enter_reason(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(ReactionCondemnReasonModal(self))
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        _reaction_condemn_pending.discard(self.pending_key)
+        await interaction.response.edit_message(content="Condena por reacción cancelada.", view=None)
+        self.stop()
+
+    async def on_timeout(self) -> None:
+        _reaction_condemn_pending.discard(self.pending_key)
+        if self.prompt_message is not None:
+            try:
+                await self.prompt_message.edit(content="La solicitud de condena por reacción expiró.", view=None)
+            except discord.HTTPException:
+                pass
+
+
 
 
 # --- Comandos /honeypot -----------------------------------------------------
