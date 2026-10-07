@@ -1807,7 +1807,16 @@ async def on_ready() -> None:
             traceback.print_exc()
 
     if _startup_done:
-        return  # on_ready se repite en cada reconexión: las vistas ya están registradas
+        # on_ready también se dispara tras una reconexión. Las vistas y loops siguen
+        # registrados, pero la caché de invitaciones puede haber quedado obsoleta
+        # mientras el bot estuvo desconectado.
+        for guild in bot.guilds:
+            try:
+                await refresh_invite_cache(guild)
+            except Exception:
+                print(f"⚠️ No pude refrescar invitaciones tras reconectar en {guild.name}:")
+                traceback.print_exc()
+        return
 
     db_init()
     honeypot_db_init()
@@ -1948,7 +1957,7 @@ async def on_ready() -> None:
 
 @bot.event
 async def on_guild_join(guild: discord.Guild) -> None:
-    """Registra un servidor nuevo sin crear recursos salvo que el administrador lo active."""
+    """Registra un servidor nuevo y publica allí los comandos sin esperar un reinicio."""
     try:
         await bootstrap_guild_configuration(guild, create_missing=False)
         await log_embed(
@@ -1960,6 +1969,27 @@ async def on_guild_join(guild: discord.Guild) -> None:
         )
     except Exception:
         traceback.print_exc()
+
+    try:
+        await refresh_invite_cache(guild)
+    except Exception:
+        print(f"⚠️ No pude inicializar la caché de invitaciones en {guild.name}:")
+        traceback.print_exc()
+
+    # Los comandos globales se eliminan deliberadamente en on_ready; por eso un
+    # servidor añadido después del arranque necesita su propia sincronización.
+    try:
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+    except Exception:
+        print(f"⚠️ No se pudieron sincronizar los comandos en el nuevo servidor {guild.name}:")
+        traceback.print_exc()
+
+    setup_view_errors = validate_setup_view_layouts(guild.id)
+    if setup_view_errors:
+        print(f"❌ Autoprueba /setup falló en el nuevo servidor {guild.name}:")
+        for error in setup_view_errors:
+            print(f"   - {error}")
 
 
 @bot.event
@@ -2218,44 +2248,59 @@ async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> N
 
 @tasks.loop(minutes=2)
 async def check_pending_verifications() -> None:
-    """Red de seguridad: si el bot se reinició, retoma verificaciones pendientes
-    cuyo timer ya venció o está por vencer (ambos flujos: Sin Verificar y Tentad@)."""
-    conn = db_connect()
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT guild_id, user_id, tentado_at, sin_verificado_at, verify_pending_at FROM guild_members "
-        "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL "
-        "OR verify_pending_at IS NOT NULL"
-    ).fetchall()
-    conn.close()
+    """Red de seguridad: retoma verificaciones pendientes sin dejar que una fila
+    dañada o un fallo puntual detenga toda la automatización."""
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = db_connect()
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT guild_id, user_id, tentado_at, sin_verificado_at, verify_pending_at FROM guild_members "
+            "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL "
+            "OR verify_pending_at IS NOT NULL"
+        ).fetchall()
+    except Exception:
+        print("❌ Falló la lectura de verificaciones pendientes:")
+        traceback.print_exc()
+        return
+    finally:
+        if conn is not None:
+            conn.close()
 
     now = datetime.now(timezone.utc)
     for row in rows:
-        guild = bot.get_guild(row["guild_id"])
-        if guild is None:
+        try:
+            guild = bot.get_guild(row["guild_id"])
+            if guild is None:
+                if row["tentado_at"] is not None:
+                    db_clear_tentado(row["guild_id"], row["user_id"])
+                if row["sin_verificado_at"] is not None:
+                    db_clear_sin_verificado(row["guild_id"], row["user_id"])
+                if row["verify_pending_at"] is not None:
+                    db_clear_verify_pending(row["guild_id"], row["user_id"])
+                continue
+
             if row["tentado_at"] is not None:
-                db_clear_tentado(row["guild_id"], row["user_id"])
+                tentado_at = datetime.fromisoformat(row["tentado_at"])
+                if now >= tentado_at + get_orientation_window(guild.id):
+                    await evaluate_member(guild.id, row["user_id"])
+
             if row["sin_verificado_at"] is not None:
-                db_clear_sin_verificado(row["guild_id"], row["user_id"])
+                sin_verificado_at = datetime.fromisoformat(row["sin_verificado_at"])
+                if now >= sin_verificado_at + get_sin_verificado_window(guild.id):
+                    await evaluate_sin_verificado(guild.id, row["user_id"])
+
             if row["verify_pending_at"] is not None:
-                db_clear_verify_pending(row["guild_id"], row["user_id"])
-            continue
-
-        if row["tentado_at"] is not None:
-            tentado_at = datetime.fromisoformat(row["tentado_at"])
-            if now >= tentado_at + get_orientation_window(guild.id):
-                await evaluate_member(guild.id, row["user_id"])
-
-        if row["sin_verificado_at"] is not None:
-            sin_verificado_at = datetime.fromisoformat(row["sin_verificado_at"])
-            if now >= sin_verificado_at + get_sin_verificado_window(guild.id):
-                await evaluate_sin_verificado(guild.id, row["user_id"])
-
-        if row["verify_pending_at"] is not None:
-            verify_pending_at = datetime.fromisoformat(row["verify_pending_at"])
-            verify_window = timedelta(seconds=get_verify_timeout(guild.id))
-            if now >= verify_pending_at + verify_window:
-                await evaluate_verify_timeout(guild.id, row["user_id"])
+                verify_pending_at = datetime.fromisoformat(row["verify_pending_at"])
+                verify_window = timedelta(seconds=get_verify_timeout(guild.id))
+                if now >= verify_pending_at + verify_window:
+                    await evaluate_verify_timeout(guild.id, row["user_id"])
+        except Exception:
+            print(
+                "❌ Verificación pendiente falló "
+                f"(guild={row['guild_id']}, user={row['user_id']}):"
+            )
+            traceback.print_exc()
 
 
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
@@ -5970,6 +6015,7 @@ async def heraldo_config(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="heraldo_check", description="Fuerza la evaluación inmediata de un miembro (sin esperar el timer de 10 min).")
 @discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
 async def heraldo_check(interaction: discord.Interaction, user: discord.User) -> None:
     try:
         member = await interaction.guild.fetch_member(user.id)
@@ -5996,6 +6042,7 @@ async def heraldo_check_error(interaction: discord.Interaction, error: discord.a
 
 @bot.tree.command(name="heraldo_check_all", description="Fuerza la evaluación inmediata de TODOS los miembros que tengan Tentad@.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
 async def heraldo_check_all(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     await interaction.response.send_message("Revisando a todos los miembros con Tentad@... esto puede tardar un poco.", ephemeral=True)
@@ -7126,7 +7173,7 @@ def template_report_embed(template: discord.Template, was_dirty: bool | None, tr
     return embed
 
 
-async def run_scheduled_template_backup(guild: discord.Guild) -> None:
+async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
     template, was_dirty, error = await sync_server_template(guild)
     if error:
         embed = discord.Embed(
@@ -7156,20 +7203,22 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> None:
             "La copia se hizo, pero no pude mandarte el enlace por mensaje privado. Usa /template_sync para verlo.",
             discord.Color.orange(),
         )
+    return error is None
 
 
 @tasks.loop(minutes=10)
 async def template_backup_loop() -> None:
-    """Revisa cada 10 min si toca la copia. Al comparar contra el último turno guardado en
-    la DB, también se recupera si el bot estaba caído a la hora."""
-    try:
-        now = datetime.now(timezone.utc)
-        for guild in bot.guilds:
-            if template_due(guild.id, now):
+    """Revisa cada servidor por separado y solo marca el turno tras una copia correcta."""
+    now = datetime.now(timezone.utc)
+    for guild in bot.guilds:
+        try:
+            if not template_due(guild.id, now):
+                continue
+            if await run_scheduled_template_backup(guild):
                 template_mark_done(guild.id, now)
-                await run_scheduled_template_backup(guild)
-    except Exception:
-        traceback.print_exc()  # que un error no detenga el loop
+        except Exception:
+            print(f"❌ Falló la copia programada de plantilla en {guild.name}:")
+            traceback.print_exc()
 
 
 def template_config_summary(guild_id: int, now_utc: datetime) -> str:
@@ -7412,10 +7461,10 @@ def motw_mark_current_slot(guild_id: int, now: datetime | None = None) -> None:
 
 @tasks.loop(minutes=10)
 async def member_of_the_week_loop() -> None:
-    """Revisa de forma independiente el turno de Miembro de la Semana de cada servidor."""
-    try:
-        now = datetime.now(STREAK_TZ)
-        for guild in bot.guilds:
+    """Revisa cada servidor por separado y confirma el turno solo si el anuncio salió."""
+    now = datetime.now(STREAK_TZ)
+    for guild in bot.guilds:
+        try:
             if not get_motw_channel_id(guild.id):
                 continue
             slot = motw_last_scheduled(guild.id, now).date().isoformat()
@@ -7425,10 +7474,14 @@ async def member_of_the_week_loop() -> None:
                 continue
             if last == slot:
                 continue
-            guild_config_set(guild.id, "motw_last_slot", slot)
-            await announce_member_of_the_week(guild.id)
-    except Exception:
-        traceback.print_exc()
+            error = await announce_member_of_the_week(guild.id)
+            if error is None:
+                guild_config_set(guild.id, "motw_last_slot", slot)
+            else:
+                print(f"⚠️ Miembro de la Semana reintentará en {guild.name}: {error}")
+        except Exception:
+            print(f"❌ Falló Miembro de la Semana en {guild.name}:")
+            traceback.print_exc()
 
 
 async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str | None:
@@ -7505,6 +7558,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
     discord.app_commands.Choice(name=name, value=i) for i, name in enumerate(MOTW_WEEKDAY_NAMES)
 ])
 @discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
 async def motw_set_schedule(interaction: discord.Interaction, dia: discord.app_commands.Choice[int], hora: discord.app_commands.Range[int, 0, 23]) -> None:
     set_motw_schedule(interaction.guild.id, dia.value, hora)
     motw_mark_current_slot(interaction.guild.id)
@@ -7533,6 +7587,7 @@ async def motw_set_schedule_error(interaction: discord.Interaction, error: disco
 @bot.tree.command(name="motw_set_channel", description="Cambiar el canal donde se anuncia el Miembro de la Semana.")
 @discord.app_commands.describe(canal="Canal de texto o de anuncios donde se publicará")
 @discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
 async def motw_set_channel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
     # Validar antes de guardar: así no se configura un canal donde el bot no puede escribir.
     perms = canal.permissions_for(canal.guild.me)
@@ -7573,6 +7628,7 @@ async def motw_set_channel_error(interaction: discord.Interaction, error: discor
 
 @bot.tree.command(name="motw_test", description="Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
+@discord.app_commands.guild_only()
 async def motw_test(interaction: discord.Interaction) -> None:
     if bot.get_channel(get_motw_channel_id(interaction.guild.id)) is None:
         await interaction.response.send_message("No encuentro el canal de anuncios configurado (¿fue borrado o el bot perdió acceso?). Elige otro con /motw_set_channel.", ephemeral=True)
