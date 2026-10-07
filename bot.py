@@ -1312,7 +1312,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
         db_clear_tentado(guild_id, user_id)  # ya no está, nada que hacer
         return "ausente"
 
-    punish_id = hp_punish_role_id(message.guild.id)
+    punish_id = hp_punish_role_id(guild_id)
     if punish_id and any(r.id == punish_id for r in member.roles):
         db_clear_tentado(guild_id, user_id)  # castigado por el honeypot: no se expulsa por falta de orientación
         return "castigado"
@@ -3163,7 +3163,7 @@ async def track_activity(message: discord.Message) -> None:
         return
     if message.channel.id in hp_trap_ids(message.guild.id):
         return  # lo escrito en un canal trampa no cuenta como actividad
-    punish_id = hp_punish_role_id(guild.id)
+    punish_id = hp_punish_role_id(message.guild.id)
     if (punish_id and any(r.id == punish_id for r in message.author.roles)) or condemnation_get(message.guild.id, message.author.id) is not None:
         return  # los condenados no suman actividad
 
@@ -4981,8 +4981,8 @@ async def condemnation_update_pardoned_card(
 
         conn = sqlite3.connect(DB_PATH)
         conn.execute(
-            "UPDATE condemnations SET announcement_message_id = ? WHERE user_id = ?",
-            (new_message.id, member.id),
+            "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
+            (new_message.id, member.guild.id, member.id),
         )
         conn.commit()
         conn.close()
@@ -5177,8 +5177,8 @@ async def _condemn_member_inner(
         if announcement_message_id:
             conn = sqlite3.connect(DB_PATH)
             conn.execute(
-                "UPDATE condemnations SET announcement_message_id = ? WHERE user_id = ?",
-                (announcement_message_id, member.id),
+                "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
+                (announcement_message_id, member.guild.id, member.id),
             )
             conn.commit()
             conn.close()
@@ -5426,7 +5426,7 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
         _hp_veteran_hits.append((now, member.id))
     _hp_veteran_hits[:] = [(t, u) for t, u in _hp_veteran_hits if now - t <= HONEYPOT_MISFIRE_WINDOW]
     if len({u for _, u in _hp_veteran_hits}) >= HONEYPOT_MISFIRE_THRESHOLD:
-        hp_setting_set(interaction.guild.id, "honeypot_paused", "1")
+        hp_setting_set(guild.id, "honeypot_paused", "1")
         _hp_veteran_hits.clear()
         await log_embed(
             guild, "⏸️ Honeypot pausado (protección contra fallos)",
