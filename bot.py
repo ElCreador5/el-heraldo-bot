@@ -8146,7 +8146,7 @@ variables_command.error(verify_command_error)
 # LISTADOS CENTRALIZADOS (/list)
 # ---------------------------------------------------------------------------
 # Los listados administrativos viven aquí para evitar comandos duplicados como
-# /condenados o /embed lista. Son privados para el creador del bot o el creador del servidor.
+# /condenados o /embed lista. Son privados para el creador del bot, el creador del servidor o administradores.
 
 list_group = discord.app_commands.Group(
     name="list",
@@ -8161,9 +8161,11 @@ async def _list_require_server_owner(interaction: discord.Interaction) -> bool:
         await interaction.response.send_message("❌ Este comando solo funciona dentro de un servidor.", ephemeral=True)
         return False
     is_bot_owner = await bot.is_owner(interaction.user)
-    if interaction.user.id != guild.owner_id and not is_bot_owner:
+    perms = getattr(interaction.user, "guild_permissions", None)
+    is_admin = bool(perms and perms.administrator)
+    if interaction.user.id != guild.owner_id and not is_bot_owner and not is_admin:
         await interaction.response.send_message(
-            "❌ Solo el creador del bot o el creador del servidor pueden consultar estos listados.",
+            "❌ Solo el creador del bot, el creador del servidor o un administrador pueden consultar estos listados.",
             ephemeral=True,
         )
         return False
