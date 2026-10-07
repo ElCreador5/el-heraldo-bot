@@ -898,11 +898,17 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
         f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
         f"Tarjeta administrada: **{'Sí' if enabled else 'No'}**\n\n"
         + "\n".join(roles)
-        + "\n\n**Cómo funciona:** reacciona con el emoji de la orientación que te represente "
-          "y El Heraldo te asignará su rol correspondiente. Solo puedes mantener una orientación "
-          "a la vez: si eliges otra, la anterior se sustituye automáticamente. Si retiras tu "
-          "reacción, también se retira ese rol. Si termina el tiempo configurado sin que tengas "
-          "ningún rol de orientación válido, se aplicará la sanción establecida para este sistema."
+        + "\n\n**Cómo funciona:** El Heraldo establece un sistema para la selección de roles "
+          "obligatorios (roles de orientación sexual por defecto). Estos roles complementan la "
+          "verificación, ayudan a garantizar participación dentro del servidor y sirven como una "
+          "señal adicional de que el miembro es humano.\n\n"
+          "• Al activarse, después de verificar su edad, el miembro debe seleccionar uno de estos "
+          "roles en el canal destinado a orientación antes de que venza el temporizador de **10 minutos**. "
+          "Estos roles pueden complementarse con los roles propios de tu servidor.\n"
+          "• Si no selecciona ninguno dentro del plazo, El Heraldo lo expulsa y envía una invitación "
+          "de recuperación de **un solo uso** para darle una oportunidad de volver a ingresar.\n"
+          "• Puedes configurar los permisos de estos roles para personalizar qué canales ve cada miembro "
+          "según su preferencia."
     )
 
 
