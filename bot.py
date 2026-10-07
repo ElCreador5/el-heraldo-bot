@@ -2853,7 +2853,84 @@ LOG_TEMPLATE_CATEGORIES = {
     "purge": ("🧹 Purgas", "Purgas manuales y automáticas."),
     "backup": ("💾 Backups / plantilla", "Copias y sincronización de la plantilla del servidor."),
     "configuration": ("⚙️ Configuración", "Cambios de canales, roles y configuración."),
+    "suggestions": ("💡 Sugerencias", "Creación y resolución de sugerencias."),
     "errors": ("⚠️ Errores / avisos", "Errores, permisos insuficientes y advertencias."),
+}
+
+LOG_EVENT_CATALOG = {
+    "general": [
+        ("heraldo_ready", "🪽 El Heraldo está listo para configurarse"),
+        ("manual_check", "🔧 Chequeo manual"),
+        ("mass_check_started", "🔍 Chequeo masivo iniciado"),
+        ("channel_merge_completed", "🔀 Fusión de canales completada"),
+        ("channel_merge_partial", "⚠️ Fusión de canales parcial"),
+    ],
+    "verification": [
+        ("verified_path", "✅ Verificado"),
+        ("age_verification", "✅ Verificación de edad"),
+        ("verification_expired", "⏰ Verificación vencida"),
+        ("verification_kick", "👢 Kick — No se verificó"),
+        ("verification_ban", "🔨 Ban — No se verificó"),
+        ("verification_panel_published", "⚙️ Panel de verificación publicado"),
+        ("verification_texts_updated", "⚙️ Textos de verificación actualizados"),
+        ("verification_dm_updated", "⚙️ DM de bienvenida actualizado"),
+        ("verification_updated", "⚙️ Verificación actualizada"),
+    ],
+    "condemnation": [
+        ("condemnation_applied", "☠️ Condena aplicada"),
+        ("condemnation_restored", "☠️ Condena restaurada al reingresar"),
+        ("condemnation_rejected", "⚠️ Condena rechazada"),
+        ("condemnation_reaction_rejected", "⚠️ Condena por reacción rechazada"),
+        ("condemnation_pardoned", "🕊️ Condena perdonada"),
+        ("condemnation_lifted", "🕊️ Condena levantada"),
+        ("condemnation_card_not_deleted", "⚠️ Tarjeta de condena no eliminada"),
+    ],
+    "honeypot": [
+        ("honeypot_paused", "⏸️ Honeypot pausado (protección contra fallos)"),
+        ("honeypot_trap_deleted", "🍯 Canal trampa eliminado"),
+        ("honeypot_updated", "⚙️ Honeypot actualizado"),
+        ("honeypot_trap_added", "🍯 Canal trampa añadido"),
+        ("honeypot_trap_created", "🍯 Canal trampa creado"),
+        ("honeypot_trap_removed", "🍯 Canal trampa quitado"),
+        ("honeypot_embed_updated", "⚙️ Embed del honeypot actualizado"),
+        ("honeypot_resumed", "▶️ Honeypot reanudado"),
+    ],
+    "raid": [("raid_updated", "⚙️ Raid Protection actualizada")],
+    "purge": [
+        ("purge_failed", "⚠️ Purga fallida"),
+        ("purge_completed", "🧹 Purga completada"),
+        ("honeypot_purge_completed", "🍯 Purga del honeypot completada"),
+    ],
+    "backup": [
+        ("template_backup_failed", "⚠️ Falló la copia de seguridad de la plantilla"),
+        ("template_synced_dm_failed", "🛡️ Plantilla sincronizada (mensaje privado no enviado)"),
+        ("template_backup_updated", "⚙️ Copia de seguridad de la plantilla actualizada"),
+        ("template_synced_manual", "🛡️ Plantilla sincronizada manualmente"),
+    ],
+    "configuration": [
+        ("log_channel_updated", "⚙️ Canal de logs actualizado"),
+        ("condemnation_channel_updated", "⚙️ Canal de condenas actualizado"),
+        ("motw_schedule_updated", "⚙️ Horario de Miembro de la Semana actualizado"),
+        ("motw_channel_updated", "⚙️ Canal de Miembro de la Semana actualizado"),
+    ],
+    "suggestions": [
+        ("suggestion_created", "💡 Nueva sugerencia"),
+        ("suggestion_accepted", "✅ Sugerencia aceptada"),
+        ("suggestion_rejected", "❌ Sugerencia rechazada"),
+    ],
+    "errors": [
+        ("verification_not_configured", "⚠️ Verificación sin configurar"),
+        ("verification_blocked", "⚠️ Verificación bloqueada"),
+        ("verification_error", "⚠️ Error al verificar"),
+        ("verification_timeout_error", "⚠️ Error al aplicar el timeout de verificación"),
+        ("kick_error", "⚠️ Error al expulsar"),
+        ("invite_error", "⚠️ Error de invite"),
+        ("remove_unverified_error", "⚠️ No pude quitar Sin Verificar"),
+        ("welcome_dm_error", "⚠️ No pude enviar el DM de bienvenida"),
+        ("condemnation_roles_error", "⚠️ No pude re-quitar roles a un condenado"),
+        ("condemnation_reapply_error", "⚠️ No pude reaplicar la condena al reingresar"),
+        ("suggestion_dm_error", "⚠️ No pude enviar una sugerencia por DM"),
+    ],
 }
 
 LOG_TEMPLATE_DEFAULTS = {
@@ -2868,40 +2945,71 @@ LOG_TEMPLATE_DEFAULTS = {
 }
 
 
-def _log_template_key(category: str, field: str) -> str:
-    return f"log_template.{category}.{field}"
+def _log_normalize_title(title: str) -> str:
+    raw = unicodedata.normalize("NFKD", title or "")
+    return "".join(ch for ch in raw if not unicodedata.combining(ch)).strip().lower()
 
 
-def log_template_get(guild_id: int, category: str, field: str) -> str:
+def _log_slug(title: str) -> str:
+    value = _log_normalize_title(title)
+    value = re.sub(r"[^a-z0-9]+", "_", value).strip("_")
+    return value[:80] or "event"
+
+
+def _log_catalog_event(category: str, event_key: str | None) -> tuple[str, str]:
+    events = LOG_EVENT_CATALOG.get(category) or LOG_EVENT_CATALOG["general"]
+    if event_key:
+        for key, label in events:
+            if key == event_key:
+                return key, label
+    return events[0]
+
+
+def _log_template_key(scope: str, field: str) -> str:
+    return f"log_template.{scope}.{field}"
+
+
+def log_template_get(guild_id: int, category: str, field: str, event_key: str | None = None) -> str:
     if category not in LOG_TEMPLATE_CATEGORIES:
         category = "general"
+    if event_key:
+        stored = guild_config_get(guild_id, _log_template_key(f"event.{event_key}", field))
+        if stored is not None:
+            return stored
     stored = guild_config_get(guild_id, _log_template_key(category, field))
     if stored is not None:
         return stored
     return LOG_TEMPLATE_DEFAULTS.get(field, "")
 
 
-def log_template_set(guild_id: int, category: str, field: str, value: str) -> None:
+def log_template_set(
+    guild_id: int, category: str, field: str, value: str, event_key: str | None = None,
+) -> None:
     if category not in LOG_TEMPLATE_CATEGORIES:
         raise ValueError("Categoría de log no válida")
     if field not in LOG_TEMPLATE_DEFAULTS:
         raise ValueError("Campo de plantilla de log no válido")
-    guild_config_set(guild_id, _log_template_key(category, field), value)
+    scope = f"event.{event_key}" if event_key else category
+    guild_config_set(guild_id, _log_template_key(scope, field), value)
 
 
-def log_template_reset(guild_id: int, category: str) -> None:
+def log_template_reset(guild_id: int, category: str, event_key: str | None = None) -> None:
+    scope = f"event.{event_key}" if event_key else category
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "DELETE FROM guild_settings WHERE guild_id = ? AND key LIKE ?",
-        (guild_id, f"log_template.{category}.%"),
+        (guild_id, f"log_template.{scope}.%"),
     )
     conn.commit()
     conn.close()
 
 
 def log_event_category(title: str) -> str:
-    raw = unicodedata.normalize("NFKD", title or "")
-    normalized = "".join(ch for ch in raw if not unicodedata.combining(ch)).lower()
+    normalized = _log_normalize_title(title)
+    for category, events in LOG_EVENT_CATALOG.items():
+        for _, label in events:
+            if _log_normalize_title(label) == normalized:
+                return category
     if any(word in normalized for word in ("error", "fall", "rechaz", "no pude", "sin permisos", "⚠")):
         return "errors"
     if any(word in normalized for word in ("conden", "perdon", "liberad")):
@@ -2916,10 +3024,20 @@ def log_event_category(title: str) -> str:
         return "verification"
     if any(word in normalized for word in ("plantilla", "template", "copia de seguridad", "backup")):
         return "backup"
+    if "suger" in normalized:
+        return "suggestions"
     if any(word in normalized for word in ("config", "canal", "rol actualizado", "setup")):
         return "configuration"
     return "general"
 
+
+def log_event_key(title: str, category: str | None = None) -> str:
+    category = category or log_event_category(title)
+    normalized = _log_normalize_title(title)
+    for key, label in LOG_EVENT_CATALOG.get(category, []):
+        if _log_normalize_title(label) == normalized:
+            return key
+    return "dynamic_" + _log_slug(title)
 
 def _log_special_vars(text: str, title: str, description: str, category: str) -> str:
     return (
