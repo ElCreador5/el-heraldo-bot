@@ -8522,27 +8522,41 @@ def variable_suggestions(guild: discord.Guild | None, current: str) -> list:
 
     kind, sep, rest = typed.partition(":")
     kind_key = _var_key(kind) if sep else ""
-    if guild is not None and (typed[:1] == "#" or kind_key in ("canal", "channel", "c")):
+    if guild is not None and (
+        typed[:1] == "#" or kind_key in ("canal", "channel", "c", "canalmencion", "mencioncanal")
+    ):
         query = typed[1:] if typed[:1] == "#" else rest
         prefix = "#" if typed[:1] == "#" else f"{kind}:"
         pick([c for c in guild.channels if not isinstance(c, discord.CategoryChannel)], lambda c: c.name, query,
-             lambda c: add(f"#{c.name}", f"{prefix}{c.name}"))
-    elif guild is not None and (typed[:1] == "@" or kind_key in ("rol", "role", "r", "usuario", "user", "miembro", "member", "u")):
-        is_role_kind = typed[:1] == "@" or kind_key in ("rol", "role", "r")
+             lambda c: add(f"#{c.name} (canal)", f"{prefix}{c.name}"))
+    elif guild is not None and (
+        typed[:1] == "@" or kind_key in (
+            "rol", "role", "r", "mencionrol", "rolmencion",
+            "usuario", "user", "miembro", "member", "u", "usuariomencion", "mencionusuario",
+        )
+    ):
+        is_role_kind = typed[:1] == "@" or kind_key in ("rol", "role", "r", "mencionrol", "rolmencion")
         query = typed[1:] if typed[:1] == "@" else rest
         prefix = "@" if typed[:1] == "@" else f"{kind}:"
         roles = [r for r in guild.roles if not r.is_default()] if is_role_kind else []
         pick(roles, lambda r: r.name, query, lambda r: add(f"@{r.name} (rol)", f"{prefix}{r.name}"))
         if typed[:1] == "@" or not is_role_kind:
             pick(guild.members, lambda m: m.display_name, query,
-                 lambda m: add(f"@{m.display_name} (miembro)", f"{prefix}{m.display_name}"))
+                 lambda m: add(f"@{m.display_name} (usuario)", f"{prefix}{m.display_name}"))
     elif kind_key in ("emoji", "e"):
         pools = list(guild.emojis) if guild is not None else []
         pick(pools, lambda e: e.name, rest, lambda e: add(f"{e} :{e.name}:", f"{kind}:{e.name}"))
     elif not sep and typed[:1] not in ("#", "@"):
         typed_key = _var_key(typed)
         if not typed_key:  # recién escrita la llave: enseñar también las búsquedas
-            for label, inner in (("#  → canales del servidor", "#"), ("@  → roles y miembros", "@"), ("emoji:  → emojis del servidor", "emoji:")):
+            for label, inner in (
+                ("canal_mencion:  → mencionar un canal", "canal_mencion:"),
+                ("rol_mencion:  → mencionar un rol", "rol_mencion:"),
+                ("usuario_mencion:  → mencionar un usuario", "usuario_mencion:"),
+                ("emoji:  → insertar un emoji del servidor", "emoji:"),
+                ("#  → atajo para canales", "#"),
+                ("@  → atajo para roles o usuarios", "@"),
+            ):
                 choice = _ac_choice(label, f"{head}{opener}{inner}")
                 if choice is not None:
                     out.append(choice)
