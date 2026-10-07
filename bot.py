@@ -1709,7 +1709,7 @@ def get_verify_success_text(guild_id: int | None = None) -> str:
 VERIFY_DM_TITLE_DEFAULT = "HAS CRUZADO EL UMBRAL"
 VERIFY_DM_BODY_DEFAULT = (
     "Pero antes de que puedas perderte entre las puertas del paraíso, hay dos pasos que separan a los curiosos de los que realmente pertenecen:\n\n"
-    "🔒 **Verifícate** en el canal de verificación — sin esto, sigues del otro lado del portón.\n\n"
+    "**Verifícate** en el canal de verificación — sin esto, sigues del otro lado del portón.\n\n"
     "🎭 Luego, elige tus roles de orientación cuando nadie está mirando.\n\n"
     "Cada rol abre una puerta distinta. Elige bien.\n\n"
     "¿Dudas? Revisa el canal de dudas del servidor."
@@ -1923,7 +1923,7 @@ async def on_ready() -> None:
     try:
         for cmd in await bot.tree.fetch_commands():
             await cmd.delete()
-            print(f"🧹 Comando global huérfano eliminado: /{cmd.name}")
+            print(f"Comando global huérfano eliminado: /{cmd.name}")
     except discord.HTTPException as e:
         print(f"No se pudo limpiar comandos globales: {e}")
     if not condemnation_expiry_loop.is_running():
@@ -2593,12 +2593,21 @@ async def heraldo_setup_go_home(
     )
 
 
+
+def _pending_config_text(items: list[str]) -> str:
+    if not items:
+        return ""
+    return "\n\n**Cambios pendientes (aún no guardados):**\n" + "\n".join(f"• {item}" for item in items)
+
+
+
 class HeraldoChannelSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.current_key = "logs"
+        self.pending_channels: dict[str, int] = {}
 
         function_select = discord.ui.Select(
             placeholder="1. Elige qué canal del sistema configurar",
@@ -2630,96 +2639,87 @@ class HeraldoChannelSetupView(discord.ui.View):
         self.channel_select = channel_select
         self.add_item(channel_select)
 
-        create_button = discord.ui.Button(
-            label="➕ Crear si no existe",
-            style=discord.ButtonStyle.success,
-            row=2,
-        )
+        create_button = discord.ui.Button(label="Crear si no existe", style=discord.ButtonStyle.secondary, row=2)
         create_button.callback = self.create_channel_if_missing
         self.add_item(create_button)
 
-        back_button = discord.ui.Button(
-            label="⬅️ Volver",
-            style=discord.ButtonStyle.secondary,
-            row=2,
-        )
+        save_button = discord.ui.Button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+        save_button.callback = self.save_changes
+        self.add_item(save_button)
+
+        discard_button = discord.ui.Button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+        discard_button.callback = self.discard_changes
+        self.add_item(discard_button)
+
+        back_button = discord.ui.Button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
         back_button.callback = self.back
         self.add_item(back_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(
-                "Este panel de configuración no es tuyo.", ephemeral=True
-            )
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
         return True
 
-    def _label(self) -> str:
-        return HERALDO_CHANNEL_DEFINITIONS[self.current_key][0]
+    def _label(self, key: str | None = None) -> str:
+        return HERALDO_CHANNEL_DEFINITIONS[key or self.current_key][0]
+
+    def _pending_lines(self, guild: discord.Guild) -> list[str]:
+        lines: list[str] = []
+        for key, channel_id in self.pending_channels.items():
+            channel = guild.get_channel(channel_id)
+            lines.append(f"{self._label(key)} → {channel.mention if channel else channel_id}")
+        return lines
+
+    def _content(self, guild: discord.Guild, notice: str | None = None) -> str:
+        label, default_name = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
+        text = (
+            "🪽 **El Heraldo · Canales del sistema**\n\n"
+            + heraldo_channels_summary(guild)
+            + f"\n\n**Configurando ahora:** {label}\n"
+            f"Selecciona un canal existente o usa **Crear si no existe** para crear **#{default_name}**."
+            + _pending_config_text(self._pending_lines(guild))
+        )
+        if notice:
+            text += f"\n\n{notice}"
+        return text
 
     async def select_function(self, interaction: discord.Interaction) -> None:
         self.current_key = self.function_select.values[0]
-        label, default_name = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
+        label, _ = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
         self.channel_select.placeholder = f"2. Selecciona canal para {label.split(' ', 1)[-1]}"
-        await interaction.response.edit_message(
-            content=(
-                "🪽 **El Heraldo · Canales del sistema**\n\n"
-                + heraldo_channels_summary(interaction.guild)
-                + f"\n\n**Configurando ahora:** {label}\n"
-                f"Selecciona un canal existente o usa **Crear si no existe** para crear **#{default_name}**."
-            ),
-            view=self,
-        )
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     async def select_existing_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         selected = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
         if not isinstance(selected, discord.TextChannel):
-            await interaction.response.send_message(
-                "❌ No pude localizar ese canal.", ephemeral=True
-            )
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
             return
-
-        guild_resource_set(self.guild_id, "channel", self.current_key, selected.id)
-        if self.current_key == "verification":
-            guild_config_set(self.guild_id, "verify_channel_id", str(selected.id))
-
+        self.pending_channels[self.current_key] = selected.id
         await interaction.response.edit_message(
-            content=(
-                "🪽 **El Heraldo · Canales del sistema**\n\n"
-                + heraldo_channels_summary(interaction.guild)
-                + f"\n\n✅ **{self._label()}** quedó configurado en {selected.mention}."
-            ),
+            content=self._content(interaction.guild, f"Selección pendiente: {self._label()} → {selected.mention}."),
             view=self,
         )
 
     async def create_channel_if_missing(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
         label, default_name = HERALDO_CHANNEL_DEFINITIONS[self.current_key]
-
-        saved_id = get_guild_channel_id(guild.id, self.current_key)
+        saved_id = self.pending_channels.get(self.current_key) or get_guild_channel_id(guild.id, self.current_key)
         saved = guild.get_channel(saved_id) if saved_id else None
         if isinstance(saved, discord.TextChannel):
-            await interaction.response.send_message(
-                f"ℹ️ {label} ya está configurado en {saved.mention}. No creé otro canal.",
-                ephemeral=True,
+            self.pending_channels[self.current_key] = saved.id
+            await interaction.response.edit_message(
+                content=self._content(guild, f"{label} usará {saved.mention} al guardar."),
+                view=self,
             )
             return
 
-        existing = next(
-            (c for c in guild.text_channels if c.name.casefold() == default_name.casefold()),
-            None,
-        )
+        existing = next((c for c in guild.text_channels if c.name.casefold() == default_name.casefold()), None)
         if existing is not None:
-            guild_resource_set(self.guild_id, "channel", self.current_key, existing.id)
-            if self.current_key == "verification":
-                guild_config_set(self.guild_id, "verify_channel_id", str(existing.id))
+            self.pending_channels[self.current_key] = existing.id
             await interaction.response.edit_message(
-                content=(
-                    "🪽 **El Heraldo · Canales del sistema**\n\n"
-                    + heraldo_channels_summary(guild)
-                    + f"\n\n♻️ Encontré {existing.mention} y lo reutilicé para **{label}**. No se creó ningún duplicado."
-                ),
+                content=self._content(guild, f"Encontré {existing.mention}; quedó pendiente para {label}."),
                 view=self,
             )
             return
@@ -2727,38 +2727,46 @@ class HeraldoChannelSetupView(discord.ui.View):
         me = guild.me
         if me is None or not me.guild_permissions.manage_channels:
             await interaction.response.send_message(
-                "❌ El canal no existe y El Heraldo no tiene permiso **Gestionar canales** para crearlo.",
+                "El canal no existe y El Heraldo no tiene permiso Gestionar canales para crearlo.",
                 ephemeral=True,
             )
             return
 
+        await interaction.response.defer(ephemeral=True)
         try:
-            created = await guild.create_text_channel(
-                default_name,
-                reason=f"El Heraldo: crear canal del sistema para {label}",
-            )
+            created = await guild.create_text_channel(default_name, reason=f"El Heraldo: crear canal del sistema para {label}")
         except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ Discord rechazó la creación del canal. Revisa el permiso **Gestionar canales**.",
-                ephemeral=True,
-            )
+            await interaction.followup.send("Discord rechazó la creación del canal. Revisa Gestionar canales.", ephemeral=True)
             return
         except discord.HTTPException:
-            await interaction.response.send_message(
-                "❌ Discord no pudo crear el canal en este momento.", ephemeral=True
-            )
+            await interaction.followup.send("Discord no pudo crear el canal en este momento.", ephemeral=True)
             return
+        self.pending_channels[self.current_key] = created.id
+        await interaction.edit_original_response(
+            content=self._content(guild, f"Creé {created.mention}; su asignación queda pendiente hasta Guardar cambios."),
+            view=self,
+        )
 
-        guild_resource_set(self.guild_id, "channel", self.current_key, created.id)
-        if self.current_key == "verification":
-            guild_config_set(self.guild_id, "verify_channel_id", str(created.id))
+    async def save_changes(self, interaction: discord.Interaction) -> None:
+        if not self.pending_channels:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        for key, channel_id in self.pending_channels.items():
+            guild_resource_set(self.guild_id, "channel", key, channel_id)
+            if key == "verification":
+                guild_config_set(self.guild_id, "verify_channel_id", str(channel_id))
+        count = len(self.pending_channels)
+        self.pending_channels.clear()
+        await interaction.edit_original_response(
+            content=self._content(interaction.guild, f"Guardados {count} cambio(s) de canales."),
+            view=self,
+        )
 
+    async def discard_changes(self, interaction: discord.Interaction) -> None:
+        self.pending_channels.clear()
         await interaction.response.edit_message(
-            content=(
-                "🪽 **El Heraldo · Canales del sistema**\n\n"
-                + heraldo_channels_summary(guild)
-                + f"\n\n➕ Creé {created.mention} y quedó configurado para **{label}**."
-            ),
+            content=self._content(interaction.guild, "Cambios pendientes descartados."),
             view=self,
         )
 
@@ -2766,15 +2774,17 @@ class HeraldoChannelSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+
 class HeraldoRoleSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.pending_roles: dict[str, int] = {}
         definitions = (
-            ("sin_verificar", "⏳ Sin Verificar"),
-            ("tentado", "🧭 En orientación"),
-            ("condenado", "⚖️ Condenado"),
+            ("sin_verificar", "Sin Verificar"),
+            ("tentado", "En orientación"),
+            ("condenado", "Condenado"),
         )
         for row_index, (key, label) in enumerate(definitions):
             select = discord.ui.RoleSelect(
@@ -2792,25 +2802,61 @@ class HeraldoRoleSetupView(discord.ui.View):
             return False
         return True
 
+    def _pending_text(self, guild: discord.Guild) -> str:
+        items = []
+        for key, role_id in self.pending_roles.items():
+            role = guild.get_role(role_id)
+            items.append(f"{key.replace('_', ' ').title()} → {role.mention if role else role_id}")
+        return _pending_config_text(items)
+
     def _make_callback(self, key: str, label: str):
         async def callback(interaction: discord.Interaction) -> None:
             values = interaction.data.get("values") if interaction.data else None
             role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
             if role is None:
-                await interaction.response.send_message("❌ No pude localizar ese rol.", ephemeral=True)
+                await interaction.response.send_message("No pude localizar ese rol.", ephemeral=True)
                 return
-            guild_resource_set(self.guild_id, "role", key, role.id)
+            if role.is_default() or role.managed or role >= interaction.guild.me.top_role:
+                await interaction.response.send_message(
+                    "Ese rol no puede ser administrado por El Heraldo. Revisa jerarquía o integraciones.",
+                    ephemeral=True,
+                )
+                return
+            self.pending_roles[key] = role.id
             await interaction.response.edit_message(
                 content=(
                     "🪽 **El Heraldo · Roles del sistema**\n\n"
-                    f"✅ {label}: {role.mention} quedó configurado para este servidor.\n\n"
-                    "Puedes configurar otro rol o volver al menú principal."
+                    "Las selecciones no se aplican hasta pulsar **Guardar cambios**."
+                    + self._pending_text(interaction.guild)
                 ),
                 view=self,
             )
         return callback
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not self.pending_roles:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        for key, role_id in self.pending_roles.items():
+            guild_resource_set(self.guild_id, "role", key, role_id)
+        count = len(self.pending_roles)
+        self.pending_roles.clear()
+        await interaction.edit_original_response(
+            content=f"🪽 **El Heraldo · Roles del sistema**\n\nGuardados {count} cambio(s).",
+            view=self,
+        )
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_roles.clear()
+        await interaction.response.edit_message(
+            content="🪽 **El Heraldo · Roles del sistema**\n\nCambios pendientes descartados.",
+            view=self,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -2896,52 +2942,67 @@ class _JoinRolesOwnedView(discord.ui.View):
 
 
 class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
-    @discord.ui.button(label="⚙️ Basic setup", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Basic setup", style=discord.ButtonStyle.primary, row=0)
     async def basic(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
             view=HeraldoJoinRolesBasicView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="👤 User specific roles", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="User specific roles", style=discord.ButtonStyle.secondary, row=0)
     async def users(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
             view=HeraldoJoinRolesUsersView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🤖 Bot roles", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Bot roles", style=discord.ButtonStyle.secondary, row=1)
     async def bots(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
             view=HeraldoJoinRolesBotsView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🔄 Synchronization", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Synchronization", style=discord.ButtonStyle.secondary, row=1)
     async def synchronization(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
             view=HeraldoJoinRolesSyncView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
 
 
 class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(guild_id, owner_id)
+        self.pending_role_ids: list[int] | None = None
+        self.pending_screening: bool | None = None
+        self.pending_enabled: bool | None = None
         selector = discord.ui.RoleSelect(
             placeholder="Roles asignados a todos los usuarios nuevos",
             min_values=0,
             max_values=JOIN_ROLES_MAX,
             row=0,
         )
-        selector.callback = self.save_roles
+        selector.callback = self.select_roles
         self.add_item(selector)
 
-    async def save_roles(self, interaction: discord.Interaction) -> None:
+    def _pending(self, guild: discord.Guild) -> str:
+        items: list[str] = []
+        if self.pending_role_ids is not None:
+            roles = [guild.get_role(rid) for rid in self.pending_role_ids]
+            items.append("Join Roles → " + (", ".join(r.mention for r in roles if r) or "ninguno"))
+        if self.pending_screening is not None:
+            items.append(f"Rules Screening → {'sí' if self.pending_screening else 'no'}")
+        if self.pending_enabled is not None:
+            items.append(f"Sistema → {'activo' if self.pending_enabled else 'desactivado'}")
+        return _pending_config_text(items)
+
+    async def select_roles(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         roles = [interaction.guild.get_role(int(value)) for value in values]
         roles = [role for role in roles if role is not None]
@@ -2949,52 +3010,89 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
             await interaction.response.send_message(
-                "❌ No puedo asignar: " + ", ".join(role.mention for role in invalid)
-                + ". Coloca El Heraldo por encima o elige roles no administrados.",
-                ephemeral=True,
+                "No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True
             )
             return
-        set_join_role_ids(self.guild_id, [role.id for role in roles])
-        if roles:
-            guild_config_set(self.guild_id, "join_roles_enabled", "1")
+        self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            + join_roles_basic_summary(interaction.guild)
+            + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="📜 Rules Screening", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Rules Screening", style=discord.ButtonStyle.secondary, row=1)
     async def screening(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = not join_roles_wait_screening(self.guild_id)
-        guild_config_set(self.guild_id, "join_roles_wait_screening", "1" if enabled else "0")
+        current = self.pending_screening if self.pending_screening is not None else join_roles_wait_screening(self.guild_id)
+        self.pending_screening = not current
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            + join_roles_basic_summary(interaction.guild)
+            + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="⏱️ Delay", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Delay", style=discord.ButtonStyle.secondary, row=1)
     async def delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesDelayModal(self.guild_id))
 
-    @discord.ui.button(label="✅ Activar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Activar", style=discord.ButtonStyle.success, row=2)
     async def enable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not get_join_role_ids(self.guild_id):
-            await interaction.response.send_message("❌ Añade al menos un Join Role.", ephemeral=True)
+        prospective_roles = self.pending_role_ids if self.pending_role_ids is not None else get_join_role_ids(self.guild_id)
+        if not prospective_roles:
+            await interaction.response.send_message("Añade al menos un Join Role.", ephemeral=True)
             return
-        guild_config_set(self.guild_id, "join_roles_enabled", "1")
+        self.pending_enabled = True
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            + join_roles_basic_summary(interaction.guild)
+            + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Desactivar", style=discord.ButtonStyle.danger, row=2)
     async def disable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        guild_config_set(self.guild_id, "join_roles_enabled", "0")
+        self.pending_enabled = False
+        await interaction.response.edit_message(
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            + join_roles_basic_summary(interaction.guild)
+            + self._pending(interaction.guild),
+            view=self,
+        )
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_role_ids is None and self.pending_screening is None and self.pending_enabled is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.pending_role_ids is not None:
+            set_join_role_ids(self.guild_id, self.pending_role_ids)
+        if self.pending_screening is not None:
+            guild_config_set(self.guild_id, "join_roles_wait_screening", "1" if self.pending_screening else "0")
+        if self.pending_enabled is not None:
+            guild_config_set(self.guild_id, "join_roles_enabled", "1" if self.pending_enabled else "0")
+        self.pending_role_ids = None
+        self.pending_screening = None
+        self.pending_enabled = None
+        await interaction.edit_original_response(
+            content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n"
+            + join_roles_basic_summary(interaction.guild)
+            + "\n\nCambios guardados.",
+            view=self,
+        )
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_role_ids = None
+        self.pending_screening = None
+        self.pending_enabled = None
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -3050,7 +3148,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         role_select.callback = self.select_roles
         self.add_item(role_select)
 
-    @discord.ui.button(label="🆔 Definir User ID", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Definir User ID", style=discord.ButtonStyle.primary, row=0)
     async def set_user_id(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesUserIdModal(self))
 
@@ -3059,7 +3157,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         self.selected_role_ids = [int(value) for value in values]
         await interaction.response.defer()
 
-    @discord.ui.button(label="💾 Guardar usuario", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Guardar usuario", style=discord.ButtonStyle.success, row=2)
     async def save_user(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_user_id is None or not self.selected_role_ids:
             await interaction.response.send_message(
@@ -3081,7 +3179,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="🗑️ Quitar usuario", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Quitar usuario", style=discord.ButtonStyle.danger, row=2)
     async def remove_user(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_user_id is None:
             await interaction.response.send_message("❌ Selecciona primero un usuario.", ephemeral=True)
@@ -3094,7 +3192,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="🧹 Remove after join", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Remove after join", style=discord.ButtonStyle.secondary, row=3)
     async def remove_after(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enabled = not join_roles_remove_specific_after_join(self.guild_id)
         guild_config_set(self.guild_id, "join_roles_specific_remove_after_join", "1" if enabled else "0")
@@ -3103,7 +3201,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -3111,68 +3209,97 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         )
 
 
+
 class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(guild_id, owner_id)
+        self.pending_role_ids: list[int] | None = None
+        self.pending_enabled: bool | None = None
+        self.pending_delay: bool | None = None
+        self.pending_different: bool | None = None
         selector = discord.ui.RoleSelect(
             placeholder="Roles alternativos para bots",
             min_values=0,
             max_values=JOIN_ROLES_MAX,
             row=0,
         )
-        selector.callback = self.save_bot_roles
+        selector.callback = self.select_bot_roles
         self.add_item(selector)
 
-    async def save_bot_roles(self, interaction: discord.Interaction) -> None:
+    def _pending(self, guild: discord.Guild) -> str:
+        items = []
+        if self.pending_role_ids is not None:
+            roles = [guild.get_role(rid) for rid in self.pending_role_ids]
+            items.append("Roles de bots → " + (", ".join(r.mention for r in roles if r) or "ninguno"))
+        if self.pending_enabled is not None:
+            items.append(f"Asignar a bots → {'sí' if self.pending_enabled else 'no'}")
+        if self.pending_delay is not None:
+            items.append(f"Aplicar delay → {'sí' if self.pending_delay else 'no'}")
+        if self.pending_different is not None:
+            items.append(f"Roles diferentes → {'sí' if self.pending_different else 'no'}")
+        return _pending_config_text(items)
+
+    async def select_bot_roles(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         roles = [interaction.guild.get_role(int(value)) for value in values]
         roles = [role for role in roles if role is not None]
         me = interaction.guild.me
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
-            await interaction.response.send_message(
-                "❌ No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True
-            )
+            await interaction.response.send_message("No puedo asignar: " + ", ".join(role.mention for role in invalid), ephemeral=True)
             return
-        set_join_bot_role_ids(self.guild_id, [role.id for role in roles])
+        self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="🤖 Assign for bots", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Assign for bots", style=discord.ButtonStyle.secondary, row=1)
     async def bot_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = not join_roles_bot_enabled(self.guild_id)
-        guild_config_set(self.guild_id, "join_roles_bot_enabled", "1" if enabled else "0")
-        await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
-            view=self,
-        )
+        current = self.pending_enabled if self.pending_enabled is not None else join_roles_bot_enabled(self.guild_id)
+        self.pending_enabled = not current
+        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
-    @discord.ui.button(label="⏱️ Apply delay", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Apply delay", style=discord.ButtonStyle.secondary, row=1)
     async def bot_delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = not join_roles_bot_apply_delay(self.guild_id)
-        guild_config_set(self.guild_id, "join_roles_bot_apply_delay", "1" if enabled else "0")
-        await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
-            view=self,
-        )
+        current = self.pending_delay if self.pending_delay is not None else join_roles_bot_apply_delay(self.guild_id)
+        self.pending_delay = not current
+        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
-    @discord.ui.button(label="🔀 Different roles", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Different roles", style=discord.ButtonStyle.secondary, row=1)
     async def bot_different(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = not join_roles_bot_use_different(self.guild_id)
-        if enabled and not get_join_bot_role_ids(self.guild_id):
-            await interaction.response.send_message(
-                "❌ Selecciona primero uno o más roles alternativos para bots.", ephemeral=True
-            )
+        current = self.pending_different if self.pending_different is not None else join_roles_bot_use_different(self.guild_id)
+        target = not current
+        prospective_roles = self.pending_role_ids if self.pending_role_ids is not None else get_join_bot_role_ids(self.guild_id)
+        if target and not prospective_roles:
+            await interaction.response.send_message("Selecciona primero uno o más roles alternativos para bots.", ephemeral=True)
             return
-        guild_config_set(self.guild_id, "join_roles_bot_use_different", "1" if enabled else "0")
-        await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
-            view=self,
-        )
+        self.pending_different = target
+        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
-    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if all(v is None for v in (self.pending_role_ids, self.pending_enabled, self.pending_delay, self.pending_different)):
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.pending_role_ids is not None:
+            set_join_bot_role_ids(self.guild_id, self.pending_role_ids)
+        if self.pending_enabled is not None:
+            guild_config_set(self.guild_id, "join_roles_bot_enabled", "1" if self.pending_enabled else "0")
+        if self.pending_delay is not None:
+            guild_config_set(self.guild_id, "join_roles_bot_apply_delay", "1" if self.pending_delay else "0")
+        if self.pending_different is not None:
+            guild_config_set(self.guild_id, "join_roles_bot_use_different", "1" if self.pending_different else "0")
+        self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
+        await interaction.edit_original_response(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
+        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild), view=self)
+
+    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -3180,50 +3307,65 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         )
 
 
+
 class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(guild_id, owner_id)
+        self.pending_excluded: list[int] | None = None
         selector = discord.ui.RoleSelect(
             placeholder="Roles que excluyen miembros del Sync",
             min_values=0,
             max_values=JOIN_ROLES_MAX,
             row=0,
         )
-        selector.callback = self.save_excluded
+        selector.callback = self.select_excluded
         self.add_item(selector)
 
-    async def save_excluded(self, interaction: discord.Interaction) -> None:
+    async def select_excluded(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
-        set_join_sync_excluded_role_ids(self.guild_id, [int(value) for value in values])
+        self.pending_excluded = [int(value) for value in values]
+        roles = [interaction.guild.get_role(rid) for rid in self.pending_excluded]
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n"
+            + join_roles_sync_summary(interaction.guild)
+            + _pending_config_text(["Excluir del Sync → " + (", ".join(r.mention for r in roles if r) or "ninguno")]),
             view=self,
         )
 
-    @discord.ui.button(label="🔄 Sync now", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Sync now", style=discord.ButtonStyle.primary, row=1)
     async def sync_now(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_excluded is not None:
+            await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de ejecutar Sync now.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         assigned, skipped, errors = await sync_join_roles(interaction.guild)
-        msg = (
-            f"✅ Sync terminado. **{assigned}** miembro(s) recibieron roles; "
-            f"**{skipped}** no necesitaron cambios."
-        )
+        msg = f"Sync terminado. {assigned} miembro(s) recibieron roles; {skipped} no necesitaron cambios."
         if errors:
-            msg += f"\n⚠️ **{len(errors)}** error(es) por permisos/jerarquía."
+            msg += f"\n{len(errors)} error(es) por permisos/jerarquía."
         await interaction.followup.send(msg, ephemeral=True)
 
-    @discord.ui.button(label="🗓️ Schedule", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Schedule", style=discord.ButtonStyle.secondary, row=1)
     async def schedule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesScheduleModal(self.guild_id))
 
-    @discord.ui.button(label="♻️ Actualizar", style=discord.ButtonStyle.secondary, row=1)
-    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_excluded is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        set_join_sync_excluded_role_ids(self.guild_id, self.pending_excluded)
+        self.pending_excluded = None
         await interaction.response.edit_message(
-            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
+            content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild) + "\n\nCambios guardados.",
             view=self,
         )
 
-    @discord.ui.button(label="⬅️ Join Roles", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_excluded = None
+        await interaction.response.edit_message(content="🚪 **El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
+
+    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="🚪 **El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -3447,7 +3589,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="✅ Activar / reparar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Activar / reparar", style=discord.ButtonStyle.success, row=2)
     async def activate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
 
@@ -3487,7 +3629,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="⛔ Desactivar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Desactivar", style=discord.ButtonStyle.danger, row=2)
     async def deactivate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         if not orientation_enabled(self.guild_id):
@@ -3504,11 +3646,11 @@ class HeraldoOrientationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="📝 Editar tarjeta", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Editar tarjeta", style=discord.ButtonStyle.secondary, row=3)
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -3675,11 +3817,13 @@ class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · 
         )
 
 
+
 class HeraldoMotwSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.pending_channel_id: int | None = None
         channel = discord.ui.ChannelSelect(
             placeholder="Seleccionar canal de Miembro de la Semana",
             channel_types=[discord.ChannelType.text],
@@ -3687,7 +3831,7 @@ class HeraldoMotwSetupView(discord.ui.View):
             max_values=1,
             row=0,
         )
-        channel.callback = self.save_channel
+        channel.callback = self.select_channel
         self.add_item(channel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -3696,47 +3840,63 @@ class HeraldoMotwSetupView(discord.ui.View):
             return False
         return True
 
-    async def save_channel(self, interaction: discord.Interaction) -> None:
+    def _content(self, guild: discord.Guild) -> str:
+        current = guild.get_channel(get_motw_channel_id(self.guild_id))
+        items = []
+        if self.pending_channel_id is not None:
+            pending = guild.get_channel(self.pending_channel_id)
+            items.append(f"Canal → {pending.mention if pending else self.pending_channel_id}")
+        return (
+            "👑 **El Heraldo · Miembro de la Semana**\n\n"
+            f"Canal guardado: {current.mention if current else 'no configurado'}\n"
+            f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} a las {get_motw_hour(self.guild_id)}:00** (hora RD)"
+            + _pending_config_text(items)
+        )
+
+    async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
             return
         perms = channel.permissions_for(interaction.guild.me)
         if not (perms.view_channel and perms.send_messages and perms.embed_links):
-            await interaction.response.send_message(
-                "❌ El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces.", ephemeral=True)
             return
-        set_motw_channel_id(self.guild_id, channel.id)
-        await interaction.response.edit_message(
-            content=(
-                "👑 **El Heraldo · Miembro de la Semana**\n\n"
-                f"Canal: {channel.mention}\n"
-                f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} "
-                f"a las {get_motw_hour(self.guild_id)}:00** (hora RD)\n\n"
-                "✅ Canal actualizado."
-            ),
-            view=self,
-        )
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="🕒 Horario", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Horario", style=discord.ButtonStyle.primary, row=1)
     async def schedule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoMotwScheduleModal(self.guild_id))
 
-    @discord.ui.button(label="🧪 Probar", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Probar", style=discord.ButtonStyle.secondary, row=1)
     async def test(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_channel_id is not None:
+            await interaction.response.send_message("Guarda o descarta el canal pendiente antes de probar.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True)
         error = await announce_member_of_the_week(self.guild_id, reset=False)
-        await interaction.followup.send(
-            "✅ Anuncio de prueba publicado." if not error else f"❌ No pude publicar: {error}",
-            ephemeral=True,
-        )
+        await interaction.followup.send("Anuncio de prueba publicado." if not error else f"No pude publicar: {error}", ephemeral=True)
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_channel_id is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        set_motw_channel_id(self.guild_id, self.pending_channel_id)
+        self.pending_channel_id = None
+        await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_channel_id = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
 
 
 class HeraldoHoneypotSetupView(discord.ui.View):
@@ -3744,6 +3904,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.pending_trap_id: int | None = None
+        self.pending_enabled: bool | None = None
         channel = discord.ui.ChannelSelect(
             placeholder="Seleccionar / añadir canal trampa",
             channel_types=[discord.ChannelType.text],
@@ -3751,7 +3913,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             max_values=1,
             row=0,
         )
-        channel.callback = self.save_trap
+        channel.callback = self.select_trap
         self.add_item(channel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -3760,57 +3922,71 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             return False
         return True
 
-    async def save_trap(self, interaction: discord.Interaction) -> None:
+    def _content(self, guild: discord.Guild) -> str:
+        items = []
+        if self.pending_trap_id is not None:
+            channel = guild.get_channel(self.pending_trap_id)
+            items.append(f"Añadir canal trampa → {channel.mention if channel else self.pending_trap_id}")
+        if self.pending_enabled is not None:
+            items.append(f"Honeypot → {'activo' if self.pending_enabled else 'desactivado'}")
+        return "🍯 **El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
+
+    async def select_trap(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
             return
         reason = hp_protected_channel_reason(channel)
         if reason:
-            await interaction.response.send_message(f"❌ Ese canal no puede ser trampa porque {reason}.", ephemeral=True)
+            await interaction.response.send_message(f"Ese canal no puede ser trampa porque {reason}.", ephemeral=True)
             return
-        hp_add_trap(self.guild_id, channel.id)
-        err = await hp_sync_warning(channel)
-        await interaction.response.edit_message(
-            content=(
-                "🍯 **El Heraldo · Honeypot**\n\n"
-                + hp_config_summary(interaction.guild)
-                + f"\n\n✅ {channel.mention} quedó añadido al Honeypot."
-                + (f"\n⚠️ {err}" if err else "")
-            ),
-            view=self,
-        )
+        self.pending_trap_id = channel.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="⏯️ Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = honeypot_enabled(self.guild_id)
-        if not enabled and not hp_traps(self.guild_id):
-            await interaction.response.send_message(
-                "❌ Añade al menos un canal trampa antes de activar el Honeypot.",
-                ephemeral=True,
-            )
+        current = self.pending_enabled if self.pending_enabled is not None else honeypot_enabled(self.guild_id)
+        target = not current
+        if target and not hp_traps(self.guild_id) and self.pending_trap_id is None:
+            await interaction.response.send_message("Añade al menos un canal trampa antes de activar el Honeypot.", ephemeral=True)
             return
-        hp_setting_set(self.guild_id, "honeypot_enabled", "0" if enabled else "1")
-        hp_setting_set(self.guild_id, "honeypot_paused", "0")
-        await interaction.response.edit_message(
-            content=(
-                "🍯 **El Heraldo · Honeypot**\n\n"
-                + hp_config_summary(interaction.guild)
-                + ("\n\n✅ Honeypot desactivado." if enabled else "\n\n✅ Honeypot activado.")
-            ),
-            view=self,
-        )
+        self.pending_enabled = target
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="🖼️ Editar aviso", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Editar aviso", style=discord.ButtonStyle.secondary, row=1)
     async def edit_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
 
-    @discord.ui.button(label="📝 Texto aviso", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Texto aviso", style=discord.ButtonStyle.secondary, row=1)
     async def edit_text(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningModal(self.guild_id))
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_trap_id is None and self.pending_enabled is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.pending_trap_id is not None:
+            hp_add_trap(self.guild_id, self.pending_trap_id)
+            channel = interaction.guild.get_channel(self.pending_trap_id)
+            if isinstance(channel, discord.TextChannel):
+                await hp_sync_warning(channel)
+        if self.pending_enabled is not None:
+            hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
+            hp_setting_set(self.guild_id, "honeypot_paused", "0")
+        self.pending_trap_id = None
+        self.pending_enabled = None
+        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_trap_id = None
+        self.pending_enabled = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -3870,11 +4046,15 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
     return "\n".join(lines)
 
 
+
 class HeraldoVerificationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.pending_role_id: int | None = None
+        self.pending_channel_id: int | None = None
+        self.pending_enabled: bool | None = None
 
         role_select = discord.ui.RoleSelect(
             placeholder="Seleccionar rol que se otorga al verificarse",
@@ -3882,7 +4062,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
             max_values=1,
             row=0,
         )
-        role_select.callback = self.save_role
+        role_select.callback = self.select_role
         self.add_item(role_select)
 
         channel_select = discord.ui.ChannelSelect(
@@ -3892,7 +4072,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
             max_values=1,
             row=1,
         )
-        channel_select.callback = self.save_channel
+        channel_select.callback = self.select_channel
         self.add_item(channel_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -3901,32 +4081,36 @@ class HeraldoVerificationSetupView(discord.ui.View):
             return False
         return True
 
-    async def save_role(self, interaction: discord.Interaction) -> None:
+    def _content(self, guild: discord.Guild) -> str:
+        items = []
+        if self.pending_role_id is not None:
+            role = guild.get_role(self.pending_role_id)
+            items.append(f"Rol de verificación → {role.mention if role else self.pending_role_id}")
+        if self.pending_channel_id is not None:
+            channel = guild.get_channel(self.pending_channel_id)
+            items.append(f"Canal de verificación → {channel.mention if channel else self.pending_channel_id}")
+        if self.pending_enabled is not None:
+            items.append(f"Verificación automática → {'activa' if self.pending_enabled else 'desactivada'}")
+        return "✅ **El Heraldo · Verificación**\n\n" + verify_config_summary(guild) + _pending_config_text(items)
+
+    async def select_role(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
         if role is None:
-            await interaction.response.send_message("❌ No pude localizar ese rol.", ephemeral=True)
+            await interaction.response.send_message("No pude localizar ese rol.", ephemeral=True)
             return
         problem = verify_role_problem(role, interaction.guild)
         if problem:
-            await interaction.response.send_message(f"❌ No guardé el rol: {role.mention} {problem}.", ephemeral=True)
+            await interaction.response.send_message(f"No puedo usar {role.mention}: {problem}.", ephemeral=True)
             return
-        guild_config_set(self.guild_id, "verify_role_id", str(role.id))
-        guild_resource_set(self.guild_id, "role", "tentado", role.id)
-        await interaction.response.edit_message(
-            content=(
-                "✅ **El Heraldo · Verificación**\n\n"
-                + verify_config_summary(interaction.guild)
-                + f"\n\n✅ Rol de verificación guardado: {role.mention}."
-            ),
-            view=self,
-        )
+        self.pending_role_id = role.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    async def save_channel(self, interaction: discord.Interaction) -> None:
+    async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+            await interaction.response.send_message("No pude localizar ese canal.", ephemeral=True)
             return
         perms = channel.permissions_for(interaction.guild.me)
         missing = []
@@ -3935,55 +4119,33 @@ class HeraldoVerificationSetupView(discord.ui.View):
         if not perms.send_messages:
             missing.append("Enviar mensajes")
         if missing:
-            await interaction.response.send_message(
-                f"❌ No guardé el canal: faltan **{', '.join(missing)}** en {channel.mention}.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message(f"Faltan {', '.join(missing)} en {channel.mention}.", ephemeral=True)
             return
-        guild_resource_set(self.guild_id, "channel", "verification", channel.id)
-        guild_config_set(self.guild_id, "verify_channel_id", str(channel.id))
-        await interaction.response.edit_message(
-            content=(
-                "✅ **El Heraldo · Verificación**\n\n"
-                + verify_config_summary(interaction.guild)
-                + f"\n\n✅ Canal de verificación guardado: {channel.mention}."
-            ),
-            view=self,
-        )
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="📝 Textos", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Textos", style=discord.ButtonStyle.secondary, row=2)
     async def texts(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
 
-    @discord.ui.button(label="📌 Publicar / actualizar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Publicar / actualizar", style=discord.ButtonStyle.secondary, row=2)
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_role_id is not None or self.pending_channel_id is not None or self.pending_enabled is not None:
+            await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de publicar.", ephemeral=True)
+            return
         channel_id = get_guild_channel_id(self.guild_id, "verification")
         channel = interaction.guild.get_channel(channel_id) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(
-                "❌ Configura primero un canal de verificación.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("Configura primero un canal de verificación.", ephemeral=True)
             return
         role = interaction.guild.get_role(get_verify_role_id(self.guild_id))
         if role is None:
-            await interaction.response.send_message(
-                "❌ Configura primero un rol de verificación.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("Configura primero un rol de verificación.", ephemeral=True)
             return
         problem = verify_role_problem(role, interaction.guild)
         if problem:
-            await interaction.response.send_message(f"❌ {role.mention} {problem}.", ephemeral=True)
+            await interaction.response.send_message(f"{role.mention} {problem}.", ephemeral=True)
             return
-        perms = channel.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages):
-            await interaction.response.send_message(
-                "❌ El Heraldo necesita Ver canal y Enviar mensajes para publicar el panel.",
-                ephemeral=True,
-            )
-            return
-
         await interaction.response.defer(ephemeral=True)
         ref = guild_config_get(self.guild_id, "verify_panel_ref")
         if ref and ref.count(":") == 1:
@@ -3996,54 +4158,57 @@ class HeraldoVerificationSetupView(discord.ui.View):
                         content=render_vars(get_verify_panel_text(self.guild_id), VarContext(interaction.guild, None, old_channel), 2000),
                         view=VerifyView(label=get_verify_button_label(self.guild_id)),
                     )
-                    await interaction.followup.send(
-                        f"✅ Panel de verificación actualizado en {old_channel.mention}.",
-                        ephemeral=True,
-                    )
+                    await interaction.followup.send(f"Panel de verificación actualizado en {old_channel.mention}.", ephemeral=True)
                     return
             except (ValueError, discord.NotFound, discord.Forbidden, discord.HTTPException):
                 pass
-
         message = await channel.send(
             content=render_vars(get_verify_panel_text(self.guild_id), VarContext(interaction.guild, None, channel), 2000),
             view=VerifyView(label=get_verify_button_label(self.guild_id)),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         guild_config_set(self.guild_id, "verify_panel_ref", f"{channel.id}:{message.id}")
-        await interaction.followup.send(
-            f"✅ Panel de verificación publicado en {channel.mention}.",
-            ephemeral=True,
-        )
+        await interaction.followup.send(f"Panel de verificación publicado en {channel.mention}.", ephemeral=True)
 
-    @discord.ui.button(label="⏯️ Activar / desactivar", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Activar / desactivar", style=discord.ButtonStyle.primary, row=2)
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = verify_enabled(self.guild_id)
-        if not enabled:
-            role = interaction.guild.get_role(get_verify_role_id(self.guild_id))
-            ref = guild_config_get(self.guild_id, "verify_panel_ref")
-            if role is None:
-                await interaction.response.send_message("❌ Configura primero un rol de verificación.", ephemeral=True)
-                return
-            if not ref:
-                await interaction.response.send_message(
-                    "❌ Publica primero el panel de verificación. No activé el timeout.",
-                    ephemeral=True,
-                )
-                return
-        guild_config_set(self.guild_id, "verify_enabled", "0" if enabled else "1")
-        await interaction.response.edit_message(
-            content=(
-                "✅ **El Heraldo · Verificación**\n\n"
-                + verify_config_summary(interaction.guild)
-                + ("\n\n✅ Verificación automática desactivada." if enabled else "\n\n✅ Verificación automática activada.")
-            ),
-            view=self,
-        )
+        current = self.pending_enabled if self.pending_enabled is not None else verify_enabled(self.guild_id)
+        target = not current
+        prospective_role_id = self.pending_role_id or get_verify_role_id(self.guild_id)
+        if target and interaction.guild.get_role(prospective_role_id) is None:
+            await interaction.response.send_message("Configura primero un rol de verificación.", ephemeral=True)
+            return
+        self.pending_enabled = target
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_role_id is None and self.pending_channel_id is None and self.pending_enabled is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.pending_role_id is not None:
+            guild_config_set(self.guild_id, "verify_role_id", str(self.pending_role_id))
+            guild_resource_set(self.guild_id, "role", "tentado", self.pending_role_id)
+        if self.pending_channel_id is not None:
+            guild_resource_set(self.guild_id, "channel", "verification", self.pending_channel_id)
+            guild_config_set(self.guild_id, "verify_channel_id", str(self.pending_channel_id))
+        if self.pending_enabled is not None:
+            if self.pending_enabled and not guild_config_get(self.guild_id, "verify_panel_ref"):
+                await interaction.followup.send("No activé la verificación: primero publica el panel.", ephemeral=True)
+                return
+            guild_config_set(self.guild_id, "verify_enabled", "1" if self.pending_enabled else "0")
+        self.pending_role_id = self.pending_channel_id = self.pending_enabled = None
+        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_role_id = self.pending_channel_id = self.pending_enabled = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
-
 
 
 class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Detección"):
@@ -4127,27 +4292,26 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
         )
 
 
+
 class HeraldoRaidSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.pending_action: str | None = None
+        self.pending_role_id: int | None = None
+        self.pending_enabled: bool | None = None
+        self.pending_invites: bool | None = None
+        self.pending_purge: bool | None = None
 
         action_select = discord.ui.Select(
             placeholder="Respuesta ante el raid",
             min_values=1,
             max_values=1,
-            options=[
-                discord.SelectOption(
-                    label=label[:100],
-                    value=value,
-                    default=(value == raid_action(guild_id)),
-                )
-                for value, label in RAID_ACTION_LABELS.items()
-            ],
+            options=[discord.SelectOption(label=label[:100], value=value, default=(value == raid_action(guild_id))) for value, label in RAID_ACTION_LABELS.items()],
             row=0,
         )
-        action_select.callback = self.save_action
+        action_select.callback = self.select_action
         self.action_select = action_select
         self.add_item(action_select)
 
@@ -4157,100 +4321,103 @@ class HeraldoRaidSetupView(discord.ui.View):
             max_values=1,
             row=1,
         )
-        role_select.callback = self.save_alert_role
+        role_select.callback = self.select_alert_role
         self.add_item(role_select)
 
-        self.toggle_enabled.label = (
-            "🛡️ Protección activada" if raid_enabled(guild_id)
-            else "🛡️ Protección desactivada"
-        )
-        self.toggle_invites.label = (
-            "🔒 Pausar invitaciones: sí" if raid_lock_invites_enabled(guild_id)
-            else "🔓 Pausar invitaciones: no"
-        )
-        self.toggle_purge.label = (
-            "🧹 Purgar mensajes: sí" if raid_purge_enabled(guild_id)
-            else "🧹 Purgar mensajes: no"
-        )
+        self.toggle_enabled.label = "Protección activada" if raid_enabled(guild_id) else "Protección desactivada"
+        self.toggle_invites.label = "Pausar invitaciones: sí" if raid_lock_invites_enabled(guild_id) else "Pausar invitaciones: no"
+        self.toggle_purge.label = "Purgar mensajes: sí" if raid_purge_enabled(guild_id) else "Purgar mensajes: no"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(
-                "Este panel de configuración no es tuyo.", ephemeral=True
-            )
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
         return True
 
-    async def save_action(self, interaction: discord.Interaction) -> None:
-        value = self.action_select.values[0]
-        if value == "condemn" and interaction.guild.get_role(
-            condemnation_role_id(guild_id=self.guild_id)
-        ) is None:
-            await interaction.response.send_message(
-                "❌ Para usar «Condenar» primero debes configurar el rol Condenado.",
-                ephemeral=True,
-            )
-            return
-        guild_config_set(self.guild_id, "raid_action", value)
-        await interaction.response.edit_message(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n"
-            + raid_config_summary(interaction.guild),
-            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
-        )
+    def _content(self, guild: discord.Guild) -> str:
+        items = []
+        if self.pending_action is not None:
+            items.append(f"Respuesta → {RAID_ACTION_LABELS.get(self.pending_action, self.pending_action)}")
+        if self.pending_role_id is not None:
+            role = guild.get_role(self.pending_role_id)
+            items.append(f"Rol de alertas → {role.mention if role else self.pending_role_id}")
+        if self.pending_enabled is not None:
+            items.append(f"Protección → {'activa' if self.pending_enabled else 'desactivada'}")
+        if self.pending_invites is not None:
+            items.append(f"Pausar invitaciones → {'sí' if self.pending_invites else 'no'}")
+        if self.pending_purge is not None:
+            items.append(f"Purgar mensajes → {'sí' if self.pending_purge else 'no'}")
+        return "**El Heraldo · Raid Protection**\n\n" + raid_config_summary(guild) + _pending_config_text(items)
 
-    async def save_alert_role(self, interaction: discord.Interaction) -> None:
+    async def select_action(self, interaction: discord.Interaction) -> None:
+        value = self.action_select.values[0]
+        if value == "condemn" and interaction.guild.get_role(condemnation_role_id(guild_id=self.guild_id)) is None:
+            await interaction.response.send_message("Para usar «Condenar» primero debes configurar el rol Condenado.", ephemeral=True)
+            return
+        self.pending_action = value
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    async def select_alert_role(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         role = interaction.guild.get_role(int(values[0])) if interaction.guild and values else None
         if role is None:
-            await interaction.response.send_message(
-                "❌ No pude localizar ese rol.", ephemeral=True
-            )
+            await interaction.response.send_message("No pude localizar ese rol.", ephemeral=True)
             return
-        guild_config_set(self.guild_id, "raid_ping_role", str(role.id))
-        await interaction.response.edit_message(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n"
-            + raid_config_summary(interaction.guild),
-            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
-        )
+        self.pending_role_id = role.id
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="⚙️ Detección y duración", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Detección y duración", style=discord.ButtonStyle.primary, row=2)
     async def detection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoRaidDetectionModal(self.guild_id))
 
-    @discord.ui.button(label="🛡️ Protección", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Protección", style=discord.ButtonStyle.success, row=2)
     async def toggle_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = raid_enabled(self.guild_id)
-        guild_config_set(self.guild_id, "raid_enabled", "0" if enabled else "1")
-        await interaction.response.edit_message(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n"
-            + raid_config_summary(interaction.guild),
-            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
-        )
+        current = self.pending_enabled if self.pending_enabled is not None else raid_enabled(self.guild_id)
+        self.pending_enabled = not current
+        self.toggle_enabled.label = "Protección activada" if self.pending_enabled else "Protección desactivada"
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="🔒 Pausar invitaciones", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Pausar invitaciones", style=discord.ButtonStyle.secondary, row=3)
     async def toggle_invites(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = raid_lock_invites_enabled(self.guild_id)
-        guild_config_set(self.guild_id, "raid_lock_invites", "0" if enabled else "1")
-        await interaction.response.edit_message(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n"
-            + raid_config_summary(interaction.guild),
-            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
-        )
+        current = self.pending_invites if self.pending_invites is not None else raid_lock_invites_enabled(self.guild_id)
+        self.pending_invites = not current
+        self.toggle_invites.label = "Pausar invitaciones: sí" if self.pending_invites else "Pausar invitaciones: no"
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="🧹 Purgar mensajes", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Purgar mensajes", style=discord.ButtonStyle.secondary, row=3)
     async def toggle_purge(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled = raid_purge_enabled(self.guild_id)
-        guild_config_set(self.guild_id, "raid_purge", "0" if enabled else "1")
-        await interaction.response.edit_message(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n"
-            + raid_config_summary(interaction.guild),
-            view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
-        )
+        current = self.pending_purge if self.pending_purge is not None else raid_purge_enabled(self.guild_id)
+        self.pending_purge = not current
+        self.toggle_purge.label = "Purgar mensajes: sí" if self.pending_purge else "Purgar mensajes: no"
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if all(v is None for v in (self.pending_action, self.pending_role_id, self.pending_enabled, self.pending_invites, self.pending_purge)):
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.pending_action is not None:
+            guild_config_set(self.guild_id, "raid_action", self.pending_action)
+        if self.pending_role_id is not None:
+            guild_config_set(self.guild_id, "raid_ping_role", str(self.pending_role_id))
+        if self.pending_enabled is not None:
+            guild_config_set(self.guild_id, "raid_enabled", "1" if self.pending_enabled else "0")
+        if self.pending_invites is not None:
+            guild_config_set(self.guild_id, "raid_lock_invites", "1" if self.pending_invites else "0")
+        if self.pending_purge is not None:
+            guild_config_set(self.guild_id, "raid_purge", "1" if self.pending_purge else "0")
+        self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
+        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
-
 
 
 class VerifyDmEditorContentModal(discord.ui.Modal):
@@ -4382,15 +4549,15 @@ class VerifyDmMessageSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Contenido", style=discord.ButtonStyle.primary, row=0)
     async def content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(VerifyDmEditorContentModal(self.guild_id))
 
-    @discord.ui.button(label="🖼️ Recurso visual", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Recurso visual", style=discord.ButtonStyle.secondary, row=0)
     async def visual(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(VerifyDmEditorVisualModal(self.guild_id))
 
-    @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=0)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
             "👁️ **Vista previa del DM de verificación**",
@@ -4401,7 +4568,7 @@ class VerifyDmMessageSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=heraldo_messages_setup_content(),
@@ -4553,15 +4720,15 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Contenido", style=discord.ButtonStyle.primary, row=0)
     async def content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(SuggestionPanelContentModal(self.guild_id))
 
-    @discord.ui.button(label="🎨 Diseño", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Diseño", style=discord.ButtonStyle.secondary, row=0)
     async def design(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(SuggestionPanelVisualModal(self.guild_id))
 
-    @discord.ui.button(label="🔄 Sincronizar", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Sincronizar", style=discord.ButtonStyle.secondary, row=0)
     async def sync(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await suggestion_ensure_panel(interaction.guild)
@@ -4570,7 +4737,7 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=heraldo_messages_setup_content(),
@@ -4697,7 +4864,7 @@ class DefaultMessageStudioView(discord.ui.View):
         self.return_to = return_to
 
         preview_btn = discord.ui.Button(
-            label="👁️ Preview",
+            label="Preview",
             style=discord.ButtonStyle.primary if self.mode == "preview" else discord.ButtonStyle.secondary,
             row=0,
             disabled=self.mode == "preview",
@@ -4706,7 +4873,7 @@ class DefaultMessageStudioView(discord.ui.View):
         self.add_item(preview_btn)
 
         edit_btn = discord.ui.Button(
-            label="✏️ Edit",
+            label="Edit",
             style=discord.ButtonStyle.primary if self.mode == "edit" else discord.ButtonStyle.secondary,
             row=0,
             disabled=self.mode == "edit",
@@ -4715,7 +4882,7 @@ class DefaultMessageStudioView(discord.ui.View):
         self.add_item(edit_btn)
 
         vars_btn = discord.ui.Button(
-            label="🧩 Variables",
+            label="Variables",
             style=discord.ButtonStyle.primary if self.mode == "variables" else discord.ButtonStyle.secondary,
             row=0,
             disabled=self.mode == "variables",
@@ -4723,7 +4890,7 @@ class DefaultMessageStudioView(discord.ui.View):
         vars_btn.callback = self.show_variables
         self.add_item(vars_btn)
 
-        back_btn = discord.ui.Button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=0)
+        back_btn = discord.ui.Button(label="Volver", style=discord.ButtonStyle.secondary, row=0)
         back_btn.callback = self.go_back
         self.add_item(back_btn)
 
@@ -4905,8 +5072,8 @@ LOG_TEMPLATE_CATEGORIES = {
     "verification": ("✅ Verificación", "Verificación, orientación y accesos."),
     "condemnation": ("☠️ Condenas", "Condenas, liberaciones y perdones."),
     "honeypot": ("🍯 Honeypot", "Disparos, pausas y acciones del honeypot."),
-    "raid": ("🛡️ Raid Protection", "Detección y acciones de protección contra raids."),
-    "purge": ("🧹 Purgas", "Purgas manuales y automáticas."),
+    "raid": ("Raid Protection", "Detección y acciones de protección contra raids."),
+    "purge": ("Purgas", "Purgas manuales y automáticas."),
     "backup": ("💾 Backups / plantilla", "Copias y sincronización de la plantilla del servidor."),
     "configuration": ("⚙️ Configuración", "Cambios de canales, roles y configuración."),
     "suggestions": ("💡 Sugerencias", "Creación y resolución de sugerencias."),
@@ -4954,14 +5121,14 @@ LOG_EVENT_CATALOG = {
     "raid": [("raid_updated", "⚙️ Raid Protection actualizada")],
     "purge": [
         ("purge_failed", "⚠️ Purga fallida"),
-        ("purge_completed", "🧹 Purga completada"),
+        ("purge_completed", "Purga completada"),
         ("honeypot_purge_completed", "🍯 Purga del honeypot completada"),
     ],
     "backup": [
         ("template_backup_failed", "⚠️ Falló la copia de seguridad de la plantilla"),
-        ("template_synced_dm_failed", "🛡️ Plantilla sincronizada (mensaje privado no enviado)"),
+        ("template_synced_dm_failed", "Plantilla sincronizada (mensaje privado no enviado)"),
         ("template_backup_updated", "⚙️ Copia de seguridad de la plantilla actualizada"),
-        ("template_synced_manual", "🛡️ Plantilla sincronizada manualmente"),
+        ("template_synced_manual", "Plantilla sincronizada manualmente"),
     ],
     "configuration": [
         ("log_channel_updated", "⚙️ Canal de logs actualizado"),
@@ -5495,7 +5662,7 @@ class LogTemplateEditorView(discord.ui.View):
         self.add_item(event_select)
 
         preview_btn = discord.ui.Button(
-            label="👁️ Preview",
+            label="Preview",
             style=discord.ButtonStyle.primary if self.mode == "preview" else discord.ButtonStyle.secondary,
             disabled=self.mode == "preview",
             row=2,
@@ -5504,7 +5671,7 @@ class LogTemplateEditorView(discord.ui.View):
         self.add_item(preview_btn)
 
         edit_btn = discord.ui.Button(
-            label="✏️ Edit",
+            label="Edit",
             style=discord.ButtonStyle.primary if self.mode == "edit" else discord.ButtonStyle.secondary,
             disabled=self.mode == "edit",
             row=2,
@@ -5513,7 +5680,7 @@ class LogTemplateEditorView(discord.ui.View):
         self.add_item(edit_btn)
 
         vars_btn = discord.ui.Button(
-            label="🧩 Variables",
+            label="Variables",
             style=discord.ButtonStyle.primary if self.mode == "variables" else discord.ButtonStyle.secondary,
             disabled=self.mode == "variables",
             row=2,
@@ -5521,25 +5688,25 @@ class LogTemplateEditorView(discord.ui.View):
         vars_btn.callback = self.show_variables
         self.add_item(vars_btn)
 
-        back_btn = discord.ui.Button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+        back_btn = discord.ui.Button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
         back_btn.callback = self.back
         self.add_item(back_btn)
 
         if self.mode == "edit":
             content_btn = discord.ui.Button(
-                label="🎨 Visual", style=discord.ButtonStyle.primary, row=3
+                label="Visual", style=discord.ButtonStyle.primary, row=3
             )
             content_btn.callback = self.edit_content
             self.add_item(content_btn)
 
             design_btn = discord.ui.Button(
-                label="🖼️ Diseño", style=discord.ButtonStyle.secondary, row=3
+                label="Diseño", style=discord.ButtonStyle.secondary, row=3
             )
             design_btn.callback = self.edit_design
             self.add_item(design_btn)
 
             reset_btn = discord.ui.Button(
-                label="↩️ Restaurar este evento",
+                label="Restaurar este evento",
                 style=discord.ButtonStyle.danger,
                 row=3,
             )
@@ -5799,7 +5966,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="⬅️ Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -5855,7 +6022,7 @@ class HeraldoSetupView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="📋 Configurar canales", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Configurar canales", style=discord.ButtonStyle.primary, row=0)
     async def channels(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5869,7 +6036,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoChannelSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="👥 Configurar roles", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Configurar roles", style=discord.ButtonStyle.primary, row=0)
     async def roles(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5878,7 +6045,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoRoleSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🧭 Roles de orientación", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Roles de orientación", style=discord.ButtonStyle.primary, row=0)
     async def orientation(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5888,7 +6055,7 @@ class HeraldoSetupView(discord.ui.View):
         )
 
 
-    @discord.ui.button(label="✅ Verificación de edad", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Verificación de edad", style=discord.ButtonStyle.primary, row=0)
     async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5897,12 +6064,12 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoVerificationSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="⏱️ Configurar tiempos", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Configurar tiempos", style=discord.ButtonStyle.secondary, row=1)
     async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
 
 
-    @discord.ui.button(label="🚪 Join Roles", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=1)
     async def join_roles(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5911,7 +6078,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoJoinRolesSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🍯 Honeypot", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Honeypot", style=discord.ButtonStyle.secondary, row=1)
     async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5920,16 +6087,16 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoHoneypotSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🛡️ Raid Protection", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Raid Protection", style=discord.ButtonStyle.secondary, row=1)
     async def raid_protection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
-            content="🛡️ **El Heraldo · Raid Protection**\n\n" + raid_config_summary(interaction.guild),
+            content="**El Heraldo · Raid Protection**\n\n" + raid_config_summary(interaction.guild),
             embed=None,
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="👑 Miembro de la semana", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Miembro de la semana", style=discord.ButtonStyle.secondary, row=1)
     async def motw(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         channel = interaction.guild.get_channel(get_motw_channel_id(self.guild_id))
@@ -5944,7 +6111,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoMotwSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="⚖️ Tarjeta de condena", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Tarjeta de condena", style=discord.ButtonStyle.secondary, row=2)
     async def condemned(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5957,7 +6124,7 @@ class HeraldoSetupView(discord.ui.View):
             view=CondemnationTemplateEditorView(self.owner_id, return_to="setup"),
         )
 
-    @discord.ui.button(label="✉️ Mensajes y paneles", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Mensajes y paneles", style=discord.ButtonStyle.primary, row=2)
     async def messages(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
@@ -5966,7 +6133,7 @@ class HeraldoSetupView(discord.ui.View):
             view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="🧪 Revisar configuración", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Revisar configuración", style=discord.ButtonStyle.secondary, row=2)
     async def permissions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send(
@@ -5974,7 +6141,7 @@ class HeraldoSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.defer(ephemeral=True)
@@ -7159,7 +7326,7 @@ def template_report_embed(template: discord.Template, was_dirty: bool | None, tr
     else:
         state = "✅ Sincronizada (Discord no indicó si había cambios)."
     embed = discord.Embed(
-        title="🛡️ Copia de seguridad de la plantilla",
+        title="Copia de seguridad de la plantilla",
         description=state,
         color=discord.Color.green(),
         timestamp=datetime.now(timezone.utc),
@@ -7199,7 +7366,7 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
         await log_embed(guild, "⚠️ Falló la copia de seguridad de la plantilla", error, discord.Color.dark_red())
     elif not sent:
         await log_embed(
-            guild, "🛡️ Plantilla sincronizada (mensaje privado no enviado)",
+            guild, "Plantilla sincronizada (mensaje privado no enviado)",
             "La copia se hizo, pero no pude mandarte el enlace por mensaje privado. Usa /template_sync para verlo.",
             discord.Color.orange(),
         )
@@ -7350,7 +7517,7 @@ async def template_sync(interaction: discord.Interaction) -> None:
             ephemeral=True,
         )
     await log_embed(
-        interaction.guild, "🛡️ Plantilla sincronizada manualmente",
+        interaction.guild, "Plantilla sincronizada manualmente",
         f"{interaction.user.mention} sincronizó la plantilla del servidor.",
         discord.Color.blurple(),
     )
@@ -8118,7 +8285,7 @@ def condemnation_origin_label(origin: str) -> str:
         "command": "⌨️ Comando",
         "reaction": "☠️ Reacción",
         "role": "🎭 Rol otorgado a mano",
-        "raid": "🛡️ Raid Protection",
+        "raid": "Raid Protection",
     }.get(origin, origin)
 
 
@@ -8712,7 +8879,7 @@ async def run_purge_job(
     limit: int | None = None,
     progress=None,
     content_type: str = "all",
-    title: str = "🧹 Purga completada",
+    title: str = "Purga completada",
 ) -> PurgeResult | None:
     """Ejecuta una purga con control de duplicados y reporta el resultado en el log."""
     key = (guild.id, user.id)
@@ -8901,7 +9068,7 @@ def _build_condemnation_embed(
     if include_pardon_button:
         if view is None:
             view = discord.ui.View(timeout=None)
-        view.add_item(discord.ui.Button(label="🕊️ Perdonar", style=discord.ButtonStyle.success, custom_id="heraldo:condemnation:pardon"))
+        view.add_item(discord.ui.Button(label="Perdonar", style=discord.ButtonStyle.success, custom_id="heraldo:condemnation:pardon"))
     return embed, view
 
 
@@ -9287,7 +9454,7 @@ async def condemn_member(
     reason = (reason or "").strip()
     if not reason:
         automatic_reasons = {
-            "raid": "🛡️ Protección RAID: ingreso detectado durante un patrón de incursión masiva.",
+            "raid": "Protección RAID: ingreso detectado durante un patrón de incursión masiva.",
             "honeypot": "🍯 Honeypot: el miembro activó un canal trampa de seguridad.",
             "role": "🎭 El rol Condenado fue otorgado manualmente y activó el motor de condenas.",
             "reaction": "☠️ Condena aplicada mediante la reacción de moderación.",
@@ -10077,27 +10244,27 @@ class CondemnationTemplateEditorView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="✏️ Diseño", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Diseño", style=discord.ButtonStyle.primary, row=0)
     async def edit_core(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationCoreModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="🏷️ Etiquetas", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Etiquetas", style=discord.ButtonStyle.primary, row=0)
     async def edit_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationDetailsModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="🏷️ Más etiquetas", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Más etiquetas", style=discord.ButtonStyle.primary, row=0)
     async def edit_more_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationMoreDetailsModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="🔗 Enlace del botón", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Enlace del botón", style=discord.ButtonStyle.secondary, row=1)
     async def edit_button_url(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationButtonUrlModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="⏳ Duración", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Duración", style=discord.ButtonStyle.secondary, row=1)
     async def edit_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationDurationModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="👁️ Vista previa", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=1)
     async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.guild is None:
             await interaction.response.send_message("❌ Solo disponible en un servidor.", ephemeral=True)
@@ -10108,7 +10275,7 @@ class CondemnationTemplateEditorView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="↩️ Restaurar valores", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label="Restaurar valores", style=discord.ButtonStyle.danger, row=1)
     async def reset(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         condemnation_template_reset(interaction.guild.id)
         await condemnation_template_editor_update(
@@ -10118,7 +10285,7 @@ class CondemnationTemplateEditorView(discord.ui.View):
         )
 
 
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back_to_heraldo(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.return_to == "messages_command":
             await interaction.response.edit_message(
@@ -11508,7 +11675,7 @@ async def raid_lock_invites(guild: discord.Guild) -> str:
             return "ℹ️ las invitaciones ya estaban pausadas (no las toco)"
         await guild.edit(invites_disabled=True, reason="Raid Protection: modo raid activado")
         db_meta_set(f"raid_invites_locked:{guild.id}", "1")
-        return "🔒 invitaciones pausadas"
+        return "invitaciones pausadas"
     except (discord.HTTPException, TypeError) as e:
         return f"⚠️ no pude pausar las invitaciones ({e})"
 
@@ -11522,7 +11689,7 @@ async def raid_unlock_invites(guild: discord.Guild) -> str:
     except (discord.HTTPException, TypeError) as e:
         return f"⚠️ no pude reabrir las invitaciones ({e}); reábrelas a mano en Ajustes del servidor"
     db_meta_set(f"raid_invites_locked:{guild.id}", "0")
-    return "🔓 invitaciones reabiertas"
+    return "invitaciones reabiertas"
 
 
 async def _raid_purge_member(member: discord.Member, stats: dict) -> None:
@@ -11594,7 +11761,7 @@ async def raid_start(
     }
     lock_note = await raid_lock_invites(guild) if raid_lock_invites_enabled(guild.id) else "—"
     await raid_alert(
-        guild, "🛡️ RAID DETECTADO — modo raid activado",
+        guild, "RAID DETECTADO — modo raid activado",
         f"**Motivo:** {trigger}\n"
         f"**Duración:** {format_flex_duration(duration)} (termina <t:{int((now + timedelta(seconds=duration)).timestamp())}:R>)\n"
         f"**Acción sobre los sospechosos:** {RAID_ACTION_LABELS[raid_action(guild.id)]}\n"
@@ -11646,7 +11813,7 @@ async def raid_end(
         lines.append(f"**Condenas del raid liberadas:** {released}" + (f" ({failed_release} fallaron)" if failed_release else ""))
     elif stats and stats["action"] == "condemn" and stats["acted"]:
         lines.append("ℹ️ Las condenas del raid siguen activas: revísalas con `/condenados` o libéralas con `/raid end liberar:True`.")
-    await raid_alert(guild, "🛡️ Modo raid terminado", "\n".join(lines), discord.Color.green())
+    await raid_alert(guild, "Modo raid terminado", "\n".join(lines), discord.Color.green())
     return "\n".join(lines)
 
 
@@ -11717,7 +11884,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
     state = "🔴 **MODO RAID ACTIVO**" if raid_is_active(guild.id) else "🟢 Sin raid"
     until = raid_until(guild.id)
     lines = [
-        f"🛡️ **Raid Protection** — {'✅ activada' if raid_enabled(guild.id) else '❌ desactivada'} · {state}",
+        f"**Raid Protection** — {'✅ activada' if raid_enabled(guild.id) else '❌ desactivada'} · {state}",
         f"• Disparo: **{raid_threshold(guild.id)}** ingresos en **{format_flex_duration(raid_window_seconds(guild.id))}**",
         f"• Duración del modo raid: **{format_flex_duration(raid_duration_seconds(guild.id))}**",
         f"• Acción: **{RAID_ACTION_LABELS[raid_action(guild.id)]}**",
@@ -12990,25 +13157,25 @@ class EmbedEditorView(discord.ui.View):
     async def _gone(self, interaction: discord.Interaction) -> None:
         await interaction.response.edit_message(content="❌ Ese embed ya no existe.", embed=None, view=None)
 
-    @discord.ui.button(label="✏️ Contenido", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Contenido", style=discord.ButtonStyle.primary, row=0)
     async def edit_content(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         data = self._data()
         if data is None:
             return await self._gone(interaction)
         await interaction.response.send_modal(EmbedContentModal(self.guild_id, self.name, data))
 
-    @discord.ui.button(label="👤 Autor y pie", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Autor y pie", style=discord.ButtonStyle.primary, row=0)
     async def edit_author(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         data = self._data()
         if data is None:
             return await self._gone(interaction)
         await interaction.response.send_modal(EmbedAuthorFooterModal(self.guild_id, self.name, data))
 
-    @discord.ui.button(label="➕ Campo", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Campo", style=discord.ButtonStyle.secondary, row=0)
     async def add_field(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(EmbedFieldModal(self.guild_id, self.name))
 
-    @discord.ui.button(label="🕒 Fecha: no", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Fecha: no", style=discord.ButtonStyle.secondary, row=0)
     async def toggle_time(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         record = embed_get(self.guild_id, self.name)
         if record is None:
@@ -13029,7 +13196,7 @@ class EmbedEditorView(discord.ui.View):
             embed_save(self.guild_id, self.name, data)
         await embed_refresh(interaction, self.name)
 
-    @discord.ui.button(label="📤 Enviar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Enviar", style=discord.ButtonStyle.success, row=2)
     async def send_embed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
             "¿A qué canal lo envío?", view=EmbedChannelPicker(interaction.user.id, self.name), ephemeral=True)
@@ -13896,37 +14063,37 @@ class HeraldoMessagesView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="✅ Verificación", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Verificación", style=discord.ButtonStyle.primary, row=0)
     async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await open_default_message_studio(
             interaction, "verification", self.owner_id, "messages_command"
         )
 
-    @discord.ui.button(label="💡 Sugerencias", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Sugerencias", style=discord.ButtonStyle.primary, row=0)
     async def suggestions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await open_default_message_studio(
             interaction, "suggestions", self.owner_id, "messages_command"
         )
 
-    @discord.ui.button(label="🍯 Honeypot", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Honeypot", style=discord.ButtonStyle.primary, row=0)
     async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await open_default_message_studio(
             interaction, "honeypot", self.owner_id, "messages_command"
         )
 
-    @discord.ui.button(label="📩 DM verificación", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="DM verificación", style=discord.ButtonStyle.secondary, row=1)
     async def verify_dm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await open_default_message_studio(
             interaction, "verify_dm", self.owner_id, "messages_command"
         )
 
-    @discord.ui.button(label="☠️ Condenas", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Condenas", style=discord.ButtonStyle.secondary, row=1)
     async def condemnations(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await open_default_message_studio(
             interaction, "condemnation", self.owner_id, "messages_command"
         )
 
-    @discord.ui.button(label="📜 Logs", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Logs", style=discord.ButtonStyle.secondary, row=1)
     async def logs(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=log_template_editor_content("general"),
@@ -13934,7 +14101,7 @@ class HeraldoMessagesView(discord.ui.View):
             view=LogTemplateEditorView(self.guild_id, self.owner_id, "general", None, "messages_command"),
         )
 
-    @discord.ui.button(label="🧩 Embeds personalizados", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Embeds personalizados", style=discord.ButtonStyle.secondary, row=1)
     async def custom_embeds(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         names = embed_names(self.guild_id)
         if names:
@@ -13948,7 +14115,7 @@ class HeraldoMessagesView(discord.ui.View):
             text = "🧩 No hay embeds personalizados guardados. Crea el primero con `/embed crear`."
         await interaction.response.send_message(text, ephemeral=True)
 
-    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Centro de mensajes cerrado.", view=None)
