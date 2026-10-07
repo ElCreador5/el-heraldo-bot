@@ -451,6 +451,46 @@ def db_init() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS moderation_cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            case_number INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            duration_minutes INTEGER,
+            created_at TEXT NOT NULL,
+            expires_at TEXT,
+            author_id INTEGER,
+            proof TEXT,
+            verified_proof TEXT,
+            moderator_notes TEXT,
+            message_history TEXT,
+            open INTEGER NOT NULL DEFAULT 1,
+            closed_at TEXT,
+            closed_by INTEGER,
+            resolution TEXT,
+            UNIQUE (guild_id, case_number)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS moderation_message_cache (
+            guild_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            message_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            content TEXT,
+            attachments TEXT,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (guild_id, message_id)
+        )
+        """
+    )
+
     conn.commit()
     conn.close()
 
@@ -1940,6 +1980,8 @@ async def on_ready() -> None:
             print(f"Comando global huérfano eliminado: /{cmd.name}")
     except discord.HTTPException as e:
         print(f"No se pudo limpiar comandos globales: {e}")
+    if not moderation_case_expiry_loop.is_running():
+        moderation_case_expiry_loop.start()
     if not condemnation_expiry_loop.is_running():
         condemnation_expiry_loop.start()
     if not raid_expiry_loop.is_running():
@@ -6301,6 +6343,29 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         )
 
 
+class HeraldoCasesSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Actualizar", style=discord.ButtonStyle.secondary, row=0)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content=moderation_cases_summary(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=0)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
+            view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
+        )
+
 class HeraldoModerationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -6312,6 +6377,13 @@ class HeraldoModerationSetupView(discord.ui.View):
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
         return True
+
+    @discord.ui.button(label="Cases", style=discord.ButtonStyle.primary, row=0)
+    async def cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=moderation_cases_summary(interaction.guild),
+            view=HeraldoCasesSetupView(self.guild_id, self.owner_id),
+        )
 
     @discord.ui.button(label="Reportes", style=discord.ButtonStyle.primary, row=0)
     async def user_reports(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -7873,6 +7945,26 @@ async def track_activity(message: discord.Message) -> None:
     db_track_message(message.guild.id, message.author.id, today.isoformat(), yesterday.isoformat())
 
 
+@bot.listen("on_message")
+async def moderation_cache_recent_messages(message: discord.Message) -> None:
+    if message.guild is None or message.author.bot:
+        return
+    conn = db_connect()
+    conn.execute(
+        "INSERT OR REPLACE INTO moderation_message_cache "
+        "(guild_id, channel_id, message_id, user_id, content, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (message.guild.id, message.channel.id, message.id, message.author.id, (message.content or "")[:2000],
+         json.dumps([attachment.url for attachment in message.attachments[:5]], ensure_ascii=False), message.created_at.isoformat()),
+    )
+    conn.execute(
+        "DELETE FROM moderation_message_cache WHERE guild_id = ? AND channel_id = ? AND user_id = ? AND message_id NOT IN ("
+        "SELECT message_id FROM moderation_message_cache WHERE guild_id = ? AND channel_id = ? AND user_id = ? "
+        "ORDER BY created_at DESC LIMIT 5)",
+        (message.guild.id, message.channel.id, message.author.id, message.guild.id, message.channel.id, message.author.id),
+    )
+    conn.close()
+
+
 @bot.tree.command(name="profile", description="Muestra tu perfil o el de otro miembro.")
 @discord.app_commands.describe(user="Miembro a consultar (déjalo vacío para ver el tuyo)")
 @discord.app_commands.guild_only()
@@ -8579,6 +8671,279 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
     return CONDEMNED_EMOJI
 
 
+
+MODERATION_CASE_TYPES = {"WARN", "MUTE", "KICK", "BAN", "CONDEMN"}
+
+
+def moderation_case_next_number(guild_id: int) -> int:
+    conn = db_connect()
+    row = conn.execute(
+        "SELECT COALESCE(MAX(case_number), 0) + 1 FROM moderation_cases WHERE guild_id = ?",
+        (guild_id,),
+    ).fetchone()
+    conn.close()
+    return int(row[0])
+
+
+def moderation_case_get(guild_id: int, case_number: int) -> sqlite3.Row | None:
+    conn = db_connect()
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT * FROM moderation_cases WHERE guild_id = ? AND case_number = ?",
+        (guild_id, case_number),
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def moderation_case_list(guild_id: int, user_id: int | None = None, case_type: str | None = None, open_only: bool | None = None, limit: int = 20) -> list[sqlite3.Row]:
+    conn = db_connect()
+    conn.row_factory = sqlite3.Row
+    where = ["guild_id = ?"]
+    params: list[object] = [guild_id]
+    if user_id is not None:
+        where.append("user_id = ?")
+        params.append(user_id)
+    if case_type:
+        where.append("type = ?")
+        params.append(case_type.upper())
+    if open_only is not None:
+        where.append("open = ?")
+        params.append(1 if open_only else 0)
+    params.append(max(1, min(limit, 50)))
+    rows = conn.execute(
+        "SELECT * FROM moderation_cases WHERE " + " AND ".join(where) + " ORDER BY case_number DESC LIMIT ?",
+        params,
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def moderation_case_message_history(guild_id: int, user_id: int) -> str:
+    conn = db_connect()
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT channel_id, message_id, content, attachments, created_at FROM moderation_message_cache "
+        "WHERE guild_id = ? AND user_id = ? ORDER BY channel_id, created_at DESC",
+        (guild_id, user_id),
+    ).fetchall()
+    conn.close()
+    grouped: dict[int, list[dict[str, object]]] = {}
+    for row in rows:
+        bucket = grouped.setdefault(int(row["channel_id"]), [])
+        if len(bucket) >= 5:
+            continue
+        try:
+            attachment_list = json.loads(row["attachments"] or "[]")
+        except json.JSONDecodeError:
+            attachment_list = []
+        bucket.append({
+            "message_id": int(row["message_id"]),
+            "content": (row["content"] or "")[:1000],
+            "attachments": attachment_list,
+            "created_at": row["created_at"],
+        })
+    return json.dumps(grouped, ensure_ascii=False)
+
+
+def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None) -> int:
+    case_type = case_type.upper()
+    if case_type not in MODERATION_CASE_TYPES:
+        raise ValueError("Tipo de caso inválido.")
+    case_number = moderation_case_next_number(guild_id)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=duration_minutes) if duration_minutes else None
+    conn = db_connect()
+    conn.execute(
+        "INSERT INTO moderation_cases "
+        "(guild_id, case_number, type, user_id, reason, duration_minutes, created_at, expires_at, author_id, proof, verified_proof, moderator_notes, message_history, open) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        (guild_id, case_number, case_type, user_id, reason[:1000], duration_minutes, now.isoformat(),
+         expires_at.isoformat() if expires_at else None, author_id, (proof or "")[:2000],
+         (verified_proof or "")[:2000], (moderator_notes or "")[:2000],
+         moderation_case_message_history(guild_id, user_id)),
+    )
+    conn.close()
+    return case_number
+
+
+def moderation_case_update(guild_id: int, case_number: int, *, reason: str | None = None, duration_minutes: int | None | object = ..., proof: str | None = None, verified_proof: str | None = None, notes: str | None = None) -> bool:
+    row = moderation_case_get(guild_id, case_number)
+    if row is None:
+        return False
+    updates: list[str] = []
+    params: list[object] = []
+    if reason is not None:
+        updates.append("reason = ?")
+        params.append(reason[:1000])
+    if duration_minutes is not ...:
+        updates.extend(["duration_minutes = ?", "expires_at = ?"])
+        params.append(duration_minutes)
+        params.append((datetime.fromisoformat(row["created_at"]) + timedelta(minutes=int(duration_minutes))).isoformat() if duration_minutes else None)
+    if proof is not None:
+        updates.append("proof = ?")
+        params.append(proof[:2000])
+    if verified_proof is not None:
+        updates.append("verified_proof = ?")
+        params.append(verified_proof[:2000])
+    if notes is not None:
+        updates.append("moderator_notes = ?")
+        params.append(notes[:2000])
+    if not updates:
+        return True
+    params.extend([guild_id, case_number])
+    conn = db_connect()
+    conn.execute("UPDATE moderation_cases SET " + ", ".join(updates) + " WHERE guild_id = ? AND case_number = ?", params)
+    conn.close()
+    return True
+
+
+def moderation_case_close(guild_id: int, case_number: int, *, closed_by: int | None, resolution: str = "closed") -> bool:
+    conn = db_connect()
+    cur = conn.execute(
+        "UPDATE moderation_cases SET open = 0, closed_at = ?, closed_by = ?, resolution = ? "
+        "WHERE guild_id = ? AND case_number = ? AND open = 1",
+        (datetime.now(timezone.utc).isoformat(), closed_by, resolution[:500], guild_id, case_number),
+    )
+    conn.close()
+    return cur.rowcount > 0
+
+
+def moderation_case_delete(guild_id: int, case_number: int) -> bool:
+    conn = db_connect()
+    cur = conn.execute("DELETE FROM moderation_cases WHERE guild_id = ? AND case_number = ?", (guild_id, case_number))
+    conn.close()
+    return cur.rowcount > 0
+
+
+async def moderation_verified_proof(guild: discord.Guild, proof: str | None) -> str | None:
+    if not proof:
+        return None
+    match = re.search(r"discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)", proof)
+    if not match or int(match.group(1)) != guild.id:
+        return None
+    channel = guild.get_channel_or_thread(int(match.group(2)))
+    if channel is None or not hasattr(channel, "fetch_message"):
+        return None
+    try:
+        message = await channel.fetch_message(int(match.group(3)))
+    except discord.HTTPException:
+        return None
+    text = message.content or "(sin texto)"
+    if message.attachments:
+        text += "\n" + "\n".join(attachment.url for attachment in message.attachments[:5])
+    return text[:2000]
+
+
+def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"Moderation Case #{row['case_number']} · {row['type']}",
+        color=discord.Color.orange() if row["open"] else discord.Color.dark_grey(),
+        timestamp=datetime.fromisoformat(row["created_at"]),
+    )
+    embed.add_field(name="Estado", value="Abierto" if row["open"] else "Cerrado", inline=True)
+    embed.add_field(name="Usuario", value=f"<@{row['user_id']}>\nID: {row['user_id']}", inline=True)
+    embed.add_field(name="Autor", value=f"<@{row['author_id']}>" if row["author_id"] else "El Heraldo", inline=True)
+    embed.add_field(name="Motivo", value=str(row["reason"])[:1024], inline=False)
+    duration_text = format_duration(int(row["duration_minutes"])) if row["duration_minutes"] else "Indefinida / no aplica"
+    embed.add_field(name="Duración", value=duration_text, inline=True)
+    if row["expires_at"]:
+        embed.add_field(name="Caduca", value=discord.utils.format_dt(datetime.fromisoformat(row["expires_at"]), "R"), inline=True)
+    if row["proof"]:
+        embed.add_field(name="Prueba", value=str(row["proof"])[:1024], inline=False)
+    if row["verified_proof"]:
+        embed.add_field(name="Prueba verificada", value=str(row["verified_proof"])[:1024], inline=False)
+    if row["moderator_notes"]:
+        embed.add_field(name="Notas del moderador", value=str(row["moderator_notes"])[:1024], inline=False)
+    if not row["open"] and row["resolution"]:
+        embed.add_field(name="Resolución", value=str(row["resolution"])[:1024], inline=False)
+    embed.set_footer(text=f"{guild.name} · El Heraldo 🪽")
+    return embed
+
+
+def moderation_cases_summary(guild: discord.Guild) -> str:
+    rows = moderation_case_list(guild.id, limit=8)
+    if not rows:
+        return "**El Heraldo · Moderation · Cases**\n\nTodavía no hay casos registrados."
+    lines = []
+    for row in rows:
+        state = "abierto" if row["open"] else "cerrado"
+        lines.append(f"**#{row['case_number']}** · {row['type']} · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
+    return "**El Heraldo · Moderation · Cases**\n\n" + "\n\n".join(lines)
+
+
+async def moderation_send_case_dm(guild: discord.Guild, user_id: int, case_number: int) -> bool:
+    row = moderation_case_get(guild.id, case_number)
+    member = guild.get_member(user_id)
+    if row is None or member is None:
+        return False
+    try:
+        await member.send(embed=moderation_case_embed(guild, row))
+        return True
+    except discord.HTTPException:
+        return False
+
+
+async def moderation_apply_case_punishment(interaction: discord.Interaction, member: discord.Member, case_type: str, reason: str, duration_minutes: int | None = None, proof: str | None = None) -> tuple[bool, str, int | None]:
+    guild = interaction.guild
+    case_type = case_type.upper()
+    if member.bot:
+        return False, "Los bots no se castigan desde Moderation.", None
+    if member.id == guild.owner_id:
+        return False, "No se puede castigar al dueño del servidor.", None
+    if interaction.user.id != guild.owner_id and member.top_role >= interaction.user.top_role:
+        return False, "La jerarquía del servidor impide aplicar esta acción.", None
+    if member.top_role >= guild.me.top_role:
+        return False, "El rol del miembro está al mismo nivel o por encima de El Heraldo.", None
+    verified = await moderation_verified_proof(guild, proof)
+    try:
+        if case_type == "MUTE":
+            minutes = duration_minutes or 30
+            await member.timeout(datetime.now(timezone.utc) + timedelta(minutes=min(minutes, 28 * 24 * 60)), reason=reason)
+        elif case_type == "KICK":
+            await member.kick(reason=reason)
+        elif case_type == "BAN":
+            await member.ban(reason=reason, delete_message_seconds=0)
+        elif case_type != "WARN":
+            return False, "Tipo de castigo no compatible.", None
+    except discord.HTTPException as exc:
+        return False, f"Discord rechazó la acción: {exc}", None
+    case_number = moderation_case_create(
+        guild.id, case_type, member.id, reason, duration_minutes=duration_minutes,
+        author_id=interaction.user.id, proof=proof, verified_proof=verified,
+    )
+    dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
+    await log_embed(
+        guild, f"Moderation · {case_type}",
+        f"Caso #{case_number} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}",
+        discord.Color.orange(),
+    )
+    return True, f"Caso #{case_number} creado.", case_number
+
+
+async def moderation_close_case_effect(guild: discord.Guild, row: sqlite3.Row, actor: discord.Member) -> str:
+    case_type = str(row["type"])
+    user_id = int(row["user_id"])
+    if case_type == "MUTE":
+        member = guild.get_member(user_id)
+        if member is not None:
+            try:
+                await member.timeout(None, reason=f"Cierre del caso #{row['case_number']}")
+                return "Timeout retirado."
+            except discord.HTTPException:
+                return "Caso cerrado; no pude retirar el timeout."
+    if case_type == "BAN":
+        try:
+            await guild.unban(discord.Object(id=user_id), reason=f"Cierre del caso #{row['case_number']}")
+            return "Ban retirado."
+        except (discord.NotFound, discord.HTTPException):
+            return "Caso cerrado; el usuario no estaba baneado o no pude retirarlo."
+    if case_type == "CONDEMN":
+        member = guild.get_member(user_id)
+        if member is not None and condemnation_get(guild.id, user_id) is not None:
+            ok, note = await release_condemned_member(member, released_by=actor, automatic=False)
+            return note if ok else f"No pude levantar la condena: {note}"
+    return "Caso cerrado."
 
 MODERATION_REPORT_MAX_REACTIONS = 10
 MODERATION_REPORT_ACTIONS = {"report", "timeout", "kick", "ban", "condemn"}
@@ -10158,6 +10523,18 @@ async def _condemn_member_inner(
             )
             conn.commit()
             conn.close()
+    if send_dm or announce:
+        try:
+            verified = await moderation_verified_proof(member.guild, source_message_url)
+            moderation_case_create(
+                member.guild.id, "CONDEMN", member.id, reason,
+                duration_minutes=duration_minutes,
+                author_id=applied_by.id if applied_by else None,
+                proof=source_message_url,
+                verified_proof=verified,
+            )
+        except Exception:
+            traceback.print_exc()
     await log_embed(
         member.guild, "☠️ Condena aplicada",
         f"{member.mention} (`{member.id}`)\n"
@@ -10304,6 +10681,41 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
         )
         await asyncio.sleep(1)
 
+
+@tasks.loop(minutes=1)
+async def moderation_case_expiry_loop() -> None:
+    now = datetime.now(timezone.utc)
+    conn = db_connect()
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM moderation_cases WHERE open = 1 AND expires_at IS NOT NULL").fetchall()
+    conn.close()
+    for row in rows:
+        try:
+            expires = datetime.fromisoformat(row["expires_at"])
+            guild = bot.get_guild(int(row["guild_id"]))
+            if guild is None:
+                continue
+            member = guild.get_member(int(row["user_id"]))
+            case_type = str(row["type"])
+            if case_type == "MUTE" and member is not None and expires > now + timedelta(days=27):
+                current = member.timed_out_until
+                if current is None or current < now + timedelta(days=27):
+                    await member.timeout(min(expires, now + timedelta(days=28)), reason=f"Extensión del caso #{row['case_number']}")
+            if expires > now:
+                continue
+            if case_type == "MUTE" and member is not None:
+                try:
+                    await member.timeout(None, reason=f"Expiró caso #{row['case_number']}")
+                except discord.HTTPException:
+                    pass
+            elif case_type == "BAN":
+                try:
+                    await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró caso #{row['case_number']}")
+                except (discord.NotFound, discord.HTTPException):
+                    pass
+            moderation_case_close(guild.id, int(row["case_number"]), closed_by=None, resolution="Expirado automáticamente")
+        except Exception:
+            traceback.print_exc()
 
 @tasks.loop(minutes=1)
 async def condemnation_expiry_loop() -> None:
@@ -12124,6 +12536,157 @@ class PurgeConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="Purga cancelada.", view=None)
         self.stop()
 
+
+@bot.tree.command(name="warn", description="Advierte a un miembro y crea un caso de Moderation.")
+@app_commands.describe(usuario="Miembro", motivo="Motivo", duracion="Opcional: 30m, 2h, 7d", prueba="Enlace o texto de prueba")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_warn(interaction: discord.Interaction, usuario: discord.Member, motivo: str, duracion: Optional[str] = None, prueba: Optional[str] = None) -> None:
+    minutes = None
+    if duracion:
+        try:
+            minutes = parse_duration(duracion, 1, 365 * 24 * 60)
+        except ValueError as exc:
+            await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
+            return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    ok, note, _ = await moderation_apply_case_punishment(interaction, usuario, "WARN", motivo.strip(), minutes, prueba)
+    await interaction.followup.send(("Listo. " if ok else "No pude hacerlo: ") + note, ephemeral=True)
+
+
+@bot.tree.command(name="mute", description="Aplica timeout y crea un caso de Moderation.")
+@app_commands.describe(usuario="Miembro", duracion="Ej.: 30m, 2h, 7d", motivo="Motivo", prueba="Enlace o texto de prueba")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_mute(interaction: discord.Interaction, usuario: discord.Member, duracion: str, motivo: str, prueba: Optional[str] = None) -> None:
+    try:
+        minutes = parse_duration(duracion, 1, 365 * 24 * 60)
+    except ValueError as exc:
+        await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    ok, note, _ = await moderation_apply_case_punishment(interaction, usuario, "MUTE", motivo.strip(), minutes, prueba)
+    await interaction.followup.send(("Listo. " if ok else "No pude hacerlo: ") + note, ephemeral=True)
+
+
+@bot.tree.command(name="kick", description="Expulsa a un miembro y crea un caso de Moderation.")
+@app_commands.describe(usuario="Miembro", motivo="Motivo", prueba="Enlace o texto de prueba")
+@app_commands.checks.has_permissions(kick_members=True)
+@app_commands.guild_only()
+async def moderation_kick(interaction: discord.Interaction, usuario: discord.Member, motivo: str, prueba: Optional[str] = None) -> None:
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    ok, note, _ = await moderation_apply_case_punishment(interaction, usuario, "KICK", motivo.strip(), None, prueba)
+    await interaction.followup.send(("Listo. " if ok else "No pude hacerlo: ") + note, ephemeral=True)
+
+
+@bot.tree.command(name="ban", description="Banea a un miembro y crea un caso de Moderation.")
+@app_commands.describe(usuario="Miembro", motivo="Motivo", duracion="Opcional: ban temporal", prueba="Enlace o texto de prueba")
+@app_commands.checks.has_permissions(ban_members=True)
+@app_commands.guild_only()
+async def moderation_ban(interaction: discord.Interaction, usuario: discord.Member, motivo: str, duracion: Optional[str] = None, prueba: Optional[str] = None) -> None:
+    minutes = None
+    if duracion:
+        try:
+            minutes = parse_duration(duracion, 1, 10 * 365 * 24 * 60)
+        except ValueError as exc:
+            await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
+            return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    ok, note, _ = await moderation_apply_case_punishment(interaction, usuario, "BAN", motivo.strip(), minutes, prueba)
+    await interaction.followup.send(("Listo. " if ok else "No pude hacerlo: ") + note, ephemeral=True)
+
+
+@bot.tree.command(name="caseinfo", description="Muestra la información de un caso de Moderation.")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_caseinfo(interaction: discord.Interaction, caso: int) -> None:
+    row = moderation_case_get(interaction.guild.id, caso)
+    if row is None:
+        await interaction.response.send_message("No existe ese caso en este servidor.", ephemeral=True)
+        return
+    await interaction.response.send_message(embed=moderation_case_embed(interaction.guild, row), ephemeral=True)
+
+
+@bot.tree.command(name="caselist", description="Lista los casos más recientes de Moderation.")
+@app_commands.describe(usuario="Filtrar por usuario", tipo="WARN, MUTE, KICK, BAN o CONDEMN", abiertos="True: abiertos; False: cerrados")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_caselist(interaction: discord.Interaction, usuario: Optional[discord.User] = None, tipo: Optional[str] = None, abiertos: Optional[bool] = None) -> None:
+    case_type = tipo.upper() if tipo else None
+    if case_type and case_type not in MODERATION_CASE_TYPES:
+        await interaction.response.send_message("Tipo inválido. Usa WARN, MUTE, KICK, BAN o CONDEMN.", ephemeral=True)
+        return
+    rows = moderation_case_list(interaction.guild.id, usuario.id if usuario else None, case_type, abiertos, 20)
+    if not rows:
+        await interaction.response.send_message("No encontré casos con esos filtros.", ephemeral=True)
+        return
+    lines = [f"#{row['case_number']} · {row['type']} · <@{row['user_id']}> · {'abierto' if row['open'] else 'cerrado'} · {str(row['reason'])[:90]}" for row in rows]
+    await interaction.response.send_message("\n".join(lines)[:1900], ephemeral=True)
+
+
+@bot.tree.command(name="caseupdate", description="Actualiza motivo, duración o notas de un caso.")
+@app_commands.describe(caso="Número de caso", motivo="Nuevo motivo", duracion="Nueva duración; 0 = sin duración", notas="Notas internas")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_caseupdate(interaction: discord.Interaction, caso: int, motivo: Optional[str] = None, duracion: Optional[str] = None, notas: Optional[str] = None) -> None:
+    if moderation_case_get(interaction.guild.id, caso) is None:
+        await interaction.response.send_message("No existe ese caso.", ephemeral=True)
+        return
+    duration_value: int | None | object = ...
+    if duracion is not None:
+        if duracion.strip() == "0":
+            duration_value = None
+        else:
+            try:
+                duration_value = parse_duration(duracion, 1, 10 * 365 * 24 * 60)
+            except ValueError as exc:
+                await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
+                return
+    moderation_case_update(interaction.guild.id, caso, reason=motivo, duration_minutes=duration_value, notes=notas)
+    row = moderation_case_get(interaction.guild.id, caso)
+    await interaction.response.send_message(embed=moderation_case_embed(interaction.guild, row), ephemeral=True)
+
+
+@bot.tree.command(name="setproof", description="Establece o reemplaza la prueba de un caso.")
+@app_commands.describe(caso="Número de caso", prueba="Texto o enlace de mensaje")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_setproof(interaction: discord.Interaction, caso: int, prueba: str) -> None:
+    row = moderation_case_get(interaction.guild.id, caso)
+    if row is None:
+        await interaction.response.send_message("No existe ese caso.", ephemeral=True)
+        return
+    verified = await moderation_verified_proof(interaction.guild, prueba)
+    moderation_case_update(interaction.guild.id, caso, proof=prueba, verified_proof=verified if verified is not None else row["verified_proof"])
+    await interaction.response.send_message("Prueba actualizada.", ephemeral=True)
+
+
+@bot.tree.command(name="caseclose", description="Cierra un caso y revierte el castigo reversible cuando corresponde.")
+@app_commands.describe(caso="Número de caso", motivo="Resolución o motivo de cierre")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_caseclose(interaction: discord.Interaction, caso: int, motivo: Optional[str] = None) -> None:
+    row = moderation_case_get(interaction.guild.id, caso)
+    if row is None:
+        await interaction.response.send_message("No existe ese caso.", ephemeral=True)
+        return
+    if not row["open"]:
+        await interaction.response.send_message("Ese caso ya está cerrado.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
+    moderation_case_close(interaction.guild.id, caso, closed_by=interaction.user.id, resolution=motivo or "Cerrado manualmente")
+    await interaction.followup.send(f"Caso #{caso} cerrado. {effect}", ephemeral=True)
+
+
+@bot.tree.command(name="casedelete", description="Elimina definitivamente un caso de Moderation.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.guild_only()
+async def moderation_casedelete(interaction: discord.Interaction, caso: int) -> None:
+    if not moderation_case_delete(interaction.guild.id, caso):
+        await interaction.response.send_message("No existe ese caso.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"Caso #{caso} eliminado.", ephemeral=True)
 
 @bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
 @discord.app_commands.describe(
