@@ -1491,7 +1491,161 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
     return created
 
 
-@bot.tree.command(name="heraldo_setup", description="Configura y aplica la estructura de El Heraldo en este servidor.")
+class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configuración general"):
+    verify_timeout = discord.ui.TextInput(
+        label="Tiempo de verificación (minutos)",
+        required=False,
+        max_length=6,
+        placeholder="Ejemplo: 5",
+    )
+    orientation_timeout = discord.ui.TextInput(
+        label="Tiempo de orientación (minutos)",
+        required=False,
+        max_length=6,
+        placeholder="Ejemplo: 10",
+    )
+    sin_verificar_timeout = discord.ui.TextInput(
+        label="Respaldo Sin Verificar (minutos)",
+        required=False,
+        max_length=6,
+        placeholder="Ejemplo: 5",
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.verify_timeout.default = str(max(1, get_verify_timeout(guild_id) // 60))
+        self.orientation_timeout.default = str(max(1, int(get_orientation_window(guild_id).total_seconds() // 60)))
+        self.sin_verificar_timeout.default = str(max(1, int(get_sin_verificado_window(guild_id).total_seconds() // 60)))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            verify_minutes = int(str(self.verify_timeout).strip())
+            orientation_minutes = int(str(self.orientation_timeout).strip())
+            sin_verificar_minutes = int(str(self.sin_verificar_timeout).strip())
+            if min(verify_minutes, orientation_minutes, sin_verificar_minutes) < 1:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message("❌ Los tres tiempos deben ser números enteros mayores que 0.", ephemeral=True)
+            return
+
+        guild_config_set(self.guild_id, "verify_timeout", str(verify_minutes * 60))
+        guild_config_set(self.guild_id, "orientation_timeout_seconds", str(orientation_minutes * 60))
+        guild_config_set(self.guild_id, "sin_verificado_timeout_seconds", str(sin_verificar_minutes * 60))
+        await interaction.response.send_message(
+            "✅ Tiempos guardados por servidor.\n"
+            f"• Verificación: **{verify_minutes} min**\n"
+            f"• Orientación: **{orientation_minutes} min**\n"
+            f"• Respaldo Sin Verificar: **{sin_verificar_minutes} min**",
+            ephemeral=True,
+        )
+
+
+class HeraldoChannelSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        definitions = (
+            ("logs", "📋 Logs"),
+            ("condemned", "⚖️ Condenados"),
+            ("honeypot", "🍯 Honeypot"),
+            ("verification", "✅ Verificación"),
+            ("questions", "💬 Dudas"),
+        )
+        for key, label in definitions:
+            select = discord.ui.ChannelSelect(
+                placeholder=f"Seleccionar canal · {label}",
+                channel_types=[discord.ChannelType.text],
+                min_values=1,
+                max_values=1,
+                row=len(self.children) // 1,
+            )
+            select.callback = self._make_callback(key, label)
+            self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    def _make_callback(self, key: str, label: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            channel = interaction.data.get("values") if interaction.data else None
+            selected = interaction.guild.get_channel(int(channel[0])) if interaction.guild and channel else None
+            if selected is None:
+                await interaction.response.send_message("❌ No pude localizar ese canal.", ephemeral=True)
+                return
+            guild_resource_set(self.guild_id, "channel", key, selected.id)
+            if key == "verification":
+                guild_config_set(self.guild_id, "verify_channel_id", str(selected.id))
+            await interaction.response.send_message(
+                f"✅ {label}: {selected.mention} quedó configurado para este servidor.",
+                ephemeral=True,
+            )
+        return callback
+
+
+class HeraldoSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="📋 Canales", style=discord.ButtonStyle.primary, row=0)
+    async def channels(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Canales**\n\n"
+                "Selecciona el canal que corresponde a cada función. Los canales existentes se reutilizan y quedan guardados por servidor.\n\n"
+                "Canales disponibles: Logs, Condenados, Honeypot, Verificación y Dudas."
+            ),
+            embed=None,
+            view=HeraldoChannelSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="⚙️ Tiempos", style=discord.ButtonStyle.secondary, row=0)
+    async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
+
+    @discord.ui.button(label="🛠️ Crear faltantes", style=discord.ButtonStyle.success, row=0)
+    async def create_missing(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        result = await bootstrap_guild_configuration(interaction.guild, create_missing=True)
+        await interaction.followup.send(
+            "✅ **Recursos faltantes procesados.**\n"
+            f"Canales creados: **{len(result.get('channels', []))}** · "
+            f"roles creados: **{len(result.get('roles', []))}**.\n"
+            "Los recursos existentes se reutilizaron; no se creó ningún canal de Anuncios, Reglas ni Recuperación.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="🔄 Actualizar panel", style=discord.ButtonStyle.secondary, row=1)
+    async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=(
+                "🪽 **El Heraldo · Configuración del servidor**\n\n"
+                "Desde aquí se establecen las configuraciones generales del bot. "
+                "Elige una sección para modificarla."
+            ),
+            embed=None,
+            view=HeraldoSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="❌ Cerrar", style=discord.ButtonStyle.danger, row=1)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
+
+
+@bot.tree.command(name="heraldo_setup", description="Configura las opciones generales de El Heraldo en este servidor.")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
 async def heraldo_setup(interaction: discord.Interaction) -> None:
@@ -1500,16 +1654,11 @@ async def heraldo_setup(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("Este comando solo puede usarse dentro de un servidor.", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
-    create_missing = guild_config_get(guild.id, "heraldo_auto_create_resources") == "1"
-    result = await bootstrap_guild_configuration(guild, create_missing=create_missing)
-    mode_text = "puede crear recursos faltantes" if create_missing else "solo reutiliza recursos existentes"
-
-    await interaction.followup.send(
-        f"🪽 **Configuración de El Heraldo aplicada.**\n"
-        f"Modo actual: **{mode_text}**.\n"
-        f"Canales creados: {len(result.get('channels', []))}; roles creados: {len(result.get('roles', []))}.\n\n"
-        "La configuración de cada canal/rol debe definirse desde este asistente. Los recursos existentes se reutilizan y no se crean duplicados.",
+    await interaction.response.send_message(
+        "🪽 **El Heraldo · Configuración del servidor**\n\n"
+        "Este es el centro de configuración general. Desde aquí puedes establecer canales, "
+        "tiempos y otros parámetros del bot. Los cambios se guardan por servidor.",
+        view=HeraldoSetupView(guild.id, interaction.user.id),
         ephemeral=True,
     )
 
