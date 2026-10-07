@@ -437,6 +437,20 @@ def db_init() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS moderation_reaction_reports (
+            guild_id INTEGER NOT NULL,
+            message_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            emoji_key TEXT NOT NULL,
+            reporter_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            action_executed INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (guild_id, message_id, emoji_key, reporter_id)
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -6047,7 +6061,13 @@ class ModerationReportReactionsModal(discord.ui.Modal, title="Moderation · Reac
                 await interaction.response.send_message("No puedes repetir el mismo emoji.", ephemeral=True)
                 return
             seen.add(key)
-            parsed.append({"emoji": emoji[:100], "label": label[:100]})
+            previous = next(
+                (dict(item) for item in moderation_report_reactions(self.parent_view.guild_id)
+                 if _moderation_emoji_key(str(item["emoji"])) == key),
+                {},
+            )
+            previous.update({"emoji": emoji[:100], "label": label[:100]})
+            parsed.append(previous)
             if len(parsed) > MODERATION_REPORT_MAX_REACTIONS:
                 await interaction.response.send_message(
                     f"Puedes configurar hasta {MODERATION_REPORT_MAX_REACTIONS} reacciones de reporte.", ephemeral=True
@@ -6055,6 +6075,91 @@ class ModerationReportReactionsModal(discord.ui.Modal, title="Moderation · Reac
                 return
         self.parent_view.pending_reactions = parsed
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
+
+
+class ModerationReportActionsModal(discord.ui.Modal, title="Moderation · Acciones automáticas"):
+    rules = discord.ui.TextInput(
+        label="Emoji | acción | duración | reportes | borrar",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=2000,
+        placeholder="📢 | timeout | 30m | 2 | si\n🚩 | condemn | 1d | 2 | si",
+    )
+
+    def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
+        super().__init__()
+        self.parent_view = parent_view
+        current = parent_view.pending_reactions
+        if current is None:
+            current = moderation_report_reactions(parent_view.guild_id)
+        lines = []
+        for item in current:
+            duration = item.get("duration_minutes")
+            duration_text = format_duration(int(duration)) if duration else "-"
+            delete_text = "si" if item.get("delete_message") else "no"
+            lines.append(
+                f"{item['emoji']} | {item.get('action', 'report')} | {duration_text} | "
+                f"{item.get('threshold', 1)} | {delete_text}"
+            )
+        self.rules.default = "\n".join(lines)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        current = self.parent_view.pending_reactions
+        if current is None:
+            current = moderation_report_reactions(self.parent_view.guild_id)
+        by_emoji = {_moderation_emoji_key(str(item["emoji"])): dict(item) for item in current}
+        for raw_line in str(self.rules).splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            parts = [part.strip() for part in line.split("|")]
+            if len(parts) != 5:
+                await interaction.response.send_message(
+                    "Usa: emoji | acción | duración | reportes | borrar.", ephemeral=True
+                )
+                return
+            emoji, action, duration_raw, threshold_raw, delete_raw = parts
+            key = _moderation_emoji_key(emoji)
+            if key not in by_emoji:
+                await interaction.response.send_message(
+                    f"El emoji {emoji} no existe entre las reacciones configuradas.", ephemeral=True
+                )
+                return
+            action = action.lower()
+            if action not in MODERATION_REPORT_ACTIONS:
+                await interaction.response.send_message(
+                    "Acciones válidas: report, timeout, kick, ban, condemn.", ephemeral=True
+                )
+                return
+            try:
+                threshold = int(threshold_raw)
+                if not 1 <= threshold <= 25:
+                    raise ValueError
+            except ValueError:
+                await interaction.response.send_message("El umbral debe ser un número entre 1 y 25.", ephemeral=True)
+                return
+            duration_minutes = None
+            if duration_raw not in {"", "-", "0", "none", "indefinida"}:
+                try:
+                    duration_minutes = parse_duration(duration_raw, 1, 28 * 24 * 60)
+                except ValueError as exc:
+                    await interaction.response.send_message(f"Duración inválida para {emoji}: {exc}", ephemeral=True)
+                    return
+            if action == "timeout" and duration_minutes is None:
+                await interaction.response.send_message("Timeout requiere una duración.", ephemeral=True)
+                return
+            delete_message = delete_raw.lower() in {"si", "sí", "yes", "1", "true"}
+            by_emoji[key].update(
+                action=action,
+                duration_minutes=duration_minutes,
+                threshold=threshold,
+                delete_message=delete_message,
+            )
+        self.parent_view.pending_reactions = list(by_emoji.values())
+        await interaction.response.edit_message(
+            content=self.parent_view._content(interaction.guild),
+            view=self.parent_view,
+        )
 
 
 class ModerationCondemnEmojiModal(discord.ui.Modal, title="Moderation · Emoji de condena"):
@@ -6139,6 +6244,10 @@ class HeraldoUserReportsSetupView(discord.ui.View):
     @discord.ui.button(label="Editar reacciones", style=discord.ButtonStyle.primary, row=1)
     async def edit_reactions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationReportReactionsModal(self))
+
+    @discord.ui.button(label="Acciones automáticas", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_actions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(ModerationReportActionsModal(self))
 
     @discord.ui.button(label="Emoji de condena", style=discord.ButtonStyle.secondary, row=1)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -8462,11 +8571,12 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
 
 
 MODERATION_REPORT_MAX_REACTIONS = 10
+MODERATION_REPORT_ACTIONS = {"report", "timeout", "kick", "ban", "condemn"}
 MODERATION_REPORT_REACTION_DEFAULTS = (
-    {"emoji": "📢", "label": "Spam"},
-    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido"},
-    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)"},
-    {"emoji": "🔞", "label": "Posible menor de edad"},
+    {"emoji": "📢", "label": "Spam", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
+    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
+    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
+    {"emoji": "🔞", "label": "Posible menor de edad", "action": "report", "duration_minutes": None, "threshold": 1, "delete_message": False},
 )
 _moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
 _reaction_condemn_pending: set[tuple[int, int]] = set()
@@ -8476,11 +8586,40 @@ def _moderation_emoji_key(value: str) -> str:
     return str(value).replace("\ufe0f", "").strip()
 
 
-def _moderation_report_default_reactions() -> list[dict[str, str]]:
+def _moderation_report_default_reactions() -> list[dict[str, object]]:
     return [dict(item) for item in MODERATION_REPORT_REACTION_DEFAULTS]
 
 
-def moderation_report_reactions(guild_id: int) -> list[dict[str, str]]:
+def _normalize_moderation_report_rule(item: dict) -> dict[str, object] | None:
+    emoji = str(item.get("emoji", "")).strip()
+    label = str(item.get("label", "")).strip()
+    if not emoji or not label:
+        return None
+    action = str(item.get("action", "report")).strip().lower()
+    if action not in MODERATION_REPORT_ACTIONS:
+        action = "report"
+    try:
+        threshold = max(1, min(25, int(item.get("threshold", 1))))
+    except (TypeError, ValueError):
+        threshold = 1
+    duration = item.get("duration_minutes")
+    try:
+        duration_minutes = int(duration) if duration not in (None, "", 0, "0") else None
+    except (TypeError, ValueError):
+        duration_minutes = None
+    if duration_minutes is not None:
+        duration_minutes = max(1, min(28 * 24 * 60, duration_minutes))
+    return {
+        "emoji": emoji[:100],
+        "label": label[:100],
+        "action": action,
+        "duration_minutes": duration_minutes,
+        "threshold": threshold,
+        "delete_message": bool(item.get("delete_message", False)),
+    }
+
+
+def moderation_report_reactions(guild_id: int) -> list[dict[str, object]]:
     raw = guild_config_get(guild_id, "moderation_report_reactions")
     if raw is None:
         return _moderation_report_default_reactions()
@@ -8488,37 +8627,153 @@ def moderation_report_reactions(guild_id: int) -> list[dict[str, str]]:
         data = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
         return _moderation_report_default_reactions()
-    result: list[dict[str, str]] = []
+    result: list[dict[str, object]] = []
     seen: set[str] = set()
     for item in data if isinstance(data, list) else []:
         if not isinstance(item, dict):
             continue
-        emoji = str(item.get("emoji", "")).strip()
-        label = str(item.get("label", "")).strip()
-        key = _moderation_emoji_key(emoji)
-        if not emoji or not label or key in seen:
+        normalized = _normalize_moderation_report_rule(item)
+        if normalized is None:
+            continue
+        key = _moderation_emoji_key(str(normalized["emoji"]))
+        if key in seen:
             continue
         seen.add(key)
-        result.append({"emoji": emoji[:100], "label": label[:100]})
+        result.append(normalized)
         if len(result) >= MODERATION_REPORT_MAX_REACTIONS:
             break
     return result
 
 
-def set_moderation_report_reactions(guild_id: int, reactions: list[dict[str, str]]) -> None:
-    clean: list[dict[str, str]] = []
+def set_moderation_report_reactions(guild_id: int, reactions: list[dict]) -> None:
+    clean: list[dict[str, object]] = []
     seen: set[str] = set()
     for item in reactions:
-        emoji = str(item.get("emoji", "")).strip()
-        label = str(item.get("label", "")).strip()
-        key = _moderation_emoji_key(emoji)
-        if not emoji or not label or key in seen:
+        normalized = _normalize_moderation_report_rule(item)
+        if normalized is None:
+            continue
+        key = _moderation_emoji_key(str(normalized["emoji"]))
+        if key in seen:
             continue
         seen.add(key)
-        clean.append({"emoji": emoji[:100], "label": label[:100]})
+        clean.append(normalized)
         if len(clean) >= MODERATION_REPORT_MAX_REACTIONS:
             break
     guild_config_set(guild_id, "moderation_report_reactions", json.dumps(clean, ensure_ascii=False))
+
+
+def moderation_report_rule_for_emoji(guild_id: int, emoji: str) -> dict[str, object] | None:
+    key = _moderation_emoji_key(emoji)
+    for item in moderation_report_reactions(guild_id):
+        if _moderation_emoji_key(str(item["emoji"])) == key:
+            return item
+    return None
+
+
+def moderation_report_type_for_emoji(guild_id: int, emoji: str) -> str | None:
+    rule = moderation_report_rule_for_emoji(guild_id, emoji)
+    return str(rule["label"]) if rule else None
+
+
+def moderation_report_record(
+    guild_id: int, message_id: int, target_id: int, emoji_key: str, reporter_id: int
+) -> tuple[int, bool]:
+    conn = db_connect()
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT OR IGNORE INTO moderation_reaction_reports "
+        "(guild_id, message_id, target_id, emoji_key, reporter_id, created_at, action_executed) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0)",
+        (guild_id, message_id, target_id, emoji_key, reporter_id, now),
+    )
+    row = conn.execute(
+        "SELECT COUNT(*), MAX(action_executed) FROM moderation_reaction_reports "
+        "WHERE guild_id = ? AND message_id = ? AND target_id = ? AND emoji_key = ?",
+        (guild_id, message_id, target_id, emoji_key),
+    ).fetchone()
+    conn.close()
+    return int(row[0]), bool(row[1])
+
+
+def moderation_report_mark_executed(guild_id: int, message_id: int, target_id: int, emoji_key: str) -> None:
+    conn = db_connect()
+    conn.execute(
+        "UPDATE moderation_reaction_reports SET action_executed = 1 "
+        "WHERE guild_id = ? AND message_id = ? AND target_id = ? AND emoji_key = ?",
+        (guild_id, message_id, target_id, emoji_key),
+    )
+    conn.close()
+
+
+def moderation_action_label(action: str) -> str:
+    return {
+        "report": "Solo reportar",
+        "timeout": "Timeout / mute",
+        "kick": "Expulsar",
+        "ban": "Banear",
+        "condemn": "Condenar",
+    }.get(action, action)
+
+
+async def execute_moderation_report_action(
+    guild: discord.Guild,
+    target: discord.Member,
+    message: discord.Message,
+    rule: dict[str, object],
+    reporter_count: int,
+) -> tuple[bool, str]:
+    action = str(rule.get("action", "report"))
+    delete_message = bool(rule.get("delete_message", False))
+    duration_minutes = rule.get("duration_minutes")
+    duration_minutes = int(duration_minutes) if duration_minutes else None
+    reason = f"Reporte automático: {rule.get('label', 'reporte')} · {reporter_count} reporte(s) distintos"
+
+    protection = condemnation_protection_reason(target)
+    if action != "report" and protection:
+        return False, f"Acción bloqueada: {protection}."
+
+    notes: list[str] = []
+    if delete_message:
+        try:
+            await message.delete(reason=reason)
+            notes.append("mensaje eliminado")
+        except discord.HTTPException:
+            notes.append("no pude eliminar el mensaje")
+
+    if action == "report":
+        return True, "; ".join(notes) if notes else "solo registrado"
+
+    try:
+        if action == "timeout":
+            if duration_minutes is None:
+                duration_minutes = 30
+            until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
+            await target.timeout(until, reason=reason)
+            notes.append(f"timeout {format_duration(duration_minutes)}")
+        elif action == "kick":
+            await target.kick(reason=reason)
+            notes.append("miembro expulsado")
+        elif action == "ban":
+            await target.ban(reason=reason, delete_message_seconds=0)
+            notes.append("miembro baneado")
+        elif action == "condemn":
+            ok, note = await condemn_member(
+                target,
+                reason=reason,
+                duration_minutes=duration_minutes or condemnation_default_duration_minutes(guild.id),
+                purge_spec=None,
+                origin="reaction_report",
+                applied_by=None,
+                source_message_url=message.jump_url,
+                source_channel_id=message.channel.id,
+            )
+            if not ok:
+                return False, note
+            notes.append("condena aplicada")
+    except discord.HTTPException as exc:
+        return False, f"Discord rechazó la acción: {exc}"
+
+    return True, "; ".join(notes) if notes else moderation_action_label(action)
 
 
 def moderation_report_channel_id(guild_id: int) -> int:
@@ -8552,7 +8807,14 @@ def moderation_reports_summary(guild: discord.Guild) -> str:
     channel_id = moderation_report_channel_id(guild.id)
     channel = guild.get_channel(channel_id) if channel_id else None
     mappings = moderation_report_reactions(guild.id)
-    mapping_text = "\n".join(f"• {item['emoji']} → **{item['label']}**" for item in mappings) or "• Sin reacciones configuradas"
+    def rule_line(item: dict[str, object]) -> str:
+        action = moderation_action_label(str(item.get("action", "report")))
+        threshold = int(item.get("threshold", 1))
+        duration = item.get("duration_minutes")
+        duration_text = f" · {format_duration(int(duration))}" if duration else ""
+        delete_text = " · borrar mensaje" if item.get("delete_message") else ""
+        return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){delete_text}"
+    mapping_text = "\n".join(rule_line(item) for item in mappings) or "• Sin reacciones configuradas"
     return (
         f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
         f"**Reacciones de reporte:**\n{mapping_text}\n"
@@ -10654,8 +10916,9 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
     emoji = str(payload.emoji)
     condemn_emoji = get_condemnation_emoji(guild.id)
     is_condemn = _moderation_emoji_key(emoji) == _moderation_emoji_key(condemn_emoji)
-    report_type = moderation_report_type_for_emoji(guild.id, emoji)
-    if not is_condemn and report_type is None:
+    report_rule = moderation_report_rule_for_emoji(guild.id, emoji)
+    report_type = str(report_rule["label"]) if report_rule else None
+    if not is_condemn and report_rule is None:
         return
 
     channel = guild.get_channel_or_thread(payload.channel_id)
@@ -10707,6 +10970,11 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
     if last is not None and now - last < 3600:
         return
     _moderation_report_dedupe[dedupe_key] = now
+    emoji_key = _moderation_emoji_key(emoji)
+    reporter_count, action_executed = moderation_report_record(
+        guild.id, message.id, target.id, emoji_key, actor.id
+    )
+    threshold = int(report_rule.get("threshold", 1)) if report_rule else 1
     if len(_moderation_report_dedupe) > 5000:
         cutoff = now - 3600
         for key, stamp in list(_moderation_report_dedupe.items()):
@@ -10728,10 +10996,27 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
         attachments = "\n".join(a.url for a in message.attachments[:5])
         embed.add_field(name="Adjuntos", value=attachments[:1024], inline=False)
     embed.add_field(name="Referencia", value=f"[Abrir mensaje]({message.jump_url})", inline=False)
+    embed.add_field(name="Reportes distintos", value=f"{reporter_count}/{threshold}", inline=True)
+    embed.add_field(
+        name="Acción configurada",
+        value=moderation_action_label(str(report_rule.get("action", "report"))) if report_rule else "Solo reportar",
+        inline=True,
+    )
     try:
         await report_channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         _moderation_report_dedupe.pop(dedupe_key, None)
+
+    if report_rule and reporter_count >= threshold and not action_executed:
+        ok, note = await execute_moderation_report_action(guild, target, message, report_rule, reporter_count)
+        if ok:
+            moderation_report_mark_executed(guild.id, message.id, target.id, emoji_key)
+        await log_embed(
+            guild,
+            "Moderation · Acción automática de reporte" if ok else "Moderation · Acción automática rechazada",
+            f"{target.mention} · {report_type}\nReportes: {reporter_count}/{threshold}\nResultado: {note}\n{message.jump_url}",
+            discord.Color.green() if ok else discord.Color.orange(),
+        )
 
 
 class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción"):
