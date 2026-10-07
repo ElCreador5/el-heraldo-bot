@@ -3551,39 +3551,95 @@ def _build_condemnation_embed(
 class CondemnationPardonView(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
-        button = discord.ui.Button(label="🕊️ Perdonar", style=discord.ButtonStyle.success, custom_id="heraldo:condemnation:pardon")
+        button = discord.ui.Button(
+            label="🕊️ Perdonar",
+            style=discord.ButtonStyle.success,
+            custom_id="heraldo:condemnation:pardon",
+        )
         button.callback = self.pardon_callback
         self.add_item(button)
 
     async def pardon_callback(self, interaction: discord.Interaction) -> None:
+        # Acknowledge the interaction immediately. Si cualquier paso posterior
+        # falla, Discord no mostrará "La aplicación no respondió".
         if interaction.guild is None or interaction.message is None:
-            await interaction.response.send_message("❌ Este botón solo funciona dentro del servidor.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Este botón solo funciona dentro del servidor.",
+                ephemeral=True,
+            )
             return
-        mentions = interaction.message.mentions
-        if not mentions:
-            await interaction.response.send_message("❌ No pude identificar al condenado asociado a este expediente.", ephemeral=True)
-            return
-        member = interaction.guild.get_member(mentions[0].id)
-        if member is None:
+
+        try:
+            await interaction.response.defer(ephemeral=True)
+
+            mentions = interaction.message.mentions
+            if not mentions:
+                await interaction.followup.send(
+                    "❌ No pude identificar al condenado asociado a este expediente.",
+                    ephemeral=True,
+                )
+                return
+
+            member = interaction.guild.get_member(mentions[0].id)
+            if member is None:
+                try:
+                    member = await interaction.guild.fetch_member(mentions[0].id)
+                except discord.HTTPException:
+                    member = None
+
+            if member is None:
+                await interaction.followup.send(
+                    "❌ Ese miembro ya no está disponible en el servidor.",
+                    ephemeral=True,
+                )
+                return
+
+            row = condemnation_get(member.id)
+            if row is None:
+                await interaction.followup.send(
+                    "ℹ️ Este expediente ya no tiene una condena activa.",
+                    ephemeral=True,
+                )
+                return
+
+            is_admin = bool(
+                getattr(interaction.user.guild_permissions, "administrator", False)
+            )
+            is_condemner = (
+                row["applied_by"] is not None
+                and int(row["applied_by"]) == interaction.user.id
+            )
+            if not (is_admin or is_condemner):
+                await interaction.followup.send(
+                    "⛔ No puedes perdonar esta condena. Solo puede hacerlo quien la aplicó o un administrador.",
+                    ephemeral=True,
+                )
+                return
+
+            ok, note = await release_condemned_member(
+                member,
+                released_by=interaction.user,
+                pardon=True,
+            )
+            await interaction.followup.send(
+                ("🕊️ " if ok else "❌ ") + note,
+                ephemeral=True,
+            )
+        except Exception:
+            traceback.print_exc()
             try:
-                member = await interaction.guild.fetch_member(mentions[0].id)
-            except discord.HTTPException:
-                member = None
-        if member is None:
-            await interaction.response.send_message("❌ Ese miembro ya no está disponible en el servidor.", ephemeral=True)
-            return
-        row = condemnation_get(member.id)
-        if row is None:
-            await interaction.response.send_message("ℹ️ Este expediente ya no tiene una condena activa.", ephemeral=True)
-            return
-        is_admin = bool(getattr(interaction.user.guild_permissions, "administrator", False))
-        is_condemner = row["applied_by"] is not None and int(row["applied_by"]) == interaction.user.id
-        if not (is_admin or is_condemner):
-            await interaction.response.send_message("⛔ No puedes perdonar esta condena. Solo puede hacerlo quien la aplicó o un administrador.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        ok, note = await release_condemned_member(member, released_by=interaction.user, pardon=True)
-        await interaction.followup.send(("🕊️ " if ok else "❌ ") + note, ephemeral=True)
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        "❌ Ocurrió un error al procesar el perdón. El error quedó registrado en los logs del bot.",
+                        ephemeral=True,
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "❌ Ocurrió un error al procesar el perdón. El error quedó registrado en los logs del bot.",
+                        ephemeral=True,
+                    )
+            except Exception:
+                traceback.print_exc()
 
 
 async def condemnation_send_dm(
