@@ -152,10 +152,9 @@ VERIFICATION_WINDOW = timedelta(minutes=10)
 
 # --- Orientación / Reaction Roles ------------------------------------------
 # El Heraldo NO crea, renombra ni elimina roles. El administrador selecciona
-# entre 1 y 6 roles ya existentes y define un emoji para cada uno.
+# entre 1 y 6 roles existentes; el emoji se obtiene automáticamente del propio rol.
 ORIENTATION_MIN_ROLES = 1
 ORIENTATION_MAX_ROLES = 6
-ORIENTATION_FALLBACK_EMOJIS = ("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣")
 # Definiciones antiguas conservadas únicamente para migrar instalaciones previas.
 ORIENTATION_ROLE_DEFINITIONS = (
     ("orientation_rr_hetero", "Hetero", "🍑"),
@@ -795,12 +794,31 @@ def _orientation_emoji_key(value: str) -> str:
     return value.replace("\ufe0f", "").strip()
 
 
-def _orientation_guess_emoji(role_name: str, fallback: str) -> str:
-    """Intenta reutilizar un emoji visible del nombre; si no, usa uno numérico."""
-    for char in reversed(role_name):
-        if unicodedata.category(char) in {"So", "Sk"} and not char.isspace():
-            return char
-    return fallback
+def _orientation_role_emoji(role: discord.Role) -> str | None:
+    """Obtiene el emoji del propio rol: icono Unicode del rol o emoji en su nombre."""
+    role_unicode = getattr(role, "unicode_emoji", None)
+    if role_unicode:
+        return str(role_unicode).strip()
+
+    name = role.name
+    # Banderas (dos indicadores regionales).
+    flag_matches = re.findall(r"[\U0001F1E6-\U0001F1FF]{2}", name)
+    if flag_matches:
+        return flag_matches[-1]
+
+    # Emojis Unicode comunes, incluyendo VS16, modificador de piel y secuencias ZWJ.
+    emoji_pattern = re.compile(
+        r"(?:"
+        r"[\U0001F300-\U0001FAFF]"
+        r"|[\u2600-\u27BF]"
+        r")"
+        r"(?:\uFE0F|\uFE0E)?"
+        r"(?:[\U0001F3FB-\U0001F3FF])?"
+        r"(?:\u200D(?:[\U0001F300-\U0001FAFF]|[\u2600-\u27BF])"
+        r"(?:\uFE0F|\uFE0E)?(?:[\U0001F3FB-\U0001F3FF])?)*"
+    )
+    matches = emoji_pattern.findall(name)
+    return matches[-1] if matches else None
 
 
 def get_orientation_bindings(guild_id: int) -> list[dict[str, object]]:
@@ -820,14 +838,13 @@ def get_orientation_bindings(guild_id: int) -> list[dict[str, object]]:
 
     # Migración suave desde la versión anterior: conserva los cuatro enlaces
     # existentes como selección inicial, sin volver a administrar esos roles.
+    # Los enlaces antiguos se migran con el emoji histórico solo hasta que el
+    # administrador vuelva a seleccionar los roles desde el nuevo panel.
     migrated: list[dict[str, object]] = []
-    for index, (key, _label, emoji) in enumerate(ORIENTATION_ROLE_DEFINITIONS):
+    for key, _label, emoji in ORIENTATION_ROLE_DEFINITIONS:
         role_id = guild_resource_get(guild_id, "role", key)
         if role_id:
-            migrated.append({
-                "role_id": int(role_id),
-                "emoji": emoji or ORIENTATION_FALLBACK_EMOJIS[index],
-            })
+            migrated.append({"role_id": int(role_id), "emoji": emoji})
     return migrated[:ORIENTATION_MAX_ROLES]
 
 
@@ -878,7 +895,7 @@ def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
     for binding in get_orientation_bindings(guild.id):
         role = guild.get_role(int(binding["role_id"]))
         if role is not None:
-            option_lines.append(f"{binding['emoji']}  {role.name}")
+            option_lines.append(f"{binding['emoji']}  {role.mention}")
 
     description = get_orientation_embed_intro(guild.id).strip()
     if option_lines:
@@ -917,7 +934,7 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
         + role_text
         + "\n\n**Cómo funciona:** El Heraldo establece un sistema para la selección de roles "
           "obligatorios usando **roles que ya existen en tu servidor**. Puedes seleccionar de **1 a 6** "
-          "roles y definir un emoji para cada uno. El Heraldo no crea, renombra ni elimina esos roles. "
+          "roles; El Heraldo toma automáticamente el emoji incluido en cada rol. No crea, renombra ni elimina esos roles. "
           "Estos roles complementan la verificación, ayudan a garantizar participación dentro del servidor "
           "y sirven como una señal adicional de que el miembro es humano.\n\n"
           "• Después de verificar su edad, el miembro debe seleccionar uno de los roles configurados "
@@ -2168,72 +2185,6 @@ class HeraldoRoleSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
-class OrientationEmojiModal(discord.ui.Modal):
-    def __init__(self, guild: discord.Guild, page: int) -> None:
-        if page not in (1, 2):
-            raise ValueError("Página de emojis de orientación inválida")
-        super().__init__(title=f"Emojis de orientación · {page}/2")
-        self.guild_id = guild.id
-        self.page = page
-        self.bindings = get_orientation_bindings(guild.id)
-        start = 0 if page == 1 else 3
-        self.indexes = list(range(start, min(start + 3, len(self.bindings))))
-        self.inputs: list[discord.ui.TextInput] = []
-
-        for index in self.indexes:
-            binding = self.bindings[index]
-            role = guild.get_role(int(binding["role_id"]))
-            label = role.name if role else f"Rol {index + 1}"
-            field = discord.ui.TextInput(
-                label=label[:45],
-                default=str(binding["emoji"]),
-                required=True,
-                max_length=100,
-                placeholder="Pega un emoji, por ejemplo 🍑",
-            )
-            self.inputs.append(field)
-            self.add_item(field)
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        if not self.indexes:
-            await interaction.response.send_message(
-                "ℹ️ No hay roles en esta página. Selecciona primero los roles.",
-                ephemeral=True,
-            )
-            return
-
-        previous = [dict(item) for item in self.bindings]
-        updated = [dict(item) for item in self.bindings]
-        for index, field in zip(self.indexes, self.inputs):
-            emoji = str(field).strip()
-            if not emoji:
-                await interaction.response.send_message("❌ El emoji no puede quedar vacío.", ephemeral=True)
-                return
-            updated[index]["emoji"] = emoji
-
-        keys = [_orientation_emoji_key(str(item["emoji"])) for item in updated]
-        if len(keys) != len(set(keys)):
-            await interaction.response.send_message(
-                "❌ Cada rol necesita un emoji diferente.",
-                ephemeral=True,
-            )
-            return
-
-        set_orientation_bindings(self.guild_id, updated)
-        await interaction.response.defer(ephemeral=True)
-        if orientation_enabled(self.guild_id):
-            ok, note = await ensure_orientation_system(interaction.guild)
-            if not ok:
-                set_orientation_bindings(self.guild_id, previous)
-                await ensure_orientation_system(interaction.guild)
-                await interaction.followup.send(
-                    f"❌ No pude usar esa configuración de emojis: {note}",
-                    ephemeral=True,
-                )
-                return
-        await interaction.followup.send("✅ Emojis actualizados.", ephemeral=True)
-
-
 class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientación"):
     title_input = discord.ui.TextInput(
         label="Título",
@@ -2323,7 +2274,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.add_item(channel_select)
 
         role_select = discord.ui.RoleSelect(
-            placeholder="Selecciona de 1 a 6 roles existentes",
+            placeholder="Selecciona 1–6 roles existentes con emoji",
             min_values=ORIENTATION_MIN_ROLES,
             max_values=ORIENTATION_MAX_ROLES,
             row=1,
@@ -2373,22 +2324,37 @@ class HeraldoOrientationSetupView(discord.ui.View):
             )
             return
 
-        previous_by_role = {
-            int(item["role_id"]): str(item["emoji"])
-            for item in get_orientation_bindings(self.guild_id)
-        }
         used: set[str] = set()
         bindings: list[dict[str, object]] = []
-        for index, role in enumerate(roles):
-            emoji = previous_by_role.get(role.id)
+        missing_emoji: list[str] = []
+        duplicate_emoji: list[str] = []
+        for role in roles:
+            emoji = _orientation_role_emoji(role)
             if not emoji:
-                emoji = _orientation_guess_emoji(role.name, ORIENTATION_FALLBACK_EMOJIS[index])
+                missing_emoji.append(role.mention)
+                continue
             key = _orientation_emoji_key(emoji)
             if key in used:
-                emoji = ORIENTATION_FALLBACK_EMOJIS[index]
-                key = _orientation_emoji_key(emoji)
+                duplicate_emoji.append(f"{role.mention} ({emoji})")
+                continue
             used.add(key)
             bindings.append({"role_id": role.id, "emoji": emoji})
+
+        if missing_emoji:
+            await interaction.response.send_message(
+                "❌ Estos roles no contienen un emoji utilizable: "
+                + ", ".join(missing_emoji)
+                + ". Añade un emoji al nombre del rol (o un emoji Unicode de rol) y vuelve a seleccionarlos.",
+                ephemeral=True,
+            )
+            return
+        if duplicate_emoji:
+            await interaction.response.send_message(
+                "❌ Cada Reaction Role necesita un emoji diferente. Revisa: "
+                + ", ".join(duplicate_emoji),
+                ephemeral=True,
+            )
+            return
 
         previous = get_orientation_bindings(self.guild_id)
         set_orientation_bindings(self.guild_id, bindings)
@@ -2468,21 +2434,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
-    @discord.ui.button(label="😀 Emojis 1/2", style=discord.ButtonStyle.secondary, row=3)
-    async def edit_emojis_1(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not get_orientation_bindings(self.guild_id):
-            await interaction.response.send_message("❌ Selecciona primero los roles.", ephemeral=True)
-            return
-        await interaction.response.send_modal(OrientationEmojiModal(interaction.guild, 1))
-
-    @discord.ui.button(label="😀 Emojis 2/2", style=discord.ButtonStyle.secondary, row=3)
-    async def edit_emojis_2(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if len(get_orientation_bindings(self.guild_id)) <= 3:
-            await interaction.response.send_message("ℹ️ No tienes roles en la segunda página.", ephemeral=True)
-            return
-        await interaction.response.send_modal(OrientationEmojiModal(interaction.guild, 2))
-
-    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
