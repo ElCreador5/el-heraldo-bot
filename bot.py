@@ -6079,11 +6079,11 @@ class ModerationReportReactionsModal(discord.ui.Modal, title="Moderation · Reac
 
 class ModerationReportActionsModal(discord.ui.Modal, title="Moderation · Acciones automáticas"):
     rules = discord.ui.TextInput(
-        label="Emoji | acción | duración | reportes | borrar",
+        label="Emoji | acción | duración | reportes | purga",
         style=discord.TextStyle.paragraph,
         required=False,
         max_length=2000,
-        placeholder="📢 | timeout | 30m | 2 | si\n🚩 | condemn | 1d | 2 | si",
+        placeholder="📢 | timeout | 30m | 2 | 30m\n🚩 | condemn | 1d | 3 | 30m",
     )
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
@@ -6096,10 +6096,11 @@ class ModerationReportActionsModal(discord.ui.Modal, title="Moderation · Accion
         for item in current:
             duration = item.get("duration_minutes")
             duration_text = format_duration(int(duration)) if duration else "-"
-            delete_text = "si" if item.get("delete_message") else "no"
+            purge = item.get("purge_minutes")
+            purge_text = format_duration(int(purge)) if purge else "-"
             lines.append(
                 f"{item['emoji']} | {item.get('action', 'report')} | {duration_text} | "
-                f"{item.get('threshold', 1)} | {delete_text}"
+                f"{item.get('threshold', 1)} | {purge_text}"
             )
         self.rules.default = "\n".join(lines)
 
@@ -6115,10 +6116,10 @@ class ModerationReportActionsModal(discord.ui.Modal, title="Moderation · Accion
             parts = [part.strip() for part in line.split("|")]
             if len(parts) != 5:
                 await interaction.response.send_message(
-                    "Usa: emoji | acción | duración | reportes | borrar.", ephemeral=True
+                    "Usa: emoji | acción | duración | reportes | purga.", ephemeral=True
                 )
                 return
-            emoji, action, duration_raw, threshold_raw, delete_raw = parts
+            emoji, action, duration_raw, threshold_raw, purge_raw = parts
             key = _moderation_emoji_key(emoji)
             if key not in by_emoji:
                 await interaction.response.send_message(
@@ -6148,12 +6149,21 @@ class ModerationReportActionsModal(discord.ui.Modal, title="Moderation · Accion
             if action == "timeout" and duration_minutes is None:
                 await interaction.response.send_message("Timeout requiere una duración.", ephemeral=True)
                 return
-            delete_message = delete_raw.lower() in {"si", "sí", "yes", "1", "true"}
+            purge_minutes = None
+            if purge_raw.lower() not in {"", "-", "0", "none", "no"}:
+                try:
+                    kind, purge_value = parse_purge_spec(purge_raw)
+                    if kind != "time":
+                        raise ValueError("La purga automática debe expresarse como tiempo, por ejemplo 30m o 2h.")
+                    purge_minutes = purge_value
+                except ValueError as exc:
+                    await interaction.response.send_message(f"Purga inválida para {emoji}: {exc}", ephemeral=True)
+                    return
             by_emoji[key].update(
                 action=action,
                 duration_minutes=duration_minutes,
                 threshold=threshold,
-                delete_message=delete_message,
+                purge_minutes=purge_minutes,
             )
         self.parent_view.pending_reactions = list(by_emoji.values())
         await interaction.response.edit_message(
@@ -8573,10 +8583,10 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
 MODERATION_REPORT_MAX_REACTIONS = 10
 MODERATION_REPORT_ACTIONS = {"report", "timeout", "kick", "ban", "condemn"}
 MODERATION_REPORT_REACTION_DEFAULTS = (
-    {"emoji": "📢", "label": "Spam", "action": "timeout", "duration_minutes": 30, "threshold": 2, "delete_message": True},
-    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido", "action": "condemn", "duration_minutes": 1440, "threshold": 3, "delete_message": True},
-    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)", "action": "condemn", "duration_minutes": None, "threshold": 2, "delete_message": True},
-    {"emoji": "🔞", "label": "Posible menor de edad", "action": "ban", "duration_minutes": None, "threshold": 2, "delete_message": True},
+    {"emoji": "📢", "label": "Spam", "action": "timeout", "duration_minutes": 30, "threshold": 2, "purge_minutes": 30},
+    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido", "action": "condemn", "duration_minutes": 1440, "threshold": 3, "purge_minutes": 30},
+    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)", "action": "condemn", "duration_minutes": None, "threshold": 2, "purge_minutes": 30},
+    {"emoji": "🔞", "label": "Posible menor de edad", "action": "ban", "duration_minutes": None, "threshold": 2, "purge_minutes": 30},
 )
 _moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
 _reaction_condemn_pending: set[tuple[int, int]] = set()
@@ -8609,13 +8619,23 @@ def _normalize_moderation_report_rule(item: dict) -> dict[str, object] | None:
         duration_minutes = None
     if duration_minutes is not None:
         duration_minutes = max(1, min(28 * 24 * 60, duration_minutes))
+    purge_raw = item.get("purge_minutes")
+    if purge_raw in (None, "", 0, "0") and item.get("delete_message"):
+        # Compatibilidad con la versión anterior: "borrar mensaje" pasa a una purga reciente.
+        purge_raw = 30
+    try:
+        purge_minutes = int(purge_raw) if purge_raw not in (None, "", 0, "0") else None
+    except (TypeError, ValueError):
+        purge_minutes = None
+    if purge_minutes is not None:
+        purge_minutes = max(1, min(PURGE_MAX_MINUTES, purge_minutes))
     return {
         "emoji": emoji[:100],
         "label": label[:100],
         "action": action,
         "duration_minutes": duration_minutes,
         "threshold": threshold,
-        "delete_message": bool(item.get("delete_message", False)),
+        "purge_minutes": purge_minutes,
     }
 
 
@@ -8723,7 +8743,8 @@ async def execute_moderation_report_action(
     reporter_count: int,
 ) -> tuple[bool, str]:
     action = str(rule.get("action", "report"))
-    delete_message = bool(rule.get("delete_message", False))
+    purge_minutes = rule.get("purge_minutes")
+    purge_minutes = int(purge_minutes) if purge_minutes else None
     duration_minutes = rule.get("duration_minutes")
     duration_minutes = int(duration_minutes) if duration_minutes else None
     reason = f"Reporte automático: {rule.get('label', 'reporte')} · {reporter_count} reporte(s) distintos"
@@ -8733,12 +8754,20 @@ async def execute_moderation_report_action(
         return False, f"Acción bloqueada: {protection}."
 
     notes: list[str] = []
-    if delete_message:
-        try:
-            await message.delete(reason=reason)
-            notes.append("mensaje eliminado")
-        except discord.HTTPException:
-            notes.append("no pude eliminar el mensaje")
+    if purge_minutes:
+        after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
+        result = await run_purge_job(
+            guild,
+            target,
+            scope_text=f"mensajes de los últimos {format_duration(purge_minutes)}",
+            requested_by=f"Moderation · {rule.get('label', 'reporte')}",
+            after=after,
+            title="Moderation · Purga automática completada",
+        )
+        if result is None:
+            notes.append("purga ya en curso")
+        else:
+            notes.append(f"purga reciente: {purge_result_text(result)}")
 
     if action == "report":
         return True, "; ".join(notes) if notes else "solo registrado"
@@ -8812,8 +8841,9 @@ def moderation_reports_summary(guild: discord.Guild) -> str:
         threshold = int(item.get("threshold", 1))
         duration = item.get("duration_minutes")
         duration_text = f" · {format_duration(int(duration))}" if duration else ""
-        delete_text = " · borrar mensaje" if item.get("delete_message") else ""
-        return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){delete_text}"
+        purge = item.get("purge_minutes")
+        purge_text = f" · purgar {format_duration(int(purge))}" if purge else ""
+        return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){purge_text}"
     mapping_text = "\n".join(rule_line(item) for item in mappings) or "• Sin reacciones configuradas"
     return (
         f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
