@@ -821,10 +821,10 @@ def get_verify_success_text(guild_id: int | None = None) -> str:
 VERIFY_DM_TITLE_DEFAULT = "HAS CRUZADO EL UMBRAL"
 VERIFY_DM_BODY_DEFAULT = (
     "Pero antes de que puedas perderte entre las puertas del paraíso, hay dos pasos que separan a los curiosos de los que realmente pertenecen:\n\n"
-    "🔒 **Verifícate** en <#1547500809015660585> — sin esto, sigues del otro lado del portón.\n\n"
-    "🎭 Luego, en <#1522863826545016913>, elige quién eres cuando nadie está mirando: Hetero, Curios@, Bi, Gay o Trans.\n\n"
+    "🔒 **Verifícate** en el canal de verificación — sin esto, sigues del otro lado del portón.\n\n"
+    "🎭 Luego, elige tus roles de orientación cuando nadie está mirando.\n\n"
     "Cada rol abre una puerta distinta. Elige bien.\n\n"
-    "¿Dudas? <#1543412172158271560> te está esperando."
+    "¿Dudas? Revisa el canal de dudas del servidor."
 )
 VERIFY_DM_FIELD_NAME_DEFAULT = "Este no es un lugar cualquiera"
 VERIFY_DM_FOOTER_DEFAULT = "© Paraíso Morboso 🍑🍆🥛"
@@ -1773,7 +1773,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
             )
 
     await interaction.followup.send(
-        render_vars(get_verify_success_text(), VarContext(guild, member, interaction.channel), 2000),
+        render_vars(get_verify_success_text(guild.id), VarContext(guild, member, interaction.channel), 2000),
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
 
