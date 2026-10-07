@@ -2844,6 +2844,327 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
         )
 
 
+MESSAGE_STUDIO_LABELS = {
+    "verification": "✅ Panel de verificación",
+    "verify_dm": "📩 DM de verificación",
+    "suggestions": "💡 Panel de sugerencias",
+    "honeypot": "🍯 Aviso del Honeypot",
+    "condemnation": "☠️ Tarjeta de condenados",
+}
+
+MESSAGE_STUDIO_VARIABLE_CONTEXT = {
+    "verification": (
+        "El mensaje del panel recibe contexto de servidor y canal. "
+        "El mensaje de éxito recibe además el miembro que se verificó."
+    ),
+    "verify_dm": (
+        "Este DM recibe contexto de servidor y del miembro verificado. "
+        "No depende de un canal del servidor."
+    ),
+    "suggestions": (
+        "El panel persistente se renderiza con contexto del servidor. "
+        "Usa variables de servidor e imágenes como {servericon} o {serverbanner}."
+    ),
+    "honeypot": (
+        "El aviso fijado recibe contexto del servidor y del canal trampa donde está publicado."
+    ),
+    "condemnation": (
+        "La tarjeta real recibe los datos del caso, del condenado y del moderador. "
+        "La vista previa usa datos de ejemplo sin tocar ningún caso real."
+    ),
+}
+
+
+def message_studio_preview(
+    kind: str,
+    guild: discord.Guild,
+    user: discord.Member,
+    channel: discord.abc.GuildChannel | None,
+) -> discord.Embed:
+    if kind == "verification":
+        rendered = render_vars(
+            get_verify_panel_text(guild.id),
+            VarContext(guild, None, channel),
+            2000,
+        )
+        return stamp_embed(_content_embed(rendered), guild)
+    if kind == "verify_dm":
+        return build_verification_welcome_embed(member=user, guild=guild)
+    if kind == "suggestions":
+        return suggestion_panel_embed(guild)
+    if kind == "honeypot":
+        if channel is not None and getattr(channel, "guild", None) == guild:
+            return hp_warning_embed(channel)
+        cfg = hp_warning_custom(guild.id)
+        try:
+            color = discord.Color(int(cfg["color"].lstrip("#"), 16))
+        except (TypeError, ValueError):
+            color = discord.Color.gold()
+        embed = discord.Embed(
+            title=render_vars(cfg["title"], VarContext(guild), 256),
+            description=render_vars(cfg["description"], VarContext(guild), 4096),
+            color=color,
+        )
+        image = render_url_var(cfg["image"], VarContext(guild)) if cfg["image"] else ""
+        if image:
+            embed.set_image(url=image)
+        thumbnail = render_url_var(cfg["thumbnail"], VarContext(guild)) if cfg["thumbnail"] else ""
+        if thumbnail:
+            embed.set_thumbnail(url=thumbnail)
+        footer = render_vars(cfg["footer"], VarContext(guild), 2048) if cfg["footer"] else ""
+        if footer:
+            embed.set_footer(text=footer)
+        return embed
+    if kind == "condemnation":
+        return condemnation_template_preview(guild, user)
+    raise ValueError(f"Tipo de mensaje no soportado: {kind}")
+
+
+def message_studio_content(kind: str, mode: str = "preview", notice: str | None = None) -> str:
+    label = MESSAGE_STUDIO_LABELS.get(kind, kind)
+    if mode == "edit":
+        body = (
+            f"✏️ **Edit · {label}**\n"
+            "Modifica únicamente propiedades que este mensaje usa de verdad. "
+            "Los cambios se guardan por servidor."
+        )
+    elif mode == "variables":
+        body = (
+            f"🧩 **Variables · {label}**\n"
+            f"{MESSAGE_STUDIO_VARIABLE_CONTEXT.get(kind, '')}\n\n"
+            "Consulta el catálogo completo con /list variables. "
+            "Una variable que no tenga el contexto necesario queda sin resolver."
+        )
+    else:
+        body = (
+            f"👁️ **Preview · {label}**\n"
+            "Vista previa con la configuración guardada actualmente."
+        )
+    return (f"✅ {notice}\n\n" if notice else "") + body
+
+
+class DefaultMessageStudioView(discord.ui.View):
+    def __init__(
+        self,
+        guild_id: int,
+        owner_id: int,
+        kind: str,
+        mode: str = "preview",
+        return_to: str = "messages_command",
+    ) -> None:
+        super().__init__(timeout=900)
+        if kind not in MESSAGE_STUDIO_LABELS:
+            raise ValueError(f"Mensaje no soportado: {kind}")
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.kind = kind
+        self.mode = mode if mode in {"preview", "edit", "variables"} else "preview"
+        self.return_to = return_to
+
+        preview_btn = discord.ui.Button(
+            label="👁️ Preview",
+            style=discord.ButtonStyle.primary if self.mode == "preview" else discord.ButtonStyle.secondary,
+            row=0,
+            disabled=self.mode == "preview",
+        )
+        preview_btn.callback = self.show_preview
+        self.add_item(preview_btn)
+
+        edit_btn = discord.ui.Button(
+            label="✏️ Edit",
+            style=discord.ButtonStyle.primary if self.mode == "edit" else discord.ButtonStyle.secondary,
+            row=0,
+            disabled=self.mode == "edit",
+        )
+        edit_btn.callback = self.show_edit
+        self.add_item(edit_btn)
+
+        vars_btn = discord.ui.Button(
+            label="🧩 Variables",
+            style=discord.ButtonStyle.primary if self.mode == "variables" else discord.ButtonStyle.secondary,
+            row=0,
+            disabled=self.mode == "variables",
+        )
+        vars_btn.callback = self.show_variables
+        self.add_item(vars_btn)
+
+        back_btn = discord.ui.Button(label="⬅️ Volver", style=discord.ButtonStyle.secondary, row=0)
+        back_btn.callback = self.go_back
+        self.add_item(back_btn)
+
+        if self.mode == "edit":
+            self._add_edit_controls()
+        elif self.mode == "preview":
+            self._add_component_preview()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    async def _switch(self, interaction: discord.Interaction, mode: str) -> None:
+        embed = message_studio_preview(
+            self.kind,
+            interaction.guild,
+            interaction.user,
+            interaction.channel,
+        )
+        await interaction.response.edit_message(
+            content=message_studio_content(self.kind, mode),
+            embed=embed if mode != "variables" else None,
+            view=DefaultMessageStudioView(
+                self.guild_id, self.owner_id, self.kind, mode, self.return_to
+            ),
+        )
+
+    async def show_preview(self, interaction: discord.Interaction) -> None:
+        await self._switch(interaction, "preview")
+
+    async def show_edit(self, interaction: discord.Interaction) -> None:
+        await self._switch(interaction, "edit")
+
+    async def show_variables(self, interaction: discord.Interaction) -> None:
+        await self._switch(interaction, "variables")
+
+    async def go_back(self, interaction: discord.Interaction) -> None:
+        if self.return_to == "messages_setup":
+            await interaction.response.edit_message(
+                content=heraldo_messages_setup_content(),
+                embed=None,
+                view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
+            )
+            return
+        await interaction.response.edit_message(
+            content=heraldo_messages_command_content(),
+            embed=None,
+            view=HeraldoMessagesView(self.guild_id, self.owner_id),
+        )
+
+    def _add_component_preview(self) -> None:
+        if self.kind == "verification":
+            self.add_item(
+                discord.ui.Button(
+                    label=get_verify_button_label(self.guild_id)[:80],
+                    style=discord.ButtonStyle.success,
+                    disabled=True,
+                    row=1,
+                )
+            )
+        elif self.kind == "suggestions":
+            self.add_item(
+                discord.ui.Button(
+                    label=(
+                        guild_config_get(self.guild_id, "suggestion_panel_button_label")
+                        or SUGGESTION_PANEL_BUTTON_DEFAULT
+                    )[:80],
+                    style=discord.ButtonStyle.primary,
+                    disabled=True,
+                    row=1,
+                )
+            )
+        elif self.kind == "condemnation":
+            label = condemnation_template_get(self.guild_id, "button_label").strip()
+            url = condemnation_template_get(self.guild_id, "button_url").strip()
+            if label and url:
+                self.add_item(
+                    discord.ui.Button(
+                        label=label[:80],
+                        style=discord.ButtonStyle.link,
+                        url=url,
+                        row=1,
+                    )
+                )
+
+    def _action_button(self, label: str, callback, *, row: int = 1, style=discord.ButtonStyle.secondary) -> None:
+        button = discord.ui.Button(label=label, style=style, row=row)
+        button.callback = callback
+        self.add_item(button)
+
+    def _add_edit_controls(self) -> None:
+        if self.kind == "verification":
+            self._action_button("🎨 Visual", self.edit_verification, style=discord.ButtonStyle.primary)
+        elif self.kind == "verify_dm":
+            self._action_button("🎨 Visual", self.edit_verify_dm_content, style=discord.ButtonStyle.primary)
+            self._action_button("🖼️ Recurso visual", self.edit_verify_dm_visual)
+        elif self.kind == "suggestions":
+            self._action_button("🎨 Visual", self.edit_suggestion_content, style=discord.ButtonStyle.primary)
+            self._action_button("🖼️ Imagen / botón", self.edit_suggestion_visual)
+        elif self.kind == "honeypot":
+            self._action_button("🎨 Visual", self.edit_honeypot, style=discord.ButtonStyle.primary)
+        elif self.kind == "condemnation":
+            self._action_button("🎨 Visual", self.edit_condemnation_core, style=discord.ButtonStyle.primary)
+            self._action_button("🏷️ Etiquetas", self.edit_condemnation_labels)
+            self._action_button("🏷️ Más etiquetas", self.edit_condemnation_more, row=2)
+            self._action_button("🔗 Botón", self.edit_condemnation_button, row=2)
+            self._action_button("⏳ Duración", self.edit_condemnation_duration, row=2)
+
+    async def edit_verification(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
+
+    async def edit_verify_dm_content(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(VerifyDmEditorContentModal(self.guild_id))
+
+    async def edit_verify_dm_visual(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(VerifyDmEditorVisualModal(self.guild_id))
+
+    async def edit_suggestion_content(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(SuggestionPanelContentModal(self.guild_id))
+
+    async def edit_suggestion_visual(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(SuggestionPanelVisualModal(self.guild_id))
+
+    async def edit_honeypot(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+
+    async def edit_condemnation_core(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            CondemnationCoreModal(interaction.guild.id, "studio_messages")
+        )
+
+    async def edit_condemnation_labels(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            CondemnationDetailsModal(interaction.guild.id, "studio_messages")
+        )
+
+    async def edit_condemnation_more(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            CondemnationMoreDetailsModal(interaction.guild.id, "studio_messages")
+        )
+
+    async def edit_condemnation_button(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            CondemnationButtonUrlModal(interaction.guild.id, "studio_messages")
+        )
+
+    async def edit_condemnation_duration(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            CondemnationDurationModal(interaction.guild.id, "studio_messages")
+        )
+
+
+async def open_default_message_studio(
+    interaction: discord.Interaction,
+    kind: str,
+    owner_id: int,
+    return_to: str,
+    *,
+    notice: str | None = None,
+) -> None:
+    embed = message_studio_preview(kind, interaction.guild, interaction.user, interaction.channel)
+    kwargs = dict(
+        content=message_studio_content(kind, "preview", notice),
+        embed=embed,
+        view=DefaultMessageStudioView(
+            interaction.guild.id, owner_id, kind, "preview", return_to
+        ),
+    )
+    if interaction.response.is_done():
+        await interaction.edit_original_response(**kwargs)
+    else:
+        await interaction.response.edit_message(**kwargs)
+
+
 LOG_TEMPLATE_CATEGORIES = {
     "general": ("📜 General", "Logs que no pertenecen a otra categoría."),
     "verification": ("✅ Verificación", "Verificación, orientación y accesos."),
@@ -3633,49 +3954,32 @@ class HeraldoMessagesSetupView(discord.ui.View):
         selected = values[0] if values else ""
 
         if selected == "verification":
-            await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
+            await open_default_message_studio(
+                interaction, "verification", self.owner_id, "messages_setup"
+            )
             return
 
         if selected == "verify_dm":
-            await interaction.response.edit_message(
-                content=(
-                    "📩 **DM de verificación**\n\n"
-                    "Edita el contenido y el recurso visual del mensaje privado que recibe "
-                    "una persona después de completar su primera verificación."
-                ),
-                embed=build_verification_welcome_embed(
-                    member=interaction.user if isinstance(interaction.user, discord.Member) else None,
-                    guild=interaction.guild,
-                ),
-                view=VerifyDmMessageSetupView(self.guild_id, self.owner_id),
+            await open_default_message_studio(
+                interaction, "verify_dm", self.owner_id, "messages_setup"
             )
             return
 
         if selected == "suggestions":
-            await interaction.response.edit_message(
-                content=(
-                    "💡 **Panel de sugerencias**\n\n"
-                    "Puedes editar su contenido visual sin alterar los datos de las sugerencias "
-                    "que ya existen."
-                ),
-                embed=suggestion_panel_embed(interaction.guild),
-                view=SuggestionPanelMessageSetupView(self.guild_id, self.owner_id),
+            await open_default_message_studio(
+                interaction, "suggestions", self.owner_id, "messages_setup"
             )
             return
 
         if selected == "honeypot":
-            await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+            await open_default_message_studio(
+                interaction, "honeypot", self.owner_id, "messages_setup"
+            )
             return
 
         if selected == "condemnation":
-            await interaction.response.edit_message(
-                content=(
-                    "☠️ **Editor de la tarjeta de condenados**\n"
-                    "Edita la plantilla usada en nuevas condenas. "
-                    "Los casos históricos no se reescriben."
-                ),
-                embed=condemnation_template_preview(interaction.guild, interaction.user),
-                view=CondemnationTemplateEditorView(self.owner_id, return_to="messages_setup"),
+            await open_default_message_studio(
+                interaction, "condemnation", self.owner_id, "messages_setup"
             )
             return
 
@@ -7629,6 +7933,16 @@ async def condemnation_template_editor_update(
         )
         return
 
+    if return_to == "studio_messages":
+        await open_default_message_studio(
+            interaction,
+            "condemnation",
+            interaction.user.id,
+            "messages_command",
+            notice=notice,
+        )
+        return
+
     embed = condemnation_template_preview(guild, interaction.user)
     view = CondemnationTemplateEditorView(interaction.user.id, return_to=return_to)
     content = (
@@ -11498,25 +11812,32 @@ class HeraldoMessagesView(discord.ui.View):
 
     @discord.ui.button(label="✅ Verificación", style=discord.ButtonStyle.primary, row=0)
     async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
+        await open_default_message_studio(
+            interaction, "verification", self.owner_id, "messages_command"
+        )
 
     @discord.ui.button(label="💡 Sugerencias", style=discord.ButtonStyle.primary, row=0)
     async def suggestions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(SuggestionPanelEditorModal(self.guild_id))
+        await open_default_message_studio(
+            interaction, "suggestions", self.owner_id, "messages_command"
+        )
 
     @discord.ui.button(label="🍯 Honeypot", style=discord.ButtonStyle.primary, row=0)
     async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+        await open_default_message_studio(
+            interaction, "honeypot", self.owner_id, "messages_command"
+        )
+
+    @discord.ui.button(label="📩 DM verificación", style=discord.ButtonStyle.secondary, row=1)
+    async def verify_dm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await open_default_message_studio(
+            interaction, "verify_dm", self.owner_id, "messages_command"
+        )
 
     @discord.ui.button(label="☠️ Condenas", style=discord.ButtonStyle.secondary, row=1)
     async def condemnations(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content=(
-                "☠️ **Mensajes · Tarjeta de condenados**\n"
-                "Edita la apariencia y las etiquetas de la tarjeta persistente de condena."
-            ),
-            embed=condemnation_template_preview(interaction.guild, interaction.user),
-            view=CondemnationTemplateEditorView(self.owner_id, return_to="messages_command"),
+        await open_default_message_studio(
+            interaction, "condemnation", self.owner_id, "messages_command"
         )
 
     @discord.ui.button(label="📜 Logs", style=discord.ButtonStyle.secondary, row=1)
