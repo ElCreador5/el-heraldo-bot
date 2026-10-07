@@ -759,9 +759,9 @@ def set_log_channel_id(channel_id: int) -> None:
 
 
 def verify_enabled(guild_id: int | None = None) -> bool:
-    value = guild_config_get(guild_id, "verify_enabled") if guild_id is not None else None
-    if value is None:
-        value = db_meta_get("verify_enabled")
+    if guild_id is None:
+        return db_meta_get("verify_enabled") == "1"
+    value = _guild_or_legacy_setting(guild_id, "verify_enabled", "0")
     return value == "1"
 
 
@@ -770,28 +770,39 @@ def get_verify_role_id(guild_id: int | None = None) -> int:
         configured = guild_config_get(guild_id, "verify_role_id")
         if configured:
             return int(configured)
+        legacy = _guild_or_legacy_setting(guild_id, "verify_role_id", "")
+        if legacy:
+            try:
+                return int(legacy)
+            except ValueError:
+                pass
         tentado = get_tentado_role_id(guild_id)
         if tentado:
             return tentado
     value = db_meta_get("verify_role_id")
-    return int(value) if value is not None else TENTADO_ROLE_ID
+    try:
+        return int(value) if value is not None else TENTADO_ROLE_ID
+    except (TypeError, ValueError):
+        return TENTADO_ROLE_ID
 
 
 def get_verify_timeout(guild_id: int | None = None) -> int:
     """Timeout de verificación por servidor, con compatibilidad con la configuración antigua."""
-    value = guild_config_get(guild_id, "verify_timeout") if guild_id is not None else None
-    if value is None:
+    if guild_id is None:
         value = db_meta_get("verify_timeout")
+    else:
+        value = _guild_or_legacy_setting(guild_id, "verify_timeout", str(VERIFY_TIMEOUT_DEFAULT))
     try:
-        return int(value) if value is not None else VERIFY_TIMEOUT_DEFAULT
+        return int(value)
     except (TypeError, ValueError):
         return VERIFY_TIMEOUT_DEFAULT
 
 
 def get_verify_action(guild_id: int | None = None) -> str:
-    value = guild_config_get(guild_id, "verify_action") if guild_id is not None else None
-    if value is None:
+    if guild_id is None:
         value = db_meta_get("verify_action")
+    else:
+        value = _guild_or_legacy_setting(guild_id, "verify_action", VERIFY_ACTION_DEFAULT)
     return value if value in VERIFY_ACTION_LABELS else VERIFY_ACTION_DEFAULT
 
 
@@ -862,8 +873,8 @@ def build_verification_welcome_embed(
         value=render_vars(get_verify_dm_body(guild_id), ctx, 1024),
         inline=False,
     )
-    footer_icon = render_url_var(get_verify_dm_footer_icon(), ctx)
-    footer_text = render_vars(get_verify_dm_footer(), ctx, 2048)
+    footer_icon = render_url_var(get_verify_dm_footer_icon(guild_id), ctx)
+    footer_text = render_vars(get_verify_dm_footer(guild_id), ctx, 2048)
     if footer_icon:
         embed.set_footer(text=footer_text, icon_url=footer_icon)
     else:
