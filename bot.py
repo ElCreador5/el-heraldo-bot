@@ -10135,6 +10135,25 @@ async def condemnation_archive_evidence(
             value=f"[Mensaje original]({source_message_url}) · puede dejar de existir tras la purga.",
             inline=False,
         )
+    conn = db_connect()
+    recent_rows = conn.execute(
+        "SELECT channel_id, message_id, content, created_at FROM moderation_message_cache "
+        "WHERE guild_id = ? AND user_id = ? AND message_id != ? "
+        "ORDER BY created_at DESC LIMIT 8",
+        (guild.id, member.id, message.id),
+    ).fetchall()
+    conn.close()
+    if recent_rows:
+        context_lines: list[str] = []
+        for channel_id, message_id, cached_content, created_at in recent_rows:
+            excerpt = (cached_content or "(sin texto)").replace("\n", " ")[:180]
+            context_lines.append(f"<#{channel_id}> · {excerpt}")
+        evidence.add_field(
+            name="Contexto reciente preservado",
+            value="\n".join(context_lines)[:1024],
+            inline=False,
+        )
+
     evidence.set_footer(text="Copia preservada antes de la purga por El Heraldo")
 
     files: list[discord.File] = []
@@ -10226,6 +10245,7 @@ def _build_condemnation_embed(
         value, member=member, guild=guild, case_id=case_id, applied_by=applied_by,
         reason=reason, when=when, source_channel=source_channel,
         duration_minutes=duration_minutes, origin=origin, source_message_url=source_message_url,
+        evidence_url=evidence_url,
     )
 
     embed = discord.Embed(
@@ -10484,7 +10504,7 @@ def _condemnation_render_template(text: str, *, member: discord.Member, guild: d
                                   case_id: str, applied_by: discord.abc.User | None,
                                   reason: str, when: datetime, source_channel: discord.abc.GuildChannel | None,
                                   duration_minutes: int | None, origin: str,
-                                  source_message_url: str | None) -> str:
+                                  source_message_url: str | None, evidence_url: str | None = None) -> str:
     values = {
         "{usuario}": member.mention,
         "{servidor}": guild.name,
@@ -10495,7 +10515,11 @@ def _condemnation_render_template(text: str, *, member: discord.Member, guild: d
         "{fecha_relativa}": discord.utils.format_dt(when, "R"),
         "{canal}": source_channel.mention if source_channel else "No registrado",
         "{duracion}": format_duration(duration_minutes) if duration_minutes else "Indefinida",
-        "{mensaje}": f"[Abrir mensaje]({source_message_url})" if source_message_url else "No disponible",
+        "{mensaje}": (
+            f"[Abrir evidencia preservada]({evidence_url})"
+            if evidence_url
+            else f"[Referencia original]({source_message_url})" if source_message_url else "No disponible"
+        ),
     }
     for key, value in values.items():
         text = text.replace(key, value)
@@ -10957,20 +10981,40 @@ async def check_expired_condemnations() -> None:
     conn = db_connect()
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT * FROM condemnations WHERE active = 1 AND expires_at IS NOT NULL AND expires_at <= ?",
+        "SELECT * FROM guild_cases WHERE active = 1 AND expires_at IS NOT NULL AND expires_at <= ?",
         (now.isoformat(),),
     ).fetchall()
     conn.close()
     for row in rows:
-        guild = bot.get_guild(row["guild_id"]) if row["guild_id"] else None
+        guild_id = int(row["guild_id"])
+        user_id = int(row["user_id"])
+        guild = bot.get_guild(guild_id)
         if guild is None:
-            condemnation_deactivate(row["guild_id"], row["user_id"])
+            condemnation_deactivate(guild_id, user_id, resolution="expired")
+            linked_case = (
+                int(row["moderation_case_number"])
+                if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
+                else None
+            )
+            if linked_case is not None:
+                moderation_case_close(
+                    guild_id, linked_case, closed_by=None, resolution="Expirado automáticamente"
+                )
             continue
-        member = guild.get_member(row["user_id"])
+        member = guild.get_member(user_id)
         if member is not None:
             await release_condemned_member(member, automatic=True)
         else:
-            condemnation_deactivate(row["guild_id"], row["user_id"])
+            condemnation_deactivate(guild_id, user_id, resolution="expired")
+            linked_case = (
+                int(row["moderation_case_number"])
+                if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
+                else None
+            )
+            if linked_case is not None:
+                moderation_case_close(
+                    guild_id, linked_case, closed_by=None, resolution="Expirado automáticamente"
+                )
 
 
 async def condemnation_reconcile(guild: discord.Guild) -> None:
