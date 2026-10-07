@@ -956,6 +956,22 @@ async def on_ready() -> None:
 
 
 @bot.event
+async def on_guild_join(guild: discord.Guild) -> None:
+    """Prepara automáticamente un guild nuevo con la plantilla base."""
+    try:
+        await bootstrap_guild_configuration(guild)
+        await log_embed(
+            guild,
+            "🪽 Plantilla base instalada",
+            "El Heraldo detectó un servidor nuevo y preparó su estructura inicial. "
+            "Los recursos se guardan por ID y pueden personalizarse desde la configuración.",
+            discord.Color.blurple(),
+        )
+    except Exception:
+        traceback.print_exc()
+
+
+@bot.event
 async def on_member_join(member: discord.Member) -> None:
     if member.bot:
         return  # los bots no pasan por el flujo de verificación
