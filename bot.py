@@ -164,14 +164,18 @@ ORIENTATION_EMBED_TITLE = "ORIENTACIÓN"
 ORIENTATION_EMBED_COLOR = 0x19A7E0
 ORIENTATION_EMBED_DESCRIPTION = (
     "Selecciona el rol que te represente reaccionando con el emoji correspondiente:\n\n"
-    "Hetero 🍑\n"
-    "Curios@ 👀\n"
-    "Gay 🥒\n"
-    "Bisex 🚻\n\n"
-    "Estos roles abren distintas puertas dentro del paraíso; según vayas cambiando "
-    "de parecer o preferencia, puedes cambiar entre ellos 😇. La verificación no te "
-    "salva del todo: se expulsará a quienes no seleccionen ninguno de estos roles o "
-    "no den señales de ser un alma genuina (humana)."
+    "🍑  Hetero\n"
+    "👀  Curios@\n"
+    "🥒  Gay\n"
+    "🚻  Bisex\n\n"
+    "Estos roles permiten definir tu orientación dentro del servidor. "
+    "Si tu preferencia cambia, puedes seleccionar otra opción.\n\n"
+    "**¿Cómo funciona?**\n"
+    "Reacciona con el emoji correspondiente para recibir el rol asociado. "
+    "Solo puedes mantener una orientación activa a la vez. Al elegir otra, "
+    "la anterior será reemplazada.\n\n"
+    "Esto certifica que eres una persona y tu participación en el servidor.\n"
+    "Si se detecta que no posees un rol de estos serás expulsado por sospecha."
 )
 
 # --- Tarjeta de condena ----------------------------------------------------
