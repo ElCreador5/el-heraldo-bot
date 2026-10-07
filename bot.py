@@ -1606,6 +1606,9 @@ async def on_member_join(member: discord.Member) -> None:
     except Exception:
         traceback.print_exc()
 
+    if join_roles_enabled(member.guild.id):
+        asyncio.create_task(assign_join_roles(member))
+
     if verify_enabled(member.guild.id):
         now = datetime.now(timezone.utc)
         db_set_verify_pending(member.guild.id, member.id, now)
@@ -1711,11 +1714,35 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         return
 
     # Flujos normales de verificación; una condena activa ya salió por arriba.
+    # Join Roles que esperan Rules Screening se asignan al completar la pantalla.
+    if (
+        join_roles_enabled(after.guild.id)
+        and join_roles_wait_screening(after.guild.id)
+        and getattr(before, "pending", False)
+        and not getattr(after, "pending", False)
+    ):
+        asyncio.create_task(assign_join_roles(after))
+
+    # Si el rol de verificación aparece por cualquier medio, Sin Verificar se retira.
+    verify_role_id = get_verify_role_id(after.guild.id)
+    if verify_role_id and verify_role_id in after_role_ids and verify_role_id not in before_role_ids:
+        await clear_sin_verificar_after_verification(
+            after,
+            reason="Rol de verificación detectado por El Heraldo",
+        )
+        return
+
     if get_sin_verificado_role_id(after.guild.id) in after_role_ids and get_sin_verificado_role_id(after.guild.id) not in before_role_ids:
-        now = datetime.now(timezone.utc)
-        db_set_sin_verificado(after.guild.id, after.id, now)
-        asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
-        print(f"⏳ {after} recibió Sin Verificar — respaldo de 300s armado.")
+        if verify_role_id and verify_role_id in after_role_ids:
+            await clear_sin_verificar_after_verification(
+                after,
+                reason="Sin Verificar no aplica a un miembro ya verificado",
+            )
+        else:
+            now = datetime.now(timezone.utc)
+            db_set_sin_verificado(after.guild.id, after.id, now)
+            asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
+            print(f"⏳ {after} recibió Sin Verificar — respaldo armado.")
 
     # IMPORTANTE: asignar el rol de verificación/orientación manualmente NO inicia
     # el temporizador. La orientación solo nace cuando El Heraldo procesa una
@@ -5256,6 +5283,33 @@ async def send_verification_welcome_dm(member: discord.Member) -> bool:
         return False
 
 
+async def clear_sin_verificar_after_verification(
+    member: discord.Member,
+    *,
+    reason: str,
+) -> bool:
+    """Retira Sin Verificar y cancela sus estados pendientes tras verificarse."""
+    guild = member.guild
+    db_clear_verify_pending(guild.id, member.id)
+    db_clear_sin_verificado(guild.id, member.id)
+
+    sin_role = guild.get_role(get_sin_verificado_role_id(guild.id))
+    if sin_role is None or sin_role not in member.roles:
+        return True
+    try:
+        await member.remove_roles(sin_role, reason=reason)
+        return True
+    except discord.HTTPException as exc:
+        await log_embed(
+            guild,
+            "⚠️ No pude quitar Sin Verificar",
+            f"{member.mention} ya está verificado, pero no pude quitarle "
+            f"{sin_role.mention}: {exc}. Revisa jerarquía y permisos.",
+            discord.Color.dark_red(),
+        )
+        return False
+
+
 async def handle_verify_click(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     member = interaction.user
@@ -5280,8 +5334,15 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         return
 
     role_ids = {r.id for r in member.roles}
-    if role.id in role_ids or role_ids & get_eval_role_ids(guild.id):
+    if role.id in role_ids:
+        await clear_sin_verificar_after_verification(
+            member,
+            reason="Limpieza automática: el miembro ya posee el rol de verificación",
+        )
         await interaction.followup.send("✅ ¡Ya estás verificado!", ephemeral=True)
+        return
+    if role_ids & get_eval_role_ids(guild.id):
+        await interaction.followup.send("✅ Ya completaste la selección de orientación.", ephemeral=True)
         return
 
     problem = verify_role_problem(role, guild)
