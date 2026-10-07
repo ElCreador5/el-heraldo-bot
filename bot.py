@@ -7253,7 +7253,7 @@ def raid_is_active(guild_id: int) -> bool:
 
 def raid_is_suspicious(member: discord.Member) -> bool:
     """Con edad mínima configurada, solo se actúa sobre cuentas más nuevas que ese tiempo."""
-    min_age = raid_min_age_seconds(member.guild.id)
+    min_age = raid_min_age_seconds(guild.id)
     if min_age <= 0:
         return True
     return (datetime.now(timezone.utc) - member.created_at).total_seconds() < min_age
