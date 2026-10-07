@@ -163,7 +163,6 @@ CONDEMNATION_TEMPLATE_DEFAULTS = {
     "label_when": "Cuándo",
     "label_where": "Dónde ocurrió",
     "label_duration": "Duración",
-    "label_origin": "Origen",
     "label_roles": "Roles retirados",
     "button_label": "🔎 Ver información del caso",
     "button_url": "",
@@ -3432,6 +3431,7 @@ class _SyncGuard:
 
 _condemn_sync_busy = _SyncGuard()
 _condemn_inflight: set[int] = set()
+_pardon_inflight: set[int] = set()
 
 
 def condemnation_protection_reason(member: discord.Member) -> str | None:
@@ -3475,7 +3475,6 @@ async def condemnation_send_pardon_dm(
     embed.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
     embed.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
     embed.add_field(name="Resultado", value=(f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)" + (f"; ⚠️ **{lost_count}** no se pudieron restaurar." if lost_count else ".")), inline=False)
-    embed.add_field(name="Origen", value=condemnation_origin_label(row["origin"]), inline=True)
     embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
     embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽")
     try:
@@ -3523,7 +3522,6 @@ def _build_condemnation_embed(
     where = source_channel.mention if source_channel else ("Canal del mensaje original" if source_message_url else "No registrado")
     field("label_where", where, True)
     field("label_duration", format_duration(duration_minutes) if duration_minutes else "Indefinida", True)
-    field("label_origin", condemnation_origin_label(origin), True)
 
     role_mentions = []
     for rid in removed_role_ids or []:
@@ -3599,7 +3597,14 @@ class CondemnationPardonView(discord.ui.View):
             row = condemnation_get(member.id)
             if row is None:
                 await interaction.followup.send(
-                    "ℹ️ Este expediente ya no tiene una condena activa.",
+                    "ℹ️ Este expediente ya no tiene una condena activa o ya fue resuelto.",
+                    ephemeral=True,
+                )
+                return
+
+            if member.id in _pardon_inflight:
+                await interaction.followup.send(
+                    "⏳ Este perdón ya se está procesando.",
                     ephemeral=True,
                 )
                 return
@@ -3618,12 +3623,17 @@ class CondemnationPardonView(discord.ui.View):
                 )
                 return
 
-            ok, note = await release_condemned_member(
-                member,
-                released_by=interaction.user,
-                pardon=True,
-                announcement_message=interaction.message,
-            )
+            _pardon_inflight.add(member.id)
+            try:
+                ok, note = await release_condemned_member(
+                    member,
+                    released_by=interaction.user,
+                    pardon=True,
+                    announcement_message=interaction.message,
+                )
+            finally:
+                _pardon_inflight.discard(member.id)
+
             await interaction.followup.send(
                 ("🕊️ " if ok else "❌ ") + note,
                 ephemeral=True,
@@ -3712,7 +3722,6 @@ def _condemnation_render_template(text: str, *, member: discord.Member, guild: d
         "{fecha_relativa}": discord.utils.format_dt(when, "R"),
         "{canal}": source_channel.mention if source_channel else "No registrado",
         "{duracion}": format_duration(duration_minutes) if duration_minutes else "Indefinida",
-        "{origen}": condemnation_origin_label(origin),
         "{mensaje}": f"[Abrir mensaje]({source_message_url})" if source_message_url else "No disponible",
     }
     for key, value in values.items():
@@ -3753,7 +3762,7 @@ async def condemnation_update_pardoned_card(
     lost_count: int,
     message: discord.Message | None = None,
 ) -> bool:
-    """Cierra la tarjeta original y publica una nueva tarjeta de resolución."""
+    """Crea la tarjeta nueva de perdón y elimina la tarjeta original del caso."""
     message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
     channel = member.guild.get_channel(condemnation_channel_id())
     if not isinstance(channel, discord.TextChannel):
@@ -3771,28 +3780,6 @@ async def condemnation_update_pardoned_card(
         case_id = condemnation_case_id(member, condemned_at)
         pardoned_at = datetime.now(timezone.utc)
 
-        # 1) Cerrar la tarjeta original del expediente. No se borra ni se reemplaza:
-        # queda como registro histórico y ya no contiene acciones ejecutables.
-        closed_embed = discord.Embed(
-            title="🔒 EXPEDIENTE CERRADO",
-            description=(
-                f"El expediente **{case_id}** fue cerrado porque la condena "
-                "fue levantada mediante perdón."
-            ),
-            color=discord.Color.dark_grey(),
-            timestamp=pardoned_at,
-        )
-        closed_embed.set_thumbnail(url=member.display_avatar.url)
-        closed_embed.add_field(name="Expediente", value=f"`{case_id}`", inline=True)
-        closed_embed.add_field(name="Condenado", value=f"{member.mention}\n`{member}`", inline=True)
-        closed_embed.add_field(name="Motivo original", value=str(row["reason"])[:1024], inline=False)
-        closed_embed.add_field(name="Estado", value="🔒 Cerrado", inline=True)
-        closed_embed.add_field(name="Resuelto por", value=pardoned_by.mention, inline=True)
-        closed_embed.add_field(name="Cerrado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
-        closed_embed.set_footer(text=f"{member.guild.name} · El Heraldo 🪽 · Expediente {case_id}")
-        await message.edit(content=member.mention, embed=closed_embed, view=None)
-
-        # 2) Crear una tarjeta NUEVA con la resolución del perdón.
         resolution = discord.Embed(
             title="🕊️ CONDENA PERDONADA",
             description=(
@@ -3809,22 +3796,51 @@ async def condemnation_update_pardoned_card(
         resolution.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
         resolution.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
         resolution.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
+
         result = f"🕊️ Condena levantada. **{restored_count}** rol(es) restaurado(s)"
         if lost_count:
             result += f"; ⚠️ **{lost_count}** no se pudieron restaurar."
         else:
             result += "."
         resolution.add_field(name="Resultado", value=result, inline=False)
-        resolution.add_field(name="Origen", value=condemnation_origin_label(row["origin"]), inline=True)
         resolution.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
         resolution.set_footer(text=f"{member.guild.name} · El Heraldo 🪽 · Resolución {case_id}")
-        await channel.send(
+
+        new_message = await channel.send(
             content=member.mention,
             embed=resolution,
             allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False),
         )
+
+        old_deleted = False
+        try:
+            await message.delete()
+            old_deleted = True
+        except discord.NotFound:
+            old_deleted = True
+        except discord.Forbidden:
+            print(f"⚠️ No pude eliminar la tarjeta original del expediente {case_id}: faltan permisos.")
+        except discord.HTTPException as e:
+            print(f"⚠️ No pude eliminar la tarjeta original del expediente {case_id}: {e}")
+
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "UPDATE condemnations SET announcement_message_id = ? WHERE user_id = ?",
+            (new_message.id, member.id),
+        )
+        conn.commit()
+        conn.close()
+
+        if not old_deleted:
+            await log_embed(
+                member.guild,
+                "⚠️ Tarjeta de condena no eliminada",
+                f"Expediente: {case_id}\nNo pude eliminar la tarjeta original. "
+                f"La tarjeta de resolución sí fue creada: {new_message.jump_url}",
+                discord.Color.orange(),
+            )
         return True
-    except discord.HTTPException:
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         traceback.print_exc()
         return False
 
