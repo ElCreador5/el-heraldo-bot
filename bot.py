@@ -1494,64 +1494,44 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
     return created
 
 
-@bot.tree.command(name="heraldo_config", description="Configura las opciones generales de instalación de El Heraldo.")
+@bot.tree.command(name="heraldo_setup", description="Configura y aplica la estructura de El Heraldo en este servidor.")
 @app_commands.default_permissions(administrator=True)
-@app_commands.describe(
-    crear_recursos="Permitir que /heraldo_setup cree canales y roles de la plantilla que falten.",
-)
 @app_commands.guild_only()
-async def heraldo_config(
-    interaction: discord.Interaction,
-    crear_recursos: Optional[bool] = None,
-) -> None:
+async def heraldo_setup(interaction: discord.Interaction) -> None:
     guild = interaction.guild
     if guild is None:
         await interaction.response.send_message("Este comando solo puede usarse dentro de un servidor.", ephemeral=True)
         return
 
-    current = guild_config_get(guild.id, "heraldo_auto_create_resources") == "1"
-    if crear_recursos is None:
-        estado = "activada" if current else "desactivada"
-        await interaction.response.send_message(
-            "⚙️ Configuración general de El Heraldo\n\n"
-            f"Creación automática de recursos: {estado}\n"
-            "Si está desactivada, El Heraldo solo detecta y reutiliza canales/roles existentes. "
-            "No crea El Heraldo/Protocolo, Condenados, Honeypot, Verificación, Reglas, "
-            "Roles, Dudas ni Anuncios, ni crea roles base que falten.\n\n"
-            "Actívala con /heraldo_config crear_recursos:True si quieres que "
-            "/heraldo_setup pueda crear los recursos que falten.",
-            ephemeral=True,
-        )
-        return
+    await interaction.response.defer(ephemeral=True)
+    create_missing = guild_config_get(guild.id, "heraldo_auto_create_resources") == "1"
+    result = await bootstrap_guild_configuration(guild, create_missing=create_missing)
+    mode_text = "puede crear recursos faltantes" if create_missing else "solo reutiliza recursos existentes"
 
-    guild_config_set(guild.id, "heraldo_auto_create_resources", "1" if crear_recursos else "0")
-    estado = "activada" if crear_recursos else "desactivada"
-    await interaction.response.send_message(
-        f"✅ Creación automática de recursos {estado}.\n\n"
-        + (
-            "A partir de ahora /heraldo_setup podrá crear los canales y roles de la plantilla que falten."
-            if crear_recursos
-            else "A partir de ahora /heraldo_setup no creará canales ni roles; solo detectará y reutilizará los existentes."
-        ),
+    await interaction.followup.send(
+        f"🪽 **Configuración de El Heraldo aplicada.**\n"
+        f"Modo actual: **{mode_text}**.\n"
+        f"Canales creados: {len(result.get('channels', []))}; roles creados: {len(result.get('roles', []))}.\n\n"
+        "La configuración de cada canal/rol debe definirse desde este asistente. Los recursos existentes se reutilizan y no se crean duplicados.",
         ephemeral=True,
     )
 
 
-@bot.tree.command(name="heraldo_setup", description="Instala o repara la plantilla base de El Heraldo en este servidor.")
+@bot.tree.command(name="heraldo_config", description="Consulta la configuración general de El Heraldo.")
 @app_commands.default_permissions(administrator=True)
-async def heraldo_setup(interaction: discord.Interaction):
-    if interaction.guild is None:
+@app_commands.guild_only()
+async def heraldo_config(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    if guild is None:
         await interaction.response.send_message("Este comando solo puede usarse dentro de un servidor.", ephemeral=True)
         return
-    await interaction.response.defer(ephemeral=True)
-    create_missing = guild_config_get(interaction.guild.id, "heraldo_auto_create_resources") == "1"
-    result = await bootstrap_guild_configuration(interaction.guild, create_missing=create_missing)
-    mode_text = "con creación de faltantes activada" if create_missing else "sin crear recursos faltantes"
-    await interaction.followup.send(
-        f"🪽 Plantilla base del Heraldo aplicada ({mode_text}). "
-        f"Canales creados: {len(result.get('channels', []))}; "
-        f"roles creados: {len(result.get('roles', []))}. "
-        "Los recursos detectados o creados quedaron registrados por servidor.",
+
+    create_missing = guild_config_get(guild.id, "heraldo_auto_create_resources") == "1"
+    estado = "activada" if create_missing else "desactivada"
+    await interaction.response.send_message(
+        "⚙️ **Configuración general de El Heraldo**\n\n"
+        f"Creación automática de recursos: **{estado}**.\n"
+        "La configuración de canales, roles, verificación, orientación, tiempos, permisos y demás opciones se realiza mediante `/heraldo_setup`.",
         ephemeral=True,
     )
 
