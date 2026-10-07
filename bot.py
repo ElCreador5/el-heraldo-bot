@@ -2100,7 +2100,7 @@ async def verify_config(
     changes: list[str] = []
     if rol is not None:
         db_meta_set("verify_role_id", str(rol.id))
-    guild_config_set(interaction.guild.id, "verify_role_id", str(rol.id))
+        guild_config_set(interaction.guild.id, "verify_role_id", str(rol.id))
         changes.append(f"rol → {rol.mention}")
     if timeout_seconds is not None:
         db_meta_set("verify_timeout", str(timeout_seconds))
