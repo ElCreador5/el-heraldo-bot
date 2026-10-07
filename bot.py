@@ -323,6 +323,38 @@ def db_init() -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS guild_config (
+            guild_id INTEGER PRIMARY KEY,
+            initialized INTEGER NOT NULL DEFAULT 0,
+            setup_version INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS guild_resources (
+            guild_id INTEGER NOT NULL,
+            resource_type TEXT NOT NULL,
+            config_key TEXT NOT NULL,
+            resource_id INTEGER NOT NULL,
+            PRIMARY KEY (guild_id, resource_type, config_key),
+            UNIQUE (guild_id, resource_type, resource_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS guild_settings (
+            guild_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT,
+            PRIMARY KEY (guild_id, key)
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -517,6 +549,83 @@ def db_reset_week() -> None:
     conn.close()
 
 
+def guild_config_get(guild_id: int, key: str) -> str | None:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?",
+        (guild_id, key),
+    ).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def guild_config_set(guild_id: int, key: str, value: str) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO guild_settings (guild_id, key, value)
+        VALUES (?, ?, ?)
+        ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
+        """,
+        (guild_id, key, value),
+    )
+    conn.execute(
+        "UPDATE guild_config SET updated_at = ? WHERE guild_id = ?",
+        (datetime.now(timezone.utc).isoformat(), guild_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def guild_resource_get(guild_id: int, resource_type: str, config_key: str) -> int | None:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT resource_id FROM guild_resources WHERE guild_id = ? AND resource_type = ? AND config_key = ?",
+        (guild_id, resource_type, config_key),
+    ).fetchone()
+    conn.close()
+    return int(row[0]) if row else None
+
+
+def guild_resource_set(guild_id: int, resource_type: str, config_key: str, resource_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO guild_resources (guild_id, resource_type, config_key, resource_id)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(guild_id, resource_type, config_key)
+        DO UPDATE SET resource_id = excluded.resource_id
+        """,
+        (guild_id, resource_type, config_key, resource_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def guild_is_initialized(guild_id: int) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT initialized FROM guild_config WHERE guild_id = ?",
+        (guild_id,),
+    ).fetchone()
+    conn.close()
+    return bool(row and row[0])
+
+
+def guild_mark_initialized(guild_id: int) -> None:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO guild_config (guild_id, initialized, setup_version, updated_at)
+        VALUES (?, 1, 1, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET initialized = 1, updated_at = excluded.updated_at
+        """,
+        (guild_id, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
 def db_meta_get(key: str) -> str | None:
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
@@ -706,6 +815,12 @@ async def on_ready() -> None:
 
     db_init()
     honeypot_db_init()
+
+    for guild in bot.guilds:
+        try:
+            await bootstrap_guild_configuration(guild)
+        except Exception:
+            traceback.print_exc()
 
     # Reasocia cada botón de perdón a su mensaje real. Esto es más robusto que
     # registrar una vista global porque Discord puede entregar el custom_id de
@@ -1131,6 +1246,79 @@ async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
 # ---------------------------------------------------------------------------
 # Comando manual de prueba (slash command — no requiere message_content intent)
 # ---------------------------------------------------------------------------
+
+async def bootstrap_guild_configuration(guild: discord.Guild) -> dict[str, list[int]]:
+    """Crea o detecta la estructura base sin duplicarla.
+
+    Los nombres son solo heurísticas de instalación; la operación posterior debe
+    utilizar los IDs persistidos en guild_resources/guild_settings.
+    """
+    if guild_is_initialized(guild.id):
+        return {}
+
+    desired_channels = {
+        "logs": "El Heraldo",
+        "condemned": "Condenados",
+        "honeypot": "Honeypot",
+        "verification": "Verificación",
+        "rules": "Reglas",
+        "roles": "Roles",
+        "questions": "Dudas",
+        "announcements": "Anuncios",
+    }
+    created: dict[str, list[int]] = {"channels": [], "roles": []}
+    me = guild.me
+    if me is None or not me.guild_permissions.manage_channels:
+        return created
+
+    existing_channels = {c.name.casefold(): c for c in guild.text_channels}
+    for key, default_name in desired_channels.items():
+        channel = existing_channels.get(default_name.casefold())
+        if channel is None:
+            try:
+                channel = await guild.create_text_channel(default_name, reason="El Heraldo: instalación de plantilla base")
+                created["channels"].append(channel.id)
+            except discord.Forbidden:
+                continue
+        guild_resource_set(guild.id, "channel", key, channel.id)
+
+    if me.guild_permissions.manage_roles:
+        desired_roles = {
+            "sin_verificar": "Sin Verificar",
+            "tentado": "Tentad@",
+            "condenado": "Condenado",
+        }
+        existing_roles = {r.name.casefold(): r for r in guild.roles}
+        for key, default_name in desired_roles.items():
+            role = existing_roles.get(default_name.casefold())
+            if role is None:
+                try:
+                    role = await guild.create_role(name=default_name, reason="El Heraldo: instalación de plantilla base")
+                    created["roles"].append(role.id)
+                except discord.Forbidden:
+                    continue
+            guild_resource_set(guild.id, "role", key, role.id)
+
+    guild_mark_initialized(guild.id)
+    return created
+
+
+@bot.tree.command(name="heraldo_setup", description="Instala o repara la plantilla base de El Heraldo en este servidor.")
+@app_commands.default_permissions(administrator=True)
+async def heraldo_setup(interaction: discord.Interaction):
+    if interaction.guild is None:
+        await interaction.response.send_message("Este comando solo puede usarse dentro de un servidor.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    result = await bootstrap_guild_configuration(interaction.guild)
+    await interaction.followup.send(
+        "La Plantilla base del Heraldo fue aplicada. "
+        f"Canales creados: {len(result.get('channels', []))}; "
+        f"roles creados: {len(result.get('roles', []))}. "
+        "Los recursos detectados o creados quedaron registrados por ID para la configuración del servidor.",
+        ephemeral=True,
+    )
+
 
 @bot.tree.command(name="heraldo_check", description="Fuerza la evaluación inmediata de un miembro (sin esperar el timer de 10 min).")
 @discord.app_commands.checks.has_permissions(kick_members=True)
