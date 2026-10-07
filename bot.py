@@ -1058,9 +1058,9 @@ async def on_member_join(member: discord.Member) -> None:
 
     # Una condena activa tiene prioridad absoluta sobre los flujos de verificación.
     # El miembro puede salir y volver: la condena persiste en SQLite.
-    condemnation = condemnation_get(member.id)
+    condemnation = condemnation_get(member.guild.id, member.id)
     if condemnation is not None and condemnation_is_expired(condemnation):
-        condemnation_deactivate(member.id)  # caducó mientras estaba fuera: entra como cualquier miembro nuevo
+        condemnation_deactivate(member.guild.id, member.id)  # caducó mientras estaba fuera: entra como cualquier miembro nuevo
         condemnation = None
     if condemnation is not None:
         db_clear_verify_pending(member.guild.id, member.id)
@@ -1119,7 +1119,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
 
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
-    active_condemnation = condemnation_get(after.id)
+    active_condemnation = condemnation_get(after.guild.id, after.id)
     condemned_id = condemnation_role_id(active_condemnation)
     had_condemned = bool(condemned_id and condemned_id in before_role_ids)
     has_condemned = bool(condemned_id and condemned_id in after_role_ids)
@@ -1218,7 +1218,7 @@ async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: 
 async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
     """Respaldo del timeout de Sin Verificar (299s). Si a los 300s el
     miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
-    if condemnation_get(user_id) is not None:
+    if condemnation_get(guild_id, user_id) is not None:
         db_clear_sin_verificado(guild_id, user_id)
         return
     guild = bot.get_guild(guild_id)
@@ -1301,7 +1301,7 @@ async def check_pending_verifications() -> None:
 
 async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> str:
     """Devuelve 'verificado', 'expulsado', 'castigado' o 'ausente'/'sin-guild'."""
-    if condemnation_get(user_id) is not None:
+    if condemnation_get(guild_id, user_id) is not None:
         db_clear_tentado(guild_id, user_id)
         return "castigado"
     guild = bot.get_guild(guild_id)
@@ -1832,7 +1832,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
     expelled_sin_verificar: list[discord.Member] = []
 
     async for member in guild.fetch_members(limit=None):
-        if member.bot or condemnation_get(member.id) is not None:
+        if member.bot or condemnation_get(member.guild.id, member.id) is not None:
             continue  # los condenados quedan fuera de toda evaluación
         role_ids = {r.id for r in member.roles}
         if get_tentado_role_id(guild.id) in role_ids:
@@ -2010,7 +2010,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
     await interaction.response.defer(ephemeral=True, thinking=True)
 
     punish_role_id = hp_punish_role_id()
-    if condemnation_get(member.id) is not None or (punish_role_id and any(r.id == punish_role_id for r in member.roles)):
+    if condemnation_get(member.guild.id, member.id) is not None or (punish_role_id and any(r.id == punish_role_id for r in member.roles)):
         await interaction.followup.send("☠️ Estás condenado: no puedes verificarte mientras la condena esté activa.", ephemeral=True)
         return
 
@@ -2114,7 +2114,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
     """Aplica la acción configurada si el miembro no se verificó dentro del timeout.
     Lee siempre la configuración actual: si el timeout se alargó mientras esperaba, no
     actúa todavía (check_pending_verifications lo retoma al vencer el nuevo plazo)."""
-    if condemnation_get(user_id) is not None:
+    if condemnation_get(guild_id, user_id) is not None:
         db_clear_verify_pending(guild_id, user_id)
         return
     row = db_get(guild_id, user_id)
@@ -2958,7 +2958,7 @@ async def track_activity(message: discord.Message) -> None:
     if message.channel.id in hp_trap_ids():
         return  # lo escrito en un canal trampa no cuenta como actividad
     punish_id = hp_punish_role_id()
-    if (punish_id and any(r.id == punish_id for r in message.author.roles)) or condemnation_get(message.author.id) is not None:
+    if (punish_id and any(r.id == punish_id for r in message.author.roles)) or condemnation_get(message.guild.id, message.author.id) is not None:
         return  # los condenados no suman actividad
 
     today = datetime.now(STREAK_TZ).date()
@@ -3079,7 +3079,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         punish_id = hp_punish_role_id()
         if punish_id and member is not None and any(r.id == punish_id for r in member.roles):
             continue  # castigado por el honeypot: no puede ganar
-        if member is not None and condemnation_get(member.id) is not None:
+        if member is not None and condemnation_get(member.guild.id, member.id) is not None:
             continue  # condenado: no puede ganar
         if member is not None and not member.bot:
             ranking.append((member, count))
@@ -3290,6 +3290,14 @@ def honeypot_db_init() -> None:
         "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1, "
         "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT, announcement_message_id INTEGER)"
     )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS guild_cases ("
+        "guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, role_id INTEGER NOT NULL DEFAULT 0, role_ids TEXT NOT NULL, "
+        "reason TEXT NOT NULL, duration_minutes INTEGER, condemned_at TEXT NOT NULL, "
+        "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1, "
+        "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT, announcement_message_id INTEGER, "
+        "PRIMARY KEY (guild_id, user_id))"
+    )
     try:
         conn.execute("ALTER TABLE condemnations ADD COLUMN role_id INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -3423,13 +3431,34 @@ def hp_clear_punished(user_id: int) -> None:
     conn.close()
 
 
-def condemnation_get(user_id: int, active_only: bool = True) -> sqlite3.Row | None:
+def condemnation_get(guild_id: int, user_id: int, active_only: bool = True) -> sqlite3.Row | None:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    query = "SELECT * FROM condemnations WHERE user_id = ?"
+    query = "SELECT * FROM guild_cases WHERE guild_id = ? AND user_id = ?"
+    params = (guild_id, user_id)
     if active_only:
         query += " AND active = 1"
-    row = conn.execute(query, (user_id,)).fetchone()
+    row = conn.execute(query, params).fetchone()
+    if row is None:
+        legacy_owner = db_meta_get("verify_legacy_guild_id")
+        allow_legacy = legacy_owner is None or legacy_owner == str(guild_id)
+        if allow_legacy:
+            legacy_query = "SELECT * FROM condemnations WHERE user_id = ? AND (guild_id = ? OR guild_id = 0)"
+            if active_only:
+                legacy_query += " AND active = 1"
+            legacy = conn.execute(legacy_query, (user_id, guild_id)).fetchone()
+            if legacy is not None:
+                conn.execute(
+                    "INSERT OR REPLACE INTO guild_cases "
+                    "(guild_id, user_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active, pardoned_by, pardoned_at, resolution, announcement_message_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (guild_id, legacy["user_id"], legacy["role_id"], legacy["role_ids"], legacy["reason"],
+                     legacy["duration_minutes"], legacy["condemned_at"], legacy["expires_at"], legacy["origin"],
+                     legacy["applied_by"], legacy["active"], legacy["pardoned_by"], legacy["pardoned_at"],
+                     legacy["resolution"], legacy["announcement_message_id"]),
+                )
+                conn.commit()
+                row = conn.execute(query, params).fetchone()
     conn.close()
     return row
 
@@ -3443,14 +3472,14 @@ def condemnation_save(
     expires = when + timedelta(minutes=duration_minutes) if duration_minutes else None
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        "INSERT INTO condemnations "
-        "(user_id, guild_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active, pardoned_by, pardoned_at, resolution, announcement_message_id) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, NULL, NULL, NULL) "
-        "ON CONFLICT(user_id) DO UPDATE SET guild_id=excluded.guild_id, role_ids=excluded.role_ids, "
-        "role_id=excluded.role_id, reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
+        "INSERT INTO guild_cases "
+        "(guild_id, user_id, role_id, role_ids, reason, duration_minutes, condemned_at, expires_at, origin, applied_by, active) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) "
+        "ON CONFLICT(guild_id, user_id) DO UPDATE SET role_id=excluded.role_id, role_ids=excluded.role_ids, "
+        "reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
         "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1, "
         "pardoned_by=NULL, pardoned_at=NULL, resolution=NULL, announcement_message_id=NULL",
-        (user_id, guild_id, role_id, json.dumps(role_ids), reason, duration_minutes, when.isoformat(),
+        (guild_id, user_id, role_id, json.dumps(role_ids), reason, duration_minutes, when.isoformat(),
          expires.isoformat() if expires else None, origin, applied_by),
     )
     conn.commit()
@@ -3458,27 +3487,29 @@ def condemnation_save(
 
 
 def condemnation_deactivate(
-    user_id: int, *, resolution: str | None = None, resolved_by: int | None = None
+    guild_id: int, user_id: int, *, resolution: str | None = None, resolved_by: int | None = None
 ) -> None:
     conn = sqlite3.connect(DB_PATH)
     if resolution == "pardoned":
         conn.execute(
-            "UPDATE condemnations SET active = 0, pardoned_by = ?, pardoned_at = ?, resolution = 'pardoned' WHERE user_id = ?",
-            (resolved_by, datetime.now(timezone.utc).isoformat(), user_id),
+            "UPDATE guild_cases SET active = 0, pardoned_by = ?, pardoned_at = ?, resolution = 'pardoned' "
+            "WHERE guild_id = ? AND user_id = ?",
+            (resolved_by, datetime.now(timezone.utc).isoformat(), guild_id, user_id),
         )
     elif resolution:
-        conn.execute("UPDATE condemnations SET active = 0, resolution = ? WHERE user_id = ?", (resolution, user_id))
+        conn.execute(
+            "UPDATE guild_cases SET active = 0, resolution = ? WHERE guild_id = ? AND user_id = ?",
+            (resolution, guild_id, user_id),
+        )
     else:
-        conn.execute("UPDATE condemnations SET active = 0 WHERE user_id = ?", (user_id,))
+        conn.execute("UPDATE guild_cases SET active = 0 WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
     conn.commit()
     conn.close()
     hp_clear_punished(user_id)
 
 
-def condemnation_add_saved_roles(user_id: int, new_ids: list[int]) -> None:
-    """Añade a la fotografía de roles de una condena activa los que un moderador/bot intentó
-    darle mientras estaba condenado, para que también se le devuelvan al liberarlo."""
-    row = condemnation_get(user_id)
+def condemnation_add_saved_roles(guild_id: int, user_id: int, new_ids: list[int]) -> None:
+    row = condemnation_get(guild_id, user_id)
     if row is None or not new_ids:
         return
     merged = condemnation_parse_role_ids(row["role_ids"])
@@ -3486,7 +3517,10 @@ def condemnation_add_saved_roles(user_id: int, new_ids: list[int]) -> None:
         if rid not in merged:
             merged.append(rid)
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("UPDATE condemnations SET role_ids = ? WHERE user_id = ? AND active = 1", (json.dumps(merged), user_id))
+    conn.execute(
+        "UPDATE guild_cases SET role_ids = ? WHERE guild_id = ? AND user_id = ? AND active = 1",
+        (json.dumps(merged), guild_id, user_id),
+    )
     conn.commit()
     conn.close()
 
@@ -3499,8 +3533,7 @@ def condemnation_list_all_active() -> list[sqlite3.Row]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT * FROM condemnations WHERE active = 1 "
-        "AND (expires_at IS NULL OR expires_at > ?)",
+        "SELECT * FROM guild_cases WHERE active = 1 AND (expires_at IS NULL OR expires_at > ?)",
         (datetime.now(timezone.utc).isoformat(),),
     ).fetchall()
     conn.close()
@@ -3511,7 +3544,7 @@ def condemnation_list(guild_id: int) -> list[sqlite3.Row]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT * FROM condemnations WHERE active = 1 AND (guild_id = ? OR guild_id = 0) "
+        "SELECT * FROM guild_cases WHERE active = 1 AND guild_id = ? "
         "AND (expires_at IS NULL OR expires_at > ?) ORDER BY condemned_at DESC",
         (guild_id, datetime.now(timezone.utc).isoformat()),
     ).fetchall()
@@ -4385,7 +4418,7 @@ class CondemnationPardonView(discord.ui.View):
                 )
                 return
 
-            row = condemnation_get(member.id)
+            row = condemnation_get(member.guild.id, member.id)
             if row is None:
                 await interaction.followup.send(
                     "ℹ️ Este expediente ya no tiene una condena activa o ya fue resuelto.",
@@ -4744,7 +4777,7 @@ async def _condemn_member_inner(
     send_dm: bool,
     announce: bool,
 ) -> tuple[bool, str]:
-    existing = condemnation_get(member.id)
+    existing = condemnation_get(member.guild.id, member.id)
     active_role_id = condemnation_role_id(existing)
     snapshot = preserve_role_ids
     if snapshot is None and existing is None:
@@ -4834,7 +4867,7 @@ async def release_condemned_member(
     automatic: bool = False, pardon: bool = False,
     announcement_message: discord.Message | None = None,
 ) -> tuple[bool, str]:
-    row = condemnation_get(member.id)
+    row = condemnation_get(member.guild.id, member.id)
     punish_role = member.guild.get_role(condemnation_role_id(row))
     if row is None and not (punish_role and punish_role in member.roles):
         return False, "Ese miembro no tiene una condena activa."
@@ -4863,9 +4896,9 @@ async def release_condemned_member(
         _condemn_sync_busy.discard(member.id)
 
     if pardon and row is not None and released_by is not None:
-        condemnation_deactivate(member.id, resolution="pardoned", resolved_by=released_by.id)
+        condemnation_deactivate(member.guild.id, member.id, resolution="pardoned", resolved_by=released_by.id)
     else:
-        condemnation_deactivate(member.id, resolution="expired" if automatic else None)
+        condemnation_deactivate(member.guild.id, member.id, resolution="expired" if automatic else None)
     db_clear_tentado(member.guild.id, member.id)
     db_clear_sin_verificado(member.guild.id, member.id)
     db_clear_verify_pending(member.guild.id, member.id)
@@ -4919,13 +4952,13 @@ async def check_expired_condemnations() -> None:
     for row in rows:
         guild = bot.get_guild(row["guild_id"]) if row["guild_id"] else None
         if guild is None:
-            condemnation_deactivate(row["user_id"])
+            condemnation_deactivate(row["guild_id"], row["user_id"])
             continue
         member = guild.get_member(row["user_id"])
         if member is not None:
             await release_condemned_member(member, automatic=True)
         else:
-            condemnation_deactivate(row["user_id"])
+            condemnation_deactivate(row["guild_id"], row["user_id"])
 
 
 async def condemnation_reconcile(guild: discord.Guild) -> None:
@@ -4952,7 +4985,7 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
     if punish_role is None:
         return
     for member in list(punish_role.members):
-        if member.bot or condemnation_get(member.id) is not None:
+        if member.bot or condemnation_get(member.guild.id, member.id) is not None:
             continue
         await condemn_member(
             member, reason="El rol Condenado fue otorgado manualmente (detectado al arrancar).",
@@ -5589,7 +5622,7 @@ async def condemnation_reaction(payload: discord.RawReactionActionEvent) -> None
         return
     if target.id == actor.id:
         return
-    if condemnation_get(target.id) is not None:
+    if condemnation_get(guild.id, target.id) is not None:
         return
     ok, note = await condemn_member(
         target,
