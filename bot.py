@@ -8027,7 +8027,7 @@ def _var_resolve(name: str, ctx: VarContext) -> str | None:
         kind = _var_key(prefix)
         if kind in ("canal", "channel", "c"):
             return _lookup_channel(rest, ctx.guild)
-        if kind in ("rol", "role", "r"):
+        if kind in ("rol", "role", "r", "mencionrol", "rolmencion"):
             return _lookup_role(rest, ctx.guild)
         if kind in ("usuario", "user", "miembro", "member", "u"):
             return _lookup_member(rest, ctx.guild)
