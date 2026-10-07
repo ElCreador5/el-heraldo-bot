@@ -2250,14 +2250,67 @@ class OrientationRoleNamesModal(discord.ui.Modal):
             seen.add(normalized)
             values.append((key, name))
 
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("❌ No pude resolver este servidor.", ephemeral=True)
+            return
+
+        me = guild.me
+        blocked: list[str] = []
+        for key, name in values:
+            role_id = guild_resource_get(self.guild_id, "role", key)
+            role = guild.get_role(role_id) if role_id else None
+            if role is not None and role.name != name:
+                if me is None or role >= me.top_role:
+                    blocked.append(role.name)
+
+        if blocked:
+            await interaction.response.send_message(
+                "❌ No puedo renombrar estos roles por jerarquía: **"
+                + ", ".join(blocked)
+                + "**. Coloca el rol de El Heraldo por encima e inténtalo de nuevo.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        renamed: list[tuple[discord.Role, str]] = []
+        try:
+            for key, name in values:
+                role_id = guild_resource_get(self.guild_id, "role", key)
+                role = guild.get_role(role_id) if role_id else None
+                if role is not None and role.name != name:
+                    old_name = role.name
+                    role = await role.edit(
+                        name=name,
+                        reason="El Heraldo: nombre de rol de orientación actualizado desde configuración",
+                    )
+                    renamed.append((role, old_name))
+        except (discord.Forbidden, discord.HTTPException):
+            # Intenta devolver los roles ya modificados a su nombre anterior para evitar
+            # una configuración parcialmente aplicada.
+            for role, old_name in reversed(renamed):
+                try:
+                    await role.edit(
+                        name=old_name,
+                        reason="El Heraldo: reversión de edición incompleta de orientación",
+                    )
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+            await interaction.followup.send(
+                "❌ Discord rechazó uno de los cambios. No guardé la configuración; revisa permisos y jerarquía.",
+                ephemeral=True,
+            )
+            return
+
         for key, name in values:
             guild_config_set(self.guild_id, f"orientation_role_name_{key}", name)
 
-        await interaction.response.defer(ephemeral=True)
         note = "Nombres guardados."
         if orientation_enabled(self.guild_id):
-            ok, sync_note = await ensure_orientation_system(interaction.guild)
-            note = sync_note if ok else f"Guardé los nombres, pero no pude sincronizar los roles: {sync_note}"
+            ok, sync_note = await ensure_orientation_system(guild)
+            note = sync_note if ok else f"Guardé y renombré los roles, pero la tarjeta necesita atención: {sync_note}"
 
         await interaction.followup.send(f"✅ {note}", ephemeral=True)
 
