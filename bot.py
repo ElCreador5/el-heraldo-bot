@@ -8462,6 +8462,12 @@ def get_condemnation_emoji(guild_id: int | None = None) -> str:
 
 
 MODERATION_REPORT_MAX_REACTIONS = 10
+MODERATION_REPORT_REACTION_DEFAULTS = (
+    {"emoji": "📢", "label": "Spam"},
+    {"emoji": "🚩", "label": "Contenido inapropiado / no permitido"},
+    {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)"},
+    {"emoji": "🔞", "label": "Posible menor de edad"},
+)
 _moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
 _reaction_condemn_pending: set[tuple[int, int]] = set()
 
@@ -8470,14 +8476,18 @@ def _moderation_emoji_key(value: str) -> str:
     return str(value).replace("\ufe0f", "").strip()
 
 
+def _moderation_report_default_reactions() -> list[dict[str, str]]:
+    return [dict(item) for item in MODERATION_REPORT_REACTION_DEFAULTS]
+
+
 def moderation_report_reactions(guild_id: int) -> list[dict[str, str]]:
     raw = guild_config_get(guild_id, "moderation_report_reactions")
-    if not raw:
-        return []
+    if raw is None:
+        return _moderation_report_default_reactions()
     try:
         data = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
-        return []
+        return _moderation_report_default_reactions()
     result: list[dict[str, str]] = []
     seen: set[str] = set()
     for item in data if isinstance(data, list) else []:
