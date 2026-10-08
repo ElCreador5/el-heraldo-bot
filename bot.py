@@ -108,6 +108,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 
 import asyncio
 import contextvars
+import copy
 import io
 from collections import deque
 import json
@@ -6436,6 +6437,16 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
         ("HeraldoJoinRolesBotsView", lambda: HeraldoJoinRolesBotsView(guild_id, 0)),
         ("HeraldoJoinRolesSyncView", lambda: HeraldoJoinRolesSyncView(guild_id, 0)),
+        ("HeraldoModerationSetupView", lambda: HeraldoModerationSetupView(guild_id, 0)),
+        ("HeraldoUserReportsSetupView", lambda: HeraldoUserReportsSetupView(guild_id, 0)),
+        ("HeraldoCasesSetupView", lambda: HeraldoCasesSetupView(guild_id, 0)),
+        ("HeraldoCondemnationSetupView", lambda: HeraldoCondemnationSetupView(guild_id, 0)),
+        ("HeraldoAutomodSetupView", lambda: HeraldoAutomodSetupView(guild_id, 0)),
+        ("HeraldoVerificationHubView", lambda: HeraldoVerificationHubView(guild_id, 0)),
+        ("HeraldoLoggingSetupView", lambda: HeraldoLoggingSetupView(guild_id, 0)),
+        ("HeraldoReactionRolesSetupView", lambda: HeraldoReactionRolesSetupView(guild_id, 0)),
+        ("HeraldoReactionRolesEditorView", lambda: HeraldoReactionRolesEditorView(
+            guild_id, 0, {"channel_id": 0, "roles": []})),
         ("DefaultMessageStudioView:verification:preview", lambda: DefaultMessageStudioView(guild_id, 0, "verification", "preview", "messages_setup")),
         ("DefaultMessageStudioView:verification:edit", lambda: DefaultMessageStudioView(guild_id, 0, "verification", "edit", "messages_setup")),
         ("DefaultMessageStudioView:verify_dm:edit", lambda: DefaultMessageStudioView(guild_id, 0, "verify_dm", "edit", "messages_setup")),
@@ -7315,10 +7326,10 @@ class HeraldoReactionEmojiModal(discord.ui.Modal, title="Configurar reacción"):
         bindings.append({"emoji": value, "add": [], "remove": []})
         self.editor.panel["roles"] = bindings
         self.editor.selected = len(bindings) - 1
-        await interaction.response.send_message(
-            self.editor.content(interaction.guild),
+        await interaction.response.edit_message(
+            content=self.editor.content(interaction.guild),
             view=HeraldoReactionRolesEditorView(self.editor.guild_id, self.editor.owner_id, self.editor.panel,
-                                                selected=self.editor.selected), ephemeral=True)
+                                                selected=self.editor.selected))
 
 
 class HeraldoReactionOptionsModal(discord.ui.Modal, title="Opciones de Reaction Roles"):
@@ -7347,10 +7358,10 @@ class HeraldoReactionOptionsModal(discord.ui.Modal, title="Opciones de Reaction 
         self.editor.panel["max_reactions"] = int(self.maximum.value)
         self.editor.panel["list_mode"] = normalized
         self.editor.panel["reversed"] = reverse_value in ("sí", "si")
-        await interaction.response.send_message(
-            self.editor.content(interaction.guild),
+        await interaction.response.edit_message(
+            content=self.editor.content(interaction.guild),
             view=HeraldoReactionRolesEditorView(self.editor.guild_id, self.editor.owner_id, self.editor.panel,
-                                                selected=self.editor.selected), ephemeral=True)
+                                                selected=self.editor.selected))
 
 
 class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Reaction Roles"):
@@ -7366,22 +7377,21 @@ class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Rea
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.editor.panel["title"] = str(self.heading.value)
         self.editor.panel["description"] = str(self.description.value)
-        await interaction.response.send_message(
-            self.editor.content(interaction.guild),
+        await interaction.response.edit_message(
+            content=self.editor.content(interaction.guild),
             view=HeraldoReactionRolesEditorView(
                 self.editor.guild_id,
                 self.editor.owner_id,
                 self.editor.panel,
                 selected=self.editor.selected,
             ),
-            ephemeral=True,
         )
 
 
 class HeraldoReactionRolesEditorView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int, panel: dict, selected: int = 0):
         super().__init__(timeout=900)
-        self.guild_id, self.owner_id, self.panel = guild_id, owner_id, panel
+        self.guild_id, self.owner_id, self.panel = guild_id, owner_id, copy.deepcopy(panel)
         bindings = rr_bindings(panel)
         self.selected = max(0, min(selected, len(bindings) - 1)) if bindings else 0
         active = bindings[self.selected] if bindings else None
@@ -7499,6 +7509,12 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
         if any(not rr_valid_role(interaction.guild, r) for r in selected):
             await interaction.response.send_message("Alguno de los roles no es administrable por El Heraldo.", ephemeral=True)
             return
+        other_key = "remove" if key == "add" else "add"
+        if set(selected).intersection(bindings[self.selected][other_key]):
+            await interaction.response.send_message(
+                "Un rol no puede añadirse y retirarse con la misma reacción.", ephemeral=True
+            )
+            return
         bindings[self.selected][key] = selected
         self.panel["roles"] = bindings
         updated = HeraldoReactionRolesEditorView(
@@ -7559,6 +7575,11 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
         if any(not rr_valid_role(guild, r) for x in bindings for r in x["add"] + x["remove"]):
             await interaction.response.send_message("Los roles cambiaron o superan la jerarquía del bot.", ephemeral=True)
             return
+        if any(set(x["add"]).intersection(x["remove"]) for x in bindings):
+            await interaction.response.send_message(
+                "Un rol no puede añadirse y retirarse con la misma reacción.", ephemeral=True
+            )
+            return
         await interaction.response.defer(ephemeral=True)
         created = False
         try:
@@ -7595,8 +7616,12 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
         self.panel["message_id"] = message.id
         self.panel["roles"] = bindings
         rr_panel_upsert(guild.id, self.panel)
-        await interaction.edit_original_response(content=self.content(guild) + f"\n\nGuardado: {message.jump_url}",
-                                                 view=HeraldoReactionRolesEditorView(guild.id, self.owner_id, self.panel))
+        updated = HeraldoReactionRolesEditorView(
+            guild.id, self.owner_id, self.panel, selected=self.selected
+        )
+        await interaction.edit_original_response(
+            content=updated.content(guild) + f"\n\nGuardado: {message.jump_url}", view=updated
+        )
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -7651,6 +7676,7 @@ class HeraldoReactionDeleteModal(discord.ui.Modal, title="Eliminar panel"):
         if not panel:
             await interaction.response.send_message("El panel ya no existe.", ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True)
         channel = interaction.guild.get_channel(int(panel["channel_id"]))
         if isinstance(channel, discord.TextChannel):
             try:
@@ -7660,12 +7686,16 @@ class HeraldoReactionDeleteModal(discord.ui.Modal, title="Eliminar panel"):
                         await message.clear_reaction(binding["emoji"])
                 else:
                     await message.delete()
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                await interaction.response.send_message("No se pudo retirar el mensaje o sus reacciones. Revise mis permisos.", ephemeral=True)
+            except discord.NotFound:
+                pass  # El mensaje eliminado ya no necesita limpieza en Discord.
+            except discord.HTTPException:
+                await interaction.followup.send("No se pudo retirar el mensaje o sus reacciones. Revise mis permisos.", ephemeral=True)
                 return
         reaction_role_panels_save(self.guild_id, [x for x in panels if int(x.get("message_id", 0)) != self.message_id])
         hub = HeraldoReactionRolesSetupView(self.guild_id, interaction.user.id)
-        await interaction.response.send_message(hub.summary(interaction.guild) + "\n\nPanel eliminado.", view=hub, ephemeral=True)
+        await interaction.edit_original_response(
+            content=hub.summary(interaction.guild) + "\n\nPanel eliminado.", view=hub
+        )
 
 
 class HeraldoReactionRolesSetupView(discord.ui.View):
@@ -7744,9 +7774,34 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+_rr_rejected_removals: dict[tuple[int, int, int, str], float] = {}
+
+
+async def rr_reject_reaction(message: discord.Message, emoji: str, member: discord.Member) -> None:
+    # Discord emite un evento remove también al retirar nosotros una elección rechazada.
+    # Ese evento no debe invertir acciones de roles que nunca se aplicaron.
+    now = time.monotonic()
+    for key, expiry in list(_rr_rejected_removals.items()):
+        if expiry <= now:
+            _rr_rejected_removals.pop(key, None)
+    key = (message.guild.id, message.id, member.id, _orientation_emoji_key(emoji))
+    _rr_rejected_removals[key] = now + 60
+    try:
+        await message.remove_reaction(emoji, member)
+    except discord.HTTPException:
+        _rr_rejected_removals.pop(key, None)
+        raise
+
+
 async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: bool) -> None:
     if payload.guild_id is None or payload.user_id == getattr(bot.user, "id", None):
         return
+    if not added:
+        key = (payload.guild_id, payload.message_id, payload.user_id,
+               _orientation_emoji_key(str(payload.emoji)))
+        expiry = _rr_rejected_removals.pop(key, 0)
+        if expiry > time.monotonic():
+            return
     panel = reaction_role_panel_find(payload.guild_id, payload.message_id)
     if not panel or int(panel["channel_id"]) != payload.channel_id:
         return
@@ -7770,7 +7825,7 @@ async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: boo
         if added and isinstance(channel, discord.TextChannel):
             try:
                 message = await channel.fetch_message(payload.message_id)
-                await message.remove_reaction(str(payload.emoji), member)
+                await rr_reject_reaction(message, str(payload.emoji), member)
             except discord.HTTPException:
                 pass
         return
@@ -7786,7 +7841,7 @@ async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: boo
                             active += 1
                             break
             if active > int(panel["max_reactions"]):
-                await message.remove_reaction(str(payload.emoji), member)
+                await rr_reject_reaction(message, str(payload.emoji), member)
                 return
         except discord.HTTPException:
             return
@@ -15062,7 +15117,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
         f"• Acción: **{RAID_ACTION_LABELS[raid_action(guild.id)]}**",
         f"• Filtro de edad de cuenta: **{'cuentas de menos de ' + format_flex_duration(min_age) if min_age else 'sin filtro (todos los ingresos del raid)'}**",
         f"• Proporción mínima de cuentas nuevas: **{str(ratio) + '%' if ratio else 'desactivada'}**",
-        f"• Alertas: **canal general de Logs de El Heraldo**",
+        "• Alertas: **canal general de Logs de El Heraldo**",
         f"• Pausar invitaciones: **{'sí' if raid_lock_invites_enabled(guild.id) else 'no'}**",
         f"• Purgar mensajes de los sancionados: **{'sí' if raid_purge_enabled(guild.id) else 'no'}**",
         f"• Rol de alerta: {role.mention if role else '**ninguno**'}",
@@ -15114,7 +15169,7 @@ async def raid_config(
     guild = interaction.guild
     values = (
         activado, ingresos, ventana, duracion, accion, edad_cuenta,
-        proporcion_cuentas_nuevas, canal_alertas, pausar_invitaciones, purgar, ping_rol
+        proporcion_cuentas_nuevas, pausar_invitaciones, purgar, ping_rol
     )
     if all(v is None for v in values):
         await interaction.response.send_message(raid_config_summary(guild), ephemeral=True)
