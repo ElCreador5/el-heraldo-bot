@@ -1,0 +1,25 @@
+name: Mensajes - verificación de regresiones
+
+on:
+  push:
+    branches:
+      - feat/messages-setup-studio-20261008
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Comprobar sintaxis
+        run: python -m py_compile bot.py test_regressions.py
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Pruebas de regresión
+        run: python -m unittest discover -p 'test_regressions.py' -v
