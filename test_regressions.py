@@ -279,6 +279,128 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
                         self.member.add_roles.assert_not_awaited()
 
 
+    async def test_join_inline_creation_preserves_draft_and_cache_miss(self):
+        for cls, kind in ((b.HeraldoJoinRolesBasicView, 'basic'), (b.HeraldoJoinRolesBotsView, 'bots'), (b.HeraldoJoinRolesUsersView, 'users')):
+            with self.subTest(kind=kind):
+                view = cls(777, 99)
+                if kind == 'users':
+                    view.selected_user_id = 99
+                    view.selected_role_ids = [12]
+                else:
+                    view.pending_role_ids = [12]
+                    view.pending_enabled = True
+                i = interaction(self.guild)
+                i.user.guild_permissions = b.discord.Permissions(manage_roles=True)
+                self.guild.me.guild_permissions = b.discord.Permissions(manage_roles=True)
+                self.guild.create_role = AsyncMock(return_value=SimpleNamespace(id=12345, mention='<@&12345>'))
+                modal = b.JoinRolesCreateRoleModal(view, kind)
+                modal.role_name._value = 'Nuevo'
+                await modal.on_submit(i)
+                ids = view.selected_role_ids if kind == 'users' else view.pending_role_ids
+                self.assertEqual(ids, [12, 12345])
+                if kind != 'users': self.assertTrue(view.pending_enabled)
+                selector = next(c for c in view.children if isinstance(c, b.discord.ui.RoleSelect))
+                self.assertEqual([v.id for v in selector.default_values], ids)
+                self.assertEqual(self.guild.create_role.call_args.kwargs['permissions'].value, 0)
+                i.response.defer.assert_awaited_once()
+                await modal.on_submit(i)
+                self.guild.create_role.assert_awaited_once()
+
+    async def test_join_creation_denied_does_not_create(self):
+        view = b.HeraldoJoinRolesBasicView(777, 99)
+        modal = b.JoinRolesCreateRoleModal(view, 'basic')
+        modal.role_name._value = 'Nuevo'
+        self.guild.create_role = AsyncMock()
+        await modal.on_submit(interaction(self.guild))
+        self.guild.create_role.assert_not_awaited()
+
+    async def test_join_discard_resets_visual_and_user_draft(self):
+        b.set_join_role_ids(777, [10])
+        view = b.HeraldoJoinRolesBasicView(777, 99)
+        view.pending_role_ids = [20]
+        b.join_role_selector_defaults(view, [20])
+        await view.discard_changes.callback(interaction(self.guild))
+        selector = next(c for c in view.children if isinstance(c, b.discord.ui.RoleSelect))
+        self.assertEqual([v.id for v in selector.default_values], [10])
+        users = b.HeraldoJoinRolesUsersView(777, 99)
+        users.selected_user_id, users.selected_role_ids = 99, [20]
+        await users.discard_changes.callback(interaction(self.guild))
+        self.assertIsNone(users.selected_user_id)
+        self.assertEqual(users.selected_role_ids, [])
+
+    async def test_reports_summary_uses_draft_and_discard_resets_channel(self):
+        b.set_moderation_report_channel_id(777, 10)
+        view = b.HeraldoUserReportsSetupView(777, 99)
+        view.pending_channel_id = 20
+        view.pending_reactions = [{'emoji': '🧪', 'label': 'Borrador visible', 'action': 'report', 'threshold': 2}]
+        view._rebuild_reaction_select()
+        self.assertIn('Borrador visible', view._content(self.guild))
+        self.assertNotIn('solo notifican', view._content(self.guild))
+        await view.discard_changes.callback(interaction(self.guild))
+        self.assertEqual(view.channel_select.default_values[0].id, 10)
+        self.assertNotIn('Borrador visible', view._content(self.guild))
+
+    async def test_rr_events_are_serial_and_locks_cleaned(self):
+        import asyncio
+        current = 0
+        peak = 0
+        async def handler(payload, added):
+            nonlocal current, peak
+            current += 1
+            peak = max(peak, current)
+            await asyncio.sleep(0)
+            current -= 1
+        payload = SimpleNamespace(guild_id=777, message_id=20, user_id=99)
+        with patch.object(b, '_rr_handle_reaction_serial', side_effect=handler):
+            await asyncio.gather(b.rr_handle_reaction(payload, True), b.rr_handle_reaction(payload, False))
+        self.assertEqual(peak, 1)
+        self.assertEqual(b._rr_event_locks, {})
+
+
+    async def test_join_delay_is_draft_until_save(self):
+        b.guild_config_set(777, 'join_roles_delay_seconds', '0')
+        view = b.HeraldoJoinRolesBasicView(777, 99)
+        modal = b.JoinRolesDelayModal(777, view)
+        modal.delay._value = '15'
+        await modal.on_submit(interaction(self.guild))
+        self.assertEqual(b.get_join_roles_delay(777), 0)
+        self.assertEqual(view.pending_delay, 15)
+        await view.save_changes.callback(interaction(self.guild))
+        self.assertEqual(b.get_join_roles_delay(777), 15)
+        self.assertIsNone(view.pending_delay)
+
+    async def test_join_creation_limit_and_http_failure_preserve_draft(self):
+        view = b.HeraldoJoinRolesBasicView(777, 99)
+        view.pending_role_ids = list(range(1, 26))
+        i = interaction(self.guild)
+        i.user.guild_permissions = b.discord.Permissions(manage_roles=True)
+        self.guild.me.guild_permissions = b.discord.Permissions(manage_roles=True)
+        self.guild.create_role = AsyncMock(side_effect=b.discord.Forbidden(SimpleNamespace(status=403, reason='denied'), 'denied'))
+        modal = b.JoinRolesCreateRoleModal(view, 'basic')
+        modal.role_name._value = 'Test'
+        await modal.on_submit(i)
+        self.guild.create_role.assert_not_awaited()
+        view.pending_role_ids = [123]
+        await modal.on_submit(i)
+        self.assertEqual(view.pending_role_ids, [123])
+        self.assertFalse(modal.submitting)
+        i.followup.send.assert_awaited_once()
+
+    async def test_simultaneous_reactions_keep_one_under_limit(self):
+        import asyncio
+        b.rr_panel_upsert(777, panel())
+        async def users():
+            yield self.member
+        self.message.reactions = [SimpleNamespace(emoji=e, users=users) for e in ('👍', '👎')]
+        role = MagicMock(id=2)
+        role.is_assignable.return_value = True
+        self.guild.get_role.return_value = role
+        payloads = [SimpleNamespace(guild_id=777, message_id=20, channel_id=10, user_id=99, member=self.member, emoji=e) for e in ('👍', '👎')]
+        await asyncio.gather(*(b.rr_handle_reaction(p, True) for p in payloads))
+        self.message.remove_reaction.assert_awaited_once()
+        self.member.add_roles.assert_awaited_once()
+
+
 if __name__ == '__main__':
     try:
         unittest.main(verbosity=2)

@@ -1033,11 +1033,11 @@ def _join_roles_render(guild: discord.Guild, role_ids: list[int]) -> str:
 
 def join_roles_basic_summary(guild: discord.Guild) -> str:
     return (
-        "### Basic setup\n"
+        "### Roles para nuevos miembros\n"
         f"Estado: **{'Activo' if join_roles_enabled(guild.id) else 'Desactivado'}**\n"
         f"Roles: {_join_roles_render(guild, get_join_role_ids(guild.id))}\n\n"
-        "### Additional Options\n"
-        f"Rules Screening: **{'Esperar' if join_roles_wait_screening(guild.id) else 'No esperar'}**\n"
+        "### Opciones adicionales\n"
+        f"Esperar aceptación de reglas: **{'Esperar' if join_roles_wait_screening(guild.id) else 'No esperar'}**\n"
         f"Delay: **{get_join_roles_delay(guild.id)} s**\n\n"
         "Los roles configurados se asignan a cada usuario nuevo. Las advertencias indican "
         "problemas de jerarquía, roles eliminados o roles que Discord no permite asignar."
@@ -1052,7 +1052,7 @@ def join_roles_users_summary(guild: discord.Guild) -> str:
     if len(mapping) > 15:
         lines.append(f"… y **{len(mapping) - 15}** usuario(s) más.")
     return (
-        "### User specific roles\n"
+        "### Roles por usuario\n"
         + ("\n".join(lines) if lines else "**No hay usuarios configurados.**")
         + "\n\n"
         f"Remove user from list after join: **{'Sí' if join_roles_remove_specific_after_join(guild.id) else 'No'}**\n\n"
@@ -1064,7 +1064,7 @@ def join_roles_bots_summary(guild: discord.Guild) -> str:
     use_different = join_roles_bot_use_different(guild.id)
     effective_ids = get_join_bot_role_ids(guild.id) if use_different else get_join_role_ids(guild.id)
     return (
-        "### Bot roles\n"
+        "### Roles para bots\n"
         f"Assign Join Roles for bots: **{'Sí' if join_roles_bot_enabled(guild.id) else 'No'}**\n"
         f"Apply assignment delay for bots: **{'Sí' if join_roles_bot_apply_delay(guild.id) else 'No'}**\n"
         f"Use different roles for bots: **{'Sí' if use_different else 'No'}**\n"
@@ -1204,7 +1204,7 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
         return True, "No aplica."
 
     if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
-        return True, "Esperando Rules Screening."
+        return True, "Esperando Esperar aceptación de reglas."
 
     delay = get_join_roles_delay(member.guild.id)
     if delay > 0:
@@ -1214,7 +1214,7 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
             return True, "El miembro ya no está en el servidor."
         member = refreshed
         if join_roles_wait_screening(member.guild.id) and getattr(member, "pending", False):
-            return True, "Esperando Rules Screening."
+            return True, "Esperando Esperar aceptación de reglas."
 
     if has_general:
         ok, note = await _assign_join_roles_now(member)
@@ -1306,7 +1306,7 @@ def join_roles_sync_summary(guild: discord.Guild) -> str:
     excluded = get_join_sync_excluded_role_ids(guild.id)
     last_text = discord.utils.format_dt(last, "R") if last else "**Nunca**"
     return (
-        "### Synchronization\n"
+        "### Sincronización\n"
         f"Approx. missing Join Roles: **{approximate_missing_join_roles(guild)}**\n"
         f"Last synchronization: {last_text}\n"
         f"Exclude roles from sync: {_join_roles_render(guild, excluded)}\n"
@@ -1322,7 +1322,7 @@ def join_roles_summary(guild: discord.Guild) -> str:
         "roles específicos por usuario, roles para bots y sincronización.\n\n"
         f"**Join Roles generales:** {len(get_join_role_ids(guild.id))}\n"
         f"**Usuarios específicos:** {len(get_join_specific_roles(guild.id))}\n"
-        f"**Bot roles:** {'Activo' if join_roles_bot_enabled(guild.id) else 'Desactivado'}\n"
+        f"**Roles para bots:** {'Activo' if join_roles_bot_enabled(guild.id) else 'Desactivado'}\n"
         f"**Sync periódico:** {'Activo' if get_join_sync_interval_minutes(guild.id) else 'Desactivado'}"
     )
 
@@ -2226,7 +2226,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         return
 
     # Flujos normales de verificación; una condena activa ya salió por arriba.
-    # Join Roles que esperan Rules Screening se asignan al completar la pantalla.
+    # Join Roles que esperan Esperar aceptación de reglas se asignan al completar la pantalla.
     if (
         (join_roles_enabled(after.guild.id) or after.id in get_join_specific_roles(after.guild.id))
         and join_roles_wait_screening(after.guild.id)
@@ -2656,7 +2656,8 @@ def heraldo_setup_home_content() -> str:
 async def heraldo_setup_go_home(
     interaction: discord.Interaction, guild_id: int, owner_id: int,
 ) -> None:
-    await interaction.response.edit_message(
+    await interaction.response.defer()
+    await interaction.edit_original_response(
         content=heraldo_setup_home_content(),
         embed=None,
         view=HeraldoSetupView(guild_id, owner_id),
@@ -3179,7 +3180,7 @@ class HeraldoRoleSetupView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
-class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Delay"):
+class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Tiempo de espera"):
     delay = discord.ui.TextInput(
         label="Retraso antes de asignar (segundos)",
         required=True,
@@ -3187,10 +3188,11 @@ class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Delay"):
         placeholder="0 = inmediato",
     )
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, editor=None) -> None:
         super().__init__()
         self.guild_id = guild_id
-        self.delay.default = str(get_join_roles_delay(guild_id))
+        self.editor = editor
+        self.delay.default = str(editor.pending_delay if editor is not None and editor.pending_delay is not None else get_join_roles_delay(guild_id))
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
@@ -3199,11 +3201,15 @@ class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Delay"):
                 raise ValueError
         except ValueError:
             await interaction.response.send_message(
-                "Error: El delay debe estar entre 0 y 86400 segundos.", ephemeral=True
+                "Error: La espera debe estar entre 0 y 86400 segundos.", ephemeral=True
             )
             return
+        if self.editor is not None:
+            self.editor.pending_delay = seconds
+            await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n" + join_roles_basic_summary(interaction.guild) + self.editor._pending(interaction.guild), view=self.editor)
+            return
         guild_config_set(self.guild_id, "join_roles_delay_seconds", str(seconds))
-        await interaction.response.send_message(f"Delay guardado: **{seconds} s**.", ephemeral=True)
+        await interaction.response.send_message(f"Tiempo de espera guardado: **{seconds} s**.", ephemeral=True)
 
 
 class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periódico"):
@@ -3260,31 +3266,35 @@ class _JoinRolesOwnedView(discord.ui.View):
 
 
 class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
-    @discord.ui.button(label="Basic setup", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Roles para nuevos miembros", style=discord.ButtonStyle.primary, row=0)
     async def basic(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n" + join_roles_basic_summary(interaction.guild),
             view=HeraldoJoinRolesBasicView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="User specific roles", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Roles por usuario", style=discord.ButtonStyle.secondary, row=0)
     async def users(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · User specific roles**\n\n" + join_roles_users_summary(interaction.guild),
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content="**El Heraldo · Join Roles · Roles por usuario**\n\n" + join_roles_users_summary(interaction.guild),
             view=HeraldoJoinRolesUsersView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Bot roles", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Roles para bots", style=discord.ButtonStyle.secondary, row=1)
     async def bots(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild),
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild),
             view=HeraldoJoinRolesBotsView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Synchronization", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Sincronización", style=discord.ButtonStyle.secondary, row=1)
     async def synchronization(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild),
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content="**El Heraldo · Join Roles · Sincronización**\n\n" + join_roles_sync_summary(interaction.guild),
             view=HeraldoJoinRolesSyncView(self.guild_id, self.owner_id),
         )
 
@@ -3294,12 +3304,68 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
 
 
 
+def join_role_selector_defaults(view, role_ids):
+    for child in view.children:
+        if isinstance(child, discord.ui.RoleSelect):
+            child.default_values = [discord.SelectDefaultValue(id=int(rid), type=discord.SelectDefaultValueType.role) for rid in role_ids]
+
+
+class JoinRolesCreateRoleModal(discord.ui.Modal, title="Crear rol sin salir del editor"):
+    role_name = discord.ui.TextInput(label="Nombre del nuevo rol", max_length=100)
+
+    def __init__(self, editor, kind):
+        super().__init__()
+        self.editor, self.kind, self.submitting = editor, kind, False
+
+    async def on_submit(self, interaction):
+        guild, editor = interaction.guild, self.editor
+        if guild is None or guild.id != editor.guild_id or interaction.user.id != editor.owner_id:
+            await interaction.response.send_message("Este editor pertenece a otro administrador.", ephemeral=True)
+            return
+        if not getattr(interaction.user, "guild_permissions", discord.Permissions.none()).manage_roles or guild.me is None or not guild.me.guild_permissions.manage_roles:
+            await interaction.response.send_message("Tú y El Heraldo necesitan el permiso Gestionar roles.", ephemeral=True)
+            return
+        name = str(self.role_name.value).strip()
+        if self.kind == "users":
+            roles = list(editor.selected_role_ids)
+        else:
+            saved = get_join_bot_role_ids if self.kind == "bots" else get_join_role_ids
+            roles = list(editor.pending_role_ids if editor.pending_role_ids is not None else saved(editor.guild_id))
+        if not name or len(roles) >= JOIN_ROLES_MAX:
+            await interaction.response.send_message("Indica un nombre y deja espacio en la selección: máximo 25 roles.", ephemeral=True)
+            return
+        if self.submitting:
+            await interaction.response.send_message("La creación del rol ya está en curso.", ephemeral=True)
+            return
+        self.submitting = True
+        await interaction.response.defer()
+        try:
+            role = await guild.create_role(name=name, permissions=discord.Permissions.none(), mentionable=False, hoist=False, reason="El Heraldo: creación desde Join Roles")
+        except discord.HTTPException:
+            self.submitting = False
+            await interaction.followup.send("Discord no pudo crear el rol. Revisa el permiso Gestionar roles y el límite del servidor. Tu borrador se conserva.", ephemeral=True)
+            return
+        roles.append(role.id)
+        if self.kind == "users":
+            editor.selected_role_ids = roles
+            content = editor._content(guild)
+            save = "Guardar usuario"
+        else:
+            editor.pending_role_ids = roles
+            summary = join_roles_bots_summary if self.kind == "bots" else join_roles_basic_summary
+            content = "**El Heraldo · Join Roles**\n\n" + summary(guild) + editor._pending(guild)
+            save = "Guardar cambios"
+        join_role_selector_defaults(editor, roles)
+        await interaction.edit_original_response(content=content + f"\n\nRol creado y seleccionado: {role.mention}. Pulsa **{save}** para usarlo en esta configuración. El rol ya existe aunque descartes el borrador.", view=editor)
+
+
 class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(guild_id, owner_id)
         self.pending_role_ids: list[int] | None = None
         self.pending_screening: bool | None = None
         self.pending_enabled: bool | None = None
+        self.pending_delay: int | None = None
         selector = discord.ui.RoleSelect(
             placeholder="Roles asignados a todos los usuarios nuevos",
             min_values=0,
@@ -3308,6 +3374,11 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         )
         selector.callback = self.select_roles
         self.add_item(selector)
+        join_role_selector_defaults(self, get_join_role_ids(self.guild_id))
+
+    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.primary, row=1)
+    async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(JoinRolesCreateRoleModal(self, "basic"))
 
     def _pending(self, guild: discord.Guild) -> str:
         items: list[str] = []
@@ -3315,9 +3386,11 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             roles = [guild.get_role(rid) for rid in self.pending_role_ids]
             items.append("Join Roles → " + (", ".join(r.mention for r in roles if r) or "ninguno"))
         if self.pending_screening is not None:
-            items.append(f"Rules Screening → {'sí' if self.pending_screening else 'no'}")
+            items.append(f"Esperar aceptación de reglas → {'sí' if self.pending_screening else 'no'}")
         if self.pending_enabled is not None:
             items.append(f"Sistema → {'activo' if self.pending_enabled else 'desactivado'}")
+        if self.pending_delay is not None:
+            items.append(f"Tiempo de espera → {self.pending_delay} segundos")
         return _pending_config_text(items)
 
     async def select_roles(self, interaction: discord.Interaction) -> None:
@@ -3333,26 +3406,26 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             return
         self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="Rules Screening", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Esperar aceptación de reglas", style=discord.ButtonStyle.secondary, row=1)
     async def screening(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_screening if self.pending_screening is not None else join_roles_wait_screening(self.guild_id)
         self.pending_screening = not current
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="Delay", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Tiempo de espera", style=discord.ButtonStyle.secondary, row=1)
     async def delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(JoinRolesDelayModal(self.guild_id))
+        await interaction.response.send_modal(JoinRolesDelayModal(self.guild_id, self))
 
     @discord.ui.button(label="Activar", style=discord.ButtonStyle.success, row=2)
     async def enable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -3362,7 +3435,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             return
         self.pending_enabled = True
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
@@ -3372,7 +3445,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
     async def disable(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_enabled = False
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + self._pending(interaction.guild),
             view=self,
@@ -3380,10 +3453,12 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_role_ids is None and self.pending_screening is None and self.pending_enabled is None:
+        if self.pending_role_ids is None and self.pending_screening is None and self.pending_enabled is None and self.pending_delay is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if self.pending_delay is not None:
+            guild_config_set(self.guild_id, "join_roles_delay_seconds", str(self.pending_delay))
         if self.pending_role_ids is not None:
             set_join_role_ids(self.guild_id, self.pending_role_ids)
         if self.pending_screening is not None:
@@ -3391,10 +3466,12 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         if self.pending_enabled is not None:
             guild_config_set(self.guild_id, "join_roles_enabled", "1" if self.pending_enabled else "0")
         self.pending_role_ids = None
+        join_role_selector_defaults(self, get_join_role_ids(self.guild_id))
         self.pending_screening = None
         self.pending_enabled = None
+        self.pending_delay = None
         await interaction.edit_original_response(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n"
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n"
             + join_roles_basic_summary(interaction.guild)
             + "\n\nCambios guardados.",
             view=self,
@@ -3403,10 +3480,12 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_role_ids = None
+        join_role_selector_defaults(self, get_join_role_ids(self.guild_id))
         self.pending_screening = None
         self.pending_enabled = None
+        self.pending_delay = None
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Basic setup**\n\n" + join_roles_basic_summary(interaction.guild),
+            content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n" + join_roles_basic_summary(interaction.guild),
             view=self,
         )
 
@@ -3444,10 +3523,9 @@ class JoinRolesUserIdModal(discord.ui.Modal, title="Join Roles · Usuario espec�
             )
             return
         self.parent_view.selected_user_id = user_id
-        await interaction.response.send_message(
-            f"Usuario objetivo guardado: <@{user_id}> (`{user_id}`). "
-            "Ahora selecciona sus roles y pulsa **Guardar usuario**.",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            content=self.parent_view._content(interaction.guild) + f"\n\nUsuario seleccionado: <@{user_id}>. Selecciona sus roles y pulsa **Guardar usuario**.",
+            view=self.parent_view,
         )
 
 
@@ -3468,6 +3546,10 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         role_select.callback = self.select_roles
         self.add_item(role_select)
 
+    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.primary, row=0)
+    async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(JoinRolesCreateRoleModal(self, "users"))
+
     def _content(self, guild: discord.Guild) -> str:
         items: list[str] = []
         if self.selected_user_id is not None and self.selected_role_ids:
@@ -3477,9 +3559,9 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
                 + ", ".join(role.mention for role in roles if role is not None)
             )
         if self.pending_remove_after is not None:
-            items.append(f"Remove after join → {'sí' if self.pending_remove_after else 'no'}")
+            items.append(f"Quitar regla tras ingresar → {'sí' if self.pending_remove_after else 'no'}")
         return (
-            "**El Heraldo · Join Roles · User specific roles**\n\n"
+            "**El Heraldo · Join Roles · Roles por usuario**\n\n"
             + join_roles_users_summary(guild)
             + _pending_config_text(items)
         )
@@ -3507,6 +3589,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
             return
         set_join_specific_user_roles(self.guild_id, self.selected_user_id, [role.id for role in roles])
         self.selected_role_ids = []
+        join_role_selector_defaults(self, [])
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nUsuario guardado.", view=self)
 
     @discord.ui.button(label="Quitar usuario", style=discord.ButtonStyle.danger, row=2)
@@ -3521,7 +3604,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="Remove after join", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Quitar regla tras ingresar", style=discord.ButtonStyle.secondary, row=3)
     async def remove_after(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_remove_after if self.pending_remove_after is not None else join_roles_remove_specific_after_join(self.guild_id)
         self.pending_remove_after = not current
@@ -3538,6 +3621,9 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.selected_user_id = None
+        self.selected_role_ids = []
+        join_role_selector_defaults(self, [])
         self.pending_remove_after = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
@@ -3564,6 +3650,11 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         )
         selector.callback = self.select_bot_roles
         self.add_item(selector)
+        join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
+
+    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.primary, row=1)
+    async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(JoinRolesCreateRoleModal(self, "bots"))
 
     def _pending(self, guild: discord.Guild) -> str:
         items = []
@@ -3589,23 +3680,23 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
             return
         self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild),
+            content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild),
             view=self,
         )
 
-    @discord.ui.button(label="Assign for bots", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Asignar a bots", style=discord.ButtonStyle.secondary, row=1)
     async def bot_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_enabled if self.pending_enabled is not None else join_roles_bot_enabled(self.guild_id)
         self.pending_enabled = not current
-        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
-    @discord.ui.button(label="Apply delay", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Aplicar espera", style=discord.ButtonStyle.secondary, row=1)
     async def bot_delay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_delay if self.pending_delay is not None else join_roles_bot_apply_delay(self.guild_id)
         self.pending_delay = not current
-        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
-    @discord.ui.button(label="Different roles", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Usar roles diferentes", style=discord.ButtonStyle.secondary, row=1)
     async def bot_different(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_different if self.pending_different is not None else join_roles_bot_use_different(self.guild_id)
         target = not current
@@ -3614,7 +3705,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
             await interaction.response.send_message("Selecciona primero uno o más roles alternativos para bots.", ephemeral=True)
             return
         self.pending_different = target
-        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild) + self._pending(interaction.guild), view=self)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -3631,12 +3722,14 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         if self.pending_different is not None:
             guild_config_set(self.guild_id, "join_roles_bot_use_different", "1" if self.pending_different else "0")
         self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
-        await interaction.edit_original_response(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild) + "\n\nCambios guardados.", view=self)
+        join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
+        await interaction.edit_original_response(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild) + "\n\nCambios guardados.", view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
-        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Bot roles**\n\n" + join_roles_bots_summary(interaction.guild), view=self)
+        join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild), view=self)
 
     @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -3665,7 +3758,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         self.pending_excluded = [int(value) for value in values]
         roles = [interaction.guild.get_role(rid) for rid in self.pending_excluded]
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Synchronization**\n\n"
+            content="**El Heraldo · Join Roles · Sincronización**\n\n"
             + join_roles_sync_summary(interaction.guild)
             + _pending_config_text(["Excluir del Sync → " + (", ".join(r.mention for r in roles if r) or "ninguno")]),
             view=self,
@@ -3695,14 +3788,14 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         set_join_sync_excluded_role_ids(self.guild_id, self.pending_excluded)
         self.pending_excluded = None
         await interaction.response.edit_message(
-            content="**El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild) + "\n\nCambios guardados.",
+            content="**El Heraldo · Join Roles · Sincronización**\n\n" + join_roles_sync_summary(interaction.guild) + "\n\nCambios guardados.",
             view=self,
         )
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_excluded = None
-        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Synchronization**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
+        await interaction.response.edit_message(content="**El Heraldo · Join Roles · Sincronización**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
 
     @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6575,8 +6668,8 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla d
         self.parent_view._rebuild_reaction_select()
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
-class ModerationCondemnEmojiModal(discord.ui.Modal, title="Moderation · Emoji de condena"):
-    emoji = discord.ui.TextInput(label="Emoji de condena", required=True, max_length=100, placeholder="☠️")
+class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante reacción"):
+    emoji = discord.ui.TextInput(label="Condenar mediante reacción", required=True, max_length=100, placeholder="☠️")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
         super().__init__()
@@ -6591,8 +6684,14 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Moderation · Emoji d
         report_mappings = self.parent_view.pending_reactions
         if report_mappings is None:
             report_mappings = moderation_report_reactions(self.parent_view.guild_id)
-        if any(_moderation_emoji_key(item["emoji"]) == _moderation_emoji_key(emoji) for item in report_mappings):
-            await interaction.response.send_message("Ese emoji ya está configurado para un reporte normal.", ephemeral=True)
+        conflict = next((item for item in report_mappings if _moderation_emoji_key(item["emoji"]) == _moderation_emoji_key(emoji)), None)
+        if conflict:
+            await interaction.response.send_message(
+                f"Ese emoji pertenece al reporte **{conflict['label']}**: "
+                f"{moderation_action_label(str(conflict.get('action', 'report')))}, "
+                f"con un umbral de {conflict.get('threshold', 1)} personas distintas. "
+                "Revísalo en **/setup → Moderation → Reportes → selecciona la reacción → Regla**. "
+                "Elige otro emoji para condenar mediante reacción.", ephemeral=True)
             return
         self.parent_view.pending_condemn_emoji = emoji
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
@@ -6613,6 +6712,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             channel_types=[discord.ChannelType.text], min_values=1, max_values=1, row=0,
         )
         channel_select.callback = self.select_channel
+        self.channel_select = channel_select
         self.add_item(channel_select)
         self.reaction_select: discord.ui.Select | None = None
         self._rebuild_reaction_select()
@@ -6627,6 +6727,8 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         return self.pending_reactions if self.pending_reactions is not None else moderation_report_reactions(self.guild_id)
 
     def _rebuild_reaction_select(self) -> None:
+        channel_id = self.pending_channel_id if self.pending_channel_id is not None else moderation_report_channel_id(self.guild_id)
+        self.channel_select.default_values = [discord.SelectDefaultValue(id=channel_id, type=discord.SelectDefaultValueType.channel)] if channel_id else []
         if self.reaction_select is not None:
             self.remove_item(self.reaction_select)
         reactions = self._working_reactions()
@@ -6675,7 +6777,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     f" · Duración: {format_duration(int(duration)) if duration else '—'}"
                     f" · Ventana de purga: {format_duration(int(purge)) if purge else '—'}"
                 )
-        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild) + selected + _pending_config_text(lines)
+        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -6735,7 +6837,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Emoji de condena", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Condenar mediante reacción", style=discord.ButtonStyle.secondary, row=2)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
@@ -7018,20 +7120,23 @@ class HeraldoModerationSetupView(discord.ui.View):
 
     @discord.ui.button(label="Condenas", style=discord.ButtonStyle.primary, row=0)
     async def condemnations(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         view = HeraldoCondemnationSetupView(self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
+        await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
 
     @discord.ui.button(label="Cases", style=discord.ButtonStyle.primary, row=0)
     async def cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
+        await interaction.response.defer()
+        await interaction.edit_original_response(
             content=moderation_cases_summary(interaction.guild),
             view=HeraldoCasesSetupView(self.guild_id, self.owner_id),
         )
 
     @discord.ui.button(label="Reportes", style=discord.ButtonStyle.primary, row=0)
     async def user_reports(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
+        await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
 
     @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -7885,7 +7990,25 @@ async def rr_reject_reaction(message: discord.Message, emoji: str, member: disco
         raise
 
 
+_rr_event_locks: dict[tuple, tuple[asyncio.Lock, int]] = {}
+
+
 async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: bool) -> None:
+    key = (payload.guild_id, payload.message_id, payload.user_id)
+    lock, users = _rr_event_locks.get(key, (asyncio.Lock(), 0))
+    _rr_event_locks[key] = (lock, users + 1)
+    try:
+        async with lock:
+            await _rr_handle_reaction_serial(payload, added)
+    finally:
+        _, users = _rr_event_locks[key]
+        if users == 1:
+            del _rr_event_locks[key]
+        else:
+            _rr_event_locks[key] = (lock, users - 1)
+
+
+async def _rr_handle_reaction_serial(payload: discord.RawReactionActionEvent, added: bool) -> None:
     if payload.guild_id is None or payload.user_id == getattr(bot.user, "id", None):
         return
     if not added:
@@ -7926,6 +8049,9 @@ async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: boo
             message = await channel.fetch_message(payload.message_id)
             active = 0
             for reaction in message.reactions:
+                rejection_key = (payload.guild_id, payload.message_id, payload.user_id, _orientation_emoji_key(str(reaction.emoji)))
+                if _rr_rejected_removals.get(rejection_key, 0) > time.monotonic():
+                    continue
                 if any(_orientation_emoji_key(x["emoji"]) == _orientation_emoji_key(str(reaction.emoji))
                        for x in rr_bindings(panel)):
                     async for user in reaction.users():
@@ -10889,10 +11015,10 @@ def moderation_is_staff(member: discord.Member) -> bool:
     )
 
 
-def moderation_reports_summary(guild: discord.Guild) -> str:
-    channel_id = moderation_report_channel_id(guild.id)
+def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mappings=None, condemn_emoji=None) -> str:
+    channel_id = moderation_report_channel_id(guild.id) if channel_id is None else channel_id
     channel = guild.get_channel(channel_id) if channel_id else None
-    mappings = moderation_report_reactions(guild.id)
+    mappings = moderation_report_reactions(guild.id) if mappings is None else mappings
     def rule_line(item: dict[str, object]) -> str:
         action = moderation_action_label(str(item.get("action", "report")))
         threshold = int(item.get("threshold", 1))
@@ -10905,9 +11031,13 @@ def moderation_reports_summary(guild: discord.Guild) -> str:
     return (
         f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
         f"**Reacciones de reporte:**\n{mapping_text}\n"
-        f"**Reacción para condenar:** {get_condemnation_emoji(guild.id)}\n\n"
-        "Los reportes normales solo notifican al equipo de moderación. "
-        "La reacción de condena solo puede ser usada por moderadores y exige una razón antes de aplicar el rol de castigo."
+        f"**Reacción para condenar:** {condemn_emoji or get_condemnation_emoji(guild.id)}\n\n"
+        "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
+        "Al alcanzar el umbral de personas distintas, se ejecuta la acción de esa regla. "
+        "Si hay una ventana de purga, también se eliminan mensajes, incluso con Solo reportar. "
+        "Para revisar la acción y el umbral, selecciona la reacción y pulsa **Regla**.\n"
+        "Para condenar mediante reacción, un moderador reacciona al mensaje del miembro "
+        "con el emoji de condena y proporciona la razón solicitada por mensaje directo antes de aplicar la condena."
     )
 
 
