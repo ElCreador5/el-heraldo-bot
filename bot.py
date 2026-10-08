@@ -6506,6 +6506,49 @@ class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
         )
 
 
+
+class HeraldoTemplateRawModal(discord.ui.Modal, title="Edición JSON de plantilla"):
+    raw = discord.ui.TextInput(label="JSON de la plantilla", style=discord.TextStyle.paragraph, max_length=4000)
+
+    def __init__(self, guild_id: int, owner_id: int, selected: str, template: dict):
+        super().__init__()
+        self.guild_id, self.owner_id, self.selected = guild_id, owner_id, selected
+        self.raw.default = json.dumps({k: template.get(k, "") for k in
+            ("title", "description", "image", "button_label", "button_url")}, ensure_ascii=False, indent=2)[:4000]
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Acceso denegado.", ephemeral=True)
+            return
+        try:
+            values = json.loads(str(self.raw))
+            allowed = {"title": 256, "description": 2000, "image": 400, "button_label": 80, "button_url": 400}
+            if not isinstance(values, dict) or set(values) - set(allowed):
+                raise ValueError
+            for key, value in values.items():
+                if not isinstance(value, str) or len(value) > allowed[key]:
+                    raise ValueError
+            for key in ("image", "button_url"):
+                url = values.get(key, "")
+                if url and not re.match(r"^https://[^\s]+$", url, re.I):
+                    raise ValueError
+            if bool(values.get("button_url", "")) != bool(values.get("button_label", "")):
+                raise ValueError
+            if not any(values.get(k) for k in ("title", "description", "image")):
+                raise ValueError
+        except (ValueError, TypeError):
+            await interaction.response.send_message("JSON inválido. Usa exclusivamente las propiedades admitidas, dentro de sus límites.", ephemeral=True)
+            return
+        templates = heraldo_template_list(self.guild_id)
+        target = next((x for x in templates if x["name"] == self.selected), None)
+        if target is None:
+            await interaction.response.send_message("La plantilla ya no existe.", ephemeral=True)
+            return
+        target.update(values)
+        heraldo_template_save(self.guild_id, templates)
+        await interaction.response.send_message("JSON guardado. Las acciones vinculadas se conservan.", ephemeral=True)
+
+
 class HeraldoTemplateSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int, selected: str | None = None):
         super().__init__(timeout=900)
@@ -6592,6 +6635,18 @@ class HeraldoTemplateSetupView(discord.ui.View):
             await interaction.followup.send("No fue posible publicar la plantilla. Comprueba permisos y formato.", ephemeral=True)
             return
         await interaction.followup.send(f"Plantilla publicada en {channel.mention}.", ephemeral=True)
+
+    @discord.ui.button(label="JSON", style=discord.ButtonStyle.secondary, row=3)
+    async def edit_raw(self, interaction: discord.Interaction, button: discord.ui.Button):
+        current = self._current()
+        if not current:
+            await interaction.response.send_message("Primero crea una plantilla.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoTemplateRawModal(self.guild_id, self.owner_id, self.selected, current))
+
+    @discord.ui.button(label="Variables", style=discord.ButtonStyle.secondary, row=3)
+    async def variables(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("La edición JSON admite título, descripción, imagen, etiqueta y URL del botón. Las variables dinámicas de plantillas aún no están habilitadas; no uses variables sin resolver.", ephemeral=True)
 
     @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=3)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
