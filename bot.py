@@ -6413,6 +6413,12 @@ class HeraldoMessageConfirmView(discord.ui.View):
         super().__init__(timeout=300)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.operation, self.payload = operation, payload
+        for child in self.children:
+            if isinstance(child, discord.ui.Button) and child.label == "Guardar cambios" and operation == "delete":
+                child.label = "Confirmar eliminación"
+                child.style = discord.ButtonStyle.danger
+            elif isinstance(child, discord.ui.Button) and child.label == "Guardar cambios" and operation == "kit":
+                child.label = "Confirmar importación"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
@@ -6490,8 +6496,8 @@ class HeraldoMessageConfirmView(discord.ui.View):
 async def heraldo_message_request_confirmation(interaction: discord.Interaction, guild_id: int,
                                                owner_id: int, operation: str, payload: dict, summary: str):
     await interaction.response.send_message(
-        "**El Heraldo · Cambios pendientes**\\n\\n" + summary +
-        "\\n\\nPulsa **Guardar cambios** para aplicar la operación o **Cancelar** para descartarla.",
+        "**El Heraldo · Cambios pendientes**\n\n" + summary +
+        "\n\nRevisa la operación y utiliza el botón de confirmación para ejecutarla, o **Cancelar** para descartarla.",
         view=HeraldoMessageConfirmView(guild_id, owner_id, operation, payload),
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
