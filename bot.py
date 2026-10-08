@@ -6406,6 +6406,97 @@ def heraldo_messages_setup_content() -> str:
 
 
 
+
+class HeraldoMessageConfirmView(discord.ui.View):
+    """Los modales solo preparan cambios; el administrador decide aplicarlos."""
+    def __init__(self, guild_id: int, owner_id: int, operation: str, payload: dict):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.operation, self.payload = operation, payload
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Esta confirmación no te pertenece.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def commit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        op, payload = self.operation, self.payload
+        if op in {"template", "raw", "attach", "delete"}:
+            items = heraldo_template_list(self.guild_id)
+            if op == "template":
+                old_name, item = payload["old_name"], payload["item"]
+                if old_name and not any(t["name"] == old_name for t in items):
+                    await interaction.response.send_message("La plantilla original ya no existe.", ephemeral=True)
+                    return
+                if any(t["name"].casefold() == item["name"].casefold() and t["name"] != old_name for t in items):
+                    await interaction.response.send_message("Ya existe una plantilla con ese nombre.", ephemeral=True)
+                    return
+                items = [t for t in items if t["name"] != old_name] if old_name else items
+                if len(items) >= 25:
+                    await interaction.response.send_message("Se alcanzó el límite de plantillas.", ephemeral=True)
+                    return
+                items.append(item)
+            else:
+                target = next((t for t in items if t["name"] == payload["name"]), None)
+                if not target:
+                    await interaction.response.send_message("La plantilla ya no existe.", ephemeral=True)
+                    return
+                if op == "delete":
+                    items = [t for t in items if t["name"] != payload["name"]]
+                elif op == "raw":
+                    target.update(payload["values"])
+                elif op == "attach":
+                    mode, component = payload["mode"], payload["component"]
+                    if mode == "boton" and not any(x["label"] == component for x in heraldo_message_role_config(self.guild_id)):
+                        await interaction.response.send_message("El componente fue retirado. No se guardó.", ephemeral=True)
+                        return
+                    target["role_component"] = component if mode == "boton" else ""
+                    target["role_component_mode"] = mode
+            heraldo_template_save(self.guild_id, items)
+        elif op == "component":
+            components = heraldo_message_role_config(self.guild_id)
+            item = payload["item"]
+            role, me = interaction.guild.get_role(item["role_id"]), interaction.guild.me
+            if not role or not me or role.is_default() or role.managed or role >= me.top_role or not me.guild_permissions.manage_roles:
+                await interaction.response.send_message("Ya no es posible gestionar ese rol.", ephemeral=True)
+                return
+            if len(components) >= 20 or any(x["label"].casefold() == item["label"].casefold() for x in components):
+                await interaction.response.send_message("Límite alcanzado o nombre duplicado.", ephemeral=True)
+                return
+            components.append(item)
+            guild_config_set(self.guild_id, "message_role_components", json.dumps(components, ensure_ascii=False))
+        elif op == "kit":
+            items = heraldo_template_list(self.guild_id)
+            new = payload["items"]
+            names = {x["name"].casefold() for x in items}
+            if len(items) + len(new) > 25 or any(t["name"].casefold() in names for t in new):
+                await interaction.response.send_message("Las plantillas han cambiado. Revisa el kit antes de reintentarlo.", ephemeral=True)
+                return
+            heraldo_template_save(self.guild_id, items + new)
+        else:
+            await interaction.response.send_message("Operación no admitida.", ephemeral=True)
+            return
+        self.stop()
+        await interaction.response.edit_message(content="Cambios guardados por confirmación del administrador. Los mensajes publicados no se modifican automáticamente.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="Operación cancelada. No se guardó ningún cambio.", view=None)
+
+
+async def heraldo_message_request_confirmation(interaction: discord.Interaction, guild_id: int,
+                                               owner_id: int, operation: str, payload: dict, summary: str):
+    await interaction.response.send_message(
+        "**El Heraldo · Cambios pendientes**\\n\\n" + summary +
+        "\\n\\nPulsa **Guardar cambios** para aplicar la operación o **Cancelar** para descartarla.",
+        view=HeraldoMessageConfirmView(guild_id, owner_id, operation, payload),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
 # Mensajes reutilizables por servidor. No modifica mensajes operativos del bot.
 def heraldo_template_list(guild_id: int) -> list[dict]:
     try:
@@ -6497,13 +6588,11 @@ class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
         old = next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.old_name), None)
         old_component = old.get("role_component", "") if old else ""
         old_mode = old.get("role_component_mode", "boton") if old else "boton"
-        items.append({"name": name, "title": title, "description": description, "image": image,
-                      "button_label": label, "button_url": url, "role_component": old_component, "role_component_mode": old_mode})
-        heraldo_template_save(self.guild_id, items)
-        await interaction.response.send_message(
-            f"Plantilla **{discord.utils.escape_markdown(name)}** guardada. Abre Plantillas para previsualizarla o publicarla.",
-            ephemeral=True,
-        )
+        item = {"name": name, "title": title, "description": description, "image": image,
+                "button_label": label, "button_url": url, "role_component": old_component, "role_component_mode": old_mode}
+        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
+            "template", {"old_name": self.old_name, "item": item},
+            "Plantilla: **" + discord.utils.escape_markdown(name) + "**. La configuración todavía no se ha guardado.")
 
 
 
@@ -6544,9 +6633,9 @@ class HeraldoTemplateRawModal(discord.ui.Modal, title="Edición JSON de plantill
         if target is None:
             await interaction.response.send_message("La plantilla ya no existe.", ephemeral=True)
             return
-        target.update(values)
-        heraldo_template_save(self.guild_id, templates)
-        await interaction.response.send_message("JSON guardado. Las acciones vinculadas se conservan.", ephemeral=True)
+        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
+            "raw", {"name": self.selected, "values": values},
+            "Edición JSON de **" + discord.utils.escape_markdown(self.selected) + "** pendiente de confirmación.")
 
 
 class HeraldoTemplateSetupView(discord.ui.View):
@@ -6654,12 +6743,9 @@ class HeraldoTemplateSetupView(discord.ui.View):
         if not template:
             await interaction.response.send_message("No hay una plantilla seleccionada.", ephemeral=True)
             return
-        items = [x for x in heraldo_template_list(self.guild_id) if x["name"] != self.selected]
-        heraldo_template_save(self.guild_id, items)
-        await interaction.response.edit_message(
-            content="**El Heraldo · Plantillas**\n\nPlantilla eliminada.",
-            embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
-        )
+        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
+            "delete", {"name": self.selected},
+            "Solicitas eliminar **" + discord.utils.escape_markdown(self.selected) + "**. Esta acción requiere confirmación.")
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -6710,9 +6796,9 @@ class HeraldoMessageRoleModal(discord.ui.Modal, title="Nuevo componente de roles
         if any(x["label"].casefold() == label.casefold() for x in components):
             await interaction.response.send_message("Ya existe un componente con ese nombre.", ephemeral=True)
             return
-        components.append({"label": label, "role_id": role.id, "action": action})
-        guild_config_set(self.guild_id, "message_role_components", json.dumps(components, ensure_ascii=False))
-        await interaction.response.send_message("Componente guardado. Puedes vincularlo a una plantilla.", ephemeral=True)
+        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
+            "component", {"item": {"label": label, "role_id": role.id, "action": action}},
+            "Componente **" + discord.utils.escape_markdown(label) + "** y acción **" + action + "** pendientes.")
 
 
 class HeraldoMessageComponentsSetupView(discord.ui.View):
@@ -6768,10 +6854,9 @@ class HeraldoAttachRoleModal(discord.ui.Modal, title="Vincular componente a plan
         if not template:
             await interaction.response.send_message("La plantilla ya no existe.", ephemeral=True)
             return
-        template["role_component"] = item["label"] if mode == "boton" else ""
-        template["role_component_mode"] = mode
-        heraldo_template_save(self.guild_id, templates)
-        await interaction.response.send_message("Vinculación actualizada. Publica nuevamente la plantilla para aplicar el cambio.", ephemeral=True)
+        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
+            "attach", {"name": self.template_name, "mode": mode, "component": item["label"] if mode == "boton" else ""},
+            "Vinculación de **" + discord.utils.escape_markdown(self.template_name) + "** pendiente. Los mensajes publicados se mantienen intactos.")
 
 
 
@@ -6897,8 +6982,9 @@ class HeraldoMessageKitImportModal(discord.ui.Modal, title="Importar kit de mens
         if len(current) + len(cleaned) > 25:
             await interaction.response.send_message("Importación cancelada: se superaría el máximo de 25 plantillas.", ephemeral=True)
             return
-        heraldo_template_save(self.guild_id, current + cleaned)
-        await interaction.response.send_message(f"Kit importado: {len(cleaned)} plantillas añadidas. No se sobrescribieron mensajes ni se importaron acciones de roles.", ephemeral=True)
+        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
+            "kit", {"items": cleaned},
+            f"Importación de **{len(cleaned)}** plantillas pendiente. No se importarán acciones de roles ni se sobrescribirán mensajes.")
 
 
 class HeraldoMessageKitsView(discord.ui.View):
