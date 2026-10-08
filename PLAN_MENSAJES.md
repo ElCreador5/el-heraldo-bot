@@ -50,7 +50,14 @@
 - [ ] Migrar solo textos editables; no permitir alterar identificadores internos ni evidencia, permisos o estados reales.
 - [ ] Cuando un campo no sea aplicable a un caso de condena, omitirlo.
 
-## Calidad y despliegue (no verificados)
+## Confirmación obligatoria de administrador
+- [x] Los modales de plantilla, JSON, componente de rol, vinculación y kits generan un borrador pendiente y solo persisten tras botón de confirmación.
+- [x] Eliminar plantilla exige una confirmación separada.
+- [x] Cancelar descarta la propuesta sin alterar la configuración guardada.
+- [x] Publicar mensajes sigue siendo una acción explícita del administrador; guardar no publica ni edita mensajes ya enviados.
+- [ ] Comprobar en servidor de pruebas las confirmaciones, caducidad y cambios concurrentes.
+
+## Calidad y despliegue (verificación automatizada parcial)
 - [ ] Ejecutar `python -m py_compile bot.py`.
 - [ ] Ejecutar `python -m unittest test_regressions.py` y ampliar casos.
 - [ ] Pruebas reales en servidor de prueba: botones, desplegables, mensajes efímeros, roles y reconexión.
