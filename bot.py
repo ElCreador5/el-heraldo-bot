@@ -112,6 +112,7 @@ import copy
 import io
 from collections import deque
 import json
+import io
 import os
 import re
 import sqlite3
@@ -6437,7 +6438,11 @@ def heraldo_template_view(template: dict) -> discord.ui.View | None:
         view.add_item(discord.ui.Button(label=label, url=url))
     component_name = template.get("role_component", "")
     component = next((x for x in heraldo_message_role_config(int(template.get("_guild_id", 0))) if x["label"] == component_name), None)
-    if component:
+    if template.get("role_component_mode") == "menu":
+        configs = heraldo_message_role_config(int(template.get("_guild_id", 0)))
+        if configs:
+            view.add_item(HeraldoMessageRoleSelect(configs, int(template["_guild_id"])))
+    elif component:
         view.add_item(HeraldoMessageRoleButton(component, int(template["_guild_id"])))
     return view if view.children else None
 
@@ -6489,9 +6494,11 @@ class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
         if len(items) >= 25:
             await interaction.response.send_message("Se alcanzó el máximo de 25 plantillas.", ephemeral=True)
             return
-        old_component = old.get("role_component", "") if (old := next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.old_name), None)) else ""
+        old = next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.old_name), None)
+        old_component = old.get("role_component", "") if old else ""
+        old_mode = old.get("role_component_mode", "boton") if old else "boton"
         items.append({"name": name, "title": title, "description": description, "image": image,
-                      "button_label": label, "button_url": url, "role_component": old_component})
+                      "button_label": label, "button_url": url, "role_component": old_component, "role_component_mode": old_mode})
         heraldo_template_save(self.guild_id, items)
         await interaction.response.send_message(
             f"Plantilla **{discord.utils.escape_markdown(name)}** guardada. Abre Plantillas para previsualizarla o publicarla.",
@@ -6680,7 +6687,8 @@ class HeraldoMessageComponentsSetupView(discord.ui.View):
 
 
 class HeraldoAttachRoleModal(discord.ui.Modal, title="Vincular componente a plantilla"):
-    component_text = discord.ui.TextInput(label="Nombre exacto del componente", max_length=70, required=False)
+    component_text = discord.ui.TextInput(label="Nombre exacto del botón", max_length=70, required=False)
+    mode_text = discord.ui.TextInput(label="Tipo: boton, menu o ninguno", default="boton", max_length=8)
 
     def __init__(self, guild_id: int, owner_id: int, template_name: str):
         super().__init__()
@@ -6691,8 +6699,12 @@ class HeraldoAttachRoleModal(discord.ui.Modal, title="Vincular componente a plan
             await interaction.response.send_message("Acceso denegado.", ephemeral=True)
             return
         name = str(self.component_text).strip()
+        mode = str(self.mode_text).strip().casefold()
+        if mode not in {"boton", "menu", "ninguno"}:
+            await interaction.response.send_message("Elige boton, menu o ninguno.", ephemeral=True)
+            return
         item = next((x for x in heraldo_message_role_config(self.guild_id) if x["label"].casefold() == name.casefold()), None)
-        if name and not item:
+        if mode == "boton" and (not name or not item):
             await interaction.response.send_message("Componente no encontrado. Consulta el listado de Componentes.", ephemeral=True)
             return
         templates = heraldo_template_list(self.guild_id)
@@ -6700,9 +6712,23 @@ class HeraldoAttachRoleModal(discord.ui.Modal, title="Vincular componente a plan
         if not template:
             await interaction.response.send_message("La plantilla ya no existe.", ephemeral=True)
             return
-        template["role_component"] = item["label"] if item else ""
+        template["role_component"] = item["label"] if mode == "boton" else ""
+        template["role_component_mode"] = mode
         heraldo_template_save(self.guild_id, templates)
         await interaction.response.send_message("Vinculación actualizada. Publica nuevamente la plantilla para aplicar el cambio.", ephemeral=True)
+
+
+
+class HeraldoMessageRoleSelect(discord.ui.Select):
+    def __init__(self, components: list[dict], guild_id: int):
+        self.guild_id = guild_id
+        super().__init__(
+            custom_id=f"ehmsg:select:{guild_id}",
+            placeholder="Selecciona un rol",
+            min_values=1, max_values=1,
+            options=[discord.SelectOption(label=x["label"][:100],
+                value=f"{x['role_id']}:{x.get('action', 'alternar')}") for x in components[:20]],
+        )
 
 
 class HeraldoMessageRoleButton(discord.ui.Button):
@@ -6745,6 +6771,13 @@ async def heraldo_message_components_dispatch(interaction: discord.Interaction):
     if interaction.type != discord.InteractionType.component or not interaction.data:
         return
     custom_id = str(interaction.data.get("custom_id", ""))
+    if custom_id.startswith("ehmsg:select:"):
+        parts = custom_id.split(":")
+        values = interaction.data.get("values", [])
+        selected = str(values[0]).split(":") if values else []
+        if len(parts) == 3 and parts[2].isdigit() and len(selected) == 2 and selected[0].isdigit() and selected[1] in {"añadir", "quitar", "alternar"} and not interaction.response.is_done():
+            await heraldo_message_role_action(interaction, int(parts[2]), int(selected[0]), selected[1])
+        return
     if not custom_id.startswith("ehmsg:role:"):
         return
     parts = custom_id.split(":")
@@ -6752,6 +6785,82 @@ async def heraldo_message_components_dispatch(interaction: discord.Interaction):
         return
     if not interaction.response.is_done():
         await heraldo_message_role_action(interaction, int(parts[2]), int(parts[3]), parts[4])
+
+
+
+class HeraldoMessageKitImportModal(discord.ui.Modal, title="Importar kit de mensajes"):
+    payload = discord.ui.TextInput(label="JSON del kit", style=discord.TextStyle.paragraph, max_length=4000)
+
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__()
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Acceso denegado.", ephemeral=True)
+            return
+        try:
+            data = json.loads(str(self.payload))
+            if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("templates"), list):
+                raise ValueError
+            incoming = data["templates"]
+            if len(incoming) > 25:
+                raise ValueError
+            for item in incoming:
+                if (not isinstance(item, dict) or not isinstance(item.get("name"), str)
+                    or not 1 <= len(item["name"]) <= 70
+                    or not isinstance(item.get("description", ""), str)
+                    or len(item.get("description", "")) > 2000
+                    or not isinstance(item.get("title", ""), str)
+                    or len(item.get("title", "")) > 256):
+                    raise ValueError
+                for urlkey in ("image", "button_url"):
+                    url = item.get(urlkey, "")
+                    if not isinstance(url, str) or (url and not re.match(r"^https://[^\s]+$", url, re.I)):
+                        raise ValueError
+            if len({x["name"].casefold() for x in incoming}) != len(incoming):
+                raise ValueError
+        except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+            await interaction.response.send_message("El kit no cumple el formato y los límites exigidos.", ephemeral=True)
+            return
+        # Los kits no pueden importar acciones interactivas sin configurar permisos localmente.
+        cleaned = [{"name": x["name"], "title": x.get("title", ""),
+                    "description": x.get("description", ""), "image": x.get("image", ""),
+                    "button_label": str(x.get("button_label", ""))[:80],
+                    "button_url": x.get("button_url", ""), "role_component": "",
+                    "role_component_mode": "ninguno"} for x in incoming]
+        heraldo_template_save(self.guild_id, cleaned)
+        await interaction.response.send_message(f"Kit importado: {len(cleaned)} plantillas. Las acciones de roles no se importaron.", ephemeral=True)
+
+
+class HeraldoMessageKitsView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel no te pertenece.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Exportar kit", style=discord.ButtonStyle.primary)
+    async def export(self, interaction: discord.Interaction, button: discord.ui.Button):
+        templates = heraldo_template_list(self.guild_id)
+        safe = [{k: t.get(k, "") for k in ("name", "title", "description", "image", "button_label", "button_url")} for t in templates]
+        content = json.dumps({"version": 1, "templates": safe}, ensure_ascii=False, indent=2).encode("utf-8")
+        await interaction.response.send_message(
+            "Kit exportado. No incluye las acciones de roles ni configuraciones de otros servidores.",
+            file=discord.File(io.BytesIO(content), filename="heraldo-message-kit.json"), ephemeral=True)
+
+    @discord.ui.button(label="Importar kit", style=discord.ButtonStyle.secondary)
+    async def import_kit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(HeraldoMessageKitImportModal(self.guild_id, self.owner_id))
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=heraldo_messages_setup_content(), embed=None,
+                                                view=HeraldoMessagesSetupView(self.guild_id, self.owner_id))
 
 
 class HeraldoMessagesSetupView(discord.ui.View):
@@ -6766,7 +6875,8 @@ class HeraldoMessagesSetupView(discord.ui.View):
             max_values=1,
             options=[
                 discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
-                discord.SelectOption(label="Componentes", value="components", description="Botones de roles con acciones configurables."),
+                discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
+                discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
@@ -6816,6 +6926,11 @@ class HeraldoMessagesSetupView(discord.ui.View):
     async def open_editor(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         selected = values[0] if values else ""
+
+        if selected == "kits":
+            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\\n\\nExporta o importa plantillas. La importación reemplaza las existentes.", embed=None,
+                view=HeraldoMessageKitsView(self.guild_id, self.owner_id))
+            return
 
         if selected == "components":
             await interaction.response.edit_message(content="**El Heraldo · Componentes**\n\nConfigura botones de roles reutilizables.", embed=None,
@@ -6891,6 +7006,7 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
         ("HeraldoTemplateSetupView", lambda: HeraldoTemplateSetupView(guild_id, 0)),
         ("HeraldoMessageComponentsSetupView", lambda: HeraldoMessageComponentsSetupView(guild_id, 0)),
+        ("HeraldoMessageKitsView", lambda: HeraldoMessageKitsView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
         ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
