@@ -24,6 +24,17 @@ Este archivo es el punto de entrada para ChatGPT, Codex, Claude y cualquier agen
 - No automatizar una cuenta personal de Discord con tokens de usuario/self-bots; preferir bot oficial y cuentas de prueba autorizadas.
 - Si hay cambios concurrentes, reconciliar primero mediante commits y PR; no dar por válida una versión antigua de los documentos.
 
+
+## Cierre preventivo antes de agotar créditos o contexto (obligatorio)
+- **No esperar a quedarse sin créditos, tokens, mensajes, tiempo de ejecución ni contexto** para preparar el informe de continuidad. La preservación del trabajo tiene prioridad sobre empezar otra tarea.
+- Cuando el consumo sea visible, reservar margen para guardar cambios, ejecutar las verificaciones posibles, crear commits, actualizar documentos y entregar el informe; usar como referencia preventiva iniciar el cierre antes del 80 % del presupuesto consumido, sin tratarlo como un cálculo fiable cuando no se conoce el límite.
+- Si la plataforma no informa los recursos restantes, producir puntos de control periódicos y documentar avances durante tareas largas. Ningún agente debe fingir conocer el crédito disponible.
+- Ante una limitación próxima o un corte probable: detener nuevas tareas, preservar lo realizado, registrar trabajo incompleto, errores y pruebas pendientes, y **entregar inmediatamente el informe de transferencia**.
+- Guardar el informe en el repositorio o registro compartido cuando haya permisos y autorización. Si no es posible, entregarlo en la conversación como texto copiable e indicar expresamente que no quedó persistido.
+- El informe anticipado debe incluir: proyecto y rama, objetivo, cambios reales, commits, resultados de pruebas (separando automatizadas y Discord), errores y riesgos, archivos guardados o sin confirmar, tareas pendientes, estado exacto al interrumpir y pasos concretos para el siguiente agente.
+- Nunca declarar guardados, commits o pruebas que no se hayan ejecutado. No añadir credenciales ni datos privados a los registros.
+- **Principio:** es preferible interrumpir una implementación y preservar su estado a perder el progreso por agotar la sesión.
+
 ## Informe de cierre (plantilla)
 **Rama y commit:** ...
 **Objetivo:** ...
