@@ -1,0 +1,34 @@
+# Estado compartido — El Heraldo
+
+**Actualizado:** 2026-10-08
+**Repositorio:** `ElCreador5/el-heraldo-bot`
+**Producción:** rama `main` — no modificar sin revisión y autorización.
+**Desarrollo/pruebas:** rama `Pruebas`, desplegada desde el servicio Railway `worker` del proyecto independiente **El Heraldo - Test**.
+**Bot de prueba:** El Heraldo - Test; servidor de laboratorio: Heraldo's Lab.
+
+## Verificaciones confirmadas
+- Railway: despliegue de `Pruebas` en estado `SUCCESS`, commit `a69f59b` (observado 2026-10-08); conectado a Discord Gateway.
+- Log de inicio: «Autoprueba /setup correcta en Heraldo's Lab» y conexión del bot de test; **esto no reemplaza ensayos manuales de botones**.
+- Almacenamiento Railway independiente: volumen `worker-volume`, mount `/data`; servicio con variables `DISCORD_TOKEN`, `DB_PATH`, `MESSAGE_CONTENT_INTENT` (valores sensibles no documentados).
+- GitHub Actions `python-checks`: compilación y pruebas de regresión completadas con éxito en los últimos cambios de código verificados; las pruebas de Discord siguen pendientes.
+- Ramas de trabajo: `main` y `Pruebas`. PR histórico #2 fue cerrado sin fusionar.
+
+## Módulo Mensajes en Pruebas (implementación parcial)
+- Acceso desde `/setup`; plantillas con embeds, imagen URL, enlace y vista previa.
+- Edición y publicación de plantillas; `/sendtemplate`.
+- Botones y selectores de roles con comprobaciones de permisos; kits JSON básicos; editor raw.
+- Confirmación de guardado, borrado e importación para operaciones del editor.
+- `/edittemplate`: edición manual de un mensaje del propio bot mediante enlace y confirmación explícita.
+- Pruebas de regresión para confirmación, cancelación, conflictos de kits y aislamiento de sesión.
+- **No afirmar paridad completa con Sapphire:** falta completar acciones de componentes, menús avanzados, variables, edición visual avanzada, automatizaciones, programación, sticky y catálogo general de mensajes.
+
+## Otras áreas que requieren pruebas en laboratorio
+- Condena, perdón, tarjeta al canal y DM, evidencias persistentes, duración y permisos.
+- Reaction Roles, Join Roles, verificaciones, reportes, logs, sugerencias y recuperación tras reinicio.
+- Revisar `PRUEBAS_DISCORD.md` para casos y resultados; no confundir «implementado» con «comprobado».
+
+## Próximo objetivo
+Realizar recorrido real y reproducible de `/setup` → Mensajes (guardar, cancelar, publicar, editar, botones, roles, importación), registrar errores en `PRUEBAS_DISCORD.md` y corregirlos en `Pruebas`. Después ampliar las funciones respecto a la referencia Sapphire.
+
+## Actualización
+Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar historial. Esta página no es una garantía de que todas las funciones estén correctas.
