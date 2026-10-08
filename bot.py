@@ -7450,7 +7450,7 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
                 message = await channel.fetch_message(int(self.panel["message_id"]))
             else:
                 if not perms.send_messages or not perms.embed_links:
-                    raise discord.Forbidden(discord.Object(id=channel.id), "Sin permiso para publicar")
+                    raise ValueError("Sin permiso para publicar")
                 message = await channel.send(embed=discord.Embed(
                     title=self.panel.get("title", "Selección de roles"),
                     description=self.panel.get("description", "Seleccione sus roles mediante reacciones."),
@@ -7518,6 +7518,40 @@ class HeraldoReactionExistingModal(discord.ui.Modal, title="Vincular mensaje exi
         await interaction.response.send_message(editor.content(interaction.guild), view=editor, ephemeral=True)
 
 
+
+class HeraldoReactionDeleteModal(discord.ui.Modal, title="Eliminar panel"):
+    confirmation = discord.ui.TextInput(label="Escriba ELIMINAR para confirmar", max_length=8)
+
+    def __init__(self, guild_id: int, message_id: int):
+        super().__init__()
+        self.guild_id, self.message_id = guild_id, message_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if str(self.confirmation.value).strip().upper() != "ELIMINAR":
+            await interaction.response.send_message("Operación cancelada.", ephemeral=True)
+            return
+        panels = reaction_role_panels(self.guild_id)
+        panel = next((x for x in panels if int(x.get("message_id", 0)) == self.message_id), None)
+        if not panel:
+            await interaction.response.send_message("El panel ya no existe.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(int(panel["channel_id"]))
+        if isinstance(channel, discord.TextChannel):
+            try:
+                message = await channel.fetch_message(self.message_id)
+                if panel.get("existing"):
+                    for binding in rr_bindings(panel):
+                        await message.clear_reaction(binding["emoji"])
+                else:
+                    await message.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                await interaction.response.send_message("No se pudo retirar el mensaje o sus reacciones. Revise mis permisos.", ephemeral=True)
+                return
+        reaction_role_panels_save(self.guild_id, [x for x in panels if int(x.get("message_id", 0)) != self.message_id])
+        hub = HeraldoReactionRolesSetupView(self.guild_id, interaction.user.id)
+        await interaction.response.send_message(hub.summary(interaction.guild) + "\n\nPanel eliminado.", view=hub, ephemeral=True)
+
+
 class HeraldoReactionRolesSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -7535,6 +7569,12 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
                           description=f"Canal {p['channel_id']}") for p in panels[-25:]], row=1)
             selector.callback = self.manage
             self.add_item(selector)
+            removal = discord.ui.Select(
+                placeholder="Eliminar un panel registrado",
+                options=[discord.SelectOption(label=f"Eliminar panel {p['message_id']}",
+                          value=str(p["message_id"])) for p in panels[-25:]], row=3)
+            removal.callback = self.delete_panel
+            self.add_item(removal)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
@@ -7562,6 +7602,10 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
             return
         editor = HeraldoReactionRolesEditorView(self.guild_id, self.owner_id, dict(panel))
         await interaction.response.edit_message(content=editor.content(interaction.guild), view=editor)
+
+    async def delete_panel(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            HeraldoReactionDeleteModal(self.guild_id, int(interaction.data["values"][0])))
 
     @discord.ui.button(label="Crear mensaje", style=discord.ButtonStyle.success, row=2)
     async def create(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -7635,8 +7679,6 @@ async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: boo
     to_add = binding["add"] if do_add else binding["remove"]
     to_remove = binding["remove"] if do_add else binding["add"]
     # Reverse mode inverts the meaning of the two configured actions.
-    if reverse:
-        to_add, to_remove = to_remove, to_add
     additions = [guild.get_role(int(r)) for r in to_add]
     removals = [guild.get_role(int(r)) for r in to_remove]
     additions = [r for r in additions if r and r.is_assignable() and r not in member.roles]
