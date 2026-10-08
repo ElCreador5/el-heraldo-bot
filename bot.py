@@ -6404,6 +6404,197 @@ def heraldo_messages_setup_content() -> str:
     )
 
 
+
+# Mensajes reutilizables por servidor. No modifica mensajes operativos del bot.
+def heraldo_template_list(guild_id: int) -> list[dict]:
+    try:
+        value = json.loads(guild_config_get(guild_id, "message_custom_templates") or "[]")
+        return [x for x in value if isinstance(x, dict) and isinstance(x.get("name"), str)][:25] if isinstance(value, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+def heraldo_template_save(guild_id: int, templates: list[dict]) -> None:
+    guild_config_set(guild_id, "message_custom_templates", json.dumps(templates, ensure_ascii=False))
+
+
+def heraldo_template_embed(template: dict) -> discord.Embed | None:
+    title = template.get("title", "")
+    description = template.get("description", "")
+    image = template.get("image", "")
+    if not title and not description and not image:
+        return None
+    embed = discord.Embed(title=title or None, description=description or None, color=0x2B2D31)
+    if image:
+        embed.set_image(url=image)
+    return embed
+
+
+def heraldo_template_view(template: dict) -> discord.ui.View | None:
+    label, url = template.get("button_label", ""), template.get("button_url", "")
+    if not label or not url:
+        return None
+    view = discord.ui.View(timeout=None)
+    view.add_item(discord.ui.Button(label=label, url=url))
+    return view
+
+
+class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
+    name = discord.ui.TextInput(label="Nombre único", max_length=70)
+    title_text = discord.ui.TextInput(label="Título del embed (opcional)", required=False, max_length=256)
+    description = discord.ui.TextInput(label="Contenido", style=discord.TextStyle.paragraph, required=False, max_length=2000)
+    image = discord.ui.TextInput(label="URL de imagen (opcional)", required=False, max_length=400)
+    button = discord.ui.TextInput(label="Botón enlace: Etiqueta | https://...", required=False, max_length=400)
+
+    def __init__(self, guild_id: int, owner_id: int, old_name: str | None = None):
+        super().__init__()
+        self.guild_id, self.owner_id, self.old_name = guild_id, owner_id, old_name
+        old = next((x for x in heraldo_template_list(guild_id) if x["name"] == old_name), None)
+        if old:
+            self.name.default = old["name"]
+            self.title_text.default = old.get("title", "")
+            self.description.default = old.get("description", "")
+            self.image.default = old.get("image", "")
+            if old.get("button_url"):
+                self.button.default = old.get("button_label", "") + " | " + old["button_url"]
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.owner_id or interaction.guild_id != self.guild_id:
+            await interaction.response.send_message("No tienes acceso a este editor.", ephemeral=True)
+            return
+        name, title, description = str(self.name).strip(), str(self.title_text).strip(), str(self.description).strip()
+        image, button = str(self.image).strip(), str(self.button).strip()
+        if not name or not (title or description or image):
+            await interaction.response.send_message("Indica un nombre y un contenido o imagen.", ephemeral=True)
+            return
+        if image and not re.match(r"^https://[^\\s]+$", image, re.I):
+            await interaction.response.send_message("La imagen requiere una URL HTTPS válida.", ephemeral=True)
+            return
+        label, url = "", ""
+        if button:
+            label, sep, url = button.partition("|")
+            label, url = label.strip(), url.strip()
+            if not sep or not label or len(label) > 80 or not re.match(r"^https://[^\\s]+$", url, re.I):
+                await interaction.response.send_message("Usa Etiqueta | https://direccion para el botón.", ephemeral=True)
+                return
+        items = heraldo_template_list(self.guild_id)
+        if any(x["name"].casefold() == name.casefold() and x["name"] != self.old_name for x in items):
+            await interaction.response.send_message("Ya existe una plantilla con ese nombre.", ephemeral=True)
+            return
+        if self.old_name:
+            items = [x for x in items if x["name"] != self.old_name]
+        if len(items) >= 25:
+            await interaction.response.send_message("Se alcanzó el máximo de 25 plantillas.", ephemeral=True)
+            return
+        items.append({"name": name, "title": title, "description": description, "image": image,
+                      "button_label": label, "button_url": url})
+        heraldo_template_save(self.guild_id, items)
+        await interaction.response.send_message(
+            f"Plantilla **{discord.utils.escape_markdown(name)}** guardada. Abre Plantillas para previsualizarla o publicarla.",
+            ephemeral=True,
+        )
+
+
+class HeraldoTemplateSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, selected: str | None = None):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        templates = heraldo_template_list(guild_id)
+        self.selected = selected if any(x["name"] == selected for x in templates) else (templates[0]["name"] if templates else None)
+        self.channel_id = None
+        if templates:
+            choose = discord.ui.Select(
+                placeholder="Seleccionar plantilla",
+                options=[discord.SelectOption(label=t["name"][:100], value=str(i),
+                    default=t["name"] == self.selected) for i, t in enumerate(templates)],
+                row=0,
+            )
+            choose.callback = self.choose
+            self.add_item(choose)
+        channel = discord.ui.ChannelSelect(placeholder="Canal para publicar la plantilla",
+                                           channel_types=[discord.ChannelType.text], row=1)
+        channel.callback = self.channel_selected
+        self.add_item(channel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id or interaction.guild_id != self.guild_id:
+            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+            return False
+        return True
+
+    def _current(self) -> dict | None:
+        return next((t for t in heraldo_template_list(self.guild_id) if t["name"] == self.selected), None)
+
+    async def choose(self, interaction: discord.Interaction):
+        values = (interaction.data or {}).get("values", [])
+        templates = heraldo_template_list(self.guild_id)
+        index = int(values[0]) if values and values[0].isdigit() else -1
+        if index < 0 or index >= len(templates):
+            await interaction.response.send_message("Plantilla no disponible.", ephemeral=True)
+            return
+        chosen = templates[index]
+        await interaction.response.edit_message(
+            content="**El Heraldo · Plantillas**\\n\\nSeleccionada: **" + discord.utils.escape_markdown(chosen["name"]) + "**",
+            embed=heraldo_template_embed(chosen),
+            view=HeraldoTemplateSetupView(self.guild_id, self.owner_id, chosen["name"]),
+        )
+
+    async def channel_selected(self, interaction: discord.Interaction):
+        values = (interaction.data or {}).get("values", [])
+        self.channel_id = int(values[0]) if values else None
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Crear", style=discord.ButtonStyle.primary, row=2)
+    async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id))
+
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=2)
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self._current():
+            await interaction.response.send_message("Primero crea una plantilla.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id, self.selected))
+
+    @discord.ui.button(label="Publicar", style=discord.ButtonStyle.success, row=2)
+    async def publish(self, interaction: discord.Interaction, button: discord.ui.Button):
+        template = self._current()
+        channel = interaction.guild.get_channel(self.channel_id) if self.channel_id else None
+        if not template or not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Selecciona una plantilla y un canal válido.", ephemeral=True)
+            return
+        if not channel.permissions_for(interaction.guild.me).send_messages:
+            await interaction.response.send_message("El Heraldo no tiene permiso para enviar mensajes en ese canal.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await channel.send(embed=heraldo_template_embed(template), view=heraldo_template_view(template),
+                               allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            await interaction.followup.send("No fue posible publicar la plantilla. Comprueba permisos y formato.", ephemeral=True)
+            return
+        await interaction.followup.send(f"Plantilla publicada en {channel.mention}.", ephemeral=True)
+
+    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=3)
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        template = self._current()
+        if not template:
+            await interaction.response.send_message("No hay una plantilla seleccionada.", ephemeral=True)
+            return
+        items = [x for x in heraldo_template_list(self.guild_id) if x["name"] != self.selected]
+        heraldo_template_save(self.guild_id, items)
+        await interaction.response.edit_message(
+            content="**El Heraldo · Plantillas**\\n\\nPlantilla eliminada.",
+            embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content=heraldo_messages_setup_content(), embed=None,
+            view=HeraldoMessagesSetupView(self.guild_id, self.owner_id),
+        )
+
+
 class HeraldoMessagesSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -6411,10 +6602,11 @@ class HeraldoMessagesSetupView(discord.ui.View):
         self.owner_id = owner_id
 
         panel_select = discord.ui.Select(
-            placeholder="Selecciona el panel o mensaje que quieres editar",
+            placeholder="Selecciona una sección de Mensajes",
             min_values=1,
             max_values=1,
             options=[
+                discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
@@ -6464,6 +6656,13 @@ class HeraldoMessagesSetupView(discord.ui.View):
     async def open_editor(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         selected = values[0] if values else ""
+
+        if selected == "templates":
+            await interaction.response.edit_message(
+                content="**El Heraldo · Plantillas**\\n\\nCrea, edita y publica plantillas reutilizables.",
+                embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
+            )
+            return
 
         if selected == "verification":
             await open_default_message_studio(
@@ -6525,6 +6724,7 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoVerificationSetupView", lambda: HeraldoVerificationSetupView(guild_id, 0)),
         ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
+        ("HeraldoTemplateSetupView", lambda: HeraldoTemplateSetupView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
         ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
@@ -8119,6 +8319,7 @@ class HeraldoSetupView(discord.ui.View):
         ("reaction_roles", "Reaction Roles", "Configuración de roles por reacción"),
         ("role_connections", "Role Connections", "Conexiones de roles (pendiente)"),
         ("logging", "Logging", "Canal de registros y plantillas"),
+        ("messages", "Mensajes", "Plantillas y mensajes predeterminados"),
         ("verification", "Verification", "Verificación y orientación"),
         ("language", "Idioma", "Configuración del idioma (pendiente)"),
     )
@@ -8206,6 +8407,9 @@ class HeraldoSetupView(discord.ui.View):
         elif selected == "logging":
             view = HeraldoLoggingSetupView(self.guild_id, self.owner_id)
             content = view._content(interaction.guild)
+        elif selected == "messages":
+            content = heraldo_messages_setup_content()
+            view = HeraldoMessagesSetupView(self.guild_id, self.owner_id)
         elif selected == "verification":
             content = "**El Heraldo · Verification**\n\nConfigura los sistemas de verificación."
             view = HeraldoVerificationHubView(self.guild_id, self.owner_id)
