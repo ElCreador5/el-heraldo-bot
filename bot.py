@@ -7226,27 +7226,315 @@ def reaction_role_panels_save(guild_id: int, panels: list[dict]) -> None:
     guild_config_set(guild_id, "reaction_role_panels", json.dumps(panels, ensure_ascii=False))
 
 
-class HeraldoReactionRolesSetupView(discord.ui.View):
-    """Publicación de paneles independientes de roles por reacción."""
 
+def rr_bindings(panel: dict) -> list[dict]:
+    """Read both Sapphire-style bindings and legacy one-role panels."""
+    return [{"emoji": str(x["emoji"]),
+             "add": [int(v) for v in x.get("add", [x["role_id"]] if "role_id" in x else [])],
+             "remove": [int(v) for v in x.get("remove", [])]}
+            for x in panel.get("roles", []) if x.get("emoji")]
+
+
+def rr_summary(guild: discord.Guild, panel: dict) -> str:
+    result = ["**El Heraldo · Reaction Roles · Editor**",
+              f"Mensaje: `{panel.get('message_id') or 'Sin publicar'}`",
+              f"Canal: <#{panel['channel_id']}>",
+              f"Modo: {'Reacciones invertidas' if panel.get('reversed') else 'Normal'}",
+              f"Máximo por miembro: {panel.get('max_reactions') or 'Sin límite'}",
+              f"Acceso: {panel.get('list_mode', 'Todos')}"]
+    if panel.get("allowed_roles"):
+        result.append("Roles de acceso: " + ", ".join(f"<@&{r}>" for r in panel["allowed_roles"]))
+    result.append("\n**Reacciones y acciones**")
+    for binding in rr_bindings(panel):
+        adds = ", ".join(f"<@&{r}>" for r in binding["add"]) or "Ninguno"
+        removes = ", ".join(f"<@&{r}>" for r in binding["remove"]) or "Ninguno"
+        result.append(f"{binding['emoji']} · Añadir: {adds} · Retirar: {removes}")
+    if not rr_bindings(panel):
+        result.append("No se han configurado reacciones.")
+    return "\n".join(result)
+
+
+def rr_valid_role(guild: discord.Guild, role_id: int) -> bool:
+    role = guild.get_role(role_id)
+    return bool(role and role.is_assignable() and not role.managed and not role.is_default())
+
+
+def rr_can_use(member: discord.Member, panel: dict) -> bool:
+    mode = panel.get("list_mode", "Todos")
+    allowed = set(int(x) for x in panel.get("allowed_roles", []))
+    present = bool(allowed.intersection(r.id for r in member.roles))
+    return (mode != "Lista blanca" or present) and (mode != "Lista negra" or not present)
+
+
+def rr_panel_upsert(guild_id: int, panel: dict) -> None:
+    panels = reaction_role_panels(guild_id)
+    panels = [p for p in panels if int(p.get("message_id", 0)) != int(panel["message_id"])]
+    panels.append(panel)
+    reaction_role_panels_save(guild_id, panels)
+
+
+class HeraldoReactionEmojiModal(discord.ui.Modal, title="Configurar reacción"):
+    emoji = discord.ui.TextInput(label="Emoji", placeholder="Emoji Unicode o <:nombre:id>", max_length=100)
+
+    def __init__(self, editor: "HeraldoReactionRolesEditorView"):
+        super().__init__()
+        self.editor = editor
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        value = str(self.emoji.value).strip()
+        try:
+            parsed = discord.PartialEmoji.from_str(value)
+            if not value or (parsed.id and not interaction.guild.get_emoji(parsed.id)):
+                raise ValueError()
+        except (ValueError, TypeError):
+            await interaction.response.send_message("Seleccione un emoji válido del servidor o un emoji Unicode.", ephemeral=True)
+            return
+        key = _orientation_emoji_key(value)
+        bindings = rr_bindings(self.editor.panel)
+        if any(_orientation_emoji_key(x["emoji"]) == key for x in bindings):
+            await interaction.response.send_message("Este emoji ya figura en el panel.", ephemeral=True)
+            return
+        if len(bindings) >= 20:
+            await interaction.response.send_message("El máximo es 20 reacciones por mensaje.", ephemeral=True)
+            return
+        bindings.append({"emoji": value, "add": [], "remove": []})
+        self.editor.panel["roles"] = bindings
+        self.editor.selected = len(bindings) - 1
+        await interaction.response.send_message("Reacción añadida. Configure los roles de esta reacción y guarde los cambios.", ephemeral=True)
+
+
+class HeraldoReactionOptionsModal(discord.ui.Modal, title="Opciones de Reaction Roles"):
+    maximum = discord.ui.TextInput(label="Máximo de reacciones (0 = sin límite)", default="0", max_length=2)
+    mode = discord.ui.TextInput(label="Acceso: Todos / Lista blanca / Lista negra", default="Todos", max_length=20)
+
+    def __init__(self, editor: "HeraldoReactionRolesEditorView"):
+        super().__init__()
+        self.editor = editor
+        self.maximum.default = str(editor.panel.get("max_reactions", 0))
+        self.mode.default = editor.panel.get("list_mode", "Todos")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        mode = str(self.mode.value).strip().casefold()
+        normalized = {"todos": "Todos", "lista blanca": "Lista blanca",
+                      "lista negra": "Lista negra"}.get(mode)
+        if not str(self.maximum.value).strip().isdigit() or int(self.maximum.value) > 20 or not normalized:
+            await interaction.response.send_message("Indique un máximo entre 0 y 20 y un modo de acceso válido.", ephemeral=True)
+            return
+        self.editor.panel["max_reactions"] = int(self.maximum.value)
+        self.editor.panel["list_mode"] = normalized
+        await interaction.response.send_message("Opciones actualizadas. Pulse Guardar para aplicarlas.", ephemeral=True)
+
+
+class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Reaction Roles"):
+    heading = discord.ui.TextInput(label="Título", max_length=256, required=False)
+    description = discord.ui.TextInput(label="Descripción", style=discord.TextStyle.paragraph, max_length=3800)
+
+    def __init__(self, editor: "HeraldoReactionRolesEditorView"):
+        super().__init__()
+        self.editor = editor
+        self.heading.default = editor.panel.get("title", "Selección de roles")
+        self.description.default = editor.panel.get("description", "Seleccione los roles reaccionando a este mensaje.")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.editor.panel["title"] = str(self.heading.value)
+        self.editor.panel["description"] = str(self.description.value)
+        await interaction.response.send_message("Mensaje actualizado en el borrador. Pulse Guardar para publicar.", ephemeral=True)
+
+
+class HeraldoReactionRolesEditorView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, panel: dict):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id, self.panel = guild_id, owner_id, panel
+        self.selected = 0
+        bindings = rr_bindings(panel)
+        if bindings:
+            picker = discord.ui.Select(
+                placeholder="Seleccionar reacción para configurar",
+                options=[discord.SelectOption(label=str(x["emoji"])[:80], value=str(i),
+                          description=f"Añadir {len(x['add'])} · Retirar {len(x['remove'])}")
+                         for i, x in enumerate(bindings[:20])], row=0)
+            picker.callback = self.select_emoji
+            self.add_item(picker)
+        role_add = discord.ui.RoleSelect(placeholder="Roles que añade la reacción seleccionada",
+                                        min_values=0, max_values=10, row=1)
+        role_add.callback = self.set_add
+        self.add_item(role_add)
+        role_remove = discord.ui.RoleSelect(placeholder="Roles que retira la reacción seleccionada",
+                                           min_values=0, max_values=10, row=2)
+        role_remove.callback = self.set_remove
+        self.add_item(role_remove)
+        access = discord.ui.RoleSelect(placeholder="Roles de lista blanca / negra",
+                                      min_values=0, max_values=10, row=3)
+        access.callback = self.set_access
+        self.add_item(access)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor pertenece a otro administrador.", ephemeral=True)
+            return False
+        return True
+
+    def content(self, guild: discord.Guild) -> str:
+        return rr_summary(guild, self.panel) + f"\n\nReacción seleccionada: {self.selected + 1 if rr_bindings(self.panel) else 'Ninguna'}"
+
+    async def select_emoji(self, interaction: discord.Interaction) -> None:
+        self.selected = int(interaction.data["values"][0])
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    async def _set_roles(self, interaction: discord.Interaction, key: str) -> None:
+        bindings = rr_bindings(self.panel)
+        if not bindings or self.selected >= len(bindings):
+            await interaction.response.send_message("Añada una reacción primero.", ephemeral=True)
+            return
+        selected = [int(x) for x in interaction.data.get("values", [])]
+        if any(not rr_valid_role(interaction.guild, r) for r in selected):
+            await interaction.response.send_message("Alguno de los roles no es administrable por El Heraldo.", ephemeral=True)
+            return
+        bindings[self.selected][key] = selected
+        self.panel["roles"] = bindings
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    async def set_add(self, interaction: discord.Interaction) -> None:
+        await self._set_roles(interaction, "add")
+
+    async def set_remove(self, interaction: discord.Interaction) -> None:
+        await self._set_roles(interaction, "remove")
+
+    async def set_access(self, interaction: discord.Interaction) -> None:
+        self.panel["allowed_roles"] = [int(x) for x in interaction.data.get("values", [])]
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Añadir emoji", style=discord.ButtonStyle.primary, row=4)
+    async def add_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoReactionEmojiModal(self))
+
+    @discord.ui.button(label="Opciones", style=discord.ButtonStyle.secondary, row=4)
+    async def options(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoReactionOptionsModal(self))
+
+    @discord.ui.button(label="Invertir acciones", style=discord.ButtonStyle.secondary, row=4)
+    async def reverse(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.panel["reversed"] = not self.panel.get("reversed", False)
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.secondary, row=4)
+    async def edit_message(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.panel.get("existing"):
+            await interaction.response.send_message("Los mensajes existentes no pueden editarse desde este editor.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoReactionMessageModal(self))
+
+    @discord.ui.button(label="Guardar", style=discord.ButtonStyle.success, row=4)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        channel = guild.get_channel(int(self.panel["channel_id"]))
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("El canal ya no existe.", ephemeral=True)
+            return
+        perms = channel.permissions_for(guild.me)
+        if not (perms.view_channel and perms.read_message_history and perms.add_reactions
+                and guild.me.guild_permissions.manage_roles):
+            await interaction.response.send_message("Faltan permisos para leer, reaccionar o administrar roles.", ephemeral=True)
+            return
+        bindings = rr_bindings(self.panel)
+        if not bindings or any(not (x["add"] or x["remove"]) for x in bindings):
+            await interaction.response.send_message("Cada emoji necesita al menos una acción de rol.", ephemeral=True)
+            return
+        if any(not rr_valid_role(guild, r) for x in bindings for r in x["add"] + x["remove"]):
+            await interaction.response.send_message("Los roles cambiaron o superan la jerarquía del bot.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        created = False
+        try:
+            if self.panel.get("message_id"):
+                message = await channel.fetch_message(int(self.panel["message_id"]))
+            else:
+                if not perms.send_messages or not perms.embed_links:
+                    raise discord.Forbidden(discord.Object(id=channel.id), "Sin permiso para publicar")
+                message = await channel.send(embed=discord.Embed(
+                    title=self.panel.get("title", "Selección de roles"),
+                    description=self.panel.get("description", "Seleccione sus roles mediante reacciones."),
+                    color=discord.Color.blurple()))
+                created = True
+            if not self.panel.get("existing") and not created:
+                await message.edit(embed=discord.Embed(
+                    title=self.panel.get("title", "Selección de roles"),
+                    description=self.panel.get("description", "Seleccione sus roles mediante reacciones."),
+                    color=discord.Color.blurple()))
+            for binding in bindings:
+                await message.add_reaction(binding["emoji"])
+            old = reaction_role_panel_find(guild.id, message.id)
+            if old and guild_config_get(guild.id, "rr_auto_remove") != "0":
+                for previous in rr_bindings(old):
+                    if all(_orientation_emoji_key(x["emoji"]) != _orientation_emoji_key(previous["emoji"]) for x in bindings):
+                        await message.clear_reaction(previous["emoji"])
+        except (discord.HTTPException, ValueError) as exc:
+            if created:
+                try:
+                    await message.delete()
+                except discord.HTTPException:
+                    pass
+            await interaction.followup.send(f"No fue posible guardar el panel: {exc}", ephemeral=True)
+            return
+        self.panel["message_id"] = message.id
+        self.panel["roles"] = bindings
+        rr_panel_upsert(guild.id, self.panel)
+        await interaction.edit_original_response(content=self.content(guild) + f"\n\nGuardado: {message.jump_url}",
+                                                 view=HeraldoReactionRolesEditorView(guild.id, self.owner_id, self.panel))
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        hub = HeraldoReactionRolesSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=hub.summary(interaction.guild), view=hub)
+
+
+class HeraldoReactionExistingModal(discord.ui.Modal, title="Vincular mensaje existente"):
+    link = discord.ui.TextInput(label="Enlace al mensaje de Discord", max_length=250)
+
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__()
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        import re
+        match = re.search(r"discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)", str(self.link.value))
+        if not match or int(match.group(1)) != self.guild_id:
+            await interaction.response.send_message("El enlace debe corresponder a un mensaje de este servidor.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(int(match.group(2)))
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("No se encontró el canal.", ephemeral=True)
+            return
+        try:
+            await channel.fetch_message(int(match.group(3)))
+        except discord.HTTPException:
+            await interaction.response.send_message("No tengo acceso a ese mensaje.", ephemeral=True)
+            return
+        panel = reaction_role_panel_find(self.guild_id, int(match.group(3)))
+        if not panel:
+            panel = {"channel_id": channel.id, "message_id": int(match.group(3)),
+                     "roles": [], "existing": True, "max_reactions": 0}
+        editor = HeraldoReactionRolesEditorView(self.guild_id, self.owner_id, panel)
+        await interaction.response.send_message(editor.content(interaction.guild), view=editor, ephemeral=True)
+
+
+class HeraldoReactionRolesSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
-        self.guild_id = guild_id
-        self.owner_id = owner_id
-        self.channel_id: int | None = None
-        self.roles: list[dict] | None = None
-        self.exclusive = False
-
-        channels = discord.ui.ChannelSelect(
-            placeholder="Seleccionar canal del panel", channel_types=[discord.ChannelType.text], row=0,
-        )
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.channel_id = None
+        channels = discord.ui.ChannelSelect(placeholder="Canal para mensaje nuevo",
+                                            channel_types=[discord.ChannelType.text], row=0)
         channels.callback = self.choose_channel
         self.add_item(channels)
-        roles = discord.ui.RoleSelect(
-            placeholder="Seleccionar de 1 a 6 roles con reacción", min_values=1, max_values=6, row=1,
-        )
-        roles.callback = self.choose_roles
-        self.add_item(roles)
+        panels = reaction_role_panels(guild_id)
+        if panels:
+            selector = discord.ui.Select(
+                placeholder="Administrar panel publicado",
+                options=[discord.SelectOption(label=f"Panel {p['message_id']}", value=str(p["message_id"]),
+                          description=f"Canal {p['channel_id']}") for p in panels[-25:]], row=1)
+            selector.callback = self.manage
+            self.add_item(selector)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
@@ -7255,156 +7543,48 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
         return True
 
     def summary(self, guild: discord.Guild) -> str:
-        panels = reaction_role_panels(self.guild_id)
-        lines = [
-            "**El Heraldo · Reaction Roles**",
-            "",
-            "Publique paneles independientes para que los miembros administren sus roles mediante reacciones.",
-            f"Paneles publicados: **{len(panels)}**",
-            f"Canal seleccionado: {guild.get_channel(self.channel_id).mention if self.channel_id and guild.get_channel(self.channel_id) else 'Sin seleccionar'}",
-            "Roles seleccionados: " + (
-                ", ".join(guild.get_role(int(x['role_id'])).mention for x in self.roles if guild.get_role(int(x['role_id'])))
-                if self.roles else "Sin seleccionar"
-            ),
-            f"Modo de selección: **{'Exclusivo' if self.exclusive else 'Múltiple'}**",
-        ]
-        if panels:
-            lines.extend(["", "**Paneles activos**"])
-            for panel in panels[:12]:
-                lines.append(
-                    f"ID de mensaje `{panel['message_id']}` · "
-                    f"<#{panel['channel_id']}> · "
-                    f"{'Exclusivo' if panel.get('exclusive') else 'Múltiple'}"
-                )
-        return "\n".join(lines)
+        return ("**El Heraldo · Reaction Roles**\n\n"
+                "Cree un mensaje, vincule uno existente o seleccione un panel para modificarlo.\n"
+                f"Paneles registrados: {len(reaction_role_panels(self.guild_id))}\n"
+                f"Canal seleccionado: <#{self.channel_id}>" if self.channel_id else
+                "**El Heraldo · Reaction Roles**\n\nCree un mensaje, vincule uno existente o seleccione un panel para modificarlo.\n"
+                f"Paneles registrados: {len(reaction_role_panels(self.guild_id))}\nCanal seleccionado: Ninguno")
 
     async def choose_channel(self, interaction: discord.Interaction) -> None:
-        values = (interaction.data or {}).get("values", [])
-        channel = interaction.guild.get_channel(int(values[0])) if values and interaction.guild else None
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("Seleccione un canal de texto válido.", ephemeral=True)
-            return
-        self.channel_id = channel.id
+        self.channel_id = int(interaction.data["values"][0])
         await interaction.response.edit_message(content=self.summary(interaction.guild), view=self)
 
-    async def choose_roles(self, interaction: discord.Interaction) -> None:
-        guild = interaction.guild
-        values = (interaction.data or {}).get("values", [])
-        me = guild.me if guild else None
-        selected = []
-        seen = set()
-        for value in values:
-            role = guild.get_role(int(value))
-            if role is None or role.is_default() or role.managed or me is None or role >= me.top_role:
-                await interaction.response.send_message(
-                    "Uno de los roles seleccionados no puede ser administrado por El Heraldo.",
-                    ephemeral=True,
-                )
-                return
-            emoji = _orientation_role_emoji(role)
-            if not emoji:
-                await interaction.response.send_message(
-                    f"El rol {role.mention} necesita un emoji en su nombre o icono para utilizar reacciones.",
-                    ephemeral=True,
-                )
-                return
-            key = _orientation_emoji_key(emoji)
-            if key in seen:
-                await interaction.response.send_message(
-                    "Cada rol debe utilizar un emoji diferente.", ephemeral=True,
-                )
-                return
-            seen.add(key)
-            selected.append({"role_id": role.id, "emoji": emoji})
-        self.roles = selected
-        await interaction.response.edit_message(content=self.summary(guild), view=self)
-
-    @discord.ui.button(label="Modo múltiple / exclusivo", style=discord.ButtonStyle.secondary, row=2)
-    async def toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.exclusive = not self.exclusive
-        await interaction.response.edit_message(content=self.summary(interaction.guild), view=self)
-
-    @discord.ui.button(label="Publicar panel", style=discord.ButtonStyle.success, row=2)
-    async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        guild = interaction.guild
-        channel = guild.get_channel(self.channel_id) if guild and self.channel_id else None
-        if not isinstance(channel, discord.TextChannel) or not self.roles:
-            await interaction.response.send_message(
-                "Seleccione un canal y al menos un rol antes de publicar.", ephemeral=True,
-            )
+    async def manage(self, interaction: discord.Interaction) -> None:
+        message_id = int(interaction.data["values"][0])
+        panel = reaction_role_panel_find(self.guild_id, message_id)
+        if panel is None:
+            await interaction.response.send_message("El panel ya no figura registrado.", ephemeral=True)
             return
-        perms = channel.permissions_for(guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links and
-                perms.add_reactions and perms.read_message_history and guild.me.guild_permissions.manage_roles):
-            await interaction.response.send_message(
-                "Faltan permisos para ver el canal, publicar, añadir reacciones, leer el historial o gestionar roles.",
-                ephemeral=True,
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        lines = [f"{str(x['emoji'])}  <@&{x['role_id']}>" for x in self.roles]
-        embed = discord.Embed(
-            title="Selección de roles",
-            description="Seleccione sus roles reaccionando a este mensaje. "
-                        + ("Solo puede mantener un rol de este panel." if self.exclusive else
-                           "Puede seleccionar varios roles de este panel.")
-                        + "\n\n" + "\n".join(lines),
-            color=discord.Color.blurple(),
-        )
-        try:
-            message = await channel.send(embed=embed)
-            for item in self.roles:
-                await message.add_reaction(str(item["emoji"]))
-        except discord.HTTPException as exc:
-            # Evitar paneles parcialmente publicados cuando falle una reacción.
-            if "message" in locals():
-                try:
-                    await message.delete()
-                except discord.HTTPException:
-                    pass
-            await interaction.followup.send(
-                f"No fue posible publicar el panel: {exc}", ephemeral=True,
-            )
-            return
-        panels = reaction_role_panels(self.guild_id)
-        panels.append({
-            "message_id": message.id, "channel_id": channel.id,
-            "roles": self.roles, "exclusive": self.exclusive,
-        })
-        reaction_role_panels_save(self.guild_id, panels)
-        await interaction.edit_original_response(
-            content=self.summary(guild) + f"\n\nPanel publicado: {message.jump_url}",
-            view=self,
-        )
+        editor = HeraldoReactionRolesEditorView(self.guild_id, self.owner_id, dict(panel))
+        await interaction.response.edit_message(content=editor.content(interaction.guild), view=editor)
 
-    @discord.ui.button(label="Retirar último panel", style=discord.ButtonStyle.danger, row=3)
-    async def remove_last(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        panels = reaction_role_panels(self.guild_id)
-        if not panels:
-            await interaction.response.send_message("No hay paneles publicados.", ephemeral=True)
+    @discord.ui.button(label="Crear mensaje", style=discord.ButtonStyle.success, row=2)
+    async def create(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not self.channel_id:
+            await interaction.response.send_message("Seleccione primero un canal.", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        panel = panels[-1]
-        channel = interaction.guild.get_channel(int(panel["channel_id"]))
-        if isinstance(channel, discord.TextChannel):
-            try:
-                message = await channel.fetch_message(int(panel["message_id"]))
-                await message.delete()
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                pass
-        reaction_role_panels_save(self.guild_id, panels[:-1])
-        await interaction.edit_original_response(
-            content=self.summary(interaction.guild) + "\n\nSe retiró el último panel registrado.",
-            view=self,
-        )
+        panel = {"channel_id": self.channel_id, "roles": [], "reversed": False,
+                 "max_reactions": 0, "list_mode": "Todos", "allowed_roles": [],
+                 "title": "Selección de roles",
+                 "description": "Seleccione los roles reaccionando a este mensaje."}
+        editor = HeraldoReactionRolesEditorView(self.guild_id, self.owner_id, panel)
+        await interaction.response.edit_message(content=editor.content(interaction.guild), view=editor)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Usar mensaje existente", style=discord.ButtonStyle.primary, row=2)
+    async def existing(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoReactionExistingModal(self.guild_id, self.owner_id))
+
+    @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
-@bot.listen("on_raw_reaction_add")
-async def general_reaction_role_add(payload: discord.RawReactionActionEvent) -> None:
+async def rr_handle_reaction(payload: discord.RawReactionActionEvent, added: bool) -> None:
     if payload.guild_id is None or payload.user_id == getattr(bot.user, "id", None):
         return
     panel = reaction_role_panel_find(payload.guild_id, payload.message_id)
@@ -7422,65 +7602,62 @@ async def general_reaction_role_add(payload: discord.RawReactionActionEvent) -> 
     if member.bot:
         return
     emoji = _orientation_emoji_key(str(payload.emoji))
-    binding = next((x for x in panel["roles"] if _orientation_emoji_key(str(x["emoji"])) == emoji), None)
+    binding = next((x for x in rr_bindings(panel) if _orientation_emoji_key(x["emoji"]) == emoji), None)
     if not binding:
         return
-    role = guild.get_role(int(binding["role_id"]))
-    if not role or not role.is_assignable():
-        return
-    try:
-        if panel.get("exclusive"):
-            removals = [
-                guild.get_role(int(x["role_id"])) for x in panel["roles"]
-                if int(x["role_id"]) != role.id
-            ]
-            removals = [r for r in removals if r and r in member.roles and r.is_assignable()]
-            if removals:
-                await member.remove_roles(*removals, reason="Reaction Roles: selección exclusiva")
-        if role not in member.roles:
-            await member.add_roles(role, reason="Reaction Roles: asignación")
-    except discord.HTTPException:
-        return
-    if panel.get("exclusive"):
-        channel = guild.get_channel(payload.channel_id)
-        if isinstance(channel, discord.TextChannel):
+    channel = guild.get_channel(payload.channel_id)
+    if not rr_can_use(member, panel):
+        if added and isinstance(channel, discord.TextChannel):
             try:
                 message = await channel.fetch_message(payload.message_id)
-                for x in panel["roles"]:
-                    if int(x["role_id"]) != role.id:
-                        await message.remove_reaction(str(x["emoji"]), member)
+                await message.remove_reaction(str(payload.emoji), member)
             except discord.HTTPException:
                 pass
+        return
+    if added and panel.get("max_reactions") and isinstance(channel, discord.TextChannel):
+        try:
+            message = await channel.fetch_message(payload.message_id)
+            active = 0
+            for reaction in message.reactions:
+                if any(_orientation_emoji_key(x["emoji"]) == _orientation_emoji_key(str(reaction.emoji))
+                       for x in rr_bindings(panel)):
+                    async for user in reaction.users():
+                        if user.id == member.id:
+                            active += 1
+                            break
+            if active > int(panel["max_reactions"]):
+                await message.remove_reaction(str(payload.emoji), member)
+                return
+        except discord.HTTPException:
+            return
+    reverse = bool(panel.get("reversed"))
+    do_add = (added != reverse)
+    to_add = binding["add"] if do_add else binding["remove"]
+    to_remove = binding["remove"] if do_add else binding["add"]
+    # Reverse mode inverts the meaning of the two configured actions.
+    if reverse:
+        to_add, to_remove = to_remove, to_add
+    additions = [guild.get_role(int(r)) for r in to_add]
+    removals = [guild.get_role(int(r)) for r in to_remove]
+    additions = [r for r in additions if r and r.is_assignable() and r not in member.roles]
+    removals = [r for r in removals if r and r.is_assignable() and r in member.roles]
+    try:
+        if removals:
+            await member.remove_roles(*removals, reason="Reaction Roles: acción de reacción")
+        if additions:
+            await member.add_roles(*additions, reason="Reaction Roles: acción de reacción")
+    except discord.HTTPException:
+        pass
+
+
+@bot.listen("on_raw_reaction_add")
+async def general_reaction_role_add(payload: discord.RawReactionActionEvent) -> None:
+    await rr_handle_reaction(payload, True)
 
 
 @bot.listen("on_raw_reaction_remove")
 async def general_reaction_role_remove(payload: discord.RawReactionActionEvent) -> None:
-    if payload.guild_id is None or payload.user_id == getattr(bot.user, "id", None):
-        return
-    panel = reaction_role_panel_find(payload.guild_id, payload.message_id)
-    if not panel or int(panel["channel_id"]) != payload.channel_id:
-        return
-    guild = bot.get_guild(payload.guild_id)
-    if guild is None:
-        return
-    member = guild.get_member(payload.user_id)
-    if member is None:
-        try:
-            member = await guild.fetch_member(payload.user_id)
-        except discord.HTTPException:
-            return
-    if member.bot:
-        return
-    emoji = _orientation_emoji_key(str(payload.emoji))
-    binding = next((x for x in panel["roles"] if _orientation_emoji_key(str(x["emoji"])) == emoji), None)
-    if not binding:
-        return
-    role = guild.get_role(int(binding["role_id"]))
-    if role and role in member.roles and role.is_assignable():
-        try:
-            await member.remove_roles(role, reason="Reaction Roles: reacción retirada")
-        except discord.HTTPException:
-            pass
+    await rr_handle_reaction(payload, False)
 
 
 class HeraldoPendingSetupModuleView(discord.ui.View):
