@@ -6432,11 +6432,14 @@ def heraldo_template_embed(template: dict) -> discord.Embed | None:
 
 def heraldo_template_view(template: dict) -> discord.ui.View | None:
     label, url = template.get("button_label", ""), template.get("button_url", "")
-    if not label or not url:
-        return None
     view = discord.ui.View(timeout=None)
-    view.add_item(discord.ui.Button(label=label, url=url))
-    return view
+    if label and url:
+        view.add_item(discord.ui.Button(label=label, url=url))
+    component_name = template.get("role_component", "")
+    component = next((x for x in heraldo_message_role_config(int(template.get("_guild_id", 0))) if x["label"] == component_name), None)
+    if component:
+        view.add_item(HeraldoMessageRoleButton(component, int(template["_guild_id"])))
+    return view if view.children else None
 
 
 class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
@@ -6555,6 +6558,13 @@ class HeraldoTemplateSetupView(discord.ui.View):
             return
         await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id, self.selected))
 
+    @discord.ui.button(label="Vincular botón", style=discord.ButtonStyle.secondary, row=2)
+    async def attach(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self._current():
+            await interaction.response.send_message("Primero crea una plantilla.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoAttachRoleModal(self.guild_id, self.owner_id, self.selected))
+
     @discord.ui.button(label="Publicar", style=discord.ButtonStyle.success, row=2)
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button):
         template = self._current()
@@ -6567,7 +6577,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
             return
         await interaction.response.defer(ephemeral=True)
         try:
-            await channel.send(embed=heraldo_template_embed(template), view=heraldo_template_view(template),
+            await channel.send(embed=heraldo_template_embed(template), view=heraldo_template_view(dict(template, _guild_id=self.guild_id)),
                                allowed_mentions=discord.AllowedMentions.none())
         except discord.HTTPException:
             await interaction.followup.send("No fue posible publicar la plantilla. Comprueba permisos y formato.", ephemeral=True)
@@ -6595,6 +6605,155 @@ class HeraldoTemplateSetupView(discord.ui.View):
         )
 
 
+
+# Componentes de mensajes: gestión persistente de roles con comprobación de jerarquías.
+def heraldo_message_role_config(guild_id: int) -> list[dict]:
+    try:
+        data = json.loads(guild_config_get(guild_id, "message_role_components") or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [x for x in data if isinstance(x, dict) and x.get("role_id") and x.get("label")][:20] if isinstance(data, list) else []
+
+
+class HeraldoMessageRoleModal(discord.ui.Modal, title="Nuevo componente de roles"):
+    label_text = discord.ui.TextInput(label="Etiqueta", max_length=70)
+    role_text = discord.ui.TextInput(label="ID del rol del servidor", max_length=22)
+    action_text = discord.ui.TextInput(label="Acción: añadir, quitar o alternar", default="alternar", max_length=12)
+
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__()
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Acceso denegado.", ephemeral=True)
+            return
+        label = str(self.label_text).strip()
+        raw_id = str(self.role_text).strip()
+        action = str(self.action_text).strip().casefold()
+        if not raw_id.isdecimal() or action not in {"añadir", "quitar", "alternar"}:
+            await interaction.response.send_message("Indica un ID válido y una acción admitida.", ephemeral=True)
+            return
+        role = interaction.guild.get_role(int(raw_id))
+        me = interaction.guild.me
+        if not role or role.is_default() or role.managed or not me or role >= me.top_role:
+            await interaction.response.send_message("El rol no existe o no puede ser administrado por El Heraldo.", ephemeral=True)
+            return
+        components = heraldo_message_role_config(self.guild_id)
+        if len(components) >= 20:
+            await interaction.response.send_message("Se alcanzó el límite de componentes de roles.", ephemeral=True)
+            return
+        if any(x["label"].casefold() == label.casefold() for x in components):
+            await interaction.response.send_message("Ya existe un componente con ese nombre.", ephemeral=True)
+            return
+        components.append({"label": label, "role_id": role.id, "action": action})
+        guild_config_set(self.guild_id, "message_role_components", json.dumps(components, ensure_ascii=False))
+        await interaction.response.send_message("Componente guardado. Puedes vincularlo a una plantilla.", ephemeral=True)
+
+
+class HeraldoMessageComponentsSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este editor no te pertenece.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Nuevo componente", style=discord.ButtonStyle.primary)
+    async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(HeraldoMessageRoleModal(self.guild_id, self.owner_id))
+
+    @discord.ui.button(label="Consultar", style=discord.ButtonStyle.secondary)
+    async def list_components(self, interaction: discord.Interaction, button: discord.ui.Button):
+        items = heraldo_message_role_config(self.guild_id)
+        lines = [f"**{discord.utils.escape_markdown(x['label'])}** · <@&{x['role_id']}> · {x.get('action', 'alternar')}" for x in items]
+        await interaction.response.send_message("\n".join(lines)[:1900] if lines else "No existen componentes configurados.", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=heraldo_messages_setup_content(), embed=None,
+                                                view=HeraldoMessagesSetupView(self.guild_id, self.owner_id))
+
+
+class HeraldoAttachRoleModal(discord.ui.Modal, title="Vincular componente a plantilla"):
+    component_text = discord.ui.TextInput(label="Nombre exacto del componente", max_length=70, required=False)
+
+    def __init__(self, guild_id: int, owner_id: int, template_name: str):
+        super().__init__()
+        self.guild_id, self.owner_id, self.template_name = guild_id, owner_id, template_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Acceso denegado.", ephemeral=True)
+            return
+        name = str(self.component_text).strip()
+        item = next((x for x in heraldo_message_role_config(self.guild_id) if x["label"].casefold() == name.casefold()), None)
+        if name and not item:
+            await interaction.response.send_message("Componente no encontrado. Consulta el listado de Componentes.", ephemeral=True)
+            return
+        templates = heraldo_template_list(self.guild_id)
+        template = next((x for x in templates if x["name"] == self.template_name), None)
+        if not template:
+            await interaction.response.send_message("La plantilla ya no existe.", ephemeral=True)
+            return
+        template["role_component"] = item["label"] if item else ""
+        heraldo_template_save(self.guild_id, templates)
+        await interaction.response.send_message("Vinculación actualizada. Publica nuevamente la plantilla para aplicar el cambio.", ephemeral=True)
+
+
+class HeraldoMessageRoleButton(discord.ui.Button):
+    def __init__(self, component: dict, guild_id: int):
+        super().__init__(label=component["label"][:80], style=discord.ButtonStyle.secondary,
+                         custom_id=f"ehmsg:role:{guild_id}:{component['role_id']}:{component.get('action', 'alternar')}")
+        self.guild_id, self.role_id, self.action = guild_id, int(component["role_id"]), component.get("action", "alternar")
+
+    async def callback(self, interaction: discord.Interaction):
+        await heraldo_message_role_action(interaction, self.guild_id, self.role_id, self.action)
+
+
+async def heraldo_message_role_action(interaction: discord.Interaction, guild_id: int, role_id: int, action: str):
+    guild = interaction.guild
+    if not guild or guild.id != guild_id or not isinstance(interaction.user, discord.Member):
+        await interaction.response.send_message("Acción no disponible fuera del servidor.", ephemeral=True)
+        return
+    allowed = any(int(x["role_id"]) == role_id and x.get("action") == action for x in heraldo_message_role_config(guild_id))
+    role, me = guild.get_role(role_id), guild.me
+    if not allowed or not role or not me or not me.guild_permissions.manage_roles or role.is_default() or role.managed or role >= me.top_role:
+        await interaction.response.send_message("Este componente ya no está disponible o faltan permisos.", ephemeral=True)
+        return
+    member = interaction.user
+    try:
+        if action == "añadir" or (action == "alternar" and role not in member.roles):
+            await member.add_roles(role, reason="Componente de mensajes de El Heraldo")
+            answer = "Rol asignado."
+        elif action == "quitar" or (action == "alternar" and role in member.roles):
+            await member.remove_roles(role, reason="Componente de mensajes de El Heraldo")
+            answer = "Rol retirado."
+        else:
+            answer = "No fue necesario realizar cambios."
+    except discord.HTTPException:
+        answer = "No fue posible modificar el rol. Verifica los permisos."
+    await interaction.response.send_message(answer, ephemeral=True)
+
+
+@bot.listen("on_interaction")
+async def heraldo_message_components_dispatch(interaction: discord.Interaction):
+    # Captura los componentes publicados antes de un reinicio sin registrar una vista por mensaje.
+    if interaction.type != discord.InteractionType.component or not interaction.data:
+        return
+    custom_id = str(interaction.data.get("custom_id", ""))
+    if not custom_id.startswith("ehmsg:role:"):
+        return
+    parts = custom_id.split(":")
+    if len(parts) != 5 or not parts[2].isdigit() or not parts[3].isdigit() or parts[4] not in {"añadir", "quitar", "alternar"}:
+        return
+    if not interaction.response.is_done():
+        await heraldo_message_role_action(interaction, int(parts[2]), int(parts[3]), parts[4])
+
+
 class HeraldoMessagesSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -6607,6 +6766,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
             max_values=1,
             options=[
                 discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
+                discord.SelectOption(label="Componentes", value="components", description="Botones de roles con acciones configurables."),
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
@@ -6656,6 +6816,11 @@ class HeraldoMessagesSetupView(discord.ui.View):
     async def open_editor(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         selected = values[0] if values else ""
+
+        if selected == "components":
+            await interaction.response.edit_message(content="**El Heraldo · Componentes**\\n\\nConfigura botones de roles reutilizables.", embed=None,
+                view=HeraldoMessageComponentsSetupView(self.guild_id, self.owner_id))
+            return
 
         if selected == "templates":
             await interaction.response.edit_message(
@@ -6725,6 +6890,7 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
         ("HeraldoTemplateSetupView", lambda: HeraldoTemplateSetupView(guild_id, 0)),
+        ("HeraldoMessageComponentsSetupView", lambda: HeraldoMessageComponentsSetupView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
         ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
