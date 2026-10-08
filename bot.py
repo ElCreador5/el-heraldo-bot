@@ -8936,6 +8936,110 @@ async def heraldo_sendtemplate_autocomplete(interaction: discord.Interaction, cu
             if current.casefold() in t["name"].casefold()][:25]
 
 
+
+class HeraldoEditTemplateConfirmView(discord.ui.View):
+    """Edición manual de un mensaje del bot; no se ejecuta al seleccionar la plantilla."""
+    def __init__(self, guild_id: int, owner_id: int, channel_id: int, message_id: int, template_name: str):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id, self.channel_id = guild_id, owner_id, channel_id
+        self.message_id, self.template_name = message_id, template_name
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Esta confirmación no te pertenece.", ephemeral=True)
+            return False
+        if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
+            await interaction.response.send_message("Se requiere Administrar mensajes.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar edición", style=discord.ButtonStyle.primary)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        channel = guild.get_channel(self.channel_id) if guild else None
+        item = next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.template_name), None)
+        if not isinstance(channel, discord.TextChannel) or not item:
+            await interaction.response.send_message("El canal o la plantilla ya no está disponible.", ephemeral=True)
+            return
+        me = guild.me
+        perms = channel.permissions_for(me) if me else None
+        if not perms or not perms.view_channel or not perms.read_message_history or not perms.send_messages or not perms.embed_links:
+            await interaction.response.send_message("Permisos insuficientes para editar el mensaje.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            message = await channel.fetch_message(self.message_id)
+            if not me or message.author.id != me.id:
+                await interaction.followup.send("Solo se pueden editar mensajes publicados por este bot.", ephemeral=True)
+                return
+            await message.edit(content=None, embed=heraldo_template_embed(item),
+                               view=heraldo_template_view(dict(item, _guild_id=self.guild_id)),
+                               allowed_mentions=discord.AllowedMentions.none())
+        except (discord.HTTPException, discord.NotFound):
+            await interaction.followup.send("No fue posible actualizar el mensaje.", ephemeral=True)
+            return
+        self.stop()
+        await interaction.edit_original_response(content="Mensaje actualizado por confirmación del administrador.", view=None)
+        await interaction.followup.send("Edición completada.", ephemeral=True)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="Edición cancelada. El mensaje original permanece intacto.", view=None)
+
+
+@bot.tree.command(name="edittemplate", description="Edita un mensaje del Heraldo con una plantilla, previa confirmación.")
+@app_commands.default_permissions(manage_messages=True)
+@app_commands.guild_only()
+async def heraldo_edittemplate(interaction: discord.Interaction, enlace: str, plantilla: str):
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message("Se requiere Administrar mensajes.", ephemeral=True)
+        return
+    match = re.fullmatch(r"https://(?:discord(?:app)?\\.com)/channels/(\\d+)/(\\d+)/(\\d+)", enlace.strip())
+    if not match or int(match.group(1)) != interaction.guild.id:
+        await interaction.response.send_message("Introduce el enlace a un mensaje de este servidor.", ephemeral=True)
+        return
+    channel_id, message_id = int(match.group(2)), int(match.group(3))
+    channel = interaction.guild.get_channel(channel_id)
+    item = next((x for x in heraldo_template_list(interaction.guild.id)
+                 if x["name"].casefold() == plantilla.strip().casefold()), None)
+    if not isinstance(channel, discord.TextChannel) or item is None:
+        await interaction.response.send_message("El canal o la plantilla no existe.", ephemeral=True)
+        return
+    me = interaction.guild.me
+    perms = channel.permissions_for(me) if me else None
+    if not perms or not perms.view_channel or not perms.read_message_history:
+        await interaction.response.send_message("El Heraldo no puede consultar ese mensaje.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        message = await channel.fetch_message(message_id)
+    except discord.HTTPException:
+        await interaction.followup.send("No se encontró el mensaje.", ephemeral=True)
+        return
+    if not me or message.author.id != me.id:
+        await interaction.followup.send("La edición solo está permitida para mensajes del Heraldo.", ephemeral=True)
+        return
+    await interaction.followup.send(
+        "**El Heraldo · Edición pendiente**\\n\\n"
+        + f"Plantilla: **{discord.utils.escape_markdown(item['name'])}**\\n"
+        + f"Mensaje de destino: {message.jump_url}\\n\\n"
+        + "La publicación actual no cambiará hasta pulsar **Confirmar edición**.",
+        view=HeraldoEditTemplateConfirmView(interaction.guild.id, interaction.user.id,
+                                             channel_id, message_id, item["name"]),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
+@heraldo_edittemplate.autocomplete("plantilla")
+async def heraldo_edittemplate_autocomplete(interaction: discord.Interaction, current: str):
+    if not interaction.guild_id:
+        return []
+    return [app_commands.Choice(name=t["name"][:100], value=t["name"][:100])
+            for t in heraldo_template_list(interaction.guild_id)
+            if current.casefold() in t["name"].casefold()][:25]
+
+
 @bot.tree.command(name="setup", description="Configura las opciones generales de El Heraldo en este servidor.")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
