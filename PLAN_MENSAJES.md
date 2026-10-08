@@ -15,7 +15,7 @@
 - [x] Crear, editar, borrar, previsualizar y publicar embeds con título, descripción, imagen HTTPS y enlace.
 - [x] Vincular botón de rol o menú de roles a una plantilla.
 - [ ] Contenido de texto independiente del embed, varios embeds, miniaturas, pies, autores y campos.
-- [ ] Editor JSON Raw con validación de esquema.
+- [x] Editor JSON Raw con validación de esquema básica.
 - [ ] Variables dinámicas por contexto; impedir menciones automáticas no deseadas.
 - [ ] Edición de publicaciones existentes mediante enlace/ID con verificación de autoría.
 - [ ] Vista previa de todos los componentes y experiencia de navegación uniforme.
@@ -37,7 +37,8 @@
 - [ ] Portabilidad de valores visuales y compatibilidad por versión.
 
 ## Fase 5: Uso y automatizaciones (pendiente)
-- [ ] Enviar y editar mediante comando.
+- [x] Enviar mediante /sendtemplate, con autocompletado y comprobación de permisos.
+- [ ] Editar publicaciones existentes mediante comando.
 - [ ] Programación puntual/recurrente con zona horaria configurada.
 - [ ] Auto-respuestas por palabra clave con controles anti-spam.
 - [ ] Mensajes fijados al final (sticky) sin duplicados ni bucles.
