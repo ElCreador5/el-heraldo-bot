@@ -6829,8 +6829,20 @@ class HeraldoMessageKitImportModal(discord.ui.Modal, title="Importar kit de mens
                     "button_label": str(x.get("button_label", ""))[:80],
                     "button_url": x.get("button_url", ""), "role_component": "",
                     "role_component_mode": "ninguno"} for x in incoming]
-        heraldo_template_save(self.guild_id, cleaned)
-        await interaction.response.send_message(f"Kit importado: {len(cleaned)} plantillas. Las acciones de roles no se importaron.", ephemeral=True)
+        current = heraldo_template_list(self.guild_id)
+        existing = {x["name"].casefold() for x in current}
+        duplicates = [x["name"] for x in cleaned if x["name"].casefold() in existing]
+        if duplicates:
+            await interaction.response.send_message(
+                "Importación cancelada: el kit contiene nombres que ya existen. Renómbralos antes de importar.",
+                ephemeral=True,
+            )
+            return
+        if len(current) + len(cleaned) > 25:
+            await interaction.response.send_message("Importación cancelada: se superaría el máximo de 25 plantillas.", ephemeral=True)
+            return
+        heraldo_template_save(self.guild_id, current + cleaned)
+        await interaction.response.send_message(f"Kit importado: {len(cleaned)} plantillas añadidas. No se sobrescribieron mensajes ni se importaron acciones de roles.", ephemeral=True)
 
 
 class HeraldoMessageKitsView(discord.ui.View):
@@ -6928,7 +6940,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
         selected = values[0] if values else ""
 
         if selected == "kits":
-            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\\n\\nExporta o importa plantillas. La importación reemplaza las existentes.", embed=None,
+            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\\n\\nExporta o importa plantillas. La importación añade mensajes sin sobrescribir.", embed=None,
                 view=HeraldoMessageKitsView(self.guild_id, self.owner_id))
             return
 
