@@ -6534,7 +6534,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
             return
         chosen = templates[index]
         await interaction.response.edit_message(
-            content="**El Heraldo · Plantillas**\\n\\nSeleccionada: **" + discord.utils.escape_markdown(chosen["name"]) + "**",
+            content="**El Heraldo · Plantillas**\n\nSeleccionada: **" + discord.utils.escape_markdown(chosen["name"]) + "**",
             embed=heraldo_template_embed(chosen),
             view=HeraldoTemplateSetupView(self.guild_id, self.owner_id, chosen["name"]),
         )
@@ -6583,7 +6583,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
         items = [x for x in heraldo_template_list(self.guild_id) if x["name"] != self.selected]
         heraldo_template_save(self.guild_id, items)
         await interaction.response.edit_message(
-            content="**El Heraldo · Plantillas**\\n\\nPlantilla eliminada.",
+            content="**El Heraldo · Plantillas**\n\nPlantilla eliminada.",
             embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
         )
 
@@ -6659,7 +6659,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
 
         if selected == "templates":
             await interaction.response.edit_message(
-                content="**El Heraldo · Plantillas**\\n\\nCrea, edita y publica plantillas reutilizables.",
+                content="**El Heraldo · Plantillas**\n\nCrea, edita y publica plantillas reutilizables.",
                 embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
             )
             return
