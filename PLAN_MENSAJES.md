@@ -31,9 +31,9 @@
 
 ## Fase 4: Kits (parcialmente implementada)
 - [x] Exportación JSON de plantillas sin secretos ni acciones de permisos.
-- [x] Importación manual de JSON con comprobación de tipos y límites.
+- [x] Importación manual de JSON con comprobación de tipos, límites y detección de conflictos (sin sobrescritura).
 - [ ] Importación de archivo de kits grandes, enlace/ID seguro, vista previa de diferencias.
-- [ ] Confirmación explícita antes de reemplazo, versionado y restauración.
+- [ ] Versionado, importación de kits grandes y restauración opcional bajo confirmación.
 - [ ] Portabilidad de valores visuales y compatibilidad por versión.
 
 ## Fase 5: Uso y automatizaciones (pendiente)
@@ -58,6 +58,6 @@
 - [ ] Aprobar PR, fusionar y desplegar solo tras completar verificaciones.
 
 ## Problemas conocidos en la rama actual
-- El panel de importación sustituye las plantillas actuales sin confirmación; requiere paso de confirmación antes de producción.
+- La importación actual no reemplaza plantillas; rechaza los nombres repetidos. Todavía necesita un flujo de revisión de diferencias.
 - El componente de menú comparte el catálogo de roles del servidor, aún sin editor individual de opciones.
 - Se requiere ejecutar pruebas de sintaxis y servidor; la conexión de GitHub no ejecuta automáticamente código Python.
