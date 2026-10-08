@@ -7382,27 +7382,70 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int, panel: dict, selected: int = 0):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id, self.panel = guild_id, owner_id, panel
-        self.selected = selected
         bindings = rr_bindings(panel)
+        self.selected = max(0, min(selected, len(bindings) - 1)) if bindings else 0
+        active = bindings[self.selected] if bindings else None
+        guild = bot.get_guild(guild_id)
+
+        def role_defaults(role_ids: list[int]) -> list[discord.Role]:
+            if guild is None:
+                return []
+            return [
+                role for role_id in role_ids[:10]
+                if (role := guild.get_role(int(role_id))) is not None
+            ]
+
         if bindings:
             picker = discord.ui.Select(
-                placeholder="Seleccionar reacción para configurar",
-                options=[discord.SelectOption(label=str(x["emoji"])[:80], value=str(i),
-                          description=f"Añadir {len(x['add'])} · Retirar {len(x['remove'])}")
-                         for i, x in enumerate(bindings[:20])] +
-                         [discord.SelectOption(label="Retirar reacción seleccionada", value="remove_selected")], row=0)
+                placeholder=f"Reacción activa: {active['emoji']}",
+                options=[
+                    discord.SelectOption(
+                        label=str(x["emoji"])[:80],
+                        value=str(i),
+                        description=f"Añadir {len(x['add'])} · Retirar {len(x['remove'])}",
+                        default=i == self.selected,
+                    )
+                    for i, x in enumerate(bindings[:20])
+                ] + [
+                    discord.SelectOption(
+                        label="Eliminar reacción actual",
+                        value="remove_selected",
+                        description=f"Retirar {active['emoji']} de este panel",
+                    )
+                ],
+                row=0,
+            )
             picker.callback = self.select_emoji
             self.add_item(picker)
-        role_add = discord.ui.RoleSelect(placeholder="Roles que añade la reacción seleccionada",
-                                        min_values=0, max_values=10, row=1)
+
+        active_emoji = active["emoji"] if active else "la reacción seleccionada"
+        role_add = discord.ui.RoleSelect(
+            placeholder=f"Roles que añade {active_emoji}",
+            min_values=0,
+            max_values=10,
+            default_values=role_defaults(active["add"] if active else []),
+            row=1,
+        )
         role_add.callback = self.set_add
         self.add_item(role_add)
-        role_remove = discord.ui.RoleSelect(placeholder="Roles que retira la reacción seleccionada",
-                                           min_values=0, max_values=10, row=2)
+
+        role_remove = discord.ui.RoleSelect(
+            placeholder=f"Roles que retira {active_emoji}",
+            min_values=0,
+            max_values=10,
+            default_values=role_defaults(active["remove"] if active else []),
+            row=2,
+        )
         role_remove.callback = self.set_remove
         self.add_item(role_remove)
-        access = discord.ui.RoleSelect(placeholder="Roles de lista blanca / negra",
-                                      min_values=0, max_values=10, row=3)
+
+        access = discord.ui.RoleSelect(
+            placeholder="Roles de acceso para lista blanca / negra",
+            min_values=0,
+            max_values=10,
+            default_values=role_defaults([int(x) for x in panel.get("allowed_roles", [])]),
+            row=3,
+        )
         access.callback = self.set_access
         self.add_item(access)
 
@@ -7413,21 +7456,39 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
         return True
 
     def content(self, guild: discord.Guild) -> str:
-        return rr_summary(guild, self.panel) + f"\n\nReacción seleccionada: {self.selected + 1 if rr_bindings(self.panel) else 'Ninguna'}"
+        bindings = rr_bindings(self.panel)
+        if not bindings:
+            selected_text = "Ninguna"
+        else:
+            active = bindings[self.selected]
+            selected_text = f"{active['emoji']} ({self.selected + 1}/{len(bindings)})"
+        return rr_summary(guild, self.panel) + f"\n\nEditando reacción: {selected_text}"
 
     async def select_emoji(self, interaction: discord.Interaction) -> None:
         value = interaction.data["values"][0]
+        bindings = rr_bindings(self.panel)
         if value == "remove_selected":
-            bindings = rr_bindings(self.panel)
             if bindings and self.selected < len(bindings):
                 bindings.pop(self.selected)
                 self.panel["roles"] = bindings
-                self.selected = 0
-            updated = HeraldoReactionRolesEditorView(self.guild_id, self.owner_id, self.panel)
-            await interaction.response.edit_message(content=updated.content(interaction.guild), view=updated)
+            next_selected = min(self.selected, len(bindings) - 1) if bindings else 0
+            updated = HeraldoReactionRolesEditorView(
+                self.guild_id, self.owner_id, self.panel, selected=next_selected
+            )
+            await interaction.response.edit_message(
+                content=updated.content(interaction.guild),
+                view=updated,
+            )
             return
-        self.selected = int(value)
-        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+        selected = int(value)
+        updated = HeraldoReactionRolesEditorView(
+            self.guild_id, self.owner_id, self.panel, selected=selected
+        )
+        await interaction.response.edit_message(
+            content=updated.content(interaction.guild),
+            view=updated,
+        )
 
     async def _set_roles(self, interaction: discord.Interaction, key: str) -> None:
         bindings = rr_bindings(self.panel)
@@ -7440,7 +7501,13 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
             return
         bindings[self.selected][key] = selected
         self.panel["roles"] = bindings
-        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+        updated = HeraldoReactionRolesEditorView(
+            self.guild_id, self.owner_id, self.panel, selected=self.selected
+        )
+        await interaction.response.edit_message(
+            content=updated.content(interaction.guild),
+            view=updated,
+        )
 
     async def set_add(self, interaction: discord.Interaction) -> None:
         await self._set_roles(interaction, "add")
@@ -7450,7 +7517,13 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
 
     async def set_access(self, interaction: discord.Interaction) -> None:
         self.panel["allowed_roles"] = [int(x) for x in interaction.data.get("values", [])]
-        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+        updated = HeraldoReactionRolesEditorView(
+            self.guild_id, self.owner_id, self.panel, selected=self.selected
+        )
+        await interaction.response.edit_message(
+            content=updated.content(interaction.guild),
+            view=updated,
+        )
 
     @discord.ui.button(label="Añadir emoji", style=discord.ButtonStyle.primary, row=4)
     async def add_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
