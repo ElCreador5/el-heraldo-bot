@@ -6580,8 +6580,9 @@ class HeraldoTemplateSetupView(discord.ui.View):
         if not template or not isinstance(channel, discord.TextChannel):
             await interaction.response.send_message("Selecciona una plantilla y un canal válido.", ephemeral=True)
             return
-        if not channel.permissions_for(interaction.guild.me).send_messages:
-            await interaction.response.send_message("El Heraldo no tiene permiso para enviar mensajes en ese canal.", ephemeral=True)
+        me = interaction.guild.me
+        if not me or not channel.permissions_for(me).send_messages or not channel.permissions_for(me).embed_links:
+            await interaction.response.send_message("El Heraldo necesita Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         try:
@@ -8748,6 +8749,44 @@ class HeraldoSetupView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
 
+
+
+
+@bot.tree.command(name="sendtemplate", description="Publica una plantilla de mensajes del servidor.")
+@app_commands.default_permissions(manage_messages=True)
+@app_commands.guild_only()
+async def heraldo_sendtemplate(interaction: discord.Interaction, canal: discord.TextChannel, plantilla: str):
+    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
+        await interaction.response.send_message("Se requiere el permiso Administrar mensajes.", ephemeral=True)
+        return
+    item = next((t for t in heraldo_template_list(interaction.guild.id)
+                 if t["name"].casefold() == plantilla.strip().casefold()), None)
+    if not item:
+        await interaction.response.send_message("La plantilla indicada no existe. Consulta /setup → Mensajes.", ephemeral=True)
+        return
+    me = interaction.guild.me
+    perms = canal.permissions_for(me) if me else None
+    if not perms or not perms.send_messages or not perms.embed_links:
+        await interaction.response.send_message("El Heraldo necesita Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        sent = await canal.send(embed=heraldo_template_embed(item),
+            view=heraldo_template_view(dict(item, _guild_id=interaction.guild.id)),
+            allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        await interaction.followup.send("No se pudo publicar la plantilla. Revisa el contenido y los permisos.", ephemeral=True)
+        return
+    await interaction.followup.send(f"Mensaje publicado correctamente en {canal.mention}: {sent.jump_url}", ephemeral=True)
+
+
+@heraldo_sendtemplate.autocomplete("plantilla")
+async def heraldo_sendtemplate_autocomplete(interaction: discord.Interaction, current: str):
+    if not interaction.guild_id:
+        return []
+    return [app_commands.Choice(name=t["name"][:100], value=t["name"][:100])
+            for t in heraldo_template_list(interaction.guild_id)
+            if current.casefold() in t["name"].casefold()][:25]
 
 
 @bot.tree.command(name="setup", description="Configura las opciones generales de El Heraldo en este servidor.")
