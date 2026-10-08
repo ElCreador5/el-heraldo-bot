@@ -3,7 +3,7 @@ name: Mensajes - verificación de regresiones
 on:
   push:
     branches:
-      - feat/messages-setup-studio-20261008
+      - Pruebas
   pull_request:
     branches:
       - main
