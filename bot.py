@@ -6470,14 +6470,14 @@ class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
         if not name or not (title or description or image):
             await interaction.response.send_message("Indica un nombre y un contenido o imagen.", ephemeral=True)
             return
-        if image and not re.match(r"^https://[^\\s]+$", image, re.I):
+        if image and not re.match(r"^https://[^\s]+$", image, re.I):
             await interaction.response.send_message("La imagen requiere una URL HTTPS válida.", ephemeral=True)
             return
         label, url = "", ""
         if button:
             label, sep, url = button.partition("|")
             label, url = label.strip(), url.strip()
-            if not sep or not label or len(label) > 80 or not re.match(r"^https://[^\\s]+$", url, re.I):
+            if not sep or not label or len(label) > 80 or not re.match(r"^https://[^\s]+$", url, re.I):
                 await interaction.response.send_message("Usa Etiqueta | https://direccion para el botón.", ephemeral=True)
                 return
         items = heraldo_template_list(self.guild_id)
@@ -6489,8 +6489,9 @@ class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
         if len(items) >= 25:
             await interaction.response.send_message("Se alcanzó el máximo de 25 plantillas.", ephemeral=True)
             return
+        old_component = old.get("role_component", "") if (old := next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.old_name), None)) else ""
         items.append({"name": name, "title": title, "description": description, "image": image,
-                      "button_label": label, "button_url": url})
+                      "button_label": label, "button_url": url, "role_component": old_component})
         heraldo_template_save(self.guild_id, items)
         await interaction.response.send_message(
             f"Plantilla **{discord.utils.escape_markdown(name)}** guardada. Abre Plantillas para previsualizarla o publicarla.",
@@ -6710,8 +6711,7 @@ class HeraldoMessageRoleButton(discord.ui.Button):
                          custom_id=f"ehmsg:role:{guild_id}:{component['role_id']}:{component.get('action', 'alternar')}")
         self.guild_id, self.role_id, self.action = guild_id, int(component["role_id"]), component.get("action", "alternar")
 
-    async def callback(self, interaction: discord.Interaction):
-        await heraldo_message_role_action(interaction, self.guild_id, self.role_id, self.action)
+    # La ejecución se centraliza en el listener para mantener la misma ruta tras reinicios.
 
 
 async def heraldo_message_role_action(interaction: discord.Interaction, guild_id: int, role_id: int, action: str):
@@ -6818,7 +6818,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
         selected = values[0] if values else ""
 
         if selected == "components":
-            await interaction.response.edit_message(content="**El Heraldo · Componentes**\\n\\nConfigura botones de roles reutilizables.", embed=None,
+            await interaction.response.edit_message(content="**El Heraldo · Componentes**\n\nConfigura botones de roles reutilizables.", embed=None,
                 view=HeraldoMessageComponentsSetupView(self.guild_id, self.owner_id))
             return
 
