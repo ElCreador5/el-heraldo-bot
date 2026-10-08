@@ -7243,7 +7243,7 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
         channels.callback = self.choose_channel
         self.add_item(channels)
         roles = discord.ui.RoleSelect(
-            placeholder="Seleccionar de 1 a 6 roles con emoji", min_values=1, max_values=6, row=1,
+            placeholder="Seleccionar de 1 a 6 roles con reacción", min_values=1, max_values=6, row=1,
         )
         roles.callback = self.choose_roles
         self.add_item(roles)
@@ -7356,7 +7356,15 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
             for item in self.roles:
                 await message.add_reaction(str(item["emoji"]))
         except discord.HTTPException as exc:
-            await interaction.followup.send(f"No fue posible publicar el panel: {exc}", ephemeral=True)
+            # Evitar paneles parcialmente publicados cuando falle una reacción.
+            if "message" in locals():
+                try:
+                    await message.delete()
+                except discord.HTTPException:
+                    pass
+            await interaction.followup.send(
+                f"No fue posible publicar el panel: {exc}", ephemeral=True,
+            )
             return
         panels = reaction_role_panels(self.guild_id)
         panels.append({
