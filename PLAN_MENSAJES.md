@@ -17,7 +17,7 @@
 - [ ] Contenido de texto independiente del embed, varios embeds, miniaturas, pies, autores y campos.
 - [x] Editor JSON Raw con validación de esquema básica.
 - [ ] Variables dinámicas por contexto; impedir menciones automáticas no deseadas.
-- [ ] Edición de publicaciones existentes mediante enlace/ID con verificación de autoría.
+- [x] Edición de publicaciones existentes mediante enlace con verificación de autoría del bot y confirmación explícita.
 - [ ] Vista previa de todos los componentes y experiencia de navegación uniforme.
 
 ## Fase 3: Componentes (parcialmente implementada)
@@ -38,7 +38,7 @@
 
 ## Fase 5: Uso y automatizaciones (pendiente)
 - [x] Enviar mediante /sendtemplate, con autocompletado y comprobación de permisos.
-- [ ] Editar publicaciones existentes mediante comando.
+- [x] Editar publicaciones existentes mediante /edittemplate, solo mensajes propios y con confirmación del administrador.
 - [ ] Programación puntual/recurrente con zona horaria configurada.
 - [ ] Auto-respuestas por palabra clave con controles anti-spam.
 - [ ] Mensajes fijados al final (sticky) sin duplicados ni bucles.
