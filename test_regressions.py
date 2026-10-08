@@ -23,7 +23,7 @@ b.suggestion_db_init()
 def interaction(guild):
     return SimpleNamespace(guild=guild, user=SimpleNamespace(id=99, mention='<@99>'),
         data={'values': []}, response=SimpleNamespace(send_message=AsyncMock(),
-        edit_message=AsyncMock(), defer=AsyncMock()), followup=SimpleNamespace(send=AsyncMock()),
+        edit_message=AsyncMock(), defer=AsyncMock(), send_modal=AsyncMock()), followup=SimpleNamespace(send=AsyncMock()),
         edit_original_response=AsyncMock())
 
 
@@ -72,6 +72,8 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
             self.assertLessEqual(len(rows), 5)
             for row in rows:
                 self.assertLessEqual(len(row['components']), 5)
+                for component in row['components']:
+                    self.assertLessEqual(len(component.get('options', [])), 25)
             json.dumps(rows)
             view.stop()
 
@@ -115,6 +117,75 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         result = i.edit_original_response.call_args.kwargs
         self.assertEqual(result['view'].selected, 1)
         self.assertIn('👎 (2/2)', result['content'])
+
+    async def test_create_role_for_active_reaction_and_cache_delay(self):
+        for action in ('add', 'remove'):
+            with self.subTest(action=action):
+                role = b.discord.Role(guild=self.guild, state=MagicMock(), data={
+                    'id': '333', 'name': 'Prueba', 'permissions': '0', 'position': 1,
+                    'color': 0, 'hoist': False, 'managed': False, 'mentionable': False})
+                self.guild.create_role = AsyncMock(return_value=role)
+                view = b.HeraldoReactionRolesEditorView(777, 99, panel(), selected=1)
+                modal = b.HeraldoReactionRoleCreateModal(view, action)
+                modal.role_name._value = ' Prueba '
+                i = interaction(self.guild)
+                i.user.guild_permissions = b.discord.Permissions(manage_roles=True)
+                await modal.on_submit(i)
+                args = self.guild.create_role.call_args.kwargs
+                self.assertEqual(args['name'], 'Prueba')
+                self.assertEqual(args['permissions'].value, 0)
+                self.assertFalse(args['mentionable'])
+                result = i.edit_original_response.call_args.kwargs
+                updated = result['view']
+                self.assertEqual(updated.selected, 1)
+                self.assertIn(333, updated.panel['roles'][1][action])
+                self.assertNotIn(333, updated.panel['roles'][0][action])
+                selector = next(c for c in updated.children if c.row == (1 if action == 'add' else 2))
+                self.assertIn(333, [r.id for r in selector.default_values])
+                self.assertIsNone(b.reaction_role_panel_find(777, 20))
+                await modal.on_submit(i)
+                self.guild.create_role.assert_awaited_once()
+
+    async def test_create_role_guards(self):
+        for case in ('wrong_owner', 'missing_user_permission', 'missing_bot_permission', 'empty_name', 'limit'):
+            with self.subTest(case=case):
+                p = panel()
+                if case == 'limit':
+                    p['roles'][0]['add'] = list(range(10))
+                self.guild.me.guild_permissions.manage_roles = case != 'missing_bot_permission'
+                self.guild.create_role = AsyncMock()
+                view = b.HeraldoReactionRolesEditorView(777, 99, p)
+                modal = b.HeraldoReactionRoleCreateModal(view, 'add')
+                modal.role_name._value = ' ' if case == 'empty_name' else 'Prueba'
+                i = interaction(self.guild)
+                i.user.guild_permissions = b.discord.Permissions(manage_roles=case != 'missing_user_permission')
+                if case == 'wrong_owner':
+                    i.user.id = 12
+                await modal.on_submit(i)
+                self.guild.create_role.assert_not_awaited()
+                i.response.send_message.assert_awaited_once()
+
+    async def test_create_role_discord_error_preserves_draft(self):
+        view = b.HeraldoReactionRolesEditorView(777, 99, panel())
+        modal = b.HeraldoReactionRoleCreateModal(view, 'add')
+        modal.role_name._value = 'Prueba'
+        self.guild.create_role = AsyncMock(side_effect=b.discord.Forbidden(
+            SimpleNamespace(status=403, reason='forbidden'), 'forbidden'))
+        i = interaction(self.guild)
+        i.user.guild_permissions = b.discord.Permissions(manage_roles=True)
+        await modal.on_submit(i)
+        i.followup.send.assert_awaited_once()
+        self.assertEqual(view.panel['roles'][0]['add'], [1])
+        self.assertFalse(modal.submitting)
+
+    async def test_creation_menu_opens_modal_for_selected_reaction(self):
+        view = b.HeraldoReactionRolesEditorView(777, 99, panel(), selected=1)
+        i = interaction(self.guild)
+        i.data['values'] = ['create_remove']
+        await view.select_emoji(i)
+        modal = i.response.send_modal.call_args.args[0]
+        self.assertEqual(modal.action, 'remove')
+        self.assertEqual(modal.editor.selected, 1)
 
     async def test_modal_updates_original_message(self):
         for cls, values in (

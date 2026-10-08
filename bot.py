@@ -7388,8 +7388,77 @@ class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Rea
         )
 
 
+class HeraldoReactionRoleCreateModal(discord.ui.Modal, title="Crear rol para la reacción"):
+    role_name = discord.ui.TextInput(label="Nombre del nuevo rol", max_length=100)
+
+    def __init__(self, editor: "HeraldoReactionRolesEditorView", action: str):
+        super().__init__()
+        if action not in ("add", "remove"):
+            raise ValueError("Acción de rol desconocida")
+        self.editor = editor
+        self.action = action
+        self.submitting = False
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        if (guild is None or guild.id != self.editor.guild_id
+                or interaction.user.id != self.editor.owner_id):
+            await interaction.response.send_message("Este editor pertenece a otro administrador.", ephemeral=True)
+            return
+        user_perms = getattr(interaction.user, "guild_permissions", discord.Permissions.none())
+        if not user_perms.manage_roles or guild.me is None or not guild.me.guild_permissions.manage_roles:
+            await interaction.response.send_message(
+                "Tú y El Heraldo necesitan el permiso Gestionar roles.", ephemeral=True)
+            return
+        name = str(self.role_name.value).strip()
+        bindings = rr_bindings(self.editor.panel)
+        if not name:
+            await interaction.response.send_message("Indica un nombre para el rol.", ephemeral=True)
+            return
+        if not bindings or self.editor.selected >= len(bindings):
+            await interaction.response.send_message("Añade una reacción primero.", ephemeral=True)
+            return
+        if len(bindings[self.editor.selected][self.action]) >= 10:
+            await interaction.response.send_message(
+                "Esta acción ya tiene el máximo de 10 roles. Retira uno antes de crear otro.", ephemeral=True)
+            return
+        if self.submitting:
+            await interaction.response.send_message("La creación del rol ya está en curso.", ephemeral=True)
+            return
+        self.submitting = True
+        await interaction.response.defer()
+        try:
+            role = await guild.create_role(
+                name=name, permissions=discord.Permissions.none(), mentionable=False, hoist=False,
+                reason=f"El Heraldo: rol de Reaction Roles creado por {interaction.user.id}",
+            )
+        except discord.HTTPException:
+            self.submitting = False
+            await interaction.followup.send(
+                "Discord no pudo crear el rol. Revisa mis permisos y el límite de roles del servidor.",
+                ephemeral=True,
+            )
+            return
+        bindings[self.editor.selected][self.action].append(role.id)
+        self.editor.panel["roles"] = bindings
+        updated = HeraldoReactionRolesEditorView(
+            self.editor.guild_id, self.editor.owner_id, self.editor.panel,
+            selected=self.editor.selected, created_role=role,
+        )
+        await interaction.edit_original_response(
+            content=updated.content(guild) + (
+                f"\n\nRol creado: {role.mention}. Quedó seleccionado en "
+                f"**{'Roles que añade' if self.action == 'add' else 'Roles que retira'}**. "
+                "Pulsa **Guardar** para aplicar la configuración de la reacción. "
+                "El rol ya existe en el servidor aunque salgas sin guardar."
+            ),
+            view=updated,
+        )
+
+
 class HeraldoReactionRolesEditorView(discord.ui.View):
-    def __init__(self, guild_id: int, owner_id: int, panel: dict, selected: int = 0):
+    def __init__(self, guild_id: int, owner_id: int, panel: dict, selected: int = 0,
+                 created_role: discord.Role | None = None):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id, self.panel = guild_id, owner_id, copy.deepcopy(panel)
         bindings = rr_bindings(panel)
@@ -7402,7 +7471,9 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
                 return []
             return [
                 role for role_id in role_ids[:10]
-                if (role := guild.get_role(int(role_id))) is not None
+                if (role := guild.get_role(int(role_id)) or (
+                    created_role if created_role and created_role.id == int(role_id) else None
+                )) is not None
             ]
 
         if bindings:
@@ -7417,6 +7488,16 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
                     )
                     for i, x in enumerate(bindings[:20])
                 ] + [
+                    discord.SelectOption(
+                        label="Crear rol que añade esta reacción",
+                        value="create_add",
+                        description="Crear un rol y seleccionarlo sin salir del editor",
+                    ),
+                    discord.SelectOption(
+                        label="Crear rol que retira esta reacción",
+                        value="create_remove",
+                        description="Crear un rol y seleccionarlo sin salir del editor",
+                    ),
                     discord.SelectOption(
                         label="Eliminar reacción actual",
                         value="remove_selected",
@@ -7472,11 +7553,22 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
         else:
             active = bindings[self.selected]
             selected_text = f"{active['emoji']} ({self.selected + 1}/{len(bindings)})"
-        return rr_summary(guild, self.panel) + f"\n\nEditando reacción: {selected_text}"
+        return rr_summary(guild, self.panel) + (
+            f"\n\nEditando reacción: {selected_text}\n"
+            "Puedes elegir roles existentes en los selectores o crear uno desde el menú de la reacción activa."
+        )
 
     async def select_emoji(self, interaction: discord.Interaction) -> None:
         value = interaction.data["values"][0]
         bindings = rr_bindings(self.panel)
+        if value in ("create_add", "create_remove"):
+            if not bindings or self.selected >= len(bindings):
+                await interaction.response.send_message("Añade una reacción primero.", ephemeral=True)
+                return
+            await interaction.response.send_modal(
+                HeraldoReactionRoleCreateModal(self, "add" if value == "create_add" else "remove")
+            )
+            return
         if value == "remove_selected":
             if bindings and self.selected < len(bindings):
                 bindings.pop(self.selected)
