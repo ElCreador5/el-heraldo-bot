@@ -7300,32 +7300,42 @@ class HeraldoReactionEmojiModal(discord.ui.Modal, title="Configurar reacción"):
         bindings.append({"emoji": value, "add": [], "remove": []})
         self.editor.panel["roles"] = bindings
         self.editor.selected = len(bindings) - 1
-        await interaction.response.edit_message(
-            content=self.editor.content(interaction.guild),
+        await interaction.response.send_message(
+            self.editor.content(interaction.guild),
             view=HeraldoReactionRolesEditorView(self.editor.guild_id, self.editor.owner_id, self.editor.panel,
-                                                selected=self.editor.selected))
+                                                selected=self.editor.selected), ephemeral=True)
 
 
 class HeraldoReactionOptionsModal(discord.ui.Modal, title="Opciones de Reaction Roles"):
     maximum = discord.ui.TextInput(label="Máximo de reacciones (0 = sin límite)", default="0", max_length=2)
     mode = discord.ui.TextInput(label="Acceso: Todos / Lista blanca / Lista negra", default="Todos", max_length=20)
+    reverse_mode = discord.ui.TextInput(label="Reacciones invertidas: Sí / No", default="No", max_length=3)
 
     def __init__(self, editor: "HeraldoReactionRolesEditorView"):
         super().__init__()
         self.editor = editor
         self.maximum.default = str(editor.panel.get("max_reactions", 0))
         self.mode.default = editor.panel.get("list_mode", "Todos")
+        self.reverse_mode.default = "Sí" if editor.panel.get("reversed") else "No"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         mode = str(self.mode.value).strip().casefold()
         normalized = {"todos": "Todos", "lista blanca": "Lista blanca",
                       "lista negra": "Lista negra"}.get(mode)
+        reverse_value = str(self.reverse_mode.value).strip().casefold()
+        if reverse_value not in ("sí", "si", "no"):
+            await interaction.response.send_message("En reacciones invertidas escriba Sí o No.", ephemeral=True)
+            return
         if not str(self.maximum.value).strip().isdigit() or int(self.maximum.value) > 20 or not normalized:
             await interaction.response.send_message("Indique un máximo entre 0 y 20 y un modo de acceso válido.", ephemeral=True)
             return
         self.editor.panel["max_reactions"] = int(self.maximum.value)
         self.editor.panel["list_mode"] = normalized
-        await interaction.response.edit_message(content=self.editor.content(interaction.guild), view=self.editor)
+        self.editor.panel["reversed"] = reverse_value in ("sí", "si")
+        await interaction.response.send_message(
+            self.editor.content(interaction.guild),
+            view=HeraldoReactionRolesEditorView(self.editor.guild_id, self.editor.owner_id, self.editor.panel,
+                                                selected=self.editor.selected), ephemeral=True)
 
 
 class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Reaction Roles"):
@@ -7425,11 +7435,6 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
     @discord.ui.button(label="Opciones", style=discord.ButtonStyle.secondary, row=4)
     async def options(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoReactionOptionsModal(self))
-
-    @discord.ui.button(label="Invertir acciones", style=discord.ButtonStyle.secondary, row=4)
-    async def reverse(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.panel["reversed"] = not self.panel.get("reversed", False)
-        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
 
     @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.secondary, row=4)
     async def edit_message(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
