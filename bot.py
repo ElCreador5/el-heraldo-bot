@@ -8995,7 +8995,7 @@ async def heraldo_edittemplate(interaction: discord.Interaction, enlace: str, pl
     if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("Se requiere Administrar mensajes.", ephemeral=True)
         return
-    match = re.fullmatch(r"https://(?:discord(?:app)?\\.com)/channels/(\\d+)/(\\d+)/(\\d+)", enlace.strip())
+    match = re.fullmatch(r"https://(?:discord(?:app)?\.com)/channels/(\d+)/(\d+)/(\d+)", enlace.strip())
     if not match or int(match.group(1)) != interaction.guild.id:
         await interaction.response.send_message("Introduce el enlace a un mensaje de este servidor.", ephemeral=True)
         return
@@ -9021,9 +9021,9 @@ async def heraldo_edittemplate(interaction: discord.Interaction, enlace: str, pl
         await interaction.followup.send("La edición solo está permitida para mensajes del Heraldo.", ephemeral=True)
         return
     await interaction.followup.send(
-        "**El Heraldo · Edición pendiente**\\n\\n"
-        + f"Plantilla: **{discord.utils.escape_markdown(item['name'])}**\\n"
-        + f"Mensaje de destino: {message.jump_url}\\n\\n"
+        "**El Heraldo · Edición pendiente**\n\n"
+        + f"Plantilla: **{discord.utils.escape_markdown(item['name'])}**\n"
+        + f"Mensaje de destino: {message.jump_url}\n\n"
         + "La publicación actual no cambiará hasta pulsar **Confirmar edición**.",
         view=HeraldoEditTemplateConfirmView(interaction.guild.id, interaction.user.id,
                                              channel_id, message_id, item["name"]),
