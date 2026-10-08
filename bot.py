@@ -686,18 +686,33 @@ def guild_resource_get(guild_id: int, resource_type: str, config_key: str) -> in
 
 
 def guild_resource_set(guild_id: int, resource_type: str, config_key: str, resource_id: int) -> None:
+    """Asigna un recurso de forma uno-a-uno y tolera migraciones de claves antiguas."""
     conn = db_connect()
-    conn.execute(
-        """
-        INSERT INTO guild_resources (guild_id, resource_type, config_key, resource_id)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(guild_id, resource_type, config_key)
-        DO UPDATE SET resource_id = excluded.resource_id
-        """,
-        (guild_id, resource_type, config_key, resource_id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        # guild_resources también impide que un mismo recurso quede ligado a dos
+        # claves del mismo tipo. Retira primero cualquier alias antiguo y realiza
+        # ambas operaciones dentro de la misma transacción.
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "DELETE FROM guild_resources "
+            "WHERE guild_id = ? AND resource_type = ? AND resource_id = ? AND config_key <> ?",
+            (guild_id, resource_type, resource_id, config_key),
+        )
+        conn.execute(
+            """
+            INSERT INTO guild_resources (guild_id, resource_type, config_key, resource_id)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id, resource_type, config_key)
+            DO UPDATE SET resource_id = excluded.resource_id
+            """,
+            (guild_id, resource_type, config_key, resource_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def guild_is_initialized(guild_id: int) -> bool:
@@ -1007,7 +1022,7 @@ def _join_roles_render(guild: discord.Guild, role_ids: list[int]) -> str:
     for role_id in role_ids:
         role, issue = _join_role_status(guild, role_id)
         if role is None:
-            parts.append(f"Advertencia: Rol eliminado (\`{role_id}\`)")
+            parts.append(f"Advertencia: Rol eliminado (`{role_id}`)")
         elif issue:
             parts.append(f"Advertencia: {role.mention} — {issue}")
         else:
@@ -1032,7 +1047,7 @@ def join_roles_users_summary(guild: discord.Guild) -> str:
     mapping = get_join_specific_roles(guild.id)
     lines: list[str] = []
     for user_id, role_ids in list(mapping.items())[:15]:
-        lines.append(f"<@{user_id}> (\`{user_id}\`) → {_join_roles_render(guild, role_ids)}")
+        lines.append(f"<@{user_id}> (`{user_id}`) → {_join_roles_render(guild, role_ids)}")
     if len(mapping) > 15:
         lines.append(f"… y **{len(mapping) - 15}** usuario(s) más.")
     return (
@@ -3429,7 +3444,7 @@ class JoinRolesUserIdModal(discord.ui.Modal, title="Join Roles · Usuario espec�
             return
         self.parent_view.selected_user_id = user_id
         await interaction.response.send_message(
-            f"Usuario objetivo guardado: <@{user_id}> (\`{user_id}\`). "
+            f"Usuario objetivo guardado: <@{user_id}> (`{user_id}`). "
             "Ahora selecciona sus roles y pulsa **Guardar usuario**.",
             ephemeral=True,
         )
@@ -7351,7 +7366,16 @@ class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Rea
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.editor.panel["title"] = str(self.heading.value)
         self.editor.panel["description"] = str(self.description.value)
-        await interaction.response.edit_message(content=self.editor.content(interaction.guild), view=self.editor)
+        await interaction.response.send_message(
+            self.editor.content(interaction.guild),
+            view=HeraldoReactionRolesEditorView(
+                self.editor.guild_id,
+                self.editor.owner_id,
+                self.editor.panel,
+                selected=self.editor.selected,
+            ),
+            ephemeral=True,
+        )
 
 
 class HeraldoReactionRolesEditorView(discord.ui.View):
@@ -9881,6 +9905,21 @@ def condemnation_get(guild_id: int, user_id: int, active_only: bool = True) -> s
     return row
 
 
+def condemnation_get_by_announcement_message(
+    guild_id: int, message_id: int, active_only: bool = True,
+) -> sqlite3.Row | None:
+    """Obtiene el expediente ligado exactamente a una tarjeta de condena."""
+    conn = db_connect()
+    conn.row_factory = sqlite3.Row
+    query = "SELECT * FROM guild_cases WHERE guild_id = ? AND announcement_message_id = ?"
+    params = (guild_id, message_id)
+    if active_only:
+        query += " AND active = 1"
+    row = conn.execute(query, params).fetchone()
+    conn.close()
+    return row
+
+
 def condemnation_save(
     user_id: int, guild_id: int, role_id: int, role_ids: list[int], reason: str,
     duration_minutes: int | None, origin: str, applied_by: int | None,
@@ -10617,14 +10656,6 @@ def moderation_report_channel_id(guild_id: int) -> int:
 
 def set_moderation_report_channel_id(guild_id: int, channel_id: int) -> None:
     guild_config_set(guild_id, "moderation_report_channel_id", str(channel_id))
-
-
-def moderation_report_type_for_emoji(guild_id: int, emoji: str) -> str | None:
-    key = _moderation_emoji_key(emoji)
-    for item in moderation_report_reactions(guild_id):
-        if _moderation_emoji_key(item["emoji"]) == key:
-            return item["label"]
-    return None
 
 
 def moderation_is_staff(member: discord.Member) -> bool:
@@ -11658,32 +11689,28 @@ class CondemnationPardonView(discord.ui.View):
         try:
             await interaction.response.defer(ephemeral=True)
 
-            mentions = interaction.message.mentions
-            if not mentions:
+            row = condemnation_get_by_announcement_message(
+                interaction.guild.id,
+                interaction.message.id,
+            )
+            if row is None:
                 await interaction.followup.send(
-                    "Error: No pude identificar al condenado asociado a este expediente.",
+                    "Información: Este expediente ya no tiene una condena activa o ya fue resuelto.",
                     ephemeral=True,
                 )
                 return
 
-            member = interaction.guild.get_member(mentions[0].id)
+            member_id = int(row["user_id"])
+            member = interaction.guild.get_member(member_id)
             if member is None:
                 try:
-                    member = await interaction.guild.fetch_member(mentions[0].id)
+                    member = await interaction.guild.fetch_member(member_id)
                 except discord.HTTPException:
                     member = None
 
             if member is None:
                 await interaction.followup.send(
-                    "Error: Ese miembro ya no está disponible en el servidor.",
-                    ephemeral=True,
-                )
-                return
-
-            row = condemnation_get(member.guild.id, member.id)
-            if row is None:
-                await interaction.followup.send(
-                    "Información: Este expediente ya no tiene una condena activa o ya fue resuelto.",
+                    "Error: El miembro asociado a este expediente ya no está disponible en el servidor.",
                     ephemeral=True,
                 )
                 return
@@ -11704,7 +11731,7 @@ class CondemnationPardonView(discord.ui.View):
             )
             if not (is_admin or is_condemner):
                 await interaction.followup.send(
-                    "⛔ No puedes perdonar esta condena. Solo puede hacerlo quien la aplicó o un administrador.",
+                    "No puedes perdonar esta condena. Solo puede hacerlo quien la aplicó o un administrador.",
                     ephemeral=True,
                 )
                 return
