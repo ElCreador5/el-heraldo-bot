@@ -111,6 +111,25 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "verificado")
         self.assertEqual(log.await_args.args[1], "Verificación de preferencia completada")
 
+    async def test_member_logs_disabled_until_admin_confirms(self):
+        from unittest.mock import patch
+        self.assertFalse(b.log_member_event_enabled(777, "member_leave"))
+        view = b.HeraldoMemberLogSetupView(777, 99)
+        view.pending_enabled = True
+        self.assertFalse(b.log_member_event_enabled(777, "member_leave"))
+        view.pending_enabled = None
+        view.stop()
+
+    async def test_member_logs_event_isolation(self):
+        b.guild_config_set(777, "log_member.enabled.member_leave", "1")
+        b.guild_config_set(777, "log_member.channel.member_leave", "123")
+        self.assertTrue(b.log_member_event_enabled(777, "member_leave"))
+        self.assertFalse(b.log_member_event_enabled(777, "member_ban"))
+        self.assertEqual(b.log_member_channel_id(777, "member_leave"), 123)
+        self.assertFalse(b.log_member_event_enabled(888, "member_leave"))
+        self.assertEqual(b.log_event_category("Miembro baneado"), "members")
+        self.assertEqual(b.log_event_key("Miembro baneado", "members"), "member_ban")
+
     async def test_raid_setup_read_and_write(self):
         i = interaction(self.guild)
         await b.raid_config.callback(i)
