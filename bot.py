@@ -2398,7 +2398,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     if role_ids & get_eval_role_ids(guild.id):
         db_clear_tentado(guild_id, user_id)  # se verificó a tiempo
         if report:
-            await log_embed(guild, "Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
+            await log_embed(guild, "Verificación de preferencia completada", f"{member.mention} completó su verificación de preferencia.", discord.Color.green())
         return "verificado"
 
     await expel(member, report=report)
@@ -5638,8 +5638,8 @@ LOG_EVENT_CATALOG = {
         ("channel_merge_partial", "Advertencia: Fusión de canales parcial"),
     ],
     "verification": [
-        ("verified_path", "Verificado"),
-        ("age_verification", "Verificación de edad"),
+        ("verified_path", "Verificación de preferencia completada"),
+        ("age_verification", "Verificación de edad completada"),
         ("verification_expired", "Verificación vencida"),
         ("verification_kick", "Expulsión por falta de verificación"),
         ("verification_ban", "Expulsión permanente por falta de verificación"),
@@ -9406,7 +9406,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         )
 
     await log_embed(
-        guild, "Verificación de edad",
+        guild, "Verificación de edad completada",
         f"{member.mention} (`{member.id}`) se verificó correctamente.",
         discord.Color.green(),
     )
