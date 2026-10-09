@@ -1,0 +1,21 @@
+name: Logs - comprobaciones de integración
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [release/member-logs-20261008]
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validar sintaxis
+        run: python -m py_compile bot.py test_member_logs.py
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Regresiones de logs
+        run: python -m unittest test_member_logs -v
