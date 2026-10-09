@@ -5993,6 +5993,33 @@ def log_template_preview(
     )
 
 
+class LogTemplateResetConfirmView(discord.ui.View):
+    def __init__(self, guild_id, owner_id, category, event_key):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.category, self.event_key = category, event_key
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Esta confirmación no te pertenece.", ephemeral=True)
+            return False
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Se requiere Gestionar servidor.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar restauración", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        log_template_reset(self.guild_id, self.category, self.event_key)
+        self.stop()
+        await interaction.response.edit_message(content="Plantilla restaurada a los valores predeterminados.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Restauración cancelada. No se modificó la plantilla.", view=None)
+
+
 class LogTemplateSaveConfirmView(discord.ui.View):
     """Borrador efímero: ninguna plantilla se persiste sin confirmación."""
     def __init__(self, guild_id, owner_id, category, event_key, values, return_to):
@@ -6419,26 +6446,13 @@ class LogTemplateEditorView(discord.ui.View):
         )
 
     async def reset_event(self, interaction: discord.Interaction) -> None:
-        log_template_reset(self.guild_id, self.category, self.event_key)
-        await interaction.response.edit_message(
-            content=(
-                "Este evento volvió a su plantilla heredada/predeterminada.\n\n"
-                + log_template_editor_content(
-                    self.category, self.event_key, mode="edit"
-                )
-            ),
-            embed=log_template_preview(
-                interaction.guild, self.category, self.event_key
-            ),
-            view=LogTemplateEditorView(
-                self.guild_id,
-                self.owner_id,
-                self.category,
-                self.event_key,
-                self.return_to,
-                mode="edit",
-            ),
+        await interaction.response.send_message(
+            "¿Deseas restaurar esta plantilla? La acción requiere confirmación.",
+            view=LogTemplateResetConfirmView(
+                self.guild_id, self.owner_id, self.category, self.event_key),
+            ephemeral=True,
         )
+
 
     async def back(self, interaction: discord.Interaction) -> None:
         if self.return_to == "messages_command":
