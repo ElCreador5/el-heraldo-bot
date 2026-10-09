@@ -294,7 +294,12 @@ async def log_embed(
     print(f"{title} — {description}")
     if guild is None:
         return
-    channel = guild.get_channel(get_log_channel_id(guild.id))
+    category = log_event_category(title)
+    key = log_event_key(title, category)
+    if category == "members" and not log_member_event_enabled(guild.id, key):
+        return
+    destination = log_member_channel_id(guild.id, key) if category == "members" else get_log_channel_id(guild.id)
+    channel = guild.get_channel(destination)
     if channel is None:
         return
     try:
@@ -2139,6 +2144,47 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
         await suggestion_panel_deleted(payload.guild_id, payload.message_id)
     except Exception:
         traceback.print_exc()
+
+
+# Registro de actividad de miembros. Las acciones de moderación se identifican
+# mediante la auditoría de Discord; ante falta de permisos se clasifica como salida.
+@bot.listen("on_member_remove")
+async def heraldo_member_departure(member: discord.Member) -> None:
+    guild = member.guild
+    if not any(log_member_event_enabled(guild.id, key) for key in ("member_leave", "member_kick", "member_ban")):
+        return
+    await asyncio.sleep(2)
+    kind = "member_leave"
+    moderator = None
+    reason = None
+    try:
+        if guild.me and guild.me.guild_permissions.view_audit_log:
+            for action, event in ((discord.AuditLogAction.ban, "member_ban"),
+                                  (discord.AuditLogAction.kick, "member_kick")):
+                async for entry in guild.audit_logs(limit=5, action=action):
+                    if (getattr(entry.target, "id", None) == member.id
+                            and (datetime.now(timezone.utc) - entry.created_at).total_seconds() < 20):
+                        kind = event
+                        moderator = entry.user
+                        reason = entry.reason
+                        break
+                if kind != "member_leave":
+                    break
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    if not log_member_event_enabled(guild.id, kind):
+        return
+    labels = dict(LOG_EVENT_CATALOG["members"])
+    joined = discord.utils.format_dt(member.joined_at, "R") if member.joined_at else "No disponible"
+    details = [f"Usuario: {discord.utils.escape_markdown(str(member))}",
+               f"ID: {member.id}", f"Se incorporó: {joined}",
+               f"Miembros restantes: {guild.member_count if guild.member_count is not None else 'No disponible'}"]
+    if moderator:
+        details.append(f"Responsable: {moderator.mention}")
+    if reason:
+        details.append(f"Motivo: {discord.utils.escape_markdown(reason[:500])}")
+    await log_embed(guild, labels[kind], "\\n".join(details),
+                    discord.Color.red() if kind != "member_leave" else discord.Color.orange())
 
 
 @bot.event
@@ -5789,6 +5835,8 @@ def log_event_category(title: str) -> str:
         for _, label in events:
             if _log_normalize_title(label) == normalized:
                 return category
+    if normalized in {_log_normalize_title(label) for _, label in LOG_EVENT_CATALOG["members"]}:
+        return "members"
     if any(word in normalized for word in ("error", "fall", "rechaz", "no pude", "sin permisos", "⚠")):
         return "errors"
     if any(word in normalized for word in ("conden", "perdon", "liberad")):
