@@ -155,6 +155,20 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(b.log_member_event_enabled(777, "member_warn"))
         view.stop()
 
+    async def test_log_template_reset_is_explicit(self):
+        key = "log_template.event.member_leave.title"
+        b.guild_config_set(777, key, "Personalizado")
+        view = b.LogTemplateResetConfirmView(777, 99, "members", "member_leave")
+        self.assertEqual(b.guild_config_get(777, key), "Personalizado")
+        i = interaction(self.guild)
+        i.guild_id = 777
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=True)
+        await view.cancel.callback(i)
+        self.assertEqual(b.guild_config_get(777, key), "Personalizado")
+        view = b.LogTemplateResetConfirmView(777, 99, "members", "member_leave")
+        await view.confirm.callback(i)
+        self.assertIsNone(b.guild_config_get(777, key))
+
     async def test_raid_setup_read_and_write(self):
         i = interaction(self.guild)
         await b.raid_config.callback(i)
