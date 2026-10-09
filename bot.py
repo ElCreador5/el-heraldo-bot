@@ -5993,6 +5993,35 @@ def log_template_preview(
     )
 
 
+class LogTemplateSaveConfirmView(discord.ui.View):
+    """Borrador efímero: ninguna plantilla se persiste sin confirmación."""
+    def __init__(self, guild_id, owner_id, category, event_key, values, return_to):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id, self.category = guild_id, owner_id, category
+        self.event_key, self.values, self.return_to = event_key, values, return_to
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este borrador no te pertenece.", ephemeral=True)
+            return False
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Necesitas Gestionar servidor.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def save(self, interaction, button):
+        for field, value in self.values.items():
+            log_template_set(self.guild_id, self.category, field, value, self.event_key)
+        self.stop()
+        await interaction.response.edit_message(content="Plantilla guardada.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Edición cancelada. No se guardaron cambios.", view=None)
+
+
 class LogTemplateContentModal(discord.ui.Modal):
     def __init__(
         self, guild_id: int, category: str, event_key: str,
@@ -6038,25 +6067,16 @@ class LogTemplateContentModal(discord.ui.Modal):
             self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        log_template_set(
-            self.guild_id, self.category, "title",
-            self.title_input.value.strip() or "{titulo_log}", self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "description",
-            self.description_input.value.strip() or "{detalle_log}", self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "footer",
-            self.footer_input.value.strip(), self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "fields",
-            self.fields_input.value.strip(), self.event_key,
-        )
-        await log_template_editor_update(
-            interaction, self.owner_id, self.category,
-            self.event_key, self.return_to, "Contenido actualizado.",
+        fields = {
+            "title": self.title_input.value.strip() or "{titulo_log}",
+            "description": self.description_input.value.strip() or "{detalle_log}",
+            "footer": self.footer_input.value.strip(),
+            "fields": self.fields_input.value.strip(),
+        }
+        await interaction.response.send_message(
+            "Revisa la edición de esta plantilla. Solo se guardará al confirmar.",
+            view=LogTemplateSaveConfirmView(self.guild_id, self.owner_id,
+                self.category, self.event_key, fields, self.return_to), ephemeral=True,
         )
 
 
@@ -6127,25 +6147,16 @@ class LogTemplateVisualModal(discord.ui.Modal):
                 "Error: Timestamp debe ser sí o no.", ephemeral=True
             )
             return
-        log_template_set(
-            self.guild_id, self.category, "color", color, self.event_key
-        )
-        log_template_set(
-            self.guild_id, self.category, "image",
-            self.image_input.value.strip(), self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "thumbnail",
-            self.thumbnail_input.value.strip(), self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "timestamp",
-            "0" if timestamp_value in {"no", "n", "0", "false"} else "1",
-            self.event_key,
-        )
-        await log_template_editor_update(
-            interaction, self.owner_id, self.category,
-            self.event_key, self.return_to, "Diseño actualizado.",
+        fields = {
+            "color": color,
+            "image": self.image_input.value.strip(),
+            "thumbnail": self.thumbnail_input.value.strip(),
+            "timestamp": "0" if timestamp_value in {"no", "n", "0", "false"} else "1",
+        }
+        await interaction.response.send_message(
+            "Revisa los cambios visuales. Solo se guardarán al confirmar.",
+            view=LogTemplateSaveConfirmView(self.guild_id, self.owner_id,
+                self.category, self.event_key, fields, self.return_to), ephemeral=True,
         )
 
 
