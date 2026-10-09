@@ -6279,9 +6279,8 @@ class LogTemplateEditorView(discord.ui.View):
             max_values=1,
             options=[
                 discord.SelectOption(
-                    label=label.split(" ", 1)[-1],
+                    label=label[:100],
                     value=key,
-                    emoji=label.split(" ", 1)[0],
                     description=description[:100],
                     default=(key == self.category),
                 )
