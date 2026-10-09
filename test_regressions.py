@@ -130,6 +130,31 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.log_event_category("Miembro baneado"), "members")
         self.assertEqual(b.log_event_key("Miembro baneado", "members"), "member_ban")
 
+    async def test_log_template_draft_requires_confirmation(self):
+        key = "log_template.event.member_leave.title"
+        b.guild_config_set(777, key, "Anterior")
+        view = b.LogTemplateSaveConfirmView(777, 99, "members", "member_leave",
+                                            {"title": "Nuevo"}, "messages_setup")
+        self.assertEqual(b.guild_config_get(777, key), "Anterior")
+        i = interaction(self.guild)
+        i.guild_id = 777
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=True)
+        await view.cancel.callback(i)
+        self.assertEqual(b.guild_config_get(777, key), "Anterior")
+        view = b.LogTemplateSaveConfirmView(777, 99, "members", "member_leave",
+                                            {"title": "Nuevo"}, "messages_setup")
+        await view.save.callback(i)
+        self.assertEqual(b.guild_config_get(777, key), "Nuevo")
+
+    async def test_member_log_confirmation_requires_admin(self):
+        view = b.HeraldoMemberLogSetupView(777, 99)
+        i = interaction(self.guild)
+        i.guild_id = 777
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=False)
+        self.assertFalse(await view.interaction_check(i))
+        self.assertFalse(b.log_member_event_enabled(777, "member_warn"))
+        view.stop()
+
     async def test_raid_setup_read_and_write(self):
         i = interaction(self.guild)
         await b.raid_config.callback(i)
