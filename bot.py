@@ -5990,6 +5990,35 @@ def log_template_preview(
     )
 
 
+class LogTemplateSaveConfirmView(discord.ui.View):
+    """Borrador efímero: ninguna plantilla se persiste sin confirmación."""
+    def __init__(self, guild_id, owner_id, category, event_key, values, return_to):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id, self.category = guild_id, owner_id, category
+        self.event_key, self.values, self.return_to = event_key, values, return_to
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este borrador no te pertenece.", ephemeral=True)
+            return False
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Necesitas Gestionar servidor.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def save(self, interaction, button):
+        for field, value in self.values.items():
+            log_template_set(self.guild_id, self.category, field, value, self.event_key)
+        self.stop()
+        await interaction.response.edit_message(content="Plantilla guardada.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Edición cancelada. No se guardaron cambios.", view=None)
+
+
 class LogTemplateContentModal(discord.ui.Modal):
     def __init__(
         self, guild_id: int, category: str, event_key: str,
