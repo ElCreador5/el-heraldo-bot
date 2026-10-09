@@ -286,6 +286,8 @@ async def log_embed(
     title: str,
     description: str,
     color: discord.Color = discord.Color.blurple(),
+    *,
+    member: discord.Member | None = None,
 ) -> None:
     """Reporta actividad de El Heraldo en el canal de logs como embed configurable.
     La plantilla visual se edita desde el Centro de Mensajes y nunca debe tumbar
@@ -293,11 +295,18 @@ async def log_embed(
     print(f"{title} — {description}")
     if guild is None:
         return
-    channel = guild.get_channel(get_log_channel_id(guild.id))
+    category = log_event_category(title)
+    key = log_event_key(title, category)
+    if category == "members" and not log_member_event_enabled(guild.id, key):
+        return
+    destination = log_member_channel_id(guild.id, key) if category == "members" else get_log_channel_id(guild.id)
+    channel = guild.get_channel(destination)
     if channel is None:
         return
     try:
         embed = build_log_template_embed(guild, title, description, color)
+        if member is not None and not embed.thumbnail.url:
+            embed.set_thumbnail(url=member.display_avatar.url)
         await channel.send(embed=embed)
     except discord.Forbidden:
         print("Sin permisos para escribir en el canal de logs")
@@ -2138,6 +2147,47 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
         await suggestion_panel_deleted(payload.guild_id, payload.message_id)
     except Exception:
         traceback.print_exc()
+
+
+@bot.listen("on_member_remove")
+async def heraldo_member_departure(member: discord.Member) -> None:
+    guild = member.guild
+    if not any(log_member_event_enabled(guild.id, key) for key in ("member_leave", "member_kick", "member_ban")):
+        return
+    await asyncio.sleep(2)
+    kind = "member_leave"
+    moderator = None
+    reason = None
+    try:
+        if guild.me and guild.me.guild_permissions.view_audit_log:
+            for action, event in ((discord.AuditLogAction.ban, "member_ban"),
+                                  (discord.AuditLogAction.kick, "member_kick")):
+                async for entry in guild.audit_logs(limit=5, action=action):
+                    if (getattr(entry.target, "id", None) == member.id
+                            and (datetime.now(timezone.utc) - entry.created_at).total_seconds() < 20):
+                        kind = event
+                        moderator = entry.user
+                        reason = entry.reason
+                        break
+                if kind != "member_leave":
+                    break
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    if not log_member_event_enabled(guild.id, kind):
+        return
+    labels = dict(LOG_EVENT_CATALOG["members"])
+    joined = discord.utils.format_dt(member.joined_at, "R") if member.joined_at else "No disponible"
+    roles = [role.mention for role in member.roles if role != guild.default_role]
+    details = [f"Usuario: {discord.utils.escape_markdown(str(member))}",
+               f"ID: {member.id}", f"Se incorporó: {joined}",
+               f"Miembros restantes: {guild.member_count if guild.member_count is not None else 'No disponible'}",
+               f"Roles: {', '.join(roles)[:700] if roles else 'Ninguno'}"]
+    if moderator:
+        details.append(f"Responsable: {moderator.mention}")
+    if reason:
+        details.append(f"Motivo: {discord.utils.escape_markdown(reason[:500])}")
+    await log_embed(guild, labels[kind], "\n".join(details),
+                    discord.Color.red() if kind != "member_leave" else discord.Color.orange(), member=member)
 
 
 @bot.event
@@ -5617,6 +5667,7 @@ async def open_default_message_studio(
 
 LOG_TEMPLATE_CATEGORIES = {
     "general": ("General", "Logs que no pertenecen a otra categoría."),
+    "members": ("Miembros", "Salidas, expulsiones, baneos y advertencias."),
     "verification": ("Verificación", "Verificación, orientación y accesos."),
     "condemnation": ("Condenas", "Condenas, liberaciones y perdones."),
     "honeypot": ("Honeypot", "Disparos, pausas y acciones del honeypot."),
@@ -5629,6 +5680,12 @@ LOG_TEMPLATE_CATEGORIES = {
 }
 
 LOG_EVENT_CATALOG = {
+    "members": [
+        ("member_leave", "Miembro abandonó el servidor"),
+        ("member_kick", "Miembro expulsado"),
+        ("member_ban", "Miembro baneado"),
+        ("member_warn", "Miembro advertido"),
+    ],
     "general": [
         ("heraldo_ready", "El Heraldo está listo para configurarse"),
         ("manual_check", "Chequeo manual"),
@@ -5781,6 +5838,8 @@ def log_event_category(title: str) -> str:
         for _, label in events:
             if _log_normalize_title(label) == normalized:
                 return category
+    if normalized in {_log_normalize_title(label) for _, label in LOG_EVENT_CATALOG["members"]}:
+        return "members"
     if any(word in normalized for word in ("error", "fall", "rechaz", "no pude", "sin permisos", "⚠")):
         return "errors"
     if any(word in normalized for word in ("conden", "perdon", "liberad")):
@@ -5976,25 +6035,16 @@ class LogTemplateContentModal(discord.ui.Modal):
             self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        log_template_set(
-            self.guild_id, self.category, "title",
-            self.title_input.value.strip() or "{titulo_log}", self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "description",
-            self.description_input.value.strip() or "{detalle_log}", self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "footer",
-            self.footer_input.value.strip(), self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "fields",
-            self.fields_input.value.strip(), self.event_key,
-        )
-        await log_template_editor_update(
-            interaction, self.owner_id, self.category,
-            self.event_key, self.return_to, "Contenido actualizado.",
+        fields = {
+            "title": self.title_input.value.strip() or "{titulo_log}",
+            "description": self.description_input.value.strip() or "{detalle_log}",
+            "footer": self.footer_input.value.strip(),
+            "fields": self.fields_input.value.strip(),
+        }
+        await interaction.response.send_message(
+            "Revisa la edición de esta plantilla. Solo se guardará al confirmar.",
+            view=LogTemplateSaveConfirmView(self.guild_id, self.owner_id,
+                self.category, self.event_key, fields, self.return_to), ephemeral=True,
         )
 
 
@@ -6065,25 +6115,16 @@ class LogTemplateVisualModal(discord.ui.Modal):
                 "Error: Timestamp debe ser sí o no.", ephemeral=True
             )
             return
-        log_template_set(
-            self.guild_id, self.category, "color", color, self.event_key
-        )
-        log_template_set(
-            self.guild_id, self.category, "image",
-            self.image_input.value.strip(), self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "thumbnail",
-            self.thumbnail_input.value.strip(), self.event_key,
-        )
-        log_template_set(
-            self.guild_id, self.category, "timestamp",
-            "0" if timestamp_value in {"no", "n", "0", "false"} else "1",
-            self.event_key,
-        )
-        await log_template_editor_update(
-            interaction, self.owner_id, self.category,
-            self.event_key, self.return_to, "Diseño actualizado.",
+        fields = {
+            "color": color,
+            "image": self.image_input.value.strip(),
+            "thumbnail": self.thumbnail_input.value.strip(),
+            "timestamp": "0" if timestamp_value in {"no", "n", "0", "false"} else "1",
+        }
+        await interaction.response.send_message(
+            "Revisa los cambios visuales. Solo se guardarán al confirmar.",
+            view=LogTemplateSaveConfirmView(self.guild_id, self.owner_id,
+                self.category, self.event_key, fields, self.return_to), ephemeral=True,
         )
 
 
@@ -7250,7 +7291,8 @@ class HeraldoLoggingSetupView(discord.ui.View):
         return (
             "**El Heraldo · Logging**\n\n"
             f"Canal actual: {current.mention if isinstance(current, discord.TextChannel) else 'no configurado'}\n"
-            "Desde aquí se configura el destino de los registros y sus plantillas visuales."
+            "Aquí se configuran eventos y canales de registro. "
+            "Las plantillas visuales se editan desde Mensajes."
             + pending
         )
 
@@ -7307,13 +7349,10 @@ class HeraldoLoggingSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="Plantillas de logs", style=discord.ButtonStyle.primary, row=1)
-    async def templates(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content=log_template_editor_content("general"),
-            embed=log_template_preview(interaction.guild, "general"),
-            view=LogTemplateEditorView(self.guild_id, self.owner_id, "general", None, "setup"),
-        )
+    @discord.ui.button(label="Eventos de miembros", style=discord.ButtonStyle.primary, row=1)
+    async def member_events(self, interaction, button):
+        view = HeraldoMemberLogSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view.content(interaction.guild), view=view)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -7338,6 +7377,115 @@ class HeraldoLoggingSetupView(discord.ui.View):
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
+
+
+MEMBER_LOG_EVENTS = ("member_leave", "member_kick", "member_ban", "member_warn")
+
+
+def log_member_event_enabled(guild_id: int, event_key: str) -> bool:
+    return event_key in MEMBER_LOG_EVENTS and guild_config_get(guild_id, f"log_member.enabled.{event_key}") == "1"
+
+
+def log_member_channel_id(guild_id: int, event_key: str) -> int:
+    value = guild_config_get(guild_id, f"log_member.channel.{event_key}")
+    return int(value) if value and value.isdecimal() else get_log_channel_id(guild_id)
+
+
+class HeraldoMemberLogSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.event_key = "member_leave"
+        self.pending_enabled = None
+        self.pending_channel_id = None
+        select = discord.ui.Select(placeholder="Seleccionar evento", row=0, options=[
+            discord.SelectOption(label=label, value=key) for key, label in LOG_EVENT_CATALOG["members"]
+        ])
+        select.callback = self.select_event
+        self.add_item(select)
+        channel = discord.ui.ChannelSelect(placeholder="Elegir canal para el evento", row=1,
+            channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
+        channel.callback = self.select_channel
+        self.add_item(channel)
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Esta configuración no te pertenece.", ephemeral=True)
+            return False
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Necesitas Gestionar servidor.", ephemeral=True)
+            return False
+        return True
+
+    def content(self, guild):
+        name = dict(LOG_EVENT_CATALOG["members"])[self.event_key]
+        enabled = self.pending_enabled if self.pending_enabled is not None else log_member_event_enabled(self.guild_id, self.event_key)
+        channel_id = self.pending_channel_id if self.pending_channel_id is not None else log_member_channel_id(self.guild_id, self.event_key)
+        channel = guild.get_channel(channel_id)
+        destination = channel.mention if isinstance(channel, discord.TextChannel) else "Sin canal disponible"
+        return (f"**El Heraldo · Logs · Miembros**\n\nEvento: **{name}**\n"
+                f"Estado: **{'Activo' if enabled else 'Inactivo'}**\nCanal: {destination}\n\n"
+                "Los cambios se aplican únicamente al pulsar Guardar cambios. "
+                "Las plantillas se editan en Mensajes → Logs.")
+
+    async def select_event(self, interaction):
+        values = (interaction.data or {}).get("values", [])
+        if values and values[0] in MEMBER_LOG_EVENTS:
+            self.event_key = values[0]
+            self.pending_enabled = None
+            self.pending_channel_id = None
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    async def select_channel(self, interaction):
+        values = (interaction.data or {}).get("values", [])
+        channel = interaction.guild.get_channel(int(values[0])) if values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Canal de texto no válido.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not all((perms.view_channel, perms.send_messages, perms.embed_links)):
+            await interaction.response.send_message("El bot necesita permisos para enviar embeds en ese canal.", ephemeral=True)
+            return
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.primary, row=2)
+    async def toggle(self, interaction, button):
+        enabled = self.pending_enabled if self.pending_enabled is not None else log_member_event_enabled(self.guild_id, self.event_key)
+        self.pending_enabled = not enabled
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save(self, interaction, button):
+        if self.pending_channel_id is None and self.pending_enabled is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        channel_id = self.pending_channel_id if self.pending_channel_id is not None else log_member_channel_id(self.guild_id, self.event_key)
+        channel = interaction.guild.get_channel(channel_id)
+        if self.pending_enabled and not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Selecciona primero un canal válido.", ephemeral=True)
+            return
+        if isinstance(channel, discord.TextChannel):
+            perms = channel.permissions_for(interaction.guild.me)
+            if not all((perms.view_channel, perms.send_messages, perms.embed_links)):
+                await interaction.response.send_message("Permisos insuficientes en el canal.", ephemeral=True)
+                return
+        if self.pending_channel_id is not None:
+            guild_config_set(self.guild_id, f"log_member.channel.{self.event_key}", str(self.pending_channel_id))
+        if self.pending_enabled is not None:
+            guild_config_set(self.guild_id, f"log_member.enabled.{self.event_key}", "1" if self.pending_enabled else "0")
+        self.pending_enabled, self.pending_channel_id = None, None
+        await interaction.response.edit_message(content=self.content(interaction.guild) + "\n\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    async def discard(self, interaction, button):
+        self.pending_enabled, self.pending_channel_id = None, None
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction, button):
+        view = HeraldoLoggingSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
 
 
 # Reaction Roles general: independiente del panel obligatorio de orientación.
@@ -8118,7 +8266,7 @@ class HeraldoSetupView(discord.ui.View):
         ("join_roles", "Join Roles", "Roles al entrar al servidor"),
         ("reaction_roles", "Reaction Roles", "Configuración de roles por reacción"),
         ("role_connections", "Role Connections", "Conexiones de roles (pendiente)"),
-        ("logging", "Logging", "Canal de registros y plantillas"),
+        ("logging", "Logs", "Eventos y canales de registros"),
         ("verification", "Verification", "Verificación y orientación"),
         ("language", "Idioma", "Configuración del idioma (pendiente)"),
     )
@@ -10744,6 +10892,14 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         f"Expediente {moderation_case_code(case_number, guild.id)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}",
         discord.Color.orange(),
     )
+    if case_type == "WARN" and log_member_event_enabled(guild.id, "member_warn"):
+        await log_embed(
+            guild, "Miembro advertido",
+            f"Usuario: {member.mention}\nMotivo: {discord.utils.escape_markdown(reason[:500])}\n"
+            f"Responsable: {interaction.user.mention}\n"
+            f"Expediente: {moderation_case_code(case_number, guild.id)}",
+            discord.Color.orange(), member=member,
+        )
     return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado.", case_number
 
 
