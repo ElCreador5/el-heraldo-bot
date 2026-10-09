@@ -11711,6 +11711,14 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         f"Expediente {moderation_case_code(case_number, guild.id)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}",
         discord.Color.orange(),
     )
+    if case_type == "WARN" and log_member_event_enabled(guild.id, "member_warn"):
+        await log_embed(
+            guild, "Miembro advertido",
+            f"Usuario: {member.mention}\\nMotivo: {discord.utils.escape_markdown(reason[:500])}\\n"
+            f"Responsable: {interaction.user.mention}\\n"
+            f"Expediente: {moderation_case_code(case_number, guild.id)}",
+            discord.Color.orange(), member=member,
+        )
     return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado.", case_number
 
 
