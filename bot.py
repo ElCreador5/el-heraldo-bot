@@ -287,6 +287,8 @@ async def log_embed(
     title: str,
     description: str,
     color: discord.Color = discord.Color.blurple(),
+    *,
+    member: discord.Member | None = None,
 ) -> None:
     """Reporta actividad de El Heraldo en el canal de logs como embed configurable.
     La plantilla visual se edita desde el Centro de Mensajes y nunca debe tumbar
@@ -304,6 +306,8 @@ async def log_embed(
         return
     try:
         embed = build_log_template_embed(guild, title, description, color)
+        if member is not None and not embed.thumbnail.url:
+            embed.set_thumbnail(url=member.display_avatar.url)
         await channel.send(embed=embed)
     except discord.Forbidden:
         print("Sin permisos para escribir en el canal de logs")
@@ -2176,15 +2180,17 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         return
     labels = dict(LOG_EVENT_CATALOG["members"])
     joined = discord.utils.format_dt(member.joined_at, "R") if member.joined_at else "No disponible"
+    roles = [role.mention for role in member.roles if role != guild.default_role]
     details = [f"Usuario: {discord.utils.escape_markdown(str(member))}",
                f"ID: {member.id}", f"Se incorporó: {joined}",
-               f"Miembros restantes: {guild.member_count if guild.member_count is not None else 'No disponible'}"]
+               f"Miembros restantes: {guild.member_count if guild.member_count is not None else 'No disponible'}",
+               f"Roles: {', '.join(roles)[:700] if roles else 'Ninguno'}"]
     if moderator:
         details.append(f"Responsable: {moderator.mention}")
     if reason:
         details.append(f"Motivo: {discord.utils.escape_markdown(reason[:500])}")
     await log_embed(guild, labels[kind], "\n".join(details),
-                    discord.Color.red() if kind != "member_leave" else discord.Color.orange())
+                    discord.Color.red() if kind != "member_leave" else discord.Color.orange(), member=member)
 
 
 @bot.event
