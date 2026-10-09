@@ -5618,6 +5618,7 @@ async def open_default_message_studio(
 
 LOG_TEMPLATE_CATEGORIES = {
     "general": ("General", "Logs que no pertenecen a otra categoría."),
+    "members": ("Miembros", "Salidas, expulsiones, baneos y advertencias."),
     "verification": ("Verificación", "Verificación, orientación y accesos."),
     "condemnation": ("Condenas", "Condenas, liberaciones y perdones."),
     "honeypot": ("Honeypot", "Disparos, pausas y acciones del honeypot."),
@@ -5630,6 +5631,12 @@ LOG_TEMPLATE_CATEGORIES = {
 }
 
 LOG_EVENT_CATALOG = {
+    "members": [
+        ("member_leave", "Miembro abandonó el servidor"),
+        ("member_kick", "Miembro expulsado"),
+        ("member_ban", "Miembro baneado"),
+        ("member_warn", "Miembro advertido"),
+    ],
     "general": [
         ("heraldo_ready", "El Heraldo está listo para configurarse"),
         ("manual_check", "Chequeo manual"),
@@ -7892,7 +7899,8 @@ class HeraldoLoggingSetupView(discord.ui.View):
         return (
             "**El Heraldo · Logging**\n\n"
             f"Canal actual: {current.mention if isinstance(current, discord.TextChannel) else 'no configurado'}\n"
-            "Desde aquí se configura el destino de los registros y sus plantillas visuales."
+            "Aquí se configuran eventos y canales de registro. "
+            "Las plantillas visuales se editan desde Mensajes."
             + pending
         )
 
@@ -7947,14 +7955,6 @@ class HeraldoLoggingSetupView(discord.ui.View):
         await interaction.edit_original_response(
             content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
             view=self,
-        )
-
-    @discord.ui.button(label="Plantillas de logs", style=discord.ButtonStyle.primary, row=1)
-    async def templates(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(
-            content=log_template_editor_content("general"),
-            embed=log_template_preview(interaction.guild, "general"),
-            view=LogTemplateEditorView(self.guild_id, self.owner_id, "general", None, "setup"),
         )
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
@@ -8760,7 +8760,7 @@ class HeraldoSetupView(discord.ui.View):
         ("join_roles", "Join Roles", "Roles al entrar al servidor"),
         ("reaction_roles", "Reaction Roles", "Configuración de roles por reacción"),
         ("role_connections", "Role Connections", "Conexiones de roles (pendiente)"),
-        ("logging", "Logging", "Canal de registros y plantillas"),
+        ("logging", "Logs", "Eventos y canales de registros"),
         ("messages", "Mensajes", "Plantillas y mensajes predeterminados"),
         ("verification", "Verification", "Verificación y orientación"),
         ("language", "Idioma", "Configuración del idioma (pendiente)"),
