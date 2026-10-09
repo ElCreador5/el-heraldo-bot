@@ -2183,7 +2183,7 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         details.append(f"Responsable: {moderator.mention}")
     if reason:
         details.append(f"Motivo: {discord.utils.escape_markdown(reason[:500])}")
-    await log_embed(guild, labels[kind], "\\n".join(details),
+    await log_embed(guild, labels[kind], "\n".join(details),
                     discord.Color.red() if kind != "member_leave" else discord.Color.orange())
 
 
@@ -8079,8 +8079,8 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         channel_id = self.pending_channel_id if self.pending_channel_id is not None else log_member_channel_id(self.guild_id, self.event_key)
         channel = guild.get_channel(channel_id)
         destination = channel.mention if isinstance(channel, discord.TextChannel) else "Sin canal disponible"
-        return (f"**El Heraldo · Logs · Miembros**\\n\\nEvento: **{name}**\\n"
-                f"Estado: **{'Activo' if enabled else 'Inactivo'}**\\nCanal: {destination}\\n\\n"
+        return (f"**El Heraldo · Logs · Miembros**\n\nEvento: **{name}**\n"
+                f"Estado: **{'Activo' if enabled else 'Inactivo'}**\nCanal: {destination}\n\n"
                 "Los cambios se aplican únicamente al pulsar Guardar cambios. "
                 "Las plantillas se editan en Mensajes → Logs.")
 
@@ -8131,7 +8131,7 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         if self.pending_enabled is not None:
             guild_config_set(self.guild_id, f"log_member.enabled.{self.event_key}", "1" if self.pending_enabled else "0")
         self.pending_enabled, self.pending_channel_id = None, None
-        await interaction.response.edit_message(content=self.content(interaction.guild) + "\\n\\nCambios guardados.", view=self)
+        await interaction.response.edit_message(content=self.content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
     @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
     async def discard(self, interaction, button):
