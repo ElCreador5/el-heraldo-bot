@@ -99,6 +99,20 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await view.interaction_check(i))
         self.assertEqual(b.heraldo_template_list(777), [])
 
+    async def test_orientation_check_does_not_duplicate_age_verification_log(self):
+        role = SimpleNamespace(id=321)
+        member = SimpleNamespace(id=99, mention="<@99>", roles=[role])
+        self.guild.get_member.return_value = member
+        with patch.object(b, 'get_eval_role_ids', return_value={321}), \\
+             patch.object(b, 'hp_punish_role_id', return_value=0), \\
+             patch.object(b, 'condemnation_get', return_value=None), \\
+             patch.object(b, 'db_clear_tentado') as clear, \\
+             patch.object(b, 'log_embed', new=AsyncMock()) as log:
+            status = await b.evaluate_member(777, 99, report=True)
+        self.assertEqual(status, "verificado")
+        clear.assert_called_once_with(777, 99)
+        log.assert_not_awaited()
+
     async def test_raid_setup_read_and_write(self):
         i = interaction(self.guild)
         await b.raid_config.callback(i)
