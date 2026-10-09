@@ -7957,6 +7957,11 @@ class HeraldoLoggingSetupView(discord.ui.View):
             view=self,
         )
 
+    @discord.ui.button(label="Eventos de miembros", style=discord.ButtonStyle.primary, row=1)
+    async def member_events(self, interaction, button):
+        view = HeraldoMemberLogSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view.content(interaction.guild), view=view)
+
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.pending_channel_id is None:
@@ -7980,6 +7985,115 @@ class HeraldoLoggingSetupView(discord.ui.View):
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
+
+
+MEMBER_LOG_EVENTS = ("member_leave", "member_kick", "member_ban", "member_warn")
+
+
+def log_member_event_enabled(guild_id: int, event_key: str) -> bool:
+    return event_key in MEMBER_LOG_EVENTS and guild_config_get(guild_id, f"log_member.enabled.{event_key}") == "1"
+
+
+def log_member_channel_id(guild_id: int, event_key: str) -> int:
+    value = guild_config_get(guild_id, f"log_member.channel.{event_key}")
+    return int(value) if value and value.isdecimal() else get_log_channel_id(guild_id)
+
+
+class HeraldoMemberLogSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.event_key = "member_leave"
+        self.pending_enabled = None
+        self.pending_channel_id = None
+        select = discord.ui.Select(placeholder="Seleccionar evento", row=0, options=[
+            discord.SelectOption(label=label, value=key) for key, label in LOG_EVENT_CATALOG["members"]
+        ])
+        select.callback = self.select_event
+        self.add_item(select)
+        channel = discord.ui.ChannelSelect(placeholder="Elegir canal para el evento", row=1,
+            channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
+        channel.callback = self.select_channel
+        self.add_item(channel)
+
+    async def interaction_check(self, interaction):
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Esta configuración no te pertenece.", ephemeral=True)
+            return False
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Necesitas Gestionar servidor.", ephemeral=True)
+            return False
+        return True
+
+    def content(self, guild):
+        name = dict(LOG_EVENT_CATALOG["members"])[self.event_key]
+        enabled = self.pending_enabled if self.pending_enabled is not None else log_member_event_enabled(self.guild_id, self.event_key)
+        channel_id = self.pending_channel_id if self.pending_channel_id is not None else log_member_channel_id(self.guild_id, self.event_key)
+        channel = guild.get_channel(channel_id)
+        destination = channel.mention if isinstance(channel, discord.TextChannel) else "Sin canal disponible"
+        return (f"**El Heraldo · Logs · Miembros**\\n\\nEvento: **{name}**\\n"
+                f"Estado: **{'Activo' if enabled else 'Inactivo'}**\\nCanal: {destination}\\n\\n"
+                "Los cambios se aplican únicamente al pulsar Guardar cambios. "
+                "Las plantillas se editan en Mensajes → Logs.")
+
+    async def select_event(self, interaction):
+        values = (interaction.data or {}).get("values", [])
+        if values and values[0] in MEMBER_LOG_EVENTS:
+            self.event_key = values[0]
+            self.pending_enabled = None
+            self.pending_channel_id = None
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    async def select_channel(self, interaction):
+        values = (interaction.data or {}).get("values", [])
+        channel = interaction.guild.get_channel(int(values[0])) if values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Canal de texto no válido.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not all((perms.view_channel, perms.send_messages, perms.embed_links)):
+            await interaction.response.send_message("El bot necesita permisos para enviar embeds en ese canal.", ephemeral=True)
+            return
+        self.pending_channel_id = channel.id
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.primary, row=2)
+    async def toggle(self, interaction, button):
+        enabled = self.pending_enabled if self.pending_enabled is not None else log_member_event_enabled(self.guild_id, self.event_key)
+        self.pending_enabled = not enabled
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save(self, interaction, button):
+        if self.pending_channel_id is None and self.pending_enabled is None:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        channel_id = self.pending_channel_id if self.pending_channel_id is not None else log_member_channel_id(self.guild_id, self.event_key)
+        channel = interaction.guild.get_channel(channel_id)
+        if self.pending_enabled and not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Selecciona primero un canal válido.", ephemeral=True)
+            return
+        if isinstance(channel, discord.TextChannel):
+            perms = channel.permissions_for(interaction.guild.me)
+            if not all((perms.view_channel, perms.send_messages, perms.embed_links)):
+                await interaction.response.send_message("Permisos insuficientes en el canal.", ephemeral=True)
+                return
+        if self.pending_channel_id is not None:
+            guild_config_set(self.guild_id, f"log_member.channel.{self.event_key}", str(self.pending_channel_id))
+        if self.pending_enabled is not None:
+            guild_config_set(self.guild_id, f"log_member.enabled.{self.event_key}", "1" if self.pending_enabled else "0")
+        self.pending_enabled, self.pending_channel_id = None, None
+        await interaction.response.edit_message(content=self.content(interaction.guild) + "\\n\\nCambios guardados.", view=self)
+
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    async def discard(self, interaction, button):
+        self.pending_enabled, self.pending_channel_id = None, None
+        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction, button):
+        view = HeraldoLoggingSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
 
 
 # Reaction Roles general: independiente del panel obligatorio de orientación.
