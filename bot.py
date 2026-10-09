@@ -2396,8 +2396,8 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     role_ids = {r.id for r in member.roles}
     if role_ids & get_eval_role_ids(guild.id):
         db_clear_tentado(guild_id, user_id)  # se verificó a tiempo
-        if report:
-            await log_embed(guild, "Verificado", f"{member.mention} eligió un buen camino.", discord.Color.green())
+        # La evaluación de orientación puede realizarse minutos después.
+        # No duplicar el aviso de éxito de la verificación inicial.
         return "verificado"
 
     await expel(member, report=report)
