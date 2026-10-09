@@ -99,6 +99,18 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await view.interaction_check(i))
         self.assertEqual(b.heraldo_template_list(777), [])
 
+    async def test_preference_verification_logs_its_own_event(self):
+        role = SimpleNamespace(id=321)
+        self.guild.get_member.return_value = SimpleNamespace(id=99, mention="<@99>", roles=[role])
+        with (patch.object(b, 'get_eval_role_ids', return_value={321}),
+              patch.object(b, 'hp_punish_role_id', return_value=0),
+              patch.object(b, 'condemnation_get', return_value=None),
+              patch.object(b, 'db_clear_tentado'),
+              patch.object(b, 'log_embed', new=AsyncMock()) as log):
+            result = await b.evaluate_member(777, 99, report=True)
+        self.assertEqual(result, "verificado")
+        self.assertEqual(log.await_args.args[1], "Verificación de preferencia completada")
+
     async def test_raid_setup_read_and_write(self):
         i = interaction(self.guild)
         await b.raid_config.callback(i)
