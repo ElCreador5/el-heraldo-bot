@@ -74,3 +74,48 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Pendientes de etapas siguientes, detectados por inspección: rol 0 persistido en condenas nuevas; permisos no revalidados en algunas confirmaciones; emojis inválidos en selector de canales; modales de condenas con guardado inmediato; purga que continúa aunque falle el archivo de evidencias; expiración dependiente de caché y auditoría tardía en Logs.
 - Conservar el aviso de verificación de preferencia: el PR #3 que pretendía eliminarlo se cerró sin fusionar.
 - Siguiente paso: comprobar CI del PR #6, integrar mediante merge cuando se autorice el efecto de despliegue en laboratorio y abordar regresiones de condenas. Agent AVD no identificado inequívocamente; no atribuirle decisiones sin fuente.
+
+## Punto de continuidad — 2026-10-10: correcciones en desarrollo
+- PR #6 fusionado mediante merge en `Pruebas@34fa94f`; incorpora la ascendencia de main. CI posterior correcto; despliegue del laboratorio `f1b82ab5-0a4a-4071-9ee3-bb6fc596e6ab` correcto, con conexión Gateway y autoprueba de setup. No acredita pruebas interactivas. `main@6f9f9ee` permanece intacta.
+- Trabajo nuevo: persistencia del rol real de condena; bloqueos por servidor/miembro para condena y perdón; expiración consulta miembros fuera de caché y conserva casos cuando no se puede consultar el servidor.
+- Evidencias: sin respaldo al canal de condenados; rechazo de archivo público o autor distinto; copia de hasta diez adjuntos y cancelación de purga vinculada si la copia es incompleta. Pendiente revisar retención y archivo de todos los mensajes de una purga amplia.
+- Configuración: permisos revalidados en 31 vistas, selector de canales corregido, propuestas confirmadas para diseño y duración de condenas, rechazo de borradores obsoletos en Mensajes y confirmación genérica.
+- Logs: reintentos de auditoría y descripción explícita de incertidumbre. Aún necesita validación real de salidas, kick, ban y warn.
+- Mensajes: texto independiente, hasta diez embeds, campos/autor/pie/miniatura mediante JSON o kit, seis variables con límites tras expansión, vistas previas sin ejecutar acciones, kit v2 e importación de archivo de hasta 128 KiB con reemplazo confirmado. Conserva kits v1 y plantillas anteriores.
+- Publicación y edición comprueban permisos del usuario en el canal. Autoservicio de roles rechaza permisos administrativos, condenas activas y pulsaciones concurrentes; espera inicial y límite de frecuencia.
+- Verificación local: 39 regresiones raíz y 25 en tests aprobadas en Python 3.12, discord.py 2.7.1, sin Gateway. Hubo una invocación incorrecta de unittest con discover como nombre de módulo; corregida y repetida con éxito. CI de estos cambios todavía pendiente.
+- No está terminado el alcance completo: editor visual avanzado, menús independientes/multiacción, programación persistente, autorespuestas, sticky, webhooks, catálogo completo de textos y revisión integral de confirmaciones. Join Roles con demora aún utiliza tareas en memoria; pendiente recuperación tras reinicio. Reaction Roles y reportes requieren revisión adicional.
+- Siguiente paso: preservar este lote en PR hacia Pruebas, ampliar pruebas de evidencia/restauración y completar módulos restantes antes de declarar preparado el recorrido integral en Discord. Agent AVD sigue sin identificarse inequívocamente.
+
+### Continuidad adicional — 2026-10-10
+- El primer lote está preservado en el PR #7 (borrador hacia Pruebas), commit remoto cb58e4e; CI 38033889706 aprobada en la matriz. Sin fusionar ni desplegar.
+- Se añade cola SQLite de Join Roles: ingresos conocidos sobreviven reinicios, no repiten demora, esperan aceptación de reglas, consultan al miembro por API y descartan trabajos de ingresos anteriores o condenas activas. No recupera eventos que Discord no entregó durante una desconexión; requiere ensayo de reinicio real.
+- Reaction Roles aplica también la política de roles administrativos y bloqueo por condena. Las regresiones existentes ahora declaran explícitamente permisos y tipo de los roles simulados.
+- Doce modales adicionales preparan propuestas: tiempos generales, demora/sincronización de Join Roles, horario semanal, orientación, raids y textos/diseño de verificación y sugerencias. La propuesta incluye archivo comparativo y el panel se sincroniza después de confirmar. No implica que todos los comandos/configuraciones heredados hayan sido migrados.
+- Pruebas locales: 39 raíz y 30 en tests aprobadas (69). Falta ejecutar la matriz remota para esta ampliación. Próximo bloque: restauración/evidencias y automatizaciones de Mensajes; aún no se declara preparación integral para Discord.
+
+### Programación y estado más reciente — 2026-10-10
+- Se incorpora `/programar_mensaje crear/listar/retirar`, accesible desde la ayuda de `/setup → Mensajes → Programación`. Publicación puntual, diaria o semanal con zona IANA y confirmación. Máximo 25 programaciones por servidor. Usa la versión guardada de la plantilla al ejecutar.
+- Estado de ejecución en SQLite; vuelve a comprobar permisos del creador y del bot. Reinicios conservan pendientes; un envío interrumpido queda en revisión y no se repite automáticamente. Las ejecuciones vencidas se agrupan en un único envío al volver; no se reproduce todo el atraso. Una retirada no puede deshacer un envío ya iniciado.
+- Se añade tzdata para disponibilidad de zonas en Windows. Compilación CI incluye los nuevos módulos.
+- Corregida interferencia de los hooks globales: las plantillas explícitas conservan texto independiente y sus pies; no se les añaden caracteres después de validar el límite agregado de embeds.
+- Estado de verificación actual: 78 pruebas offline (39 raíz + 39 tests), compilación y pip check correctos. La CI del primer commit del PR #7 pasó; consultar el HEAD más reciente para esta ampliación. Ninguna nueva prueba interactiva ni despliegue.
+- Alcance restante: autorepuestas, sticky, webhooks, menús/opciones independientes y multiacción, editor visual avanzado, catálogo completo de mensajes, revisión de comandos heredados sin confirmación, pruebas de restauración parcial/evidencias y recorrido de reportes/verificación. No declarar terminado ni desplegar como versión final.
+
+### Autorespuestas, sticky y webhooks — 2026-10-10
+- CI del segundo commit remoto del PR #7, 4e696e6: ejecución 38034714893 correcta. Pruebas remotas y producción permanecen en 34fa94f y 6f9f9ee, respectivamente.
+- Se añaden /autorespuesta crear/listar/retirar: coincidencia literal exacta o de palabra/frase, confirmación, máximo 25 reglas, espera persistente por regla y límite común de 30 segundos por canal. Se ignoran bots, webhooks y condenas activas; no se almacenan mensajes recibidos. Requiere Message Content.
+- Se añaden /sticky crear/listar/retirar: un sticky activo por canal, confirmación, reposición tras actividad humana, espera configurable y recuperación SQLite. Comprueba que la publicación anterior pertenece al bot antes de retirarla. Actividad durante un envío queda pendiente. Retirar conserva la última publicación; los estados inciertos requieren revisión.
+- Se añade /webhook_mensaje: propuesta visual, confirmación separada y permisos del autor/bot en destino. Solo crea/reutiliza webhooks del bot. No se aceptan URLs arbitrarias ni se almacenan tokens. Admite enlaces, pero no acciones de roles: estas deben publicarse mediante el bot. Un fallo incierto exige revisar el canal antes de reintentar.
+- Accesos explicativos en /setup → Mensajes; listados extensos se adjuntan completos, sin perder identificadores por truncamiento.
+- Verificación: 91 pruebas offline (39 raíz + 52 tests), compilación correcta. Pendiente CI del nuevo HEAD y pruebas reales. No se ha desplegado el PR #7.
+- Próximo bloque: componentes por plantilla/opción y acciones múltiples, editor visual avanzado, catálogo de textos, revisión restante de condenas/restauración/evidencias y comandos heredados sin confirmación. Después validar el lote en laboratorio y registrar el recorrido interactivo. No declarar alcance total terminado.
+
+
+### Estado consolidado para revisión del PR #7 — 2026-10-10
+- Esta sección sustituye las listas de pendientes históricas anteriores. Nuevo editor `/editar_plantilla`: borradores visuales de texto independiente, múltiples embeds, imágenes, autor, pie y campos; guardar requiere confirmación y detecta cambios concurrentes. Un modal tardío no reabre un editor cancelado.
+- `/componentes_mensaje`: botones y menús por plantilla, opciones independientes, selección múltiple y secuencias confirmadas de roles/respuestas/DM/canal/edición/eliminación. Revalida permisos, condena activa y jerarquía; limita frecuencia en SQLite y conserva auditoría de resultados sin contenido durante 30 días. El primer fallo detiene la secuencia con resultado parcial; no hay reversión automática.
+- Honeypot: texto y diseño proponen cambios sin persistir; sincronización después de confirmar. La fotografía de roles de condena se guarda antes de la operación remota.
+- Pruebas locales finales: 106 offline (39 raíz + 67 tests), compilación, dependencias y diff correctos. Sin Gateway ni pruebas Discord reales. Consultar GitHub para el resultado de CI del HEAD publicado.
+- PR #7 queda preparado para revisión de código; no equivale a alcance total completado ni a despliegue validado. Laboratorio sigue en 34fa94f; main permanece intacta en 6f9f9ee.
+- Pendientes y recorrido reproducible en REVISION_PR7.md. Prioridad: configuración heredada sin confirmación, archivo integral de purgas, restauración parcial; después catálogo uniforme y mejoras de importación/navegación. Agent AVD no identificado inequívocamente.

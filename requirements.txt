@@ -1,1 +1,2 @@
 discord.py>=2.3.2
+tzdata>=2024.1

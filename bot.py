@@ -112,6 +112,8 @@ import copy
 import io
 from collections import deque
 import json
+import message_payload
+import message_components
 import io
 import os
 import re
@@ -342,6 +344,9 @@ def db_connect() -> sqlite3.Connection:
 
 def db_init() -> None:
     conn = db_connect()
+    conn.execute("""CREATE TABLE IF NOT EXISTS pending_join_roles (
+        guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, joined_at TEXT NOT NULL,
+        due_at TEXT NOT NULL, PRIMARY KEY (guild_id, user_id))""")
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
@@ -1136,6 +1141,8 @@ async def _joinroles_add_roles(
     *,
     reason: str,
 ) -> tuple[bool, int, str]:
+    if condemnation_get(member.guild.id, member.id):
+        return False, 0, "Existe una condena activa; no se asignaron roles."
     roles_to_add: list[discord.Role] = []
     for role_id in role_ids:
         role, issue = _join_role_status(member.guild, role_id)
@@ -1197,14 +1204,15 @@ async def assign_user_specific_roles(member: discord.Member) -> tuple[bool, str]
         role_ids,
         reason="El Heraldo · User specific Join Roles",
     )
-    if ok and join_roles_remove_specific_after_join(member.guild.id):
+    if (ok and join_roles_remove_specific_after_join(member.guild.id)
+            and get_join_specific_roles(member.guild.id).get(member.id) == role_ids):
         remove_join_specific_user(member.guild.id, member.id)
     if ok and count:
         return True, f"Asignados {count} rol(es) específicos."
     return ok, note
 
 
-async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
+async def assign_join_roles(member: discord.Member, *, skip_delay: bool = False) -> tuple[bool, str]:
     if member.bot:
         return True, "No aplica."
 
@@ -1217,7 +1225,7 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
         return True, "Esperando Esperar aceptación de reglas."
 
     delay = get_join_roles_delay(member.guild.id)
-    if delay > 0:
+    if delay > 0 and not skip_delay:
         await asyncio.sleep(delay)
         refreshed = member.guild.get_member(member.id)
         if refreshed is None:
@@ -1238,11 +1246,11 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
     return True, f"{note} {specific_note}".strip()
 
 
-async def assign_bot_join_roles(member: discord.Member) -> tuple[bool, str]:
+async def assign_bot_join_roles(member: discord.Member, *, skip_delay: bool = False) -> tuple[bool, str]:
     if not member.bot or not join_roles_bot_enabled(member.guild.id):
         return True, "No aplica."
 
-    if join_roles_bot_apply_delay(member.guild.id):
+    if join_roles_bot_apply_delay(member.guild.id) and not skip_delay:
         delay = get_join_roles_delay(member.guild.id)
         if delay > 0:
             await asyncio.sleep(delay)
@@ -1264,6 +1272,69 @@ async def assign_bot_join_roles(member: discord.Member) -> tuple[bool, str]:
     if ok and count:
         return True, f"Asignados {count} Bot Join Role(s)."
     return ok, note
+
+
+def queue_join_roles(member: discord.Member) -> None:
+    now = datetime.now(timezone.utc)
+    delay = get_join_roles_delay(member.guild.id)
+    if member.bot and not join_roles_bot_apply_delay(member.guild.id):
+        delay = 0
+    joined = (member.joined_at or now).isoformat()
+    conn = db_connect()
+    try:
+        conn.execute("""INSERT INTO pending_join_roles VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                joined_at=excluded.joined_at, due_at=excluded.due_at
+            WHERE pending_join_roles.joined_at != excluded.joined_at""",
+            (member.guild.id, member.id, joined, (now + timedelta(seconds=delay)).isoformat()))
+    finally:
+        conn.close()
+
+
+async def process_pending_join_roles() -> None:
+    now = datetime.now(timezone.utc)
+    conn = db_connect()
+    rows = conn.execute("SELECT guild_id, user_id, joined_at FROM pending_join_roles WHERE due_at <= ? LIMIT 100",
+                        (now.isoformat(),)).fetchall()
+    conn.close()
+    for guild_id, user_id, joined_at in rows:
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            continue
+        done = False
+        try:
+            member = await guild.fetch_member(user_id)
+            if member.joined_at and member.joined_at.isoformat() != joined_at:
+                done = True  # La fila pertenece a un ingreso anterior.
+            elif condemnation_get(guild_id, user_id):
+                done = True  # La liberación restaura la fotografía; no el catálogo de ingreso.
+            elif not member.bot and join_roles_wait_screening(guild_id) and member.pending:
+                continue
+            elif member.bot:
+                done, _ = await assign_bot_join_roles(member, skip_delay=True)
+            else:
+                done, _ = await assign_join_roles(member, skip_delay=True)
+        except discord.NotFound:
+            done = True
+        except discord.HTTPException:
+            pass  # Se conserva para reintentar.
+        except Exception:
+            traceback.print_exc()
+        conn = db_connect()
+        try:
+            if done:
+                conn.execute("DELETE FROM pending_join_roles WHERE guild_id=? AND user_id=? AND joined_at=?",
+                             (guild_id, user_id, joined_at))
+            else:
+                conn.execute("UPDATE pending_join_roles SET due_at=? WHERE guild_id=? AND user_id=? AND joined_at=?",
+                             ((now + timedelta(minutes=1)).isoformat(), guild_id, user_id, joined_at))
+        finally:
+            conn.close()
+
+
+@tasks.loop(seconds=5)
+async def pending_join_roles_loop() -> None:
+    await process_pending_join_roles()
 
 
 def approximate_missing_join_roles(guild: discord.Guild) -> int:
@@ -2032,6 +2103,9 @@ async def on_ready() -> None:
         member_of_the_week_loop.start()
     if not join_roles_sync_loop.is_running():
         join_roles_sync_loop.start()
+    if not pending_join_roles_loop.is_running():
+        pending_join_roles_loop.start()
+    message_automation_engine.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
     _startup_done = True
@@ -2081,7 +2155,7 @@ async def on_member_join(member: discord.Member) -> None:
         # Los bots no pasan por verificación, pero Sapphire-style Bot Roles sí
         # pueden asignarse de forma independiente.
         if join_roles_bot_enabled(member.guild.id):
-            asyncio.create_task(assign_bot_join_roles(member))
+            queue_join_roles(member)
         return
 
     invite_code = await detect_used_invite(member.guild)
@@ -2095,7 +2169,7 @@ async def on_member_join(member: discord.Member) -> None:
         condemnation = None
     if condemnation is not None:
         db_clear_verify_pending(member.guild.id, member.id)
-        _condemn_sync_busy.add(member.id)
+        _condemn_sync_busy.add((member.guild.id, member.id))
         try:
             ok, _, note = await condemnation_sync_roles(member, save_snapshot=False, reason="Reingreso con condena activa", role_id=condemnation_role_id(condemnation))
             if not ok:
@@ -2110,7 +2184,7 @@ async def on_member_join(member: discord.Member) -> None:
         except Exception:
             traceback.print_exc()
         finally:
-            _condemn_sync_busy.discard(member.id)
+            _condemn_sync_busy.discard((member.guild.id, member.id))
         return
 
     # Raid Protection: si este ingreso dispara o cae dentro de un raid y ya fue sancionado,
@@ -2123,7 +2197,7 @@ async def on_member_join(member: discord.Member) -> None:
         traceback.print_exc()
 
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
-        asyncio.create_task(assign_join_roles(member))
+        queue_join_roles(member)
 
     if verify_enabled(member.guild.id):
         waiting_screening = (
@@ -2152,30 +2226,33 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
 
 # Registro de actividad de miembros. Las acciones de moderación se identifican
 # mediante la auditoría de Discord; ante falta de permisos se clasifica como salida.
+async def classify_member_departure(member):
+    guild = member.guild
+    observed = datetime.now(timezone.utc)
+    if not guild.me or not guild.me.guild_permissions.view_audit_log:
+        return "member_leave", None, None, "No se pudo confirmar la causa: falta acceso a la auditoría."
+    for delay in (2, 3, 5):
+        await asyncio.sleep(delay)
+        try:
+            for action, event in ((discord.AuditLogAction.ban, "member_ban"),
+                                  (discord.AuditLogAction.kick, "member_kick")):
+                async for entry in guild.audit_logs(limit=25, action=action, after=observed - timedelta(seconds=20)):
+                    if (getattr(entry.target, "id", None) == member.id
+                            and abs((entry.created_at - observed).total_seconds()) <= 20):
+                        return event, entry.user, entry.reason, None
+        except discord.Forbidden:
+            return "member_leave", None, None, "No se pudo confirmar la causa: acceso a auditoría denegado."
+        except discord.HTTPException:
+            continue
+    return "member_leave", None, None, "Salida observada; no se encontró una expulsión o baneo en la auditoría consultada."
+
+
 @bot.listen("on_member_remove")
 async def heraldo_member_departure(member: discord.Member) -> None:
     guild = member.guild
     if not any(log_member_event_enabled(guild.id, key) for key in ("member_leave", "member_kick", "member_ban")):
         return
-    await asyncio.sleep(2)
-    kind = "member_leave"
-    moderator = None
-    reason = None
-    try:
-        if guild.me and guild.me.guild_permissions.view_audit_log:
-            for action, event in ((discord.AuditLogAction.ban, "member_ban"),
-                                  (discord.AuditLogAction.kick, "member_kick")):
-                async for entry in guild.audit_logs(limit=5, action=action):
-                    if (getattr(entry.target, "id", None) == member.id
-                            and (datetime.now(timezone.utc) - entry.created_at).total_seconds() < 20):
-                        kind = event
-                        moderator = entry.user
-                        reason = entry.reason
-                        break
-                if kind != "member_leave":
-                    break
-    except (discord.Forbidden, discord.HTTPException):
-        pass
+    kind, moderator, reason, uncertainty = await classify_member_departure(member)
     if not log_member_event_enabled(guild.id, kind):
         return
     labels = dict(LOG_EVENT_CATALOG["members"])
@@ -2189,6 +2266,8 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         details.append(f"Responsable: {moderator.mention}")
     if reason:
         details.append(f"Motivo: {discord.utils.escape_markdown(reason[:500])}")
+    if uncertainty:
+        details.append(uncertainty)
     await log_embed(guild, labels[kind], "\n".join(details),
                     discord.Color.red() if kind != "member_leave" else discord.Color.orange(), member=member)
 
@@ -2197,7 +2276,7 @@ async def heraldo_member_departure(member: discord.Member) -> None:
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
     if after.bot:
         return  # los bots no pasan por el flujo de verificación
-    if after.id in _condemn_sync_busy:
+    if (after.guild.id, after.id) in _condemn_sync_busy:
         return
 
     before_role_ids = {r.id for r in before.roles}
@@ -2209,11 +2288,11 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
 
     # El rol Condenado es la fuente de verdad: si se quita por cualquier medio, se libera.
     if had_condemned and not has_condemned and active_condemnation is not None:
-        _condemn_sync_busy.add(after.id)
+        _condemn_sync_busy.add((after.guild.id, after.id))
         try:
             await release_condemned_member(after, automatic=False)
         finally:
-            _condemn_sync_busy.discard(after.id)
+            _condemn_sync_busy.discard((after.guild.id, after.id))
         return
 
     # Si alguien asigna Condenado a mano, se ejecuta exactamente el mismo proceso.
@@ -2226,7 +2305,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                     break
         except (discord.Forbidden, discord.HTTPException):
             pass
-        _condemn_sync_busy.add(after.id)
+        _condemn_sync_busy.add((after.guild.id, after.id))
         try:
             protection = condemnation_protection_reason(after)
             if protection:
@@ -2245,7 +2324,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                     preserve_role_ids=list(before_role_ids),
                 )
         finally:
-            _condemn_sync_busy.discard(after.id)
+            _condemn_sync_busy.discard((after.guild.id, after.id))
         return
 
     # Si ya estaba condenado y otro moderador/bot añade roles, se vuelven a quitar.
@@ -2259,7 +2338,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                 r.id for r in after.roles
                 if r.id not in before_role_ids and r.id != condemned_id and r.is_assignable() and not r.managed
             ]
-            _condemn_sync_busy.add(after.id)
+            _condemn_sync_busy.add((after.guild.id, after.id))
             try:
                 ok, _, note = await condemnation_sync_roles(
                     after, save_snapshot=False, reason="Condenado: no puede recibir otros roles",
@@ -2272,7 +2351,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
             except Exception:
                 traceback.print_exc()
             finally:
-                _condemn_sync_busy.discard(after.id)
+                _condemn_sync_busy.discard((after.guild.id, after.id))
         db_clear_tentado(after.guild.id, after.id)
         db_clear_sin_verificado(after.guild.id, after.id)
         db_clear_verify_pending(after.guild.id, after.id)
@@ -2286,7 +2365,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         and getattr(before, "pending", False)
         and not getattr(after, "pending", False)
     ):
-        asyncio.create_task(assign_join_roles(after))
+        queue_join_roles(after)
         verify_role_id_after_screening = get_verify_role_id(after.guild.id)
         if (
             verify_enabled(after.guild.id)
@@ -2658,16 +2737,7 @@ class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configura
             await interaction.response.send_message("Error: Los tres tiempos deben ser números enteros mayores que 0.", ephemeral=True)
             return
 
-        guild_config_set(self.guild_id, "verify_timeout", str(verify_minutes * 60))
-        guild_config_set(self.guild_id, "orientation_timeout_seconds", str(orientation_minutes * 60))
-        guild_config_set(self.guild_id, "sin_verificado_timeout_seconds", str(sin_verificar_minutes * 60))
-        await interaction.response.send_message(
-            "Tiempos guardados por servidor.\n"
-            f"• Verificación: **{verify_minutes} min**\n"
-            f"• Orientación: **{orientation_minutes} min**\n"
-            f"• Respaldo Sin Verificar: **{sin_verificar_minutes} min**",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'verify_timeout': str(verify_minutes * 60), 'orientation_timeout_seconds': str(orientation_minutes * 60), 'sin_verificado_timeout_seconds': str(sin_verificar_minutes * 60)})
 
 
 HERALDO_CHANNEL_DEFINITIONS = {
@@ -2853,6 +2923,18 @@ async def _setup_get_or_create_system_role(
     return role, created_now, None
 
 
+async def configuration_access(interaction, guild_id=None, owner_id=None) -> bool:
+    """Revalidar identidad y permisos al ejecutar, incluso en una sesión ya abierta."""
+    valid = (interaction.guild is not None
+             and (guild_id is None or interaction.guild.id == guild_id)
+             and (owner_id is None or interaction.user.id == owner_id)
+             and bool(getattr(getattr(interaction.user, "guild_permissions", None), "manage_guild", False)))
+    if not valid:
+        sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        await sender("Acceso denegado. Se requiere Gestionar servidor y una sesión propia en este servidor.", ephemeral=True)
+    return valid
+
+
 class HeraldoChannelSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -2869,7 +2951,6 @@ class HeraldoChannelSetupView(discord.ui.View):
                 discord.SelectOption(
                     label=label.split(" ", 1)[-1],
                     value=key,
-                    emoji=label.split(" ", 1)[0],
                     description=f"Canal para {label.split(' ', 1)[-1].lower()}",
                 )
                 for key, (label, _) in HERALDO_CHANNEL_DEFINITIONS.items()
@@ -2908,6 +2989,8 @@ class HeraldoChannelSetupView(discord.ui.View):
         self.add_item(back_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -3101,6 +3184,8 @@ class HeraldoRoleSetupView(discord.ui.View):
             self.add_item(create_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -3261,8 +3346,7 @@ class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Tiempo de esper
             self.editor.pending_delay = seconds
             await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n" + join_roles_basic_summary(interaction.guild) + self.editor._pending(interaction.guild), view=self.editor)
             return
-        guild_config_set(self.guild_id, "join_roles_delay_seconds", str(seconds))
-        await interaction.response.send_message(f"Tiempo de espera guardado: **{seconds} s**.", ephemeral=True)
+        await confirm_configuration(interaction, self.guild_id, {'join_roles_delay_seconds': str(seconds)})
 
 
 class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periódico"):
@@ -3294,13 +3378,10 @@ class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periód
                 "Error: Usa un valor entre 0 y 10080 minutos.", ephemeral=True
             )
             return
-        guild_config_set(self.guild_id, "join_sync_interval_minutes", str(minutes))
-        if minutes:
-            set_join_sync_last(self.guild_id)
-        await interaction.response.send_message(
-            "Sync periódico " + (f"configurado cada **{minutes} min**." if minutes else "desactivado."),
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "join_sync_interval_minutes": str(minutes),
+            "join_sync_last": datetime.now(timezone.utc).isoformat() if minutes else None,
+        })
 
 
 class _JoinRolesOwnedView(discord.ui.View):
@@ -3310,6 +3391,8 @@ class _JoinRolesOwnedView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Este panel de configuración no es tuyo.", ephemeral=True
@@ -3916,18 +3999,7 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientaci
             )
             return
 
-        guild_config_set(self.guild_id, "orientation_embed_title", title)
-        guild_config_set(self.guild_id, "orientation_embed_intro", intro)
-        guild_config_set(self.guild_id, "orientation_embed_details", details)
-        guild_config_set(self.guild_id, "orientation_embed_color", color.upper())
-        guild_config_set(self.guild_id, "orientation_embed_footer", footer)
-
-        await interaction.response.defer(ephemeral=True)
-        note = "Tarjeta guardada."
-        if orientation_enabled(self.guild_id):
-            ok, sync_note = await ensure_orientation_system(interaction.guild)
-            note = sync_note if ok else f"Guardé el texto, pero no pude actualizar la tarjeta: {sync_note}"
-        await interaction.followup.send(f"{note}", ephemeral=True)
+        await confirm_configuration(interaction, self.guild_id, {'orientation_embed_title': title, 'orientation_embed_intro': intro, 'orientation_embed_details': details, 'orientation_embed_color': color.upper(), 'orientation_embed_footer': footer})
 
 
 
@@ -3960,6 +4032,8 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.add_item(role_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -4263,12 +4337,9 @@ class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · 
                 ephemeral=True,
             )
             return
-        set_motw_schedule(self.guild_id, weekday, hour)
-        motw_mark_current_slot(self.guild_id)
-        await interaction.response.send_message(
-            f"Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {hour}:00** (hora RD).",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "motw_weekday": str(weekday), "motw_hour": str(hour),
+        })
 
 
 
@@ -4289,6 +4360,8 @@ class HeraldoMotwSetupView(discord.ui.View):
         self.add_item(channel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -4371,6 +4444,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.add_item(channel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -4587,6 +4662,8 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.add_item(channel_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -4881,16 +4958,7 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
             await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
             return
 
-        guild_config_set(self.guild_id, "raid_threshold", str(threshold))
-        guild_config_set(self.guild_id, "raid_window_seconds", str(window_s))
-        guild_config_set(self.guild_id, "raid_min_age_seconds", str(age_s))
-        guild_config_set(self.guild_id, "raid_new_account_ratio", str(ratio))
-        guild_config_set(self.guild_id, "raid_duration_seconds", str(duration_s))
-        await interaction.response.send_message(
-            "Detección de Raid Protection actualizada.\n\n"
-            + raid_config_summary(interaction.guild),
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'raid_threshold': str(threshold), 'raid_window_seconds': str(window_s), 'raid_min_age_seconds': str(age_s), 'raid_new_account_ratio': str(ratio), 'raid_duration_seconds': str(duration_s)})
 
 
 
@@ -4930,6 +4998,8 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.toggle_purge.label = "Purgar mensajes: sí" if raid_purge_enabled(guild_id) else "Purgar mensajes: no"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -5091,13 +5161,7 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             )
             return
 
-        for key, value in values.items():
-            guild_config_set(self.guild_id, key, value)
-
-        await interaction.response.send_message(
-            "Contenido del DM de verificación actualizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, values)
 
 
 class VerifyDmEditorVisualModal(discord.ui.Modal):
@@ -5128,11 +5192,7 @@ class VerifyDmEditorVisualModal(discord.ui.Modal):
             )
             return
 
-        guild_config_set(self.guild_id, "verify_dm_footer_icon", icon)
-        await interaction.response.send_message(
-            "Recurso visual del DM actualizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'verify_dm_footer_icon': icon})
 
 
 class VerifyDmMessageSetupView(discord.ui.View):
@@ -5142,6 +5202,8 @@ class VerifyDmMessageSetupView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Este editor no es tuyo.",
@@ -5222,16 +5284,7 @@ class SuggestionPanelContentModal(discord.ui.Modal):
             )
             return
 
-        guild_config_set(self.guild_id, "suggestion_panel_title", title)
-        guild_config_set(self.guild_id, "suggestion_panel_description", description)
-        guild_config_set(self.guild_id, "suggestion_panel_color", color.upper())
-
-        await interaction.response.defer(ephemeral=True)
-        await suggestion_ensure_panel(interaction.guild)
-        await interaction.followup.send(
-            "Contenido del panel de sugerencias guardado y sincronizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'suggestion_panel_title': title, 'suggestion_panel_description': description, 'suggestion_panel_color': color.upper()})
 
 
 class SuggestionPanelVisualModal(discord.ui.Modal):
@@ -5296,17 +5349,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
                 )
                 return
 
-        guild_config_set(self.guild_id, "suggestion_panel_footer", self.footer_input.value.strip())
-        guild_config_set(self.guild_id, "suggestion_panel_button_label", button_label)
-        guild_config_set(self.guild_id, "suggestion_panel_image", image)
-        guild_config_set(self.guild_id, "suggestion_panel_thumbnail", thumbnail)
-
-        await interaction.response.defer(ephemeral=True)
-        await suggestion_ensure_panel(interaction.guild)
-        await interaction.followup.send(
-            "Diseño del panel de sugerencias guardado y sincronizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'suggestion_panel_footer': self.footer_input.value.strip(), 'suggestion_panel_button_label': button_label, 'suggestion_panel_image': image, 'suggestion_panel_thumbnail': thumbnail})
 
 
 class SuggestionPanelMessageSetupView(discord.ui.View):
@@ -5316,6 +5359,8 @@ class SuggestionPanelMessageSetupView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este editor no es tuyo.", ephemeral=True)
             return False
@@ -5501,6 +5546,8 @@ class DefaultMessageStudioView(discord.ui.View):
             self._add_component_preview()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este editor no es tuyo.", ephemeral=True)
             return False
@@ -6361,6 +6408,8 @@ class LogTemplateEditorView(discord.ui.View):
             self.add_item(reset_btn)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Este editor de logs no es tuyo.", ephemeral=True
@@ -6498,6 +6547,9 @@ class HeraldoMessageConfirmView(discord.ui.View):
         super().__init__(timeout=300)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.operation, self.payload = operation, payload
+        self.original_templates = copy.deepcopy(heraldo_template_list(guild_id))
+        self.original_components = copy.deepcopy(heraldo_message_role_config(guild_id))
+        self.finished = False
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.label == "Guardar cambios" and operation == "delete":
                 child.label = "Confirmar eliminación"
@@ -6506,6 +6558,8 @@ class HeraldoMessageConfirmView(discord.ui.View):
                 child.label = "Confirmar importación"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
             await interaction.response.send_message("Esta confirmación no te pertenece.", ephemeral=True)
             return False
@@ -6513,6 +6567,15 @@ class HeraldoMessageConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
     async def commit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        if (heraldo_template_list(self.guild_id) != self.original_templates
+                or heraldo_message_role_config(self.guild_id) != self.original_components):
+            await interaction.response.send_message("La configuración cambió. Abra de nuevo el editor antes de guardar.", ephemeral=True)
+            return
         op, payload = self.operation, self.payload
         if op in {"template", "raw", "attach", "delete"}:
             items = heraldo_template_list(self.guild_id)
@@ -6537,6 +6600,8 @@ class HeraldoMessageConfirmView(discord.ui.View):
                 if op == "delete":
                     items = [t for t in items if t["name"] != payload["name"]]
                 elif op == "raw":
+                    for key in message_payload.VISUAL_KEYS:
+                        target.pop(key, None)
                     target.update(payload["values"])
                 elif op == "attach":
                     mode, component = payload["mode"], payload["component"]
@@ -6545,12 +6610,19 @@ class HeraldoMessageConfirmView(discord.ui.View):
                         return
                     target["role_component"] = component if mode == "boton" else ""
                     target["role_component_mode"] = mode
+            if op in {"template", "raw"}:
+                candidate = item if op == "template" else target
+                try:
+                    message_payload.validate({k: v for k, v in candidate.items() if k in message_payload.VISUAL_KEYS})
+                except ValueError as exc:
+                    await interaction.response.send_message(f"No se guardó la plantilla: {exc}", ephemeral=True)
+                    return
             heraldo_template_save(self.guild_id, items)
         elif op == "component":
             components = heraldo_message_role_config(self.guild_id)
             item = payload["item"]
             role, me = interaction.guild.get_role(item["role_id"]), interaction.guild.me
-            if not role or not me or role.is_default() or role.managed or role >= me.top_role or not me.guild_permissions.manage_roles:
+            if not role or not me or role.is_default() or role.managed or role >= me.top_role or not me.guild_permissions.manage_roles or not self_service_role_safe(role):
                 await interaction.response.send_message("Ya no es posible gestionar ese rol.", ephemeral=True)
                 return
             if len(components) >= 20 or any(x["label"].casefold() == item["label"].casefold() for x in components):
@@ -6562,6 +6634,10 @@ class HeraldoMessageConfirmView(discord.ui.View):
             items = heraldo_template_list(self.guild_id)
             new = payload["items"]
             names = {x["name"].casefold() for x in items}
+            if payload.get("replace"):
+                incoming_names = {x["name"].casefold() for x in new}
+                items = [x for x in items if x['name'].casefold() not in incoming_names]
+                names = {x['name'].casefold() for x in items}
             if len(items) + len(new) > 25 or any(t["name"].casefold() in names for t in new):
                 await interaction.response.send_message("Las plantillas han cambiado. Revisa el kit antes de reintentarlo.", ephemeral=True)
                 return
@@ -6569,11 +6645,13 @@ class HeraldoMessageConfirmView(discord.ui.View):
         else:
             await interaction.response.send_message("Operación no admitida.", ephemeral=True)
             return
+        self.finished = True
         self.stop()
         await interaction.response.edit_message(content="Cambios guardados por confirmación del administrador. Los mensajes publicados no se modifican automáticamente.", view=None)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.finished = True
         self.stop()
         await interaction.response.edit_message(content="Operación cancelada. No se guardó ningún cambio.", view=None)
 
@@ -6613,7 +6691,21 @@ def heraldo_template_embed(template: dict) -> discord.Embed | None:
     return embed
 
 
+def heraldo_template_payload(template, guild, member=None, channel=None):
+    context = {"servidor": guild.name, "servidor_id": str(guild.id),
+               "usuario": getattr(member, "display_name", "Miembro"),
+               "usuario_id": str(getattr(member, "id", "")),
+               "canal": getattr(channel, "name", "canal"),
+               "fecha": datetime.now(timezone.utc).isoformat(timespec="minutes")}
+    content, embeds = message_payload.render(template, context)
+    return {"content": content, "embeds": message_payload.TemplateEmbeds(discord.Embed.from_dict(e) for e in embeds),
+            "view": heraldo_template_view(dict(template, _guild_id=guild.id)),
+            "allowed_mentions": discord.AllowedMentions.none()}
+
+
 def heraldo_template_view(template: dict) -> discord.ui.View | None:
+    if template.get('componentes'):
+        return message_components.build_view(template, int(template['_guild_id']))
     label, url = template.get("button_label", ""), template.get("button_url", "")
     view = discord.ui.View(timeout=None)
     if label and url:
@@ -6679,8 +6771,14 @@ class HeraldoTemplateModal(discord.ui.Modal, title="Editor de plantilla"):
         old = next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.old_name), None)
         old_component = old.get("role_component", "") if old else ""
         old_mode = old.get("role_component_mode", "boton") if old else "boton"
-        item = {"name": name, "title": title, "description": description, "image": image,
-                "button_label": label, "button_url": url, "role_component": old_component, "role_component_mode": old_mode}
+        item = dict(old or {}, name=name, title=title, description=description, image=image,
+                    button_label=label, button_url=url, role_component=old_component, role_component_mode=old_mode)
+        if item.get("embeds"):
+            item["embeds"][0].update(title=title, description=description)
+            if image:
+                item["embeds"][0]["image"] = {"url": image}
+            else:
+                item["embeds"][0].pop("image", None)
         await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
             "template", {"old_name": self.old_name, "item": item},
             "Plantilla: **" + discord.utils.escape_markdown(name) + "**. La configuración todavía no se ha guardado.")
@@ -6693,8 +6791,8 @@ class HeraldoTemplateRawModal(discord.ui.Modal, title="Edición JSON de plantill
     def __init__(self, guild_id: int, owner_id: int, selected: str, template: dict):
         super().__init__()
         self.guild_id, self.owner_id, self.selected = guild_id, owner_id, selected
-        self.raw.default = json.dumps({k: template.get(k, "") for k in
-            ("title", "description", "image", "button_label", "button_url")}, ensure_ascii=False, indent=2)[:4000]
+        raw = json.dumps({k: v for k, v in template.items() if k in message_payload.VISUAL_KEYS}, ensure_ascii=False, indent=2)
+        self.raw.default = raw if len(raw) <= 4000 else '{"content": ""}'
 
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
@@ -6702,20 +6800,7 @@ class HeraldoTemplateRawModal(discord.ui.Modal, title="Edición JSON de plantill
             return
         try:
             values = json.loads(str(self.raw))
-            allowed = {"title": 256, "description": 2000, "image": 400, "button_label": 80, "button_url": 400}
-            if not isinstance(values, dict) or set(values) - set(allowed):
-                raise ValueError
-            for key, value in values.items():
-                if not isinstance(value, str) or len(value) > allowed[key]:
-                    raise ValueError
-            for key in ("image", "button_url"):
-                url = values.get(key, "")
-                if url and not re.match(r"^https://[^\s]+$", url, re.I):
-                    raise ValueError
-            if bool(values.get("button_url", "")) != bool(values.get("button_label", "")):
-                raise ValueError
-            if not any(values.get(k) for k in ("title", "description", "image")):
-                raise ValueError
+            values = message_payload.validate(values)
         except (ValueError, TypeError):
             await interaction.response.send_message("JSON inválido. Usa exclusivamente las propiedades admitidas, dentro de sus límites.", ephemeral=True)
             return
@@ -6751,6 +6836,8 @@ class HeraldoTemplateSetupView(discord.ui.View):
         self.add_item(channel)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id or interaction.guild_id != self.guild_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -6804,14 +6891,17 @@ class HeraldoTemplateSetupView(discord.ui.View):
             await interaction.response.send_message("Selecciona una plantilla y un canal válido.", ephemeral=True)
             return
         me = interaction.guild.me
+        user_perms = channel.permissions_for(interaction.user)
+        if not user_perms.view_channel or not user_perms.send_messages:
+            await interaction.response.send_message("No dispone de acceso para publicar en ese canal.", ephemeral=True)
+            return
         if not me or not channel.permissions_for(me).send_messages or not channel.permissions_for(me).embed_links:
             await interaction.response.send_message("El Heraldo necesita Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         try:
-            await channel.send(embed=heraldo_template_embed(template), view=heraldo_template_view(dict(template, _guild_id=self.guild_id)),
-                               allowed_mentions=discord.AllowedMentions.none())
-        except discord.HTTPException:
+            await channel.send(**heraldo_template_payload(template, interaction.guild, interaction.user, channel))
+        except (discord.HTTPException, ValueError):
             await interaction.followup.send("No fue posible publicar la plantilla. Comprueba permisos y formato.", ephemeral=True)
             return
         await interaction.followup.send(f"Plantilla publicada en {channel.mention}.", ephemeral=True)
@@ -6822,11 +6912,30 @@ class HeraldoTemplateSetupView(discord.ui.View):
         if not current:
             await interaction.response.send_message("Primero crea una plantilla.", ephemeral=True)
             return
+        raw = json.dumps({k: v for k, v in current.items() if k in message_payload.VISUAL_KEYS}, ensure_ascii=False, indent=2)
+        if len(raw) > 4000:
+            await interaction.response.send_message("Esta plantilla supera el tamaño del formulario. Exporte el kit y use /importkit con reemplazo para revisarla sin truncar contenido.", ephemeral=True)
+            return
         await interaction.response.send_modal(HeraldoTemplateRawModal(self.guild_id, self.owner_id, self.selected, current))
 
     @discord.ui.button(label="Variables", style=discord.ButtonStyle.secondary, row=3)
     async def variables(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("La edición JSON admite título, descripción, imagen, etiqueta y URL del botón. Las variables dinámicas de plantillas aún no están habilitadas; no uses variables sin resolver.", ephemeral=True)
+        await interaction.response.send_message("Variables: {usuario}, {usuario_id}, {servidor}, {servidor_id}, {canal} y {fecha} (UTC). Se resuelven al publicar; las menciones automáticas están desactivadas. JSON admite content y hasta diez embeds con campos, autor, pie, imagen y miniatura.", ephemeral=True)
+
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
+    async def preview(self, interaction, button):
+        current = self._current()
+        if not current:
+            await interaction.response.send_message("Seleccione una plantilla.", ephemeral=True)
+            return
+        try:
+            payload = heraldo_template_payload(current, interaction.guild, interaction.user, interaction.channel)
+            if payload['view']:
+                for child in payload['view'].children:
+                    child.disabled = True
+            await interaction.response.send_message(**payload, ephemeral=True)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
 
     @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=3)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -6898,6 +7007,8 @@ class HeraldoMessageComponentsSetupView(discord.ui.View):
         self.guild_id, self.owner_id = guild_id, owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este editor no te pertenece.", ephemeral=True)
             return False
@@ -6972,6 +7083,17 @@ class HeraldoMessageRoleButton(discord.ui.Button):
     # La ejecución se centraliza en el listener para mantener la misma ruta tras reinicios.
 
 
+def self_service_role_safe(role: discord.Role) -> bool:
+    """Los componentes públicos no conceden permisos de administración."""
+    forbidden = ("administrator", "manage_guild", "manage_roles", "manage_channels",
+                 "manage_webhooks", "ban_members", "kick_members", "moderate_members")
+    return not any(getattr(role.permissions, permission, False) for permission in forbidden)
+
+
+_message_role_busy: set[tuple[int, int]] = set()
+_message_role_cooldown: dict[tuple[int, int], float] = {}
+
+
 async def heraldo_message_role_action(interaction: discord.Interaction, guild_id: int, role_id: int, action: str):
     guild = interaction.guild
     if not guild or guild.id != guild_id or not isinstance(interaction.user, discord.Member):
@@ -6979,11 +7101,25 @@ async def heraldo_message_role_action(interaction: discord.Interaction, guild_id
         return
     allowed = any(int(x["role_id"]) == role_id and x.get("action") == action for x in heraldo_message_role_config(guild_id))
     role, me = guild.get_role(role_id), guild.me
-    if not allowed or not role or not me or not me.guild_permissions.manage_roles or role.is_default() or role.managed or role >= me.top_role:
+    if not allowed or not role or not me or not me.guild_permissions.manage_roles or role.is_default() or role.managed or role >= me.top_role or not self_service_role_safe(role):
         await interaction.response.send_message("Este componente ya no está disponible o faltan permisos.", ephemeral=True)
         return
     member = interaction.user
+    key = (guild.id, member.id)
+    now = time.monotonic()
+    for expired_key, until in list(_message_role_cooldown.items()):
+        if until <= now:
+            _message_role_cooldown.pop(expired_key, None)
+    if key in _message_role_busy or key in _message_role_cooldown:
+        await interaction.response.send_message("Espere unos segundos antes de volver a modificar sus roles.", ephemeral=True)
+        return
+    if condemnation_get(guild.id, member.id):
+        await interaction.response.send_message("No puede modificar sus roles mientras exista una condena activa.", ephemeral=True)
+        return
+    _message_role_busy.add(key)
     try:
+        await interaction.response.defer(ephemeral=True)
+        member = await guild.fetch_member(member.id)
         if action == "añadir" or (action == "alternar" and role not in member.roles):
             await member.add_roles(role, reason="Componente de mensajes de El Heraldo")
             answer = "Rol asignado."
@@ -6994,7 +7130,10 @@ async def heraldo_message_role_action(interaction: discord.Interaction, guild_id
             answer = "No fue necesario realizar cambios."
     except discord.HTTPException:
         answer = "No fue posible modificar el rol. Verifica los permisos."
-    await interaction.response.send_message(answer, ephemeral=True)
+    finally:
+        _message_role_busy.discard(key)
+        _message_role_cooldown[key] = time.monotonic() + 3
+    await interaction.followup.send(answer, ephemeral=True)
 
 
 @bot.listen("on_interaction")
@@ -7033,34 +7172,10 @@ class HeraldoMessageKitImportModal(discord.ui.Modal, title="Importar kit de mens
             return
         try:
             data = json.loads(str(self.payload))
-            if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("templates"), list):
-                raise ValueError
-            incoming = data["templates"]
-            if len(incoming) > 25:
-                raise ValueError
-            for item in incoming:
-                if (not isinstance(item, dict) or not isinstance(item.get("name"), str)
-                    or not 1 <= len(item["name"]) <= 70
-                    or not isinstance(item.get("description", ""), str)
-                    or len(item.get("description", "")) > 2000
-                    or not isinstance(item.get("title", ""), str)
-                    or len(item.get("title", "")) > 256):
-                    raise ValueError
-                for urlkey in ("image", "button_url"):
-                    url = item.get(urlkey, "")
-                    if not isinstance(url, str) or (url and not re.match(r"^https://[^\s]+$", url, re.I)):
-                        raise ValueError
-            if len({x["name"].casefold() for x in incoming}) != len(incoming):
-                raise ValueError
-        except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+            cleaned = message_payload.import_kit(data)
+        except (ValueError, TypeError, KeyError):
             await interaction.response.send_message("El kit no cumple el formato y los límites exigidos.", ephemeral=True)
             return
-        # Los kits no pueden importar acciones interactivas sin configurar permisos localmente.
-        cleaned = [{"name": x["name"], "title": x.get("title", ""),
-                    "description": x.get("description", ""), "image": x.get("image", ""),
-                    "button_label": str(x.get("button_label", ""))[:80],
-                    "button_url": x.get("button_url", ""), "role_component": "",
-                    "role_component_mode": "ninguno"} for x in incoming]
         current = heraldo_template_list(self.guild_id)
         existing = {x["name"].casefold() for x in current}
         duplicates = [x["name"] for x in cleaned if x["name"].casefold() in existing]
@@ -7084,6 +7199,8 @@ class HeraldoMessageKitsView(discord.ui.View):
         self.guild_id, self.owner_id = guild_id, owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel no te pertenece.", ephemeral=True)
             return False
@@ -7092,8 +7209,8 @@ class HeraldoMessageKitsView(discord.ui.View):
     @discord.ui.button(label="Exportar kit", style=discord.ButtonStyle.primary)
     async def export(self, interaction: discord.Interaction, button: discord.ui.Button):
         templates = heraldo_template_list(self.guild_id)
-        safe = [{k: t.get(k, "") for k in ("name", "title", "description", "image", "button_label", "button_url")} for t in templates]
-        content = json.dumps({"version": 1, "templates": safe}, ensure_ascii=False, indent=2).encode("utf-8")
+        safe = [{k: v for k, v in t.items() if k in message_payload.VISUAL_KEYS | {"name"}} for t in templates]
+        content = json.dumps({"version": 2, "templates": safe}, ensure_ascii=False, indent=2).encode("utf-8")
         await interaction.response.send_message(
             "Kit exportado. No incluye las acciones de roles ni configuraciones de otros servidores.",
             file=discord.File(io.BytesIO(content), filename="heraldo-message-kit.json"), ephemeral=True)
@@ -7122,6 +7239,10 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
                 discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
                 discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
+                discord.SelectOption(label="Programación", value="schedules", description="Fechas, zonas horarias y repeticiones de mensajes."),
+                discord.SelectOption(label="Autorespuestas", value="autoresponses", description="Responder a palabras o frases, con límites de frecuencia."),
+                discord.SelectOption(label="Sticky", value="sticky", description="Mantener una plantilla al final del canal."),
+                discord.SelectOption(label="Webhooks", value="webhooks", description="Publicación confirmada mediante webhooks del bot."),
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
@@ -7160,6 +7281,8 @@ class HeraldoMessagesSetupView(discord.ui.View):
         self.add_item(panel_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Este panel de configuración no es tuyo.",
@@ -7172,19 +7295,56 @@ class HeraldoMessagesSetupView(discord.ui.View):
         values = interaction.data.get("values") if interaction.data else []
         selected = values[0] if values else ""
 
+        if selected == "webhooks":
+            await interaction.response.send_message(
+                "**Publicación por webhook**\n\nUse `/webhook_mensaje` para elegir plantilla y canal y confirmar su publicación. "
+                "El administrador y el bot deben tener permiso para gestionar webhooks en el destino. "
+                "El Heraldo crea o reutiliza únicamente su propio webhook; no solicita ni almacena tokens. "
+                "Admite plantillas visuales y enlaces. Los botones y selectores de roles se publican mediante el bot.",
+                ephemeral=True)
+            return
+
+        if selected == "sticky":
+            await interaction.response.send_message(
+                "**Mensajes sticky**\n\nUse `/sticky crear` para elegir canal y plantilla; confirmar habilita su publicación. "
+                "El bot reemplaza su publicación anterior después de actividad humana, respetando una espera configurable. "
+                "Use `/sticky listar` para consultar errores y `/sticky retirar` para detenerlo; la última publicación se conserva. "
+                "Un envío incierto queda detenido para revisión.", ephemeral=True)
+            return
+
+        if selected == "autoresponses":
+            await interaction.response.send_message(
+                "**Autorespuestas**\n\n"
+                "Use `/autorespuesta crear` para elegir canal, plantilla y palabra o frase; requiere confirmación. "
+                "Puede exigir el mensaje exacto o una frase incluida. Use `/autorespuesta listar` y `/autorespuesta retirar` para administrarlas.\n"
+                "La espera es de 30 segundos a 24 horas por regla y hay un límite adicional de una respuesta cada 30 segundos por canal. "
+                "Se ignoran bots, webhooks y miembros con condena activa; se requiere Message Content.",
+                ephemeral=True)
+            return
+
+        if selected == "schedules":
+            await interaction.response.send_message(
+                "**Programación de mensajes**\n\n"
+                "Use `/programar_mensaje crear` para elegir plantilla, canal, fecha local y zona horaria. "
+                "Admite una publicación, repetición diaria o semanal; requiere confirmación.\n"
+                "Use `/programar_mensaje listar` para consultar el estado y `/programar_mensaje retirar` para cancelar próximas ejecuciones. "
+                "Un envío ya iniciado puede terminar. Tras una interrupción incierta, revise el canal antes de crear otra programación.",
+                ephemeral=True)
+            return
+
         if selected == "kits":
-            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\\n\\nExporta o importa plantillas. La importación añade mensajes sin sobrescribir.", embed=None,
+            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\n\nExporte o importe plantillas. Para archivos y reemplazos confirmados, use /importkit.", embed=None,
                 view=HeraldoMessageKitsView(self.guild_id, self.owner_id))
             return
 
         if selected == "components":
-            await interaction.response.edit_message(content="**El Heraldo · Componentes**\n\nConfigura botones de roles reutilizables.", embed=None,
+            await interaction.response.edit_message(content="**El Heraldo · Componentes**\n\nConfigure botones de roles reutilizables. Para botones y menús con opciones independientes y varias acciones, use `/componentes_mensaje` con un archivo JSON.", embed=None,
                 view=HeraldoMessageComponentsSetupView(self.guild_id, self.owner_id))
             return
 
         if selected == "templates":
             await interaction.response.edit_message(
-                content="**El Heraldo · Plantillas**\n\nCrea, edita y publica plantillas reutilizables.",
+                content="**El Heraldo · Plantillas**\n\nCree, edite y publique plantillas reutilizables. Use `/editar_plantilla` para el editor visual de contenido, múltiples embeds, campos, imágenes, autor y pie.",
                 embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
             )
             return
@@ -7445,6 +7605,8 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -7613,6 +7775,8 @@ class HeraldoCasesSetupView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -7656,14 +7820,7 @@ class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Dura
                 return
             setting = f"{minutes}m"
 
-        set_condemnation_default_duration(setting, self.guild_id)
-        label = format_duration(minutes) if minutes is not None else "Indefinida"
-        await interaction.response.send_message(
-            f"Duración predeterminada actualizada a **{label}**. "
-            "Se aplicará a las condenas nuevas sin duración explícita; "
-            "no altera las condenas existentes. Vuelve a abrir el panel para ver el valor actualizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {"condemnation_default_duration": setting or "indefinida"})
 
 
 class HeraldoCondemnationSetupView(discord.ui.View):
@@ -7694,6 +7851,8 @@ class HeraldoCondemnationSetupView(discord.ui.View):
         self.add_item(role_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -7840,6 +7999,8 @@ class HeraldoModerationSetupView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -7878,6 +8039,8 @@ class HeraldoAutomodSetupView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -7913,6 +8076,8 @@ class HeraldoVerificationHubView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -7962,6 +8127,8 @@ class HeraldoLoggingSetupView(discord.ui.View):
         self.add_item(channel_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -8095,6 +8262,8 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         self.add_item(channel)
 
     async def interaction_check(self, interaction):
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
             await interaction.response.send_message("Esta configuración no te pertenece.", ephemeral=True)
             return False
@@ -8221,7 +8390,8 @@ def rr_summary(guild: discord.Guild, panel: dict) -> str:
 
 def rr_valid_role(guild: discord.Guild, role_id: int) -> bool:
     role = guild.get_role(role_id)
-    return bool(role and role.is_assignable() and not role.managed and not role.is_default())
+    return bool(role and role.is_assignable() and not role.managed and not role.is_default()
+                and self_service_role_safe(role))
 
 
 def rr_can_use(member: discord.Member, panel: dict) -> bool:
@@ -8480,6 +8650,8 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
         self.add_item(access)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este editor pertenece a otro administrador.", ephemeral=True)
             return False
@@ -8754,6 +8926,8 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
             self.add_item(removal)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel pertenece a otro administrador.", ephemeral=True)
             return False
@@ -8865,6 +9039,8 @@ async def _rr_handle_reaction_serial(payload: discord.RawReactionActionEvent, ad
             return
     if member.bot:
         return
+    if condemnation_get(guild.id, member.id):
+        return
     emoji = _orientation_emoji_key(str(payload.emoji))
     binding = next((x for x in rr_bindings(panel) if _orientation_emoji_key(x["emoji"]) == emoji), None)
     if not binding:
@@ -8904,8 +9080,8 @@ async def _rr_handle_reaction_serial(payload: discord.RawReactionActionEvent, ad
     # Reverse mode inverts the meaning of the two configured actions.
     additions = [guild.get_role(int(r)) for r in to_add]
     removals = [guild.get_role(int(r)) for r in to_remove]
-    additions = [r for r in additions if r and r.is_assignable() and r not in member.roles]
-    removals = [r for r in removals if r and r.is_assignable() and r in member.roles]
+    additions = [r for r in additions if r and rr_valid_role(guild, r.id) and r not in member.roles]
+    removals = [r for r in removals if r and rr_valid_role(guild, r.id) and r in member.roles]
     try:
         if removals:
             await member.remove_roles(*removals, reason="Reaction Roles: acción de reacción")
@@ -8933,6 +9109,8 @@ class HeraldoPendingSetupModuleView(discord.ui.View):
         self.module_name = module_name
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -8983,6 +9161,8 @@ class HeraldoSetupView(discord.ui.View):
         self.add_item(select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
@@ -9091,12 +9271,50 @@ class HeraldoSetupView(discord.ui.View):
 
 
 
+@bot.tree.command(name="importkit", description="Importa un archivo JSON de plantillas con revisión y confirmación.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+async def heraldo_importkit(interaction: discord.Interaction, archivo: discord.Attachment, reemplazar: bool = False):
+    if not await configuration_access(interaction):
+        return
+    if archivo.size > 131072 or not archivo.filename.lower().endswith('.json'):
+        await interaction.response.send_message("Se admite un archivo JSON de hasta 128 KiB.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        raw = await archivo.read()
+        if len(raw) > 131072:
+            raise ValueError('Archivo demasiado grande.')
+        items = message_payload.import_kit(json.loads(raw.decode('utf-8-sig')))
+    except (ValueError, UnicodeError, discord.HTTPException):
+        await interaction.followup.send("El archivo no contiene un kit válido.", ephemeral=True)
+        return
+    current = heraldo_template_list(interaction.guild.id)
+    names = {x['name'].casefold() for x in current}
+    duplicates = [x['name'] for x in items if x['name'].casefold() in names]
+    if duplicates and not reemplazar:
+        await interaction.followup.send("Hay nombres repetidos. Renombre las plantillas o solicite reemplazo explícito.", ephemeral=True)
+        return
+    if len(current) + len(items) - (len(duplicates) if reemplazar else 0) > 25:
+        await interaction.followup.send("Se superaría el máximo de 25 plantillas.", ephemeral=True)
+        return
+    summary = f"Propuesta: {len(items) - len(duplicates)} nuevas, {len(duplicates)} reemplazos.\n"
+    summary += '\n'.join(('Reemplazar: ' if x['name'] in duplicates else 'Añadir: ') + discord.utils.escape_markdown(x['name']) for x in items)
+    await interaction.followup.send(summary + "\nLas acciones privilegiadas se excluyen. Confirme para aplicar.",
+        view=HeraldoMessageConfirmView(interaction.guild.id, interaction.user.id, 'kit', {'items': items, 'replace': reemplazar}),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
 @bot.tree.command(name="sendtemplate", description="Publica una plantilla de mensajes del servidor.")
 @app_commands.default_permissions(manage_messages=True)
 @app_commands.guild_only()
 async def heraldo_sendtemplate(interaction: discord.Interaction, canal: discord.TextChannel, plantilla: str):
     if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
         await interaction.response.send_message("Se requiere el permiso Administrar mensajes.", ephemeral=True)
+        return
+    user_perms = canal.permissions_for(interaction.user)
+    if canal.guild.id != interaction.guild.id or not user_perms.view_channel or not user_perms.send_messages or not user_perms.manage_messages:
+        await interaction.response.send_message("Se requiere acceso y Administrar mensajes en el canal de destino.", ephemeral=True)
         return
     item = next((t for t in heraldo_template_list(interaction.guild.id)
                  if t["name"].casefold() == plantilla.strip().casefold()), None)
@@ -9110,10 +9328,8 @@ async def heraldo_sendtemplate(interaction: discord.Interaction, canal: discord.
         return
     await interaction.response.defer(ephemeral=True)
     try:
-        sent = await canal.send(embed=heraldo_template_embed(item),
-            view=heraldo_template_view(dict(item, _guild_id=interaction.guild.id)),
-            allowed_mentions=discord.AllowedMentions.none())
-    except discord.HTTPException:
+        sent = await canal.send(**heraldo_template_payload(item, interaction.guild, interaction.user, canal))
+    except (discord.HTTPException, ValueError):
         await interaction.followup.send("No se pudo publicar la plantilla. Revisa el contenido y los permisos.", ephemeral=True)
         return
     await interaction.followup.send(f"Mensaje publicado correctamente en {canal.mention}: {sent.jump_url}", ephemeral=True)
@@ -9147,6 +9363,8 @@ class HeraldoEditTemplateConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Confirmar edición", style=discord.ButtonStyle.primary)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await self.interaction_check(interaction):
+            return
         guild = interaction.guild
         channel = guild.get_channel(self.channel_id) if guild else None
         item = next((x for x in heraldo_template_list(self.guild_id) if x["name"] == self.template_name), None)
@@ -9154,6 +9372,10 @@ class HeraldoEditTemplateConfirmView(discord.ui.View):
             await interaction.response.send_message("El canal o la plantilla ya no está disponible.", ephemeral=True)
             return
         me = guild.me
+        user_perms = channel.permissions_for(interaction.user)
+        if not user_perms.view_channel or not user_perms.manage_messages or not user_perms.send_messages:
+            await interaction.response.send_message("Ya no dispone de permisos para editar mensajes en ese canal.", ephemeral=True)
+            return
         perms = channel.permissions_for(me) if me else None
         if not perms or not perms.view_channel or not perms.read_message_history or not perms.send_messages or not perms.embed_links:
             await interaction.response.send_message("Permisos insuficientes para editar el mensaje.", ephemeral=True)
@@ -9164,10 +9386,8 @@ class HeraldoEditTemplateConfirmView(discord.ui.View):
             if not me or message.author.id != me.id:
                 await interaction.followup.send("Solo se pueden editar mensajes publicados por este bot.", ephemeral=True)
                 return
-            await message.edit(content=None, embed=heraldo_template_embed(item),
-                               view=heraldo_template_view(dict(item, _guild_id=self.guild_id)),
-                               allowed_mentions=discord.AllowedMentions.none())
-        except (discord.HTTPException, discord.NotFound):
+            await message.edit(**heraldo_template_payload(item, guild, interaction.user, channel))
+        except (discord.HTTPException, discord.NotFound, ValueError):
             await interaction.followup.send("No fue posible actualizar el mensaje.", ephemeral=True)
             return
         self.stop()
@@ -9197,6 +9417,10 @@ async def heraldo_edittemplate(interaction: discord.Interaction, enlace: str, pl
                  if x["name"].casefold() == plantilla.strip().casefold()), None)
     if not isinstance(channel, discord.TextChannel) or item is None:
         await interaction.response.send_message("El canal o la plantilla no existe.", ephemeral=True)
+        return
+    user_perms = channel.permissions_for(interaction.user)
+    if not user_perms.view_channel or not user_perms.manage_messages or not user_perms.read_message_history:
+        await interaction.response.send_message("Se requiere acceso y Administrar mensajes en el canal de destino.", ephemeral=True)
         return
     me = interaction.guild.me
     perms = channel.permissions_for(me) if me else None
@@ -9750,17 +9974,7 @@ class VerifyTextsModal(discord.ui.Modal):
         if not (panel and label and success):
             await interaction.response.send_message("Error: Ningún texto puede quedar vacío; no guardé nada.", ephemeral=True)
             return
-        guild_config_set(interaction.guild.id, "verify_panel_text", panel)
-        guild_config_set(interaction.guild.id, "verify_button_label", label)
-        guild_config_set(interaction.guild.id, "verify_success_text", success)
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        note = await update_verify_panel(interaction.guild)
-        await interaction.followup.send(f"Textos guardados. {note}", ephemeral=True)
-        await log_embed(
-            interaction.guild, "Textos de verificación actualizados",
-            f"{interaction.user.mention} editó el mensaje del panel, el botón o el mensaje de éxito.",
-            discord.Color.blurple(),
-        )
+        await confirm_configuration(interaction, interaction.guild.id, {'verify_panel_text': panel, 'verify_button_label': label, 'verify_success_text': success})
 
 
 @bot.tree.command(name="verify", description="Publicar el panel de verificación (botón) en un canal.")
@@ -12705,12 +12919,12 @@ class _SyncGuard:
     GRACE = 5.0
 
     def __init__(self) -> None:
-        self._until: dict[int, float] = {}
+        self._until: dict[tuple[int, int], float] = {}
 
-    def add(self, user_id: int) -> None:
+    def add(self, user_id: tuple[int, int]) -> None:
         self._until[user_id] = float("inf")
 
-    def discard(self, user_id: int) -> None:
+    def discard(self, user_id: tuple[int, int]) -> None:
         if user_id in self._until:
             self._until[user_id] = time.monotonic() + self.GRACE
 
@@ -12725,8 +12939,8 @@ class _SyncGuard:
 
 
 _condemn_sync_busy = _SyncGuard()
-_condemn_inflight: set[int] = set()
-_pardon_inflight: set[int] = set()
+_condemn_inflight: set[tuple[int, int]] = set()
+_pardon_inflight: set[tuple[int, int]] = set()
 
 
 def condemnation_protection_reason(member: discord.Member) -> str | None:
@@ -12773,17 +12987,18 @@ async def condemnation_archive_evidence(
 
     La URL del mensaje original se conserva solo como referencia. La evidencia real
     es una copia del texto y, cuando Discord lo permite, de los adjuntos re-subidos
-    por El Heraldo a Logs (o al canal de condenas como respaldo).
+    por El Heraldo a un canal de Logs privado. Una copia parcial no autoriza purgar.
     """
     message = await condemnation_fetch_source_message(guild, source_message_url)
-    if message is None:
+    if message is None or message.author.id != member.id:
         return None, None
 
     archive_channel = guild.get_channel(get_log_channel_id(guild.id))
     if not isinstance(archive_channel, discord.TextChannel):
-        archive_channel = guild.get_channel(condemnation_channel_id(guild.id))
-    if not isinstance(archive_channel, discord.TextChannel):
         return None, (message.content or "(sin texto)")[:2000]
+    # No copiar evidencias a un canal público ni al canal visible para condenados.
+    if archive_channel.permissions_for(guild.default_role).view_channel:
+        return None, None
 
     me = guild.me
     if me is None:
@@ -12837,8 +13052,11 @@ async def condemnation_archive_evidence(
     files: list[discord.File] = []
     archived_names: list[str] = []
     max_size = int(getattr(guild, "filesize_limit", 8 * 1024 * 1024))
-    for attachment in message.attachments[:5]:
+    complete = (len(message.content or "") <= 3500 and len(message.attachments) <= 10
+                and (not message.attachments or perms.attach_files))
+    for attachment in message.attachments[:10] if perms.attach_files else []:
         if attachment.size > max_size:
+            complete = False
             archived_names.append(f"{attachment.filename} (demasiado grande para re-subir)")
             continue
         try:
@@ -12846,6 +13064,7 @@ async def condemnation_archive_evidence(
             files.append(discord.File(io.BytesIO(data), filename=attachment.filename))
             archived_names.append(attachment.filename)
         except (discord.HTTPException, OSError):
+            complete = False
             archived_names.append(f"{attachment.filename} (no se pudo copiar)")
 
     if archived_names:
@@ -12861,9 +13080,12 @@ async def condemnation_archive_evidence(
             files=files,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        return archived.jump_url, snapshot_text
+        return (archived.jump_url if complete else None), snapshot_text
     except discord.HTTPException:
         return None, snapshot_text
+    finally:
+        for file in files:
+            file.close()
 
 
 async def condemnation_send_pardon_dm(
@@ -13053,7 +13275,7 @@ class CondemnationPardonView(discord.ui.View):
                 )
                 return
 
-            if member.id in _pardon_inflight:
+            if (member.guild.id, member.id) in _pardon_inflight:
                 await interaction.followup.send(
                     "Este perdón ya se está procesando.",
                     ephemeral=True,
@@ -13074,7 +13296,7 @@ class CondemnationPardonView(discord.ui.View):
                 )
                 return
 
-            _pardon_inflight.add(member.id)
+            _pardon_inflight.add((member.guild.id, member.id))
             try:
                 ok, note = await release_condemned_member(
                     member,
@@ -13083,7 +13305,7 @@ class CondemnationPardonView(discord.ui.View):
                     announcement_message=interaction.message,
                 )
             finally:
-                _pardon_inflight.discard(member.id)
+                _pardon_inflight.discard((member.guild.id, member.id))
 
             await interaction.followup.send(
                 ("" if ok else "Error: ") + note,
@@ -13361,7 +13583,12 @@ async def condemnation_sync_roles(
         r for r in member.roles
         if r.id not in excluded and r.is_assignable() and not r.managed
     ]
-    managed = [r for r in member.roles if r.managed and not r.is_default()]
+    managed = [r for r in member.roles if not r.is_default()
+               and (r.managed or not r.is_assignable()) and r.id != punish_role.id]
+    if save_snapshot:
+        # Persistir antes de la llamada remota: una interrupción después de retirar
+        # roles no debe destruir la única copia disponible para recuperarlos.
+        hp_save_punished(member.guild.id, member.id, saved_ids)
     try:
         await member.edit(roles=managed + [punish_role], reason=reason)
     except discord.Forbidden:
@@ -13369,9 +13596,6 @@ async def condemnation_sync_roles(
     except discord.HTTPException as e:
         return False, [], f"Error al cambiar roles: `{e}`"
 
-    if save_snapshot:
-        # Solo se guardan roles que realmente estaban antes de la condena y que el bot puede restaurar.
-        hp_save_punished(member.guild.id, member.id, saved_ids)
     return True, saved_ids, f"{len(removed)} rol(es) asignable(s) retirado(s); Tentad@ y Sin Verificar retirados."
 
 
@@ -13401,13 +13625,13 @@ async def condemn_member(
             "reaction": "Condena aplicada mediante la reacción de moderación.",
         }
         reason = automatic_reasons.get(origin, "Advertencia: Condena automática de seguridad de El Heraldo.")
-    if member.id in _condemn_inflight:
+    if (member.guild.id, member.id) in _condemn_inflight:
         return False, "Ya hay una condena en proceso para este miembro."
     protection = condemnation_protection_reason(member)
     if protection:
         return False, f"No se puede condenar: {protection}."
 
-    _condemn_inflight.add(member.id)
+    _condemn_inflight.add((member.guild.id, member.id))
     try:
         return await _condemn_member_inner(
             member, reason=reason, duration_minutes=duration_minutes, purge_spec=purge_spec,
@@ -13415,7 +13639,7 @@ async def condemn_member(
             source_message_url=source_message_url, source_channel_id=source_channel_id, send_dm=send_dm, announce=announce,
         )
     finally:
-        _condemn_inflight.discard(member.id)
+        _condemn_inflight.discard((member.guild.id, member.id))
 
 
 async def _condemn_member_inner(
@@ -13433,12 +13657,12 @@ async def _condemn_member_inner(
     announce: bool,
 ) -> tuple[bool, str]:
     existing = condemnation_get(member.guild.id, member.id)
-    active_role_id = condemnation_role_id(existing)
+    active_role_id = condemnation_role_id(existing, member.guild.id)
     snapshot = preserve_role_ids
     if snapshot is None and existing is None:
         snapshot = [r.id for r in member.roles]
 
-    _condemn_sync_busy.add(member.id)
+    _condemn_sync_busy.add((member.guild.id, member.id))
     try:
         ok, saved_ids, role_note = await condemnation_sync_roles(
             member, preserve_role_ids=snapshot, save_snapshot=(existing is None),
@@ -13446,7 +13670,7 @@ async def _condemn_member_inner(
             role_id=active_role_id,
         )
     finally:
-        _condemn_sync_busy.discard(member.id)
+        _condemn_sync_busy.discard((member.guild.id, member.id))
     if not ok:
         return False, role_note
     removed_role_ids = [
@@ -13524,6 +13748,9 @@ async def _condemn_member_inner(
                 (announcement_message_id, member.guild.id, member.id),
             )
             conn.close()
+    if purge_spec and purge_spec[0] != "none" and source_message_url and not evidence_url:
+        role_note += "; purga cancelada: no se pudo conservar íntegramente la evidencia en un canal privado"
+        purge_spec = None
     if purge_spec and purge_spec[0] != "none":
         kind, value = purge_spec
         after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
@@ -13562,8 +13789,25 @@ async def release_condemned_member(
     automatic: bool = False, pardon: bool = False,
     announcement_message: discord.Message | None = None,
 ) -> tuple[bool, str]:
+    key = (member.guild.id, member.id)
+    if key in _condemn_inflight:
+        return False, "Ya hay una operación de condena en proceso para este miembro."
+    _condemn_inflight.add(key)
+    try:
+        return await _release_condemned_member_inner(
+            member, released_by=released_by, automatic=automatic, pardon=pardon,
+            announcement_message=announcement_message)
+    finally:
+        _condemn_inflight.discard(key)
+
+
+async def _release_condemned_member_inner(
+    member: discord.Member, *, released_by: discord.abc.User | None = None,
+    automatic: bool = False, pardon: bool = False,
+    announcement_message: discord.Message | None = None,
+) -> tuple[bool, str]:
     row = condemnation_get(member.guild.id, member.id)
-    punish_role = member.guild.get_role(condemnation_role_id(row))
+    punish_role = member.guild.get_role(condemnation_role_id(row, member.guild.id))
     if row is None and not (punish_role and punish_role in member.roles):
         return False, "Ese miembro no tiene una condena activa."
 
@@ -13582,13 +13826,13 @@ async def release_condemned_member(
         if not r.is_default() and (punish_role is None or r.id != punish_role.id)
     ]
     new_roles = list({r.id: r for r in current + restore}.values())
-    _condemn_sync_busy.add(member.id)
+    _condemn_sync_busy.add((member.guild.id, member.id))
     try:
         await member.edit(roles=new_roles, reason=("Condena expirada" if automatic else f"Liberado por {released_by}"))
     except discord.HTTPException as e:
         return False, f"No pude cambiar sus roles: `{e}`"
     finally:
-        _condemn_sync_busy.discard(member.id)
+        _condemn_sync_busy.discard((member.guild.id, member.id))
 
     linked_case_number = (
         int(row["moderation_case_number"])
@@ -13664,18 +13908,16 @@ async def check_expired_condemnations() -> None:
         user_id = int(row["user_id"])
         guild = bot.get_guild(guild_id)
         if guild is None:
-            condemnation_deactivate(guild_id, user_id, resolution="expired")
-            linked_case = (
-                int(row["moderation_case_number"])
-                if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
-                else None
-            )
-            if linked_case is not None:
-                moderation_case_close(
-                    guild_id, linked_case, closed_by=None, resolution="Expirado automáticamente"
-                )
+            # La indisponibilidad temporal del servidor no resuelve el expediente.
             continue
         member = guild.get_member(user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(user_id)
+            except discord.NotFound:
+                pass
+            except discord.HTTPException:
+                continue  # Reintentar sin perder la fotografía de roles.
         if member is not None:
             await release_condemned_member(member, automatic=True)
         else:
@@ -13696,17 +13938,17 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
     - condena activa pero sin el rol: si el miembro reingresó después, se le reaplica; si no, se le libera.
     - rol Condenado sin condena registrada: se condena como si lo hubieran puesto a mano."""
     for row in condemnation_list(guild.id):
-        role = guild.get_role(condemnation_role_id(row))
+        role = guild.get_role(condemnation_role_id(row, guild.id))
         member = guild.get_member(row["user_id"])
         if role is None or member is None or role in member.roles:
             continue
         condemned_at = datetime.fromisoformat(row["condemned_at"])
         if member.joined_at and member.joined_at > condemned_at:
-            _condemn_sync_busy.add(member.id)
+            _condemn_sync_busy.add((member.guild.id, member.id))
             try:
                 await condemnation_sync_roles(member, save_snapshot=False, reason="Condena activa reaplicada al arrancar", role_id=role.id)
             finally:
-                _condemn_sync_busy.discard(member.id)
+                _condemn_sync_busy.discard((member.guild.id, member.id))
         else:
             await release_condemned_member(member, automatic=False)
         await asyncio.sleep(1)
@@ -14033,6 +14275,102 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
     await log_embed(interaction.guild, "Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
 
 
+class ConfigurationConfirmView(discord.ui.View):
+    """Borrador con control de concurrencia y confirmación explícita."""
+    def __init__(self, guild_id, owner_id, changes):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.changes = dict(changes)
+        self.original = {key: guild_config_get(guild_id, key) for key in changes}
+        self.finished = False
+
+    async def interaction_check(self, interaction):
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def save(self, interaction, button):
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        conn = db_connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for key, original in self.original.items():
+                row = conn.execute("SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?",
+                                   (self.guild_id, key)).fetchone()
+                if (row[0] if row else None) != original:
+                    conn.rollback()
+                    await interaction.response.send_message("La configuración cambió. Abra de nuevo el editor para evitar sobrescribir cambios.", ephemeral=True)
+                    return
+            for key, value in self.changes.items():
+                if value is None:
+                    conn.execute("DELETE FROM guild_settings WHERE guild_id = ? AND key = ?", (self.guild_id, key))
+                else:
+                    conn.execute("INSERT INTO guild_settings (guild_id, key, value) VALUES (?, ?, ?) ON CONFLICT(guild_id, key) DO UPDATE SET value=excluded.value",
+                                 (self.guild_id, key, str(value)))
+            conn.commit()
+        finally:
+            conn.close()
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content="Configuración guardada. Puede volver al editor para consultar la vista previa.", view=None)
+        try:
+            if any(key.startswith('honeypot_warning_') for key in self.changes):
+                errors = await hp_sync_all_warnings(interaction.guild)
+                if errors:
+                    await interaction.followup.send('Configuración guardada. Algunos avisos no se actualizaron:\n' + '\n'.join(errors)[:1500], ephemeral=True)
+            if {'motw_weekday', 'motw_hour'}.intersection(self.changes):
+                motw_mark_current_slot(self.guild_id)
+            if any(key.startswith('suggestion_panel_') for key in self.changes):
+                await suggestion_ensure_panel(interaction.guild)
+            if any(key.startswith('orientation_embed_') for key in self.changes) and orientation_enabled(self.guild_id):
+                await ensure_orientation_system(interaction.guild)
+            if {'verify_panel_text', 'verify_button_label', 'verify_success_text'}.intersection(self.changes):
+                await update_verify_panel(interaction.guild)
+                await log_embed(interaction.guild, "Textos de verificación actualizados",
+                    f"{interaction.user.mention} confirmó los textos del panel.", discord.Color.blurple())
+        except Exception:
+            traceback.print_exc()
+            await interaction.followup.send("La configuración se guardó, pero no se pudo sincronizar el panel publicado. Puede reintentar su publicación desde el editor.", ephemeral=True)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content="Propuesta cancelada. No se guardaron cambios.", view=None)
+
+
+async def confirm_configuration(interaction, guild_id, changes):
+    if not await configuration_access(interaction, guild_id):
+        return
+    report = {key: {'actual': guild_config_get(guild_id, key), 'propuesto': value}
+              for key, value in changes.items()}
+    summary = '\n'.join(f"{key.replace('_', ' ')}: {str(value)[:140] if value is not None else 'Restaurar valor predeterminado'}"
+                        for key, value in changes.items())
+    report_file = discord.File(io.BytesIO(json.dumps(report, ensure_ascii=False, indent=2).encode('utf-8')),
+                               filename='propuesta.json')
+    try:
+        await interaction.response.send_message(
+            "Revise la propuesta y confirme el guardado. El archivo adjunto incluye los valores completos.\n\n"
+            + discord.utils.escape_markdown(summary)[:1600], file=report_file,
+            view=ConfigurationConfirmView(guild_id, interaction.user.id, changes), ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none())
+    finally:
+        report_file.close()
+
+
+async def confirm_condemnation_template(interaction, guild_id, values):
+    await confirm_configuration(interaction, guild_id,
+        {f"condemnation_template_{key}": value for key, value in values.items()})
+
+
 class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
     title_input = discord.ui.TextInput(label="Título", required=False, max_length=256)
     description_input = discord.ui.TextInput(
@@ -14074,15 +14412,10 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
                     ephemeral=True,
                 )
                 return
-        condemnation_template_set(interaction.guild.id, "title", str(self.title_input).strip())
-        condemnation_template_set(interaction.guild.id, "description", str(self.description_input).strip())
-        condemnation_template_set(interaction.guild.id, "color", color or CONDEMNATION_TEMPLATE_DEFAULTS["color"])
-        condemnation_template_set(interaction.guild.id, "footer", str(self.footer_input).strip())
-        condemnation_template_set(
-            interaction.guild.id, "button_label",
-            str(self.button_label_input).strip() or CONDEMNATION_TEMPLATE_DEFAULTS["button_label"],
-        )
-        await condemnation_template_editor_update(interaction, "Diseño actualizado.", self.return_to)
+        await confirm_condemnation_template(interaction, self.guild_id, {
+            "title": str(self.title_input).strip(), "description": str(self.description_input).strip(),
+            "color": color or CONDEMNATION_TEMPLATE_DEFAULTS["color"], "footer": str(self.footer_input).strip(),
+            "button_label": str(self.button_label_input).strip() or CONDEMNATION_TEMPLATE_DEFAULTS["button_label"]})
 
 
 class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"):
@@ -14110,9 +14443,7 @@ class CondemnationDetailsModal(discord.ui.Modal, title="Condenados · Etiquetas"
             ("label_reason", self.reason_input.value),
             ("label_when", self.when_input.value),
         )
-        for key, value in values:
-            condemnation_template_set(interaction.guild.id, key, value.strip())
-        await condemnation_template_editor_update(interaction, "Etiquetas principales actualizadas.", self.return_to)
+        await confirm_condemnation_template(interaction, self.guild_id, {key: value.strip() for key, value in values})
 
 
 class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración"):
@@ -14133,16 +14464,14 @@ class CondemnationDurationModal(discord.ui.Modal, title="Condenados · Duración
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.duration_input).strip()
         if value.lower() in {"indefinida", "indefinido", "permanente", "hasta retirar", "0"}:
-            set_condemnation_default_duration(None, interaction.guild.id)
-            await condemnation_template_editor_update(interaction, "Duración predeterminada: **Indefinida (hasta retirar)**.", self.return_to)
+            await confirm_configuration(interaction, self.guild_id, {"condemnation_default_duration": "indefinida"})
             return
         try:
             minutes = parse_duration(value, 1, CONDEMNATION_MAX_MINUTES)
         except ValueError as e:
             await interaction.response.send_message(f"Error: {e}", ephemeral=True)
             return
-        set_condemnation_default_duration(value, interaction.guild.id)
-        await condemnation_template_editor_update(interaction, f"Duración predeterminada: **{format_duration(minutes)}**.", self.return_to)
+        await confirm_configuration(interaction, self.guild_id, {"condemnation_default_duration": value})
 
 
 class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más etiquetas"):
@@ -14170,9 +14499,7 @@ class CondemnationMoreDetailsModal(discord.ui.Modal, title="Condenados · Más e
             ("label_roles", self.roles_input.value),
             ("label_message", self.evidence_input.value),
         )
-        for key, value in values:
-            condemnation_template_set(interaction.guild.id, key, value.strip())
-        await condemnation_template_editor_update(interaction, "Más etiquetas actualizadas.", self.return_to)
+        await confirm_condemnation_template(interaction, self.guild_id, {key: value.strip() for key, value in values})
 
 
 class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace"):
@@ -14197,8 +14524,7 @@ class CondemnationButtonUrlModal(discord.ui.Modal, title="Condenados · Enlace")
                 ephemeral=True,
             )
             return
-        condemnation_template_set(interaction.guild.id, "button_url", url)
-        await condemnation_template_editor_update(interaction, "Enlace del botón actualizado.", self.return_to)
+        await confirm_condemnation_template(interaction, self.guild_id, {"button_url": url})
 
 
 def condemnation_template_preview(guild: discord.Guild, member: discord.Member) -> discord.Embed:
@@ -14287,6 +14613,8 @@ class CondemnationTemplateEditorView(discord.ui.View):
         self.return_to = return_to
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Este editor no es tuyo. Usa /condenar template para abrir el tuyo.",
@@ -14328,12 +14656,8 @@ class CondemnationTemplateEditorView(discord.ui.View):
 
     @discord.ui.button(label="Restaurar valores", style=discord.ButtonStyle.danger, row=1)
     async def reset(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        condemnation_template_reset(interaction.guild.id)
-        await condemnation_template_editor_update(
-            interaction,
-            "La plantilla de condenados volvió a sus valores predeterminados.",
-            self.return_to,
-        )
+        await confirm_condemnation_template(interaction, interaction.guild.id,
+            {key: None for key in CONDEMNATION_TEMPLATE_DEFAULTS})
 
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
@@ -14372,8 +14696,8 @@ async def condenar_template(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         content=(
             "**Editor de la tarjeta de condenados**\n"
-            "Selecciona una sección para abrir su formulario. Los cambios se guardan "
-            "automáticamente y la vista previa se actualiza al terminar cada formulario."
+            "Seleccione una sección para abrir su formulario. Los cambios requieren "
+            "confirmación mediante el botón Guardar cambios."
         ),
         embed=condemnation_template_preview(interaction.guild, interaction.user),
         view=CondemnationTemplateEditorView(interaction.user.id, return_to="setup"),
@@ -14670,17 +14994,10 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.text).strip()
-        if value and value != HONEYPOT_WARNING_TEXT_DEFAULT:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", value)
-        else:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "text")
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "honeypot_warning_text": value if value != HONEYPOT_WARNING_TEXT_DEFAULT else "",
+            "honeypot_warning_style": "text",
+        })
 
 
 @honeypot_group.command(name="setup", description="Ver o cambiar la configuración del honeypot.")
@@ -14934,27 +15251,15 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
                 await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
                 return
 
-        hp_setting_set(interaction.guild.id, "honeypot_warning_title", title)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_description", description)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_color", color.upper())
-        hp_setting_set(interaction.guild.id, "honeypot_warning_image", image)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_thumbnail", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_footer", footer)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "custom")
-
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Embed personalizado guardado y aplicado a los avisos fijados."
-            + ("\n" + "\n".join(errors) if errors else ""),
-            ephemeral=True,
-        )
-        await log_embed(
-            interaction.guild,
-            "Embed del honeypot actualizado",
-            f"{interaction.user.mention} personalizó título, descripción, color, imagen y pie del aviso.",
-            discord.Color.blurple(),
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "honeypot_warning_title": title,
+            "honeypot_warning_description": description,
+            "honeypot_warning_color": color.upper(),
+            "honeypot_warning_image": image,
+            "honeypot_warning_thumbnail": "",
+            "honeypot_warning_footer": footer,
+            "honeypot_warning_style": "custom",
+        })
 
 
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
@@ -17025,6 +17330,10 @@ def _content_embed(content: str) -> discord.Embed:
 
 def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     """Devuelve (content, kw) con el texto convertido a embed y todos los embeds con footer."""
+    if isinstance(kw.get("embeds"), message_payload.TemplateEmbeds):
+        # Las plantillas validan su propio contenido, diseño y límite total de 6000.
+        # Convertir texto o añadir pies aquí rompería esos límites y el modo texto.
+        return content, kw
     embed = kw.get("embed")
     embeds = kw.get("embeds")
     has_embed = embed not in (None, _MISSING)
@@ -18507,20 +18816,7 @@ class SuggestionPanelEditorModal(discord.ui.Modal, title="Mensajes · Panel de s
             )
             return
 
-        guild_config_set(self.guild_id, "suggestion_panel_title", str(self.title_input).strip())
-        guild_config_set(self.guild_id, "suggestion_panel_description", str(self.description_input).strip())
-        guild_config_set(self.guild_id, "suggestion_panel_color", color.upper())
-        guild_config_set(self.guild_id, "suggestion_panel_image", image)
-        guild_config_set(self.guild_id, "suggestion_panel_button_label", str(self.button_input).strip())
-
-        await interaction.response.defer(ephemeral=True)
-        try:
-            await suggestion_ensure_panel(interaction.guild)
-            note = "El panel publicado también fue actualizado."
-        except Exception:
-            traceback.print_exc()
-            note = "La configuración se guardó, pero no pude refrescar el panel publicado."
-        await interaction.followup.send(f"Panel de sugerencias guardado. {note}", ephemeral=True)
+        await confirm_configuration(interaction, self.guild_id, {'suggestion_panel_title': str(self.title_input).strip(), 'suggestion_panel_description': str(self.description_input).strip(), 'suggestion_panel_color': color.upper(), 'suggestion_panel_image': image, 'suggestion_panel_button_label': str(self.button_input).strip()})
 
 
 class HeraldoMessagesView(discord.ui.View):
@@ -18530,6 +18826,8 @@ class HeraldoMessagesView(discord.ui.View):
         self.owner_id = owner_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este editor de mensajes no es tuyo.", ephemeral=True)
             return False
@@ -18608,6 +18906,12 @@ async def mensajes_command(interaction: discord.Interaction) -> None:
 
 
 mensajes_command.error(verify_command_error)
+
+import message_automation
+message_automation_engine = message_automation.install(globals())
+message_components.install(globals())
+import message_editor
+message_editor.install(globals())
 
 # ---------------------------------------------------------------------------
 
