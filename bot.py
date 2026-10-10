@@ -13813,13 +13813,20 @@ async def _release_condemned_member_inner(
 
     saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.guild.id, member.id) or [])
     restore: list[discord.Role] = []
-    lost = 0
+    unrestoreable_role_ids: list[int] = []
     for rid in saved:
         role = member.guild.get_role(rid)
         if role is not None and role.is_assignable() and not role.managed:
             restore.append(role)
         else:
-            lost += 1
+            unrestoreable_role_ids.append(rid)
+    lost = len(unrestoreable_role_ids)
+    # Conservar identificadores incluso si el rol fue eliminado o ya no es manejable.
+    # El detalle solo se incorpora al registro administrativo de la resolución.
+    unrestored_detail = (
+        "\nRoles no restaurados (ID): " + ", ".join(str(role_id) for role_id in unrestoreable_role_ids)
+        if unrestoreable_role_ids else ""
+    )
 
     current = [
         r for r in member.roles
@@ -13881,7 +13888,7 @@ async def _release_condemned_member_inner(
             member.guild, "Condena perdonada",
             f"Expediente: {case_id}\nUsuario: {member.mention} ({member.id})\n"
             f"Motivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\n"
-            f"Perdonó: {released_by.mention}\nRoles: {text}\n"
+            f"Perdonó: {released_by.mention}\nRoles: {text}{unrestored_detail}\n"
             f"Tarjeta original: {'cerrada' if card_ok else 'Advertencia: no cerrada'}\n"
             f"Tarjeta de resolución: {'creada' if card_ok else 'Advertencia: no creada'}\n"
             f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado'}",
@@ -13890,7 +13897,7 @@ async def _release_condemned_member_inner(
         return True, text + (
             "; tarjeta de resolución creada" if card_ok else "; no pude publicar la tarjeta de resolución"
         ) + ("; DM de perdón enviado" if dm_ok else "; DM de perdón no disponible")
-    await log_embed(member.guild, "Condena levantada", f"{member.mention} — {text}. Por: {released_by.mention if released_by else 'El Heraldo'}.", discord.Color.green())
+    await log_embed(member.guild, "Condena levantada", f"{member.mention} — {text}{unrestored_detail}. Por: {released_by.mention if released_by else 'El Heraldo'}.", discord.Color.green())
     return True, text
 
 
