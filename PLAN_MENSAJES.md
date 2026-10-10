@@ -1,5 +1,21 @@
 # Plan de integración: /setup → Mensajes (referencia Sapphire)
 
+## Estado vigente para revisión — 2026-10-10
+
+Esta tabla sustituye las casillas históricas que se conservan debajo como registro de etapas. No acredita pruebas interactivas ni paridad completa con Sapphire.
+
+| Área | Implementado en PR #7 | Pendiente |
+| --- | --- | --- |
+| Plantillas | Texto, hasta diez embeds, variables, JSON, editor visual de campos/autor/pie/imágenes y confirmación | Navegación uniforme y validación Discord |
+| Componentes | Botones/menús independientes, selección múltiple, multiacción confirmada, permisos y auditoría | Editor visual de acciones y selección persistente por miembro |
+| Kits | v1/v2, archivo, reemplazo confirmado, portabilidad visual | Enlace/ID seguro y comparación por campo |
+| Automatizaciones | Programación, autorespuestas, sticky y webhook propio | Recorrido real y reinicios |
+| Predeterminados | Estudios de cinco familias y editor de Logs; formularios Honeypot confirmados | Catálogo completo y Raw/restauración uniforme |
+
+Ver `REVISION_PR7.md` para límites, ejemplo JSON y recorrido de aceptación. Revisión de código preparada; no es una declaración de alcance total completado.
+
+## Registro histórico de etapas
+
 ## Referencia y alcance
 - Fuente: https://docs.sapph.xyz/#/messages
 - Componentes: https://docs.sapph.xyz/#/guides/guide-to-components

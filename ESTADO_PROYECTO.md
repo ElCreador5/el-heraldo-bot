@@ -110,3 +110,12 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Accesos explicativos en /setup → Mensajes; listados extensos se adjuntan completos, sin perder identificadores por truncamiento.
 - Verificación: 91 pruebas offline (39 raíz + 52 tests), compilación correcta. Pendiente CI del nuevo HEAD y pruebas reales. No se ha desplegado el PR #7.
 - Próximo bloque: componentes por plantilla/opción y acciones múltiples, editor visual avanzado, catálogo de textos, revisión restante de condenas/restauración/evidencias y comandos heredados sin confirmación. Después validar el lote en laboratorio y registrar el recorrido interactivo. No declarar alcance total terminado.
+
+
+### Estado consolidado para revisión del PR #7 — 2026-10-10
+- Esta sección sustituye las listas de pendientes históricas anteriores. Nuevo editor `/editar_plantilla`: borradores visuales de texto independiente, múltiples embeds, imágenes, autor, pie y campos; guardar requiere confirmación y detecta cambios concurrentes. Un modal tardío no reabre un editor cancelado.
+- `/componentes_mensaje`: botones y menús por plantilla, opciones independientes, selección múltiple y secuencias confirmadas de roles/respuestas/DM/canal/edición/eliminación. Revalida permisos, condena activa y jerarquía; limita frecuencia en SQLite y conserva auditoría de resultados sin contenido durante 30 días. El primer fallo detiene la secuencia con resultado parcial; no hay reversión automática.
+- Honeypot: texto y diseño proponen cambios sin persistir; sincronización después de confirmar. La fotografía de roles de condena se guarda antes de la operación remota.
+- Pruebas locales finales: 106 offline (39 raíz + 67 tests), compilación, dependencias y diff correctos. Sin Gateway ni pruebas Discord reales. Consultar GitHub para el resultado de CI del HEAD publicado.
+- PR #7 queda preparado para revisión de código; no equivale a alcance total completado ni a despliegue validado. Laboratorio sigue en 34fa94f; main permanece intacta en 6f9f9ee.
+- Pendientes y recorrido reproducible en REVISION_PR7.md. Prioridad: configuración heredada sin confirmación, archivo integral de purgas, restauración parcial; después catálogo uniforme y mejoras de importación/navegación. Agent AVD no identificado inequívocamente.

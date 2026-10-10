@@ -52,3 +52,11 @@ Una nueva decisión debe indicar fecha, motivo y qué regla reemplaza. No modifi
 - Autorespuestas usan texto literal, sin expresiones regulares suministradas por usuarios. Solo una respuesta por mensaje y límite común del canal, persistente entre reinicios.
 - Sticky elimina únicamente su publicación anterior verificada, antes de enviar la sustituta. Se conserva la última publicación al desactivar la regla. Una interrupción no autoriza repetir envíos inciertos.
 - Los webhooks se administran exclusivamente mediante el bot y el canal seleccionado; no aceptar tokens o destinos arbitrarios. Los botones y selectores de roles quedan reservados a publicaciones directas del bot, conservando esa funcionalidad por su vía original.
+
+
+### Editores y componentes para revisión — 2026-10-10
+- Los formularios visuales editan un borrador; un valor que exceda la capacidad del formulario se conserva y deriva al editor JSON. Cancelar o caducar invalida los modales pendientes.
+- Toda secuencia de componentes requiere confirmación del usuario que la activó, con destinos completos adjuntos; se detiene ante el primer error. Las acciones públicas requieren permisos actuales de Administrar mensajes, acceso y envío para ejecutor y autor en destino. Los resultados parciales son explícitos.
+- Los componentes quedan ligados a una revisión de plantilla; cambiar su configuración invalida las publicaciones anteriores hasta republicarlas. Las respuestas generadas no encadenan componentes.
+- La copia de roles se persiste antes de retirarlos. Una operación Discord y una escritura SQLite no son atómicas; conservar pruebas de recuperación en el recorrido de revisión.
+- El PR preparado para revisión no implica aprobación de producción, paridad completa con Sapphire ni cierre de los pendientes enumerados en REVISION_PR7.md.

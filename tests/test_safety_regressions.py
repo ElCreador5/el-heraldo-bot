@@ -26,6 +26,43 @@ def interaction(allowed=True, guild_id=901):
 
 
 class SafetyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_condemnation_snapshot_exists_before_remote_role_edit(self):
+        ordinary = NS(id=700, managed=False, is_default=lambda: False, is_assignable=lambda: True)
+        punish = NS(id=701, managed=False, is_default=lambda: False, is_assignable=lambda: True)
+        guild = NS(id=905, get_role=lambda rid: {700: ordinary, 701: punish}.get(rid))
+        async def interrupted_edit(**kwargs):
+            self.assertEqual(b.hp_get_punished(905, 11), [700])
+            raise RuntimeError('Interrupción después de persistir')
+        member = NS(id=11, guild=guild, roles=[ordinary], edit=interrupted_edit)
+        with patch.object(b, 'hp_role_problem', return_value=None):
+            with self.assertRaises(RuntimeError):
+                await b.condemnation_sync_roles(member, role_id=701, save_snapshot=True)
+        self.assertEqual(b.hp_get_punished(905, 11), [700])
+
+    async def test_honeypot_warning_requires_confirmation_and_cancel_preserves_value(self):
+        b.guild_config_set(901, 'honeypot_warning_text', 'Anterior')
+        modal = b.HoneypotWarningModal(901)
+        modal.text._value = 'Propuesta'
+        i = interaction()
+        with patch.object(b, 'hp_sync_all_warnings', new=AsyncMock()) as sync:
+            await modal.on_submit(i)
+            self.assertEqual(b.guild_config_get(901, 'honeypot_warning_text'), 'Anterior')
+            view = i.response.send_message.call_args.kwargs['view']
+            await view.cancel.callback(interaction())
+            sync.assert_not_awaited()
+            self.assertEqual(b.guild_config_get(901, 'honeypot_warning_text'), 'Anterior')
+
+    async def test_honeypot_embed_revoked_permission_never_proposes_change(self):
+        modal = b.HoneypotWarningEmbedModal(901)
+        modal.title_input._value = 'Nuevo'
+        modal.description_input._value = 'Descripción'
+        modal.color_input._value = '112233'
+        modal.image_input._value = ''
+        modal.footer_input._value = ''
+        i = interaction(False)
+        await modal.on_submit(i)
+        self.assertNotIn('view', i.response.send_message.call_args.kwargs)
+
     async def test_explicit_template_bypasses_global_embed_conversion(self):
         guild = NS(id=901, name='Laboratorio')
         payload = b.heraldo_template_payload({'content': 'Texto independiente'}, guild)

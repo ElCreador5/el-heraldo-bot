@@ -113,6 +113,7 @@ import io
 from collections import deque
 import json
 import message_payload
+import message_components
 import io
 import os
 import re
@@ -6703,6 +6704,8 @@ def heraldo_template_payload(template, guild, member=None, channel=None):
 
 
 def heraldo_template_view(template: dict) -> discord.ui.View | None:
+    if template.get('componentes'):
+        return message_components.build_view(template, int(template['_guild_id']))
     label, url = template.get("button_label", ""), template.get("button_url", "")
     view = discord.ui.View(timeout=None)
     if label and url:
@@ -7335,13 +7338,13 @@ class HeraldoMessagesSetupView(discord.ui.View):
             return
 
         if selected == "components":
-            await interaction.response.edit_message(content="**El Heraldo · Componentes**\n\nConfigura botones de roles reutilizables.", embed=None,
+            await interaction.response.edit_message(content="**El Heraldo · Componentes**\n\nConfigure botones de roles reutilizables. Para botones y menús con opciones independientes y varias acciones, use `/componentes_mensaje` con un archivo JSON.", embed=None,
                 view=HeraldoMessageComponentsSetupView(self.guild_id, self.owner_id))
             return
 
         if selected == "templates":
             await interaction.response.edit_message(
-                content="**El Heraldo · Plantillas**\n\nCrea, edita y publica plantillas reutilizables.",
+                content="**El Heraldo · Plantillas**\n\nCree, edite y publique plantillas reutilizables. Use `/editar_plantilla` para el editor visual de contenido, múltiples embeds, campos, imágenes, autor y pie.",
                 embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
             )
             return
@@ -13582,6 +13585,10 @@ async def condemnation_sync_roles(
     ]
     managed = [r for r in member.roles if not r.is_default()
                and (r.managed or not r.is_assignable()) and r.id != punish_role.id]
+    if save_snapshot:
+        # Persistir antes de la llamada remota: una interrupción después de retirar
+        # roles no debe destruir la única copia disponible para recuperarlos.
+        hp_save_punished(member.guild.id, member.id, saved_ids)
     try:
         await member.edit(roles=managed + [punish_role], reason=reason)
     except discord.Forbidden:
@@ -13589,9 +13596,6 @@ async def condemnation_sync_roles(
     except discord.HTTPException as e:
         return False, [], f"Error al cambiar roles: `{e}`"
 
-    if save_snapshot:
-        # Solo se guardan roles que realmente estaban antes de la condena y que el bot puede restaurar.
-        hp_save_punished(member.guild.id, member.id, saved_ids)
     return True, saved_ids, f"{len(removed)} rol(es) asignable(s) retirado(s); Tentad@ y Sin Verificar retirados."
 
 
@@ -14313,6 +14317,10 @@ class ConfigurationConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Configuración guardada. Puede volver al editor para consultar la vista previa.", view=None)
         try:
+            if any(key.startswith('honeypot_warning_') for key in self.changes):
+                errors = await hp_sync_all_warnings(interaction.guild)
+                if errors:
+                    await interaction.followup.send('Configuración guardada. Algunos avisos no se actualizaron:\n' + '\n'.join(errors)[:1500], ephemeral=True)
             if {'motw_weekday', 'motw_hour'}.intersection(self.changes):
                 motw_mark_current_slot(self.guild_id)
             if any(key.startswith('suggestion_panel_') for key in self.changes):
@@ -14330,6 +14338,9 @@ class ConfigurationConfirmView(discord.ui.View):
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction, button):
         if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
         self.finished = True
         self.stop()
@@ -14983,17 +14994,10 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.text).strip()
-        if value and value != HONEYPOT_WARNING_TEXT_DEFAULT:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", value)
-        else:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "text")
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "honeypot_warning_text": value if value != HONEYPOT_WARNING_TEXT_DEFAULT else "",
+            "honeypot_warning_style": "text",
+        })
 
 
 @honeypot_group.command(name="setup", description="Ver o cambiar la configuración del honeypot.")
@@ -15247,27 +15251,15 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
                 await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
                 return
 
-        hp_setting_set(interaction.guild.id, "honeypot_warning_title", title)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_description", description)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_color", color.upper())
-        hp_setting_set(interaction.guild.id, "honeypot_warning_image", image)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_thumbnail", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_footer", footer)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "custom")
-
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Embed personalizado guardado y aplicado a los avisos fijados."
-            + ("\n" + "\n".join(errors) if errors else ""),
-            ephemeral=True,
-        )
-        await log_embed(
-            interaction.guild,
-            "Embed del honeypot actualizado",
-            f"{interaction.user.mention} personalizó título, descripción, color, imagen y pie del aviso.",
-            discord.Color.blurple(),
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "honeypot_warning_title": title,
+            "honeypot_warning_description": description,
+            "honeypot_warning_color": color.upper(),
+            "honeypot_warning_image": image,
+            "honeypot_warning_thumbnail": "",
+            "honeypot_warning_footer": footer,
+            "honeypot_warning_style": "custom",
+        })
 
 
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
@@ -18917,6 +18909,9 @@ mensajes_command.error(verify_command_error)
 
 import message_automation
 message_automation_engine = message_automation.install(globals())
+message_components.install(globals())
+import message_editor
+message_editor.install(globals())
 
 # ---------------------------------------------------------------------------
 
