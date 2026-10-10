@@ -26,6 +26,81 @@ def interaction(allowed=True, guild_id=901):
 
 
 class SafetyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_template_bypasses_global_embed_conversion(self):
+        guild = NS(id=901, name='Laboratorio')
+        payload = b.heraldo_template_payload({'content': 'Texto independiente'}, guild)
+        content, result = b._embedify(payload.pop('content'), payload, guild, None)
+        self.assertEqual(content, 'Texto independiente')
+        self.assertEqual(result['embeds'], [])
+        self.assertNotIn('embed', result)
+
+    async def test_template_limit_not_increased_by_automatic_footer(self):
+        guild = NS(id=901, name='Laboratorio')
+        item = {'embeds': [{'description': 'a' * 4000}, {'description': 'b' * 2000}]}
+        payload = b.heraldo_template_payload(item, guild)
+        _, result = b._embedify(payload.pop('content'), payload, guild, None)
+        self.assertEqual(sum(len(e) for e in result['embeds']), 6000)
+        self.assertTrue(all(not e.footer.text for e in result['embeds']))
+
+    async def test_setup_times_are_only_saved_after_confirmation(self):
+        b.guild_config_set(901, 'verify_timeout', '60')
+        modal = b.HeraldoGeneralConfigModal(901)
+        modal.verify_timeout._value = '7'
+        modal.orientation_timeout._value = '8'
+        modal.sin_verificar_timeout._value = '9'
+        i = interaction()
+        await modal.on_submit(i)
+        self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '60')
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.save.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '420')
+
+    async def test_setup_modal_with_revoked_permission_never_saves(self):
+        b.guild_config_set(901, 'join_roles_delay_seconds', '5')
+        modal = b.JoinRolesDelayModal(901)
+        modal.delay._value = '30'
+        i = interaction(False)
+        await modal.on_submit(i)
+        self.assertEqual(b.guild_config_get(901, 'join_roles_delay_seconds'), '5')
+        self.assertNotIn('view', i.response.send_message.call_args.kwargs)
+
+    async def test_join_queue_survives_new_connection_and_does_not_reset_delay(self):
+        member = NS(id=501, guild=NS(id=901), bot=False, joined_at=b.datetime.now(b.timezone.utc))
+        with patch.object(b, 'get_join_roles_delay', return_value=120):
+            b.queue_join_roles(member)
+            conn = b.db_connect()
+            due = conn.execute('SELECT due_at FROM pending_join_roles WHERE user_id=501').fetchone()[0]
+            conn.close()
+            b.queue_join_roles(member)
+        conn = b.db_connect()
+        self.assertEqual(conn.execute('SELECT due_at FROM pending_join_roles WHERE user_id=501').fetchone()[0], due)
+        conn.close()
+
+    async def test_join_queue_recovers_without_repeating_delay(self):
+        joined = b.datetime.now(b.timezone.utc)
+        member = NS(id=502, guild=NS(id=901), bot=False, joined_at=joined, pending=False)
+        with patch.object(b, 'get_join_roles_delay', return_value=0):
+            b.queue_join_roles(member)
+        guild = NS(fetch_member=AsyncMock(return_value=member))
+        with (patch.object(b.bot, 'get_guild', return_value=guild),
+              patch.object(b, 'condemnation_get', return_value=None),
+              patch.object(b, 'assign_join_roles', new=AsyncMock(return_value=(True, 'OK'))) as assign):
+            await b.process_pending_join_roles()
+        assign.assert_awaited_once_with(member, skip_delay=True)
+        conn = b.db_connect()
+        self.assertIsNone(conn.execute('SELECT 1 FROM pending_join_roles WHERE user_id=502').fetchone())
+        conn.close()
+
+    async def test_join_queue_preserves_unavailable_server(self):
+        member = NS(id=503, guild=NS(id=901), bot=False, joined_at=b.datetime.now(b.timezone.utc))
+        with patch.object(b, 'get_join_roles_delay', return_value=0):
+            b.queue_join_roles(member)
+        with patch.object(b.bot, 'get_guild', return_value=None):
+            await b.process_pending_join_roles()
+        conn = b.db_connect()
+        self.assertIsNotNone(conn.execute('SELECT 1 FROM pending_join_roles WHERE user_id=503').fetchone())
+        conn.close()
+
     async def test_departure_without_audit_does_not_claim_voluntary_exit(self):
         member = NS(guild=NS(me=NS(guild_permissions=NS(view_audit_log=False))))
         kind, _, _, uncertainty = await b.classify_member_departure(member)
@@ -77,6 +152,9 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         b._condemn_inflight.clear()
+        conn = b.db_connect()
+        conn.execute('DELETE FROM pending_join_roles')
+        conn.close()
 
     async def test_new_condemnation_persists_configured_role(self):
         guild = MagicMock(id=901)

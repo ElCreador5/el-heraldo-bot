@@ -76,3 +76,10 @@
 - Fase 4: kit v2, compatibilidad v1, archivo JSON mediante /importkit (128 KiB), resumen de nombres añadidos/reemplazados y confirmación con rechazo de borradores obsoletos. Falta comparación detallada por campo e importación segura por enlace/ID.
 - Fases 5 y 6 siguen pendientes salvo envío/edición manual previamente existentes. No se declara paridad con Sapphire.
 - Verificación offline del lote: 64 pruebas aprobadas; validación interactiva y CI remoto del lote pendientes.
+
+### Programación implementada y límites — 2026-10-10
+- Programación puntual, diaria y semanal con zona IANA, propuestas confirmadas, listado de estado y retirada: implementada mediante /programar_mensaje. Estado SQLite y permisos comprobados en ejecución; pendiente ensayo real.
+- Recuperación conservadora: envíos inciertos requieren revisión; los vencimientos durante desconexión se agrupan en una publicación, sin ráfagas de recuperación.
+- Texto independiente validado también frente al hook global; pies/embeds explícitos no se alteran tras su validación.
+- Las casillas históricas anteriores describen etapas previas. Autorespuestas, sticky, webhooks y componentes multiacción continúan pendientes. La documentación Sapphire no devolvió contenido legible mediante consulta web; no se ha verificado paridad completa con esa referencia.
+- Verificación del lote más reciente: 78 pruebas offline aprobadas, compilación y dependencias correctas; CI nueva e interacciones todavía pendientes.

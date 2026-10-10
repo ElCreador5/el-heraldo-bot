@@ -343,6 +343,9 @@ def db_connect() -> sqlite3.Connection:
 
 def db_init() -> None:
     conn = db_connect()
+    conn.execute("""CREATE TABLE IF NOT EXISTS pending_join_roles (
+        guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, joined_at TEXT NOT NULL,
+        due_at TEXT NOT NULL, PRIMARY KEY (guild_id, user_id))""")
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
@@ -1137,6 +1140,8 @@ async def _joinroles_add_roles(
     *,
     reason: str,
 ) -> tuple[bool, int, str]:
+    if condemnation_get(member.guild.id, member.id):
+        return False, 0, "Existe una condena activa; no se asignaron roles."
     roles_to_add: list[discord.Role] = []
     for role_id in role_ids:
         role, issue = _join_role_status(member.guild, role_id)
@@ -1198,14 +1203,15 @@ async def assign_user_specific_roles(member: discord.Member) -> tuple[bool, str]
         role_ids,
         reason="El Heraldo · User specific Join Roles",
     )
-    if ok and join_roles_remove_specific_after_join(member.guild.id):
+    if (ok and join_roles_remove_specific_after_join(member.guild.id)
+            and get_join_specific_roles(member.guild.id).get(member.id) == role_ids):
         remove_join_specific_user(member.guild.id, member.id)
     if ok and count:
         return True, f"Asignados {count} rol(es) específicos."
     return ok, note
 
 
-async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
+async def assign_join_roles(member: discord.Member, *, skip_delay: bool = False) -> tuple[bool, str]:
     if member.bot:
         return True, "No aplica."
 
@@ -1218,7 +1224,7 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
         return True, "Esperando Esperar aceptación de reglas."
 
     delay = get_join_roles_delay(member.guild.id)
-    if delay > 0:
+    if delay > 0 and not skip_delay:
         await asyncio.sleep(delay)
         refreshed = member.guild.get_member(member.id)
         if refreshed is None:
@@ -1239,11 +1245,11 @@ async def assign_join_roles(member: discord.Member) -> tuple[bool, str]:
     return True, f"{note} {specific_note}".strip()
 
 
-async def assign_bot_join_roles(member: discord.Member) -> tuple[bool, str]:
+async def assign_bot_join_roles(member: discord.Member, *, skip_delay: bool = False) -> tuple[bool, str]:
     if not member.bot or not join_roles_bot_enabled(member.guild.id):
         return True, "No aplica."
 
-    if join_roles_bot_apply_delay(member.guild.id):
+    if join_roles_bot_apply_delay(member.guild.id) and not skip_delay:
         delay = get_join_roles_delay(member.guild.id)
         if delay > 0:
             await asyncio.sleep(delay)
@@ -1265,6 +1271,69 @@ async def assign_bot_join_roles(member: discord.Member) -> tuple[bool, str]:
     if ok and count:
         return True, f"Asignados {count} Bot Join Role(s)."
     return ok, note
+
+
+def queue_join_roles(member: discord.Member) -> None:
+    now = datetime.now(timezone.utc)
+    delay = get_join_roles_delay(member.guild.id)
+    if member.bot and not join_roles_bot_apply_delay(member.guild.id):
+        delay = 0
+    joined = (member.joined_at or now).isoformat()
+    conn = db_connect()
+    try:
+        conn.execute("""INSERT INTO pending_join_roles VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                joined_at=excluded.joined_at, due_at=excluded.due_at
+            WHERE pending_join_roles.joined_at != excluded.joined_at""",
+            (member.guild.id, member.id, joined, (now + timedelta(seconds=delay)).isoformat()))
+    finally:
+        conn.close()
+
+
+async def process_pending_join_roles() -> None:
+    now = datetime.now(timezone.utc)
+    conn = db_connect()
+    rows = conn.execute("SELECT guild_id, user_id, joined_at FROM pending_join_roles WHERE due_at <= ? LIMIT 100",
+                        (now.isoformat(),)).fetchall()
+    conn.close()
+    for guild_id, user_id, joined_at in rows:
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            continue
+        done = False
+        try:
+            member = await guild.fetch_member(user_id)
+            if member.joined_at and member.joined_at.isoformat() != joined_at:
+                done = True  # La fila pertenece a un ingreso anterior.
+            elif condemnation_get(guild_id, user_id):
+                done = True  # La liberación restaura la fotografía; no el catálogo de ingreso.
+            elif not member.bot and join_roles_wait_screening(guild_id) and member.pending:
+                continue
+            elif member.bot:
+                done, _ = await assign_bot_join_roles(member, skip_delay=True)
+            else:
+                done, _ = await assign_join_roles(member, skip_delay=True)
+        except discord.NotFound:
+            done = True
+        except discord.HTTPException:
+            pass  # Se conserva para reintentar.
+        except Exception:
+            traceback.print_exc()
+        conn = db_connect()
+        try:
+            if done:
+                conn.execute("DELETE FROM pending_join_roles WHERE guild_id=? AND user_id=? AND joined_at=?",
+                             (guild_id, user_id, joined_at))
+            else:
+                conn.execute("UPDATE pending_join_roles SET due_at=? WHERE guild_id=? AND user_id=? AND joined_at=?",
+                             ((now + timedelta(minutes=1)).isoformat(), guild_id, user_id, joined_at))
+        finally:
+            conn.close()
+
+
+@tasks.loop(seconds=5)
+async def pending_join_roles_loop() -> None:
+    await process_pending_join_roles()
 
 
 def approximate_missing_join_roles(guild: discord.Guild) -> int:
@@ -2033,6 +2102,9 @@ async def on_ready() -> None:
         member_of_the_week_loop.start()
     if not join_roles_sync_loop.is_running():
         join_roles_sync_loop.start()
+    if not pending_join_roles_loop.is_running():
+        pending_join_roles_loop.start()
+    message_automation_engine.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
     _startup_done = True
@@ -2082,7 +2154,7 @@ async def on_member_join(member: discord.Member) -> None:
         # Los bots no pasan por verificación, pero Sapphire-style Bot Roles sí
         # pueden asignarse de forma independiente.
         if join_roles_bot_enabled(member.guild.id):
-            asyncio.create_task(assign_bot_join_roles(member))
+            queue_join_roles(member)
         return
 
     invite_code = await detect_used_invite(member.guild)
@@ -2124,7 +2196,7 @@ async def on_member_join(member: discord.Member) -> None:
         traceback.print_exc()
 
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
-        asyncio.create_task(assign_join_roles(member))
+        queue_join_roles(member)
 
     if verify_enabled(member.guild.id):
         waiting_screening = (
@@ -2292,7 +2364,7 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         and getattr(before, "pending", False)
         and not getattr(after, "pending", False)
     ):
-        asyncio.create_task(assign_join_roles(after))
+        queue_join_roles(after)
         verify_role_id_after_screening = get_verify_role_id(after.guild.id)
         if (
             verify_enabled(after.guild.id)
@@ -2664,16 +2736,7 @@ class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configura
             await interaction.response.send_message("Error: Los tres tiempos deben ser números enteros mayores que 0.", ephemeral=True)
             return
 
-        guild_config_set(self.guild_id, "verify_timeout", str(verify_minutes * 60))
-        guild_config_set(self.guild_id, "orientation_timeout_seconds", str(orientation_minutes * 60))
-        guild_config_set(self.guild_id, "sin_verificado_timeout_seconds", str(sin_verificar_minutes * 60))
-        await interaction.response.send_message(
-            "Tiempos guardados por servidor.\n"
-            f"• Verificación: **{verify_minutes} min**\n"
-            f"• Orientación: **{orientation_minutes} min**\n"
-            f"• Respaldo Sin Verificar: **{sin_verificar_minutes} min**",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'verify_timeout': str(verify_minutes * 60), 'orientation_timeout_seconds': str(orientation_minutes * 60), 'sin_verificado_timeout_seconds': str(sin_verificar_minutes * 60)})
 
 
 HERALDO_CHANNEL_DEFINITIONS = {
@@ -3282,8 +3345,7 @@ class JoinRolesDelayModal(discord.ui.Modal, title="Join Roles · Tiempo de esper
             self.editor.pending_delay = seconds
             await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para nuevos miembros**\n\n" + join_roles_basic_summary(interaction.guild) + self.editor._pending(interaction.guild), view=self.editor)
             return
-        guild_config_set(self.guild_id, "join_roles_delay_seconds", str(seconds))
-        await interaction.response.send_message(f"Tiempo de espera guardado: **{seconds} s**.", ephemeral=True)
+        await confirm_configuration(interaction, self.guild_id, {'join_roles_delay_seconds': str(seconds)})
 
 
 class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periódico"):
@@ -3315,13 +3377,10 @@ class JoinRolesScheduleModal(discord.ui.Modal, title="Join Roles · Sync periód
                 "Error: Usa un valor entre 0 y 10080 minutos.", ephemeral=True
             )
             return
-        guild_config_set(self.guild_id, "join_sync_interval_minutes", str(minutes))
-        if minutes:
-            set_join_sync_last(self.guild_id)
-        await interaction.response.send_message(
-            "Sync periódico " + (f"configurado cada **{minutes} min**." if minutes else "desactivado."),
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "join_sync_interval_minutes": str(minutes),
+            "join_sync_last": datetime.now(timezone.utc).isoformat() if minutes else None,
+        })
 
 
 class _JoinRolesOwnedView(discord.ui.View):
@@ -3939,18 +3998,7 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientaci
             )
             return
 
-        guild_config_set(self.guild_id, "orientation_embed_title", title)
-        guild_config_set(self.guild_id, "orientation_embed_intro", intro)
-        guild_config_set(self.guild_id, "orientation_embed_details", details)
-        guild_config_set(self.guild_id, "orientation_embed_color", color.upper())
-        guild_config_set(self.guild_id, "orientation_embed_footer", footer)
-
-        await interaction.response.defer(ephemeral=True)
-        note = "Tarjeta guardada."
-        if orientation_enabled(self.guild_id):
-            ok, sync_note = await ensure_orientation_system(interaction.guild)
-            note = sync_note if ok else f"Guardé el texto, pero no pude actualizar la tarjeta: {sync_note}"
-        await interaction.followup.send(f"{note}", ephemeral=True)
+        await confirm_configuration(interaction, self.guild_id, {'orientation_embed_title': title, 'orientation_embed_intro': intro, 'orientation_embed_details': details, 'orientation_embed_color': color.upper(), 'orientation_embed_footer': footer})
 
 
 
@@ -4288,12 +4336,9 @@ class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · 
                 ephemeral=True,
             )
             return
-        set_motw_schedule(self.guild_id, weekday, hour)
-        motw_mark_current_slot(self.guild_id)
-        await interaction.response.send_message(
-            f"Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {hour}:00** (hora RD).",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {
+            "motw_weekday": str(weekday), "motw_hour": str(hour),
+        })
 
 
 
@@ -4912,16 +4957,7 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
             await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
             return
 
-        guild_config_set(self.guild_id, "raid_threshold", str(threshold))
-        guild_config_set(self.guild_id, "raid_window_seconds", str(window_s))
-        guild_config_set(self.guild_id, "raid_min_age_seconds", str(age_s))
-        guild_config_set(self.guild_id, "raid_new_account_ratio", str(ratio))
-        guild_config_set(self.guild_id, "raid_duration_seconds", str(duration_s))
-        await interaction.response.send_message(
-            "Detección de Raid Protection actualizada.\n\n"
-            + raid_config_summary(interaction.guild),
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'raid_threshold': str(threshold), 'raid_window_seconds': str(window_s), 'raid_min_age_seconds': str(age_s), 'raid_new_account_ratio': str(ratio), 'raid_duration_seconds': str(duration_s)})
 
 
 
@@ -5124,13 +5160,7 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             )
             return
 
-        for key, value in values.items():
-            guild_config_set(self.guild_id, key, value)
-
-        await interaction.response.send_message(
-            "Contenido del DM de verificación actualizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, values)
 
 
 class VerifyDmEditorVisualModal(discord.ui.Modal):
@@ -5161,11 +5191,7 @@ class VerifyDmEditorVisualModal(discord.ui.Modal):
             )
             return
 
-        guild_config_set(self.guild_id, "verify_dm_footer_icon", icon)
-        await interaction.response.send_message(
-            "Recurso visual del DM actualizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'verify_dm_footer_icon': icon})
 
 
 class VerifyDmMessageSetupView(discord.ui.View):
@@ -5257,16 +5283,7 @@ class SuggestionPanelContentModal(discord.ui.Modal):
             )
             return
 
-        guild_config_set(self.guild_id, "suggestion_panel_title", title)
-        guild_config_set(self.guild_id, "suggestion_panel_description", description)
-        guild_config_set(self.guild_id, "suggestion_panel_color", color.upper())
-
-        await interaction.response.defer(ephemeral=True)
-        await suggestion_ensure_panel(interaction.guild)
-        await interaction.followup.send(
-            "Contenido del panel de sugerencias guardado y sincronizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'suggestion_panel_title': title, 'suggestion_panel_description': description, 'suggestion_panel_color': color.upper()})
 
 
 class SuggestionPanelVisualModal(discord.ui.Modal):
@@ -5331,17 +5348,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
                 )
                 return
 
-        guild_config_set(self.guild_id, "suggestion_panel_footer", self.footer_input.value.strip())
-        guild_config_set(self.guild_id, "suggestion_panel_button_label", button_label)
-        guild_config_set(self.guild_id, "suggestion_panel_image", image)
-        guild_config_set(self.guild_id, "suggestion_panel_thumbnail", thumbnail)
-
-        await interaction.response.defer(ephemeral=True)
-        await suggestion_ensure_panel(interaction.guild)
-        await interaction.followup.send(
-            "Diseño del panel de sugerencias guardado y sincronizado.",
-            ephemeral=True,
-        )
+        await confirm_configuration(interaction, self.guild_id, {'suggestion_panel_footer': self.footer_input.value.strip(), 'suggestion_panel_button_label': button_label, 'suggestion_panel_image': image, 'suggestion_panel_thumbnail': thumbnail})
 
 
 class SuggestionPanelMessageSetupView(discord.ui.View):
@@ -6602,6 +6609,13 @@ class HeraldoMessageConfirmView(discord.ui.View):
                         return
                     target["role_component"] = component if mode == "boton" else ""
                     target["role_component_mode"] = mode
+            if op in {"template", "raw"}:
+                candidate = item if op == "template" else target
+                try:
+                    message_payload.validate({k: v for k, v in candidate.items() if k in message_payload.VISUAL_KEYS})
+                except ValueError as exc:
+                    await interaction.response.send_message(f"No se guardó la plantilla: {exc}", ephemeral=True)
+                    return
             heraldo_template_save(self.guild_id, items)
         elif op == "component":
             components = heraldo_message_role_config(self.guild_id)
@@ -6683,7 +6697,7 @@ def heraldo_template_payload(template, guild, member=None, channel=None):
                "canal": getattr(channel, "name", "canal"),
                "fecha": datetime.now(timezone.utc).isoformat(timespec="minutes")}
     content, embeds = message_payload.render(template, context)
-    return {"content": content, "embeds": [discord.Embed.from_dict(e) for e in embeds],
+    return {"content": content, "embeds": message_payload.TemplateEmbeds(discord.Embed.from_dict(e) for e in embeds),
             "view": heraldo_template_view(dict(template, _guild_id=guild.id)),
             "allowed_mentions": discord.AllowedMentions.none()}
 
@@ -7222,6 +7236,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
                 discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
                 discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
+                discord.SelectOption(label="Programación", value="schedules", description="Fechas, zonas horarias y repeticiones de mensajes."),
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
@@ -7274,8 +7289,18 @@ class HeraldoMessagesSetupView(discord.ui.View):
         values = interaction.data.get("values") if interaction.data else []
         selected = values[0] if values else ""
 
+        if selected == "schedules":
+            await interaction.response.send_message(
+                "**Programación de mensajes**\n\n"
+                "Use `/programar_mensaje crear` para elegir plantilla, canal, fecha local y zona horaria. "
+                "Admite una publicación, repetición diaria o semanal; requiere confirmación.\n"
+                "Use `/programar_mensaje listar` para consultar el estado y `/programar_mensaje retirar` para cancelar próximas ejecuciones. "
+                "Un envío ya iniciado puede terminar. Tras una interrupción incierta, revise el canal antes de crear otra programación.",
+                ephemeral=True)
+            return
+
         if selected == "kits":
-            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\\n\\nExporta o importa plantillas. La importación añade mensajes sin sobrescribir.", embed=None,
+            await interaction.response.edit_message(content="**El Heraldo · Kits de mensajes**\n\nExporte o importe plantillas. Para archivos y reemplazos confirmados, use /importkit.", embed=None,
                 view=HeraldoMessageKitsView(self.guild_id, self.owner_id))
             return
 
@@ -8332,7 +8357,8 @@ def rr_summary(guild: discord.Guild, panel: dict) -> str:
 
 def rr_valid_role(guild: discord.Guild, role_id: int) -> bool:
     role = guild.get_role(role_id)
-    return bool(role and role.is_assignable() and not role.managed and not role.is_default())
+    return bool(role and role.is_assignable() and not role.managed and not role.is_default()
+                and self_service_role_safe(role))
 
 
 def rr_can_use(member: discord.Member, panel: dict) -> bool:
@@ -8980,6 +9006,8 @@ async def _rr_handle_reaction_serial(payload: discord.RawReactionActionEvent, ad
             return
     if member.bot:
         return
+    if condemnation_get(guild.id, member.id):
+        return
     emoji = _orientation_emoji_key(str(payload.emoji))
     binding = next((x for x in rr_bindings(panel) if _orientation_emoji_key(x["emoji"]) == emoji), None)
     if not binding:
@@ -9019,8 +9047,8 @@ async def _rr_handle_reaction_serial(payload: discord.RawReactionActionEvent, ad
     # Reverse mode inverts the meaning of the two configured actions.
     additions = [guild.get_role(int(r)) for r in to_add]
     removals = [guild.get_role(int(r)) for r in to_remove]
-    additions = [r for r in additions if r and r.is_assignable() and r not in member.roles]
-    removals = [r for r in removals if r and r.is_assignable() and r in member.roles]
+    additions = [r for r in additions if r and rr_valid_role(guild, r.id) and r not in member.roles]
+    removals = [r for r in removals if r and rr_valid_role(guild, r.id) and r in member.roles]
     try:
         if removals:
             await member.remove_roles(*removals, reason="Reaction Roles: acción de reacción")
@@ -9913,17 +9941,7 @@ class VerifyTextsModal(discord.ui.Modal):
         if not (panel and label and success):
             await interaction.response.send_message("Error: Ningún texto puede quedar vacío; no guardé nada.", ephemeral=True)
             return
-        guild_config_set(interaction.guild.id, "verify_panel_text", panel)
-        guild_config_set(interaction.guild.id, "verify_button_label", label)
-        guild_config_set(interaction.guild.id, "verify_success_text", success)
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        note = await update_verify_panel(interaction.guild)
-        await interaction.followup.send(f"Textos guardados. {note}", ephemeral=True)
-        await log_embed(
-            interaction.guild, "Textos de verificación actualizados",
-            f"{interaction.user.mention} editó el mensaje del panel, el botón o el mensaje de éxito.",
-            discord.Color.blurple(),
-        )
+        await confirm_configuration(interaction, interaction.guild.id, {'verify_panel_text': panel, 'verify_button_label': label, 'verify_success_text': success})
 
 
 @bot.tree.command(name="verify", description="Publicar el panel de verificación (botón) en un canal.")
@@ -12868,12 +12886,12 @@ class _SyncGuard:
     GRACE = 5.0
 
     def __init__(self) -> None:
-        self._until: dict[int, float] = {}
+        self._until: dict[tuple[int, int], float] = {}
 
-    def add(self, user_id: int) -> None:
+    def add(self, user_id: tuple[int, int]) -> None:
         self._until[user_id] = float("inf")
 
-    def discard(self, user_id: int) -> None:
+    def discard(self, user_id: tuple[int, int]) -> None:
         if user_id in self._until:
             self._until[user_id] = time.monotonic() + self.GRACE
 
@@ -13886,7 +13904,7 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
     - condena activa pero sin el rol: si el miembro reingresó después, se le reaplica; si no, se le libera.
     - rol Condenado sin condena registrada: se condena como si lo hubieran puesto a mano."""
     for row in condemnation_list(guild.id):
-        role = guild.get_role(condemnation_role_id(row))
+        role = guild.get_role(condemnation_role_id(row, guild.id))
         member = guild.get_member(row["user_id"])
         if role is None or member is None or role in member.roles:
             continue
@@ -14264,6 +14282,20 @@ class ConfigurationConfirmView(discord.ui.View):
         self.finished = True
         self.stop()
         await interaction.response.edit_message(content="Configuración guardada. Puede volver al editor para consultar la vista previa.", view=None)
+        try:
+            if {'motw_weekday', 'motw_hour'}.intersection(self.changes):
+                motw_mark_current_slot(self.guild_id)
+            if any(key.startswith('suggestion_panel_') for key in self.changes):
+                await suggestion_ensure_panel(interaction.guild)
+            if any(key.startswith('orientation_embed_') for key in self.changes) and orientation_enabled(self.guild_id):
+                await ensure_orientation_system(interaction.guild)
+            if {'verify_panel_text', 'verify_button_label', 'verify_success_text'}.intersection(self.changes):
+                await update_verify_panel(interaction.guild)
+                await log_embed(interaction.guild, "Textos de verificación actualizados",
+                    f"{interaction.user.mention} confirmó los textos del panel.", discord.Color.blurple())
+        except Exception:
+            traceback.print_exc()
+            await interaction.followup.send("La configuración se guardó, pero no se pudo sincronizar el panel publicado. Puede reintentar su publicación desde el editor.", ephemeral=True)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction, button):
@@ -14277,9 +14309,20 @@ class ConfigurationConfirmView(discord.ui.View):
 async def confirm_configuration(interaction, guild_id, changes):
     if not await configuration_access(interaction, guild_id):
         return
-    await interaction.response.send_message(
-        "Revise la propuesta y confirme el guardado. Cancelar conserva la configuración actual.",
-        view=ConfigurationConfirmView(guild_id, interaction.user.id, changes), ephemeral=True)
+    report = {key: {'actual': guild_config_get(guild_id, key), 'propuesto': value}
+              for key, value in changes.items()}
+    summary = '\n'.join(f"{key.replace('_', ' ')}: {str(value)[:140] if value is not None else 'Restaurar valor predeterminado'}"
+                        for key, value in changes.items())
+    report_file = discord.File(io.BytesIO(json.dumps(report, ensure_ascii=False, indent=2).encode('utf-8')),
+                               filename='propuesta.json')
+    try:
+        await interaction.response.send_message(
+            "Revise la propuesta y confirme el guardado. El archivo adjunto incluye los valores completos.\n\n"
+            + discord.utils.escape_markdown(summary)[:1600], file=report_file,
+            view=ConfigurationConfirmView(guild_id, interaction.user.id, changes), ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none())
+    finally:
+        report_file.close()
 
 
 async def confirm_condemnation_template(interaction, guild_id, values):
@@ -17265,6 +17308,10 @@ def _content_embed(content: str) -> discord.Embed:
 
 def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     """Devuelve (content, kw) con el texto convertido a embed y todos los embeds con footer."""
+    if isinstance(kw.get("embeds"), message_payload.TemplateEmbeds):
+        # Las plantillas validan su propio contenido, diseño y límite total de 6000.
+        # Convertir texto o añadir pies aquí rompería esos límites y el modo texto.
+        return content, kw
     embed = kw.get("embed")
     embeds = kw.get("embeds")
     has_embed = embed not in (None, _MISSING)
@@ -18747,20 +18794,7 @@ class SuggestionPanelEditorModal(discord.ui.Modal, title="Mensajes · Panel de s
             )
             return
 
-        guild_config_set(self.guild_id, "suggestion_panel_title", str(self.title_input).strip())
-        guild_config_set(self.guild_id, "suggestion_panel_description", str(self.description_input).strip())
-        guild_config_set(self.guild_id, "suggestion_panel_color", color.upper())
-        guild_config_set(self.guild_id, "suggestion_panel_image", image)
-        guild_config_set(self.guild_id, "suggestion_panel_button_label", str(self.button_input).strip())
-
-        await interaction.response.defer(ephemeral=True)
-        try:
-            await suggestion_ensure_panel(interaction.guild)
-            note = "El panel publicado también fue actualizado."
-        except Exception:
-            traceback.print_exc()
-            note = "La configuración se guardó, pero no pude refrescar el panel publicado."
-        await interaction.followup.send(f"Panel de sugerencias guardado. {note}", ephemeral=True)
+        await confirm_configuration(interaction, self.guild_id, {'suggestion_panel_title': str(self.title_input).strip(), 'suggestion_panel_description': str(self.description_input).strip(), 'suggestion_panel_color': color.upper(), 'suggestion_panel_image': image, 'suggestion_panel_button_label': str(self.button_input).strip()})
 
 
 class HeraldoMessagesView(discord.ui.View):
@@ -18850,6 +18884,9 @@ async def mensajes_command(interaction: discord.Interaction) -> None:
 
 
 mensajes_command.error(verify_command_error)
+
+import message_automation
+message_automation_engine = message_automation.install(globals())
 
 # ---------------------------------------------------------------------------
 

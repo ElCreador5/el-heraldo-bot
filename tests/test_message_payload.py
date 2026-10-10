@@ -27,7 +27,8 @@ class MessagePayloadTests(unittest.TestCase):
         invalid = [{'content': 'a' * 2001}, {'embeds': [{'description': 'a' * 3500}] * 2},
                    {'embeds': [{'title': 'x', 'color': True}]}, {'embeds': [{'title': 'x'}] * 11},
                    {'image': 'javascript:alert(1)'}, {'title': 'x', 'button_url': 'https://example.org'},
-                   {'title': 'x', 'unknown': 'no'}, {'embeds': [{}]}]
+                   {'title': 'x', 'unknown': 'no'}, {'embeds': [{}]},
+                   {'embeds': [{'image': {'url': ''}}]}, {'embeds': [{'author': {'icon_url': 'https://example.org/a.png'}}]}]
         for payload in invalid:
             with self.subTest(payload=str(payload)[:70]), self.assertRaises(ValueError):
                 validate(payload)

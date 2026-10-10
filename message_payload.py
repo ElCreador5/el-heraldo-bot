@@ -7,6 +7,10 @@ VARIABLES = {'usuario', 'usuario_id', 'servidor', 'servidor_id', 'canal', 'fecha
 VISUAL_KEYS = {'title', 'description', 'image', 'button_label', 'button_url', 'content', 'embeds'}
 
 
+class TemplateEmbeds(list):
+    """Lista Discord normal que conserva el diseño explícito ante hooks heredados."""
+
+
 def text(value, limit):
     if not isinstance(value, str) or len(value) > limit:
         raise ValueError(f'El texto supera {limit} caracteres o no es texto.')
@@ -51,12 +55,16 @@ def validate(values):
             if key in embed:
                 if not isinstance(embed[key], dict) or set(embed[key]) != {'url'}:
                     raise ValueError('Imagen no válida.')
+                if not embed[key]['url']:
+                    raise ValueError('La imagen o miniatura requiere una URL.')
                 url(embed[key]['url'])
         for key, caption, limit in (('footer', 'text', 2048), ('author', 'name', 256)):
             if key in embed:
                 obj = embed[key]
                 if not isinstance(obj, dict) or set(obj) - {caption, 'icon_url', 'url'}:
                     raise ValueError('Autor o pie no válido.')
+                if not obj.get(caption):
+                    raise ValueError('El autor o pie requiere texto.')
                 total += len(text(obj.get(caption, ''), limit))
                 for field in ('url', 'icon_url'):
                     url(obj.get(field, ''))
@@ -103,7 +111,7 @@ def render(template, context=None):
 
 
 def import_kit(data):
-    if not isinstance(data, dict) or data.get('version') not in (1, 2) or not isinstance(data.get('templates'), list):
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data.get('version') not in (1, 2) or not isinstance(data.get('templates'), list):
         raise ValueError('Versión o formato de kit no admitido.')
     if not 1 <= len(data['templates']) <= 25:
         raise ValueError('El kit requiere entre 1 y 25 plantillas.')

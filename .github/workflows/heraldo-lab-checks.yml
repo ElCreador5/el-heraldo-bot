@@ -36,7 +36,7 @@ jobs:
       - name: Comprobar dependencias
         run: python -m pip check
       - name: Compile Python sources
-        run: python -m py_compile bot.py test_regressions.py test_member_logs.py
+        run: python -m py_compile bot.py message_payload.py message_automation.py test_regressions.py test_member_logs.py
       - name: Existing offline regression suite
         run: python -m unittest -v test_regressions.py
       - name: Lab component validation regressions
