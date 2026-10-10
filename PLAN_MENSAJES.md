@@ -69,3 +69,10 @@
 - La importación actual no reemplaza plantillas; rechaza los nombres repetidos. Todavía necesita un flujo de revisión de diferencias.
 - El componente de menú comparte el catálogo de roles del servidor, aún sin editor individual de opciones.
 - Sintaxis y regresiones existentes verificadas en la etapa 1; las ampliaciones de cobertura y las pruebas interactivas siguen pendientes. Consultar `PRUEBAS_DISCORD.md` para entorno y alcance.
+
+## Avance real — 2026-10-10
+- Fase 2: texto independiente, múltiples embeds y propiedades avanzadas disponibles por JSON/kit; variables usuario, usuario_id, servidor, servidor_id, canal y fecha; preview desactiva acciones. Falta editor visual completo y navegación uniforme.
+- Fase 3: se refuerzan jerarquía, política de roles administrativos, condenas activas, concurrencia y frecuencia. Menús independientes, acciones secuenciales, mensajería y auditoría por acción siguen pendientes.
+- Fase 4: kit v2, compatibilidad v1, archivo JSON mediante /importkit (128 KiB), resumen de nombres añadidos/reemplazados y confirmación con rechazo de borradores obsoletos. Falta comparación detallada por campo e importación segura por enlace/ID.
+- Fases 5 y 6 siguen pendientes salvo envío/edición manual previamente existentes. No se declara paridad con Sapphire.
+- Verificación offline del lote: 64 pruebas aprobadas; validación interactiva y CI remoto del lote pendientes.

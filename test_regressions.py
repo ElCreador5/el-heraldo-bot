@@ -21,8 +21,8 @@ b.suggestion_db_init()
 
 
 def interaction(guild):
-    return SimpleNamespace(guild=guild, user=SimpleNamespace(id=99, mention='<@99>'),
-        data={'values': []}, response=SimpleNamespace(send_message=AsyncMock(),
+    return SimpleNamespace(guild=guild, user=SimpleNamespace(id=99, mention='<@99>', guild_permissions=b.discord.Permissions(manage_guild=True)),
+        data={'values': []}, response=SimpleNamespace(is_done=lambda: False, send_message=AsyncMock(),
         edit_message=AsyncMock(), defer=AsyncMock(), send_modal=AsyncMock()), followup=SimpleNamespace(send=AsyncMock()),
         edit_original_response=AsyncMock())
 
