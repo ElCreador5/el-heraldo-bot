@@ -83,3 +83,9 @@
 - Texto independiente validado también frente al hook global; pies/embeds explícitos no se alteran tras su validación.
 - Las casillas históricas anteriores describen etapas previas. Autorespuestas, sticky, webhooks y componentes multiacción continúan pendientes. La documentación Sapphire no devolvió contenido legible mediante consulta web; no se ha verificado paridad completa con esa referencia.
 - Verificación del lote más reciente: 78 pruebas offline aprobadas, compilación y dependencias correctas; CI nueva e interacciones todavía pendientes.
+
+### Fase 5 ampliada — 2026-10-10
+- Implementadas autorespuestas literales por canal con configuración confirmada y límites persistentes.
+- Implementado sticky por canal con conservación del estado y reposición limitada por actividad; al retirar se conserva la publicación final.
+- Implementado envío manual confirmado por webhook propio del bot, sin persistir credenciales. Los componentes interactivos de roles usan publicación directa del bot.
+- Estas funciones tienen regresiones offline, pero no pruebas reales Discord. Continúan pendientes componentes multiacción, menús independientes, editor visual completo y catálogo general. No afirmar paridad completa con Sapphire.

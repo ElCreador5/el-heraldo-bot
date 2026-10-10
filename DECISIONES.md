@@ -47,3 +47,8 @@ Una nueva decisión debe indicar fecha, motivo y qué regla reemplaza. No modifi
 - Se valida la zona horaria al crear y se rechazan horas locales inexistentes o ambiguas. Repetición diaria/semanal conserva la hora local; durante un salto de primavera, una futura hora inexistente se normaliza a la hora real posterior al salto.
 - Ante incertidumbre de envío se pausa esa programación para revisión; no se garantiza entrega exactamente una vez entre SQLite y Discord. Crear otra exige revisar el canal. La plantilla se resuelve al ejecutar, por lo que sus modificaciones confirmadas afectan futuros envíos.
 - Los diseños explícitos de Mensajes no reciben el formato global automático, para conservar texto independiente, pies propios y límites validados. El resto de las respuestas mantiene el comportamiento previo.
+
+### Automatizaciones activadas por actividad — 2026-10-10
+- Autorespuestas usan texto literal, sin expresiones regulares suministradas por usuarios. Solo una respuesta por mensaje y límite común del canal, persistente entre reinicios.
+- Sticky elimina únicamente su publicación anterior verificada, antes de enviar la sustituta. Se conserva la última publicación al desactivar la regla. Una interrupción no autoriza repetir envíos inciertos.
+- Los webhooks se administran exclusivamente mediante el bot y el canal seleccionado; no aceptar tokens o destinos arbitrarios. Los botones y selectores de roles quedan reservados a publicaciones directas del bot, conservando esa funcionalidad por su vía original.

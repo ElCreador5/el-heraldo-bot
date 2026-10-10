@@ -7237,6 +7237,9 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
                 discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
                 discord.SelectOption(label="Programación", value="schedules", description="Fechas, zonas horarias y repeticiones de mensajes."),
+                discord.SelectOption(label="Autorespuestas", value="autoresponses", description="Responder a palabras o frases, con límites de frecuencia."),
+                discord.SelectOption(label="Sticky", value="sticky", description="Mantener una plantilla al final del canal."),
+                discord.SelectOption(label="Webhooks", value="webhooks", description="Publicación confirmada mediante webhooks del bot."),
                 discord.SelectOption(
                     label="Verificación",
                     value="verification",
@@ -7288,6 +7291,33 @@ class HeraldoMessagesSetupView(discord.ui.View):
     async def open_editor(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
         selected = values[0] if values else ""
+
+        if selected == "webhooks":
+            await interaction.response.send_message(
+                "**Publicación por webhook**\n\nUse `/webhook_mensaje` para elegir plantilla y canal y confirmar su publicación. "
+                "El administrador y el bot deben tener permiso para gestionar webhooks en el destino. "
+                "El Heraldo crea o reutiliza únicamente su propio webhook; no solicita ni almacena tokens. "
+                "Admite plantillas visuales y enlaces. Los botones y selectores de roles se publican mediante el bot.",
+                ephemeral=True)
+            return
+
+        if selected == "sticky":
+            await interaction.response.send_message(
+                "**Mensajes sticky**\n\nUse `/sticky crear` para elegir canal y plantilla; confirmar habilita su publicación. "
+                "El bot reemplaza su publicación anterior después de actividad humana, respetando una espera configurable. "
+                "Use `/sticky listar` para consultar errores y `/sticky retirar` para detenerlo; la última publicación se conserva. "
+                "Un envío incierto queda detenido para revisión.", ephemeral=True)
+            return
+
+        if selected == "autoresponses":
+            await interaction.response.send_message(
+                "**Autorespuestas**\n\n"
+                "Use `/autorespuesta crear` para elegir canal, plantilla y palabra o frase; requiere confirmación. "
+                "Puede exigir el mensaje exacto o una frase incluida. Use `/autorespuesta listar` y `/autorespuesta retirar` para administrarlas.\n"
+                "La espera es de 30 segundos a 24 horas por regla y hay un límite adicional de una respuesta cada 30 segundos por canal. "
+                "Se ignoran bots, webhooks y miembros con condena activa; se requiere Message Content.",
+                ephemeral=True)
+            return
 
         if selected == "schedules":
             await interaction.response.send_message(
