@@ -1,0 +1,3 @@
+# Versión validada para las regresiones offline; no cambia el runtime de Railway.
+-r requirements.txt
+discord.py==2.7.1
