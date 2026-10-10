@@ -13813,13 +13813,14 @@ async def _release_condemned_member_inner(
 
     saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.guild.id, member.id) or [])
     restore: list[discord.Role] = []
-    lost = 0
+    missing_role_ids: list[int] = []
     for rid in saved:
         role = member.guild.get_role(rid)
         if role is not None and role.is_assignable() and not role.managed:
             restore.append(role)
         else:
-            lost += 1
+            missing_role_ids.append(rid)
+    lost = len(missing_role_ids)
 
     current = [
         r for r in member.roles
@@ -13869,6 +13870,9 @@ async def _release_condemned_member_inner(
         db_set_sin_verificado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_sin_verificado_check(member.guild.id, member.id, now))
 
+    pending_role_details = ", ".join(str(rid) for rid in missing_role_ids[:15])
+    if lost > 15:
+        pending_role_details += f" y {lost - 15} más"
     text = f"{len(restore)} rol(es) restaurado(s)" + (f"; {lost} no se pudieron restaurar" if lost else "")
     if pardon and row is not None and released_by is not None:
         condemned_at = datetime.fromisoformat(row["condemned_at"])
@@ -13882,6 +13886,7 @@ async def _release_condemned_member_inner(
             f"Expediente: {case_id}\nUsuario: {member.mention} ({member.id})\n"
             f"Motivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\n"
             f"Perdonó: {released_by.mention}\nRoles: {text}\n"
+            f"Roles sin restaurar (IDs): {pending_role_details if lost else 'Ninguno'}\n"
             f"Tarjeta original: {'cerrada' if card_ok else 'Advertencia: no cerrada'}\n"
             f"Tarjeta de resolución: {'creada' if card_ok else 'Advertencia: no creada'}\n"
             f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado'}",
