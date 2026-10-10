@@ -58,7 +58,7 @@
 - [ ] Comprobar en servidor de pruebas las confirmaciones, caducidad y cambios concurrentes.
 
 ## Calidad y despliegue (verificación automatizada parcial)
-- [ ] Ejecutar `python -m py_compile bot.py`.
+- [x] Ejecutar `python -m py_compile bot.py` (etapa 1, 2026-10-09; ver registro de pruebas).
 - [ ] Ejecutar `python -m unittest test_regressions.py` y ampliar casos.
 - [ ] Pruebas reales en servidor de prueba: botones, desplegables, mensajes efímeros, roles y reconexión.
 - [ ] Probar roles superiores, rol administrado, falta de permisos, eliminación de plantilla, reinicios y varios servidores.
@@ -68,4 +68,4 @@
 ## Problemas conocidos en la rama actual
 - La importación actual no reemplaza plantillas; rechaza los nombres repetidos. Todavía necesita un flujo de revisión de diferencias.
 - El componente de menú comparte el catálogo de roles del servidor, aún sin editor individual de opciones.
-- Se requiere ejecutar pruebas de sintaxis y servidor; la conexión de GitHub no ejecuta automáticamente código Python.
+- Sintaxis y regresiones existentes verificadas en la etapa 1; las ampliaciones de cobertura y las pruebas interactivas siguen pendientes. Consultar `PRUEBAS_DISCORD.md` para entorno y alcance.

@@ -51,3 +51,15 @@ Nunca inventar pruebas ejecutadas. Si una interacción no pudo comprobarse, cons
 - **Resultados CI:** PENDIENTE hasta recibir resultado de GitHub Actions de este PR.
 - **Prueba real en Discord:** NO REALIZADA en esta ampliación. No se simulan clics con cuentas de usuario.
 - **Validación posterior al despliegue:** `Heraldo's Lab` → `/setup` → `Mensajes` → `Logs`, abrir categorías y volver; registrar hora, captura saneada y errores.
+
+## Etapa 1 — 2026-10-09 (America/Santo_Domingo)
+- CI histórico de `ffefb77`: OK, ejecución https://github.com/ElCreador5/el-heraldo-bot/actions/runs/37889193532, 35 regresiones y 1 prueba del selector. Reemplaza el PENDIENTE de la propuesta original exclusivamente para ese commit.
+- Actor: Codex, Windows, Python 3.12.10 y discord.py 2.7.1. Árbol reconciliado a partir de `b8480b8`, `6f9f9ee` y `ffefb77`; registrado en el commit de preparación de esta etapa.
+- `python -X utf8 -m pip check`: OK.
+- `python -X utf8 -m py_compile bot.py test_regressions.py test_member_logs.py`: OK.
+- `python -X utf8 -m unittest -v test_regressions.py`: 35 pruebas OK.
+- `python -X utf8 -m unittest -v test_member_logs.py`: 4 pruebas OK.
+- `python -X utf8 -m unittest discover -s tests -p 'test_*.py' -v`: 1 prueba OK.
+- Los primeros intentos de las suites SQLite quedaron bloqueados por los temporales del sandbox, no por una regresión del bot. La repetición autorizada finalizó correctamente.
+- Las suites de raíz se ejecutan en procesos separados para mantener aislados sus módulos, variables y bases SQLite. La matriz Linux 3.11/3.12/3.13 requiere comprobar el nuevo CI.
+- Pruebas reales de Discord: NO REALIZADAS. La matriz interactiva anterior sigue pendiente, así como los nuevos fallos identificados en la auditoría.

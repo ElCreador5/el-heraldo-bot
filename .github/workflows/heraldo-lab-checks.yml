@@ -2,6 +2,8 @@ name: Heraldo Lab - Python regressions
 
 on:
   pull_request:
+    branches: [Pruebas, main]
+  push:
     branches: [Pruebas]
   workflow_dispatch:
 
@@ -14,19 +16,30 @@ concurrency:
 
 jobs:
   offline-regressions:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install pinned project requirements
-        run: python -m pip install -r requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-ci.txt
+      - name: Instalar dependencia directa validada
+        run: python -m pip install -r requirements-ci.txt
+      - name: Comprobar dependencias
+        run: python -m pip check
       - name: Compile Python sources
-        run: python -m py_compile bot.py test_regressions.py
+        run: python -m py_compile bot.py test_regressions.py test_member_logs.py
       - name: Existing offline regression suite
         run: python -m unittest -v test_regressions.py
       - name: Lab component validation regressions
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Regresiones de Logs incorporadas desde main
+        run: python -m unittest -v test_member_logs.py
