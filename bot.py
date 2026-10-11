@@ -14310,6 +14310,15 @@ class ConfigurationConfirmView(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
+        # Evitar propuestas obsoletas de la configuración sensible.
+        if self.changes.get("honeypot_enabled") == "1" and not hp_traps(self.guild_id):
+            await interaction.response.send_message("No se puede activar el honeypot sin canales trampa.", ephemeral=True)
+            return
+        if "honeypot_punish_role" in self.changes:
+            role = interaction.guild.get_role(int(self.changes["honeypot_punish_role"]))
+            if role is None or hp_role_problem(role, interaction.guild):
+                await interaction.response.send_message("El rol de castigo ya no es válido o manejable.", ephemeral=True)
+                return
         conn = db_connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -14333,10 +14342,15 @@ class ConfigurationConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Configuración guardada. Puede volver al editor para consultar la vista previa.", view=None)
         try:
+            if 'honeypot_retention_minutes' in self.changes:
+                hp_prune_history(self.guild_id)
             if any(key.startswith('honeypot_warning_') for key in self.changes):
                 errors = await hp_sync_all_warnings(interaction.guild)
                 if errors:
                     await interaction.followup.send('Configuración guardada. Algunos avisos no se actualizaron:\n' + '\n'.join(errors)[:1500], ephemeral=True)
+            if any(key.startswith('honeypot_') for key in self.changes):
+                await log_embed(interaction.guild, "Honeypot actualizado",
+                    f"{interaction.user.mention} confirmó cambios administrativos.", discord.Color.blurple())
             if {'motw_weekday', 'motw_hour'}.intersection(self.changes):
                 motw_mark_current_slot(self.guild_id)
             if any(key.startswith('suggestion_panel_') for key in self.changes):
@@ -15043,6 +15057,8 @@ async def honeypot_config(
     ping_rol: Optional[discord.Role] = None,
     retencion: Optional[str] = None,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     guild = interaction.guild
     if all(v is None for v in (activado, accion, rol_castigo, purga, timeout, aviso, ping_rol, retencion)):
         await interaction.response.send_message(hp_config_summary(guild), ephemeral=True)
@@ -15083,44 +15099,28 @@ async def honeypot_config(
         await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
         return
 
-    changes: list[str] = []
+    changes: dict[str, str] = {}
     if activado is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_enabled", "1" if activado else "0")
+        changes["honeypot_enabled"] = "1" if activado else "0"
         if activado:
-            hp_setting_set(interaction.guild.id, "honeypot_paused", "0")
-        changes.append("activado" if activado else "desactivado")
+            changes["honeypot_paused"] = "0"
     if accion is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_action", accion.value)
-        changes.append(f"acción → {accion.name}")
+        changes["honeypot_action"] = accion.value
     if rol_castigo is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_punish_role", str(rol_castigo.id))
-        changes.append(f"rol de castigo → {rol_castigo.mention}")
+        changes["honeypot_punish_role"] = str(rol_castigo.id)
     if purga_spec is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_purge_spec", f"{purga_spec[0]}:{purga_spec[1]}")
-        changes.append(f"purga → {format_purge_spec(*purga_spec)}")
+        changes["honeypot_purge_spec"] = f"{purga_spec[0]}:{purga_spec[1]}"
     if timeout_min is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_timeout_minutes", str(timeout_min))
-        changes.append(f"timeout → {format_duration(timeout_min)}")
+        changes["honeypot_timeout_minutes"] = str(timeout_min)
     if retencion_min is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_retention_minutes", str(retencion_min))
-        hp_prune_history(interaction.guild.id)
-        changes.append(f"retención → {format_duration(retencion_min)}")
+        changes["honeypot_retention_minutes"] = str(retencion_min)
     if ping_rol is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_ping_role", str(ping_rol.id))
-        changes.append(f"ping → {ping_rol.mention}")
+        changes["honeypot_ping_role"] = str(ping_rol.id)
     if aviso is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_warning_enabled", "1" if aviso else "0")
-        changes.append("aviso fijado activado" if aviso else "aviso fijado desactivado")
+        changes["honeypot_warning_enabled"] = "1" if aviso else "0"
 
-    await interaction.response.defer(ephemeral=True)
-    errors = await hp_sync_all_warnings(guild) if aviso is not None else []
-    await interaction.followup.send(
-        "Guardado: " + "; ".join(changes) + "\n\n" + hp_config_summary(guild)
-        + ("\n\nAdvertencia: " + "\n".join(errors) if errors else ""),
-        ephemeral=True,
-    )
-    await log_embed(guild, "Honeypot actualizado", f"{interaction.user.mention}: " + "; ".join(changes))
-
+    # Todos los cambios pasan por un borrador efímero. Cancelar no escribe.
+    await confirm_configuration(interaction, guild.id, changes)
 
 @honeypot_group.command(name="add", description="Convertir un canal de texto existente en canal trampa.")
 @discord.app_commands.describe(canal="Canal de texto que todos puedan ver y en el que puedan escribir")
@@ -15357,12 +15357,12 @@ async def honeypot_history(
 
 @honeypot_group.command(name="resume", description="Reanudar el honeypot tras una pausa por protección contra fallos.")
 async def honeypot_resume(interaction: discord.Interaction) -> None:
+    if not await configuration_access(interaction):
+        return
     if not honeypot_paused(interaction.guild.id):
         await interaction.response.send_message("El honeypot no está pausado.", ephemeral=True)
         return
-    hp_setting_set(interaction.guild.id, "honeypot_paused", "0")
-    await interaction.response.send_message("Honeypot reanudado.", ephemeral=True)
-    await log_embed(interaction.guild, "Honeypot reanudado", f"{interaction.user.mention} lo reanudó.")
+    await confirm_configuration(interaction, interaction.guild.id, {"honeypot_paused": "0"})
 
 
 @honeypot_group.error
