@@ -175,6 +175,10 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         i.response.send_message.assert_awaited_once()
         with patch.object(b, 'log_embed', new=AsyncMock()):
             await b.raid_config.callback(i, ingresos=17)
+            self.assertNotEqual(b.raid_threshold(777), 17)
+            view = i.response.send_message.call_args.kwargs['view']
+            self.assertIsInstance(view, b.ConfigurationConfirmView)
+            await view.save.callback(interaction(self.guild))
         self.assertEqual(b.raid_threshold(777), 17)
 
     async def test_startup_layouts_and_serialization(self):
