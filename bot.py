@@ -9603,39 +9603,88 @@ async def heraldo_check_all_error(interaction: discord.Interaction, error: disco
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
+class HeraldoLogChannelConfirmView(discord.ui.View):
+    """Confirmación de cambios en el canal de logs, con revalidación al pulsar."""
+    def __init__(self, guild_id: int, owner_id: int, channel_id: int, previous_id: int):
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.channel_id = channel_id
+        self.previous_id = previous_id
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(self.channel_id)
+        me = interaction.guild.me
+        if not isinstance(channel, discord.TextChannel) or me is None:
+            await interaction.response.send_message("El canal ya no está disponible.", ephemeral=True)
+            return
+        permissions = channel.permissions_for(me)
+        if not (permissions.view_channel and permissions.send_messages and permissions.embed_links):
+            await interaction.response.send_message("El Heraldo ya no tiene permisos suficientes.", ephemeral=True)
+            return
+        if get_log_channel_id(self.guild_id) != self.previous_id:
+            await interaction.response.send_message(
+                "El canal de logs cambió mientras se revisaba la propuesta. Inténtelo de nuevo.",
+                ephemeral=True,
+            )
+            return
+        set_log_channel_id(channel.id, self.guild_id)
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"Canal de logs actualizado: {channel.mention}.", view=None
+        )
+        await log_embed(
+            interaction.guild, "Canal de logs actualizado",
+            f"{interaction.user.mention} confirmó el cambio a {channel.mention}.",
+            discord.Color.blurple(),
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content="Cambio cancelado. No se guardó nada.", view=None)
+
+
 @bot.tree.command(name="heraldo_log_channel", description="Cambiar el canal donde El Heraldo reporta su actividad (logs).")
 @discord.app_commands.describe(canal="Canal de texto donde se publicarán los logs")
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
 async def heraldo_log_channel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
-    # Validar antes de guardar: así no se configura un canal donde el bot no puede escribir.
-    perms = canal.permissions_for(canal.guild.me)
-    missing = [
-        name for name, ok in (
-            ("Ver canal", perms.view_channel),
-            ("Enviar mensajes", perms.send_messages),
-            ("Insertar enlaces", perms.embed_links),
-        ) if not ok
-    ]
-    if missing:
+    if not await configuration_access(interaction):
+        return
+    me = interaction.guild.me
+    if me is None:
+        await interaction.response.send_message("No puedo comprobar los permisos del bot.", ephemeral=True)
+        return
+    perms = canal.permissions_for(me)
+    if not (perms.view_channel and perms.send_messages and perms.embed_links):
         await interaction.response.send_message(
-            f"Error: No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
-            f"**{', '.join(missing)}**. Dáselos y vuelve a intentarlo.",
-            ephemeral=True,
+            "El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en el destino.", ephemeral=True
         )
         return
-
-    set_log_channel_id(canal.id, interaction.guild.id)
-    guild_resource_set(interaction.guild.id, "channel", "logs", canal.id)
-    await interaction.response.send_message(
-        f"Los logs de El Heraldo ahora se publicarán en {canal.mention}.",
-        ephemeral=True,
+    view = HeraldoLogChannelConfirmView(
+        interaction.guild.id, interaction.user.id, canal.id, get_log_channel_id(interaction.guild.id)
     )
-    # Ya apunta al canal nuevo: este embed sirve además de prueba de que escribe bien.
-    await log_embed(
-        interaction.guild, "Canal de logs actualizado",
-        f"{interaction.user.mention} lo cambió a {canal.mention}.",
-        discord.Color.blurple(),
+    await interaction.response.send_message(
+        f"¿Confirmas cambiar el canal de logs a {canal.mention}? No se guardará nada hasta confirmar.",
+        view=view, ephemeral=True,
     )
 
 
