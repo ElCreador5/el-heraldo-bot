@@ -10401,12 +10401,7 @@ async def joinroles_add(
         "join_role_ids": json.dumps(current[:JOIN_ROLES_MAX]),
         "join_roles_enabled": "1",
     })
-    return
-    guild_config_set(interaction.guild.id, "join_roles_enabled", "1")
-    await interaction.response.send_message(
-        "Join Roles actualizados:\n" + _join_roles_render(interaction.guild, get_join_role_ids(interaction.guild.id)),
-        ephemeral=True,
-    )
+
 
 
 @joinroles_group.command(name="remove", description="Quitar uno o varios Join Roles generales.")
@@ -10426,11 +10421,7 @@ async def joinroles_remove(
     await confirm_configuration(interaction, interaction.guild.id, {
         "join_role_ids": json.dumps(current),
     })
-    return
-    await interaction.response.send_message(
-        "Join Roles actualizados:\n" + _join_roles_render(interaction.guild, current),
-        ephemeral=True,
-    )
+
 
 
 @joinroles_group.command(name="user_add", description="Añadir un rol específico a un Discord User ID.")
@@ -10461,10 +10452,7 @@ async def joinroles_user_add(
     await confirm_configuration(interaction, interaction.guild.id, {
         "join_specific_roles": json.dumps({str(k): v for k, v in mapping.items()}),
     })
-    return
-    await interaction.response.send_message(
-        f"<@{target_id}> recibirá {rol.mention} cuando ingrese.", ephemeral=True
-    )
+
 
 
 @joinroles_group.command(name="user_remove", description="Quitar un rol específico o eliminar el User ID de la lista.")
@@ -14370,6 +14358,27 @@ class ConfigurationConfirmView(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
+        # Revalidar los roles nuevos al guardar, no solo al abrir el comando.
+        new_role_ids: set[int] = set()
+        if "join_role_ids" in self.changes:
+            incoming = {int(v) for v in json.loads(self.changes["join_role_ids"])}
+            old = set(get_join_role_ids(self.guild_id))
+            new_role_ids.update(incoming - old)
+        if "join_specific_roles" in self.changes:
+            incoming = json.loads(self.changes["join_specific_roles"])
+            old = get_join_specific_roles(self.guild_id)
+            for user_id, role_ids in incoming.items():
+                previous = set(old.get(int(user_id), []))
+                new_role_ids.update({int(v) for v in role_ids} - previous)
+        for role_id in new_role_ids:
+            role = interaction.guild.get_role(role_id)
+            if role is None:
+                await interaction.response.send_message("Uno de los roles propuestos fue eliminado.", ephemeral=True)
+                return
+            problem = _joinroles_validate_command_roles(interaction.guild, [role])
+            if problem:
+                await interaction.response.send_message("No guardé el cambio: " + problem, ephemeral=True)
+                return
         # Revalidar antes de persistir configuraciones de verificación.
         if self.changes.get("verify_enabled") == "1":
             role_id = int(self.changes.get("verify_role_id") or get_verify_role_id(self.guild_id))
