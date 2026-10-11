@@ -293,5 +293,42 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(b.condemnation_get(901, 99))
 
 
+    async def test_honeypot_setup_cancel_does_not_save(self):
+        b.guild_config_set(901, 'honeypot_enabled', '1')
+        i = interaction()
+        with patch.object(b, 'log_embed', new=AsyncMock()):
+            await b.honeypot_config.callback(i, activado=False)
+            self.assertEqual(b.guild_config_get(901, 'honeypot_enabled'), '1')
+            view = i.response.send_message.call_args.kwargs['view']
+            self.assertIsInstance(view, b.ConfigurationConfirmView)
+            await view.cancel.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'honeypot_enabled'), '1')
+
+    async def test_honeypot_resume_uses_confirmed_save(self):
+        b.guild_config_set(901, 'honeypot_paused', '1')
+        i = interaction()
+        await b.honeypot_resume.callback(i)
+        self.assertEqual(b.guild_config_get(901, 'honeypot_paused'), '1')
+        view = i.response.send_message.call_args.kwargs['view']
+        with patch.object(b, 'log_embed', new=AsyncMock()):
+            await view.save.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'honeypot_paused'), '0')
+
+    async def test_log_channel_change_waits_for_confirmation(self):
+        i = interaction()
+        i.guild.me = NS(id=777)
+        destination = NS(id=999, mention='#logs', permissions_for=lambda me: NS(
+            view_channel=True, send_messages=True, embed_links=True
+        ))
+        with patch.object(b, 'set_log_channel_id') as setter:
+            await b.heraldo_log_channel.callback(i, destination)
+            view = i.response.send_message.call_args.kwargs['view']
+            self.assertIsInstance(view, b.HeraldoLogChannelConfirmView)
+            setter.assert_not_called()
+            await view.cancel.callback(interaction())
+            setter.assert_not_called()
+
+
+
 if __name__ == '__main__':
     unittest.main()
