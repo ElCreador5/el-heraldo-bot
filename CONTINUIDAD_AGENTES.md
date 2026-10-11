@@ -9,6 +9,13 @@
 4. Trabajar únicamente en rama de desarrollo autorizada. Mantener `main` sin cambios salvo autorización específica.
 5. Al finalizar, actualizar los documentos pertinentes, registrar pruebas realizadas y guardar commits/PR; no afirmar que hubo guardado si faltan permisos.
 
+## Protocolo compartido actual
+- **Rama única de desarrollo habitual:** `Pruebas`. Producción: `main`, protegida por autorización explícita.
+- Las ramas de tarea y PR abiertos son temporales, usados para revisión, pruebas y prevención de conflictos. Integrar a `Pruebas` únicamente cambios comprobados; conservar o cerrar PR obsoletos con explicación.
+- **ChatGPT** recoge decisiones de producto y coordina; **Codex** se ocupa principalmente del código y auditoría; **Work** y **Claude** solo cuando exista una necesidad específica. El repositorio es el contexto compartido.
+- Cada transferencia debe nombrar responsable siguiente, rama/commit, cambios reales, CI, pruebas reales Discord, riesgos y acción concreta.
+- La sección siguiente conserva el informe recibido el **2026-10-10 como historial**: no es el estado actual de los PR ni de la rama `Pruebas`.
+
 ## Traspaso Codex → Claude → ChatGPT (informe recibido 2026-10-10)
 **Origen:** informe de auditoría aportado por Claude a la conversación; sus resultados de ejecución se atribuyen a Claude, no han sido reproducidos al crear esta nota.
 
