@@ -14363,8 +14363,8 @@ class ConfigurationConfirmView(discord.ui.View):
             enabled = self.changes.get("raid_enabled", "1" if raid_enabled(self.guild_id) else "0") == "1"
             action = self.changes.get("raid_action", raid_action(self.guild_id))
             if enabled and action == "condemn" and (
-                interaction.guild.get_role(condemnation_role_id(guild_id=self.guild_id)) is None
-            ):
+                "raid_enabled" in self.changes or "raid_action" in self.changes
+            ) and interaction.guild.get_role(condemnation_role_id(guild_id=self.guild_id)) is None:
                 await interaction.response.send_message(
                     "No se puede activar la protección con la acción Condenar sin un rol Condenado válido.",
                     ephemeral=True,
