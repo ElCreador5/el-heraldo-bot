@@ -119,3 +119,13 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Pruebas locales finales: 106 offline (39 raíz + 67 tests), compilación, dependencias y diff correctos. Sin Gateway ni pruebas Discord reales. Consultar GitHub para el resultado de CI del HEAD publicado.
 - PR #7 queda preparado para revisión de código; no equivale a alcance total completado ni a despliegue validado. Laboratorio sigue en 34fa94f; main permanece intacta en 6f9f9ee.
 - Pendientes y recorrido reproducible en REVISION_PR7.md. Prioridad: configuración heredada sin confirmación, archivo integral de purgas, restauración parcial; después catálogo uniforme y mejoras de importación/navegación. Agent AVD no identificado inequívocamente.
+
+## Actualización comprobada — Auditoría de seguridad (2026-10-11)
+
+- Rama de trabajo: `fix/auditoria-seguridad-pr7-20261010` (PR #10 basado en PR #7), revisada hasta `c3896d7`.
+- Confirmación explícita y revalidación en comandos heredados: Honeypot (`setup`, `resume`, `add`, `create`, `remove`, exenciones), Verificación (`/verify_setup`), Join Roles (add/remove/user_add/user_remove), Raid (`setup`), Sugerencias (destinatarios y panel), Miembro de la Semana (horario y canal), canal de Logs y canal de condenas.
+- Moderación: registro de IDs de roles que no se pudieron restaurar; canal de archivo de evidencia restringido por permisos reales de roles y excepciones de miembros; no archivado si no se garantiza privacidad.
+- GitHub Actions: ejecución `38146125476` **SUCCESS** sobre `c3896d7`; matrices Python 3.11, 3.12 y 3.13, con 35 pruebas de raíz, 85 en tests y 4 de logs por cada runtime según registros del job consultado.
+- Fallos intermedios detectados y corregidos: clases de modales/vistas retiradas accidentalmente por cambios de código, mocks incompletos y aserciones antiguas incompatibles con guardado confirmado. El último CI correcto no garantiza funcionamiento interactivo.
+- Railway laboratorio antes de integración: último despliegue observado `Pruebas@34fa94f`; las correcciones del PR #10 **no estaban desplegadas** al registrar este estado.
+- **Pendiente antes de producción:** revisión y merge controlado a `Pruebas`, arranque/despliegue en Railway Test, validación real por un administrador en Heraldo's Lab y cierre del flujo operativo de roles no restaurados. Mensajes/Sapphire mantiene las fases incompletas descritas en `PLAN_MENSAJES.md`. No afirmar acabado todo el alcance.
