@@ -137,3 +137,11 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Railway (proyecto aislado El Heraldo Test): despliegue de `Pruebas@d190c11a95` **SUCCESS** el 2026-10-11. Logs del despliegue: Discord Gateway conectado, autoprueba `/setup` correcta en Heraldo's Lab y El Heraldo Test conectado. Esto **no prueba clics reales**.
 - Rama siguiente: `fix/recuperacion-roles-pendientes-20261011` / PR #11 (borrador): guarda por servidor y miembro los roles faltantes tras liberar condena, añade `/restaurar_roles_pendientes` con confirmación administrativa, comprobaciones de jerarquía, permisos y condena activa; aún no desplegado en laboratorio.
 - Pendientes: pruebas interactivas de módulos modificados; accesos y retención del archivo de evidencia; funcionalidades avanzadas de Mensajes/Reaction Roles según plan; aprobación explícita antes de cualquier actualización de producción.
+
+
+## Auditoría integral retomada — 2026-10-11
+- Estado verificado: Pruebas a659b28, main 6f9f9ee intacta; PR #7/#10/#11 fusionados, #12 a260fec8 en borrador con CI correcta. Railway Test a8314dd2 sobre a659b28 SUCCESS, Gateway/autoprueba correctos. No acredita interacción humana.
+- Rama nueva codex/auditoria-integral-20261011 sobre #12; conserva el historial local anterior. Inventario y matriz en audit/, con responsabilidades, hallazgos, propuestas y plan de servidor real sin autorización.
+- Cuatro correcciones: navegación real de setup (Button no invocable), etiqueta inicial de aislamiento aceptada por el modal, permisos revalidados al enviar ese modal, defer antes de consultas/asignación en restauración pendiente. No duplica implementación de #10/#11.
+- Verificación local: 144 pruebas (39 + 105), compilación, pip check y diff correctos. Pruebas de evidencias ahora comprueban ejecución y efectos, además de las comprobaciones estáticas preexistentes.
+- Auditoría global en curso: no se acredita cada callback en Discord; quedan riesgos de purgas/retención, operaciones interrumpidas y respaldo SQLite. No se integra ni despliega este corte hasta revisión. Ver audit/AUDITORIA_2026-10-11.md.

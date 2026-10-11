@@ -30,3 +30,7 @@
 
 ## Paso siguiente concreto
 Pedir al administrador abrir Heraldo's Lab y ejecutar **/setup**: navegar Mensajes, Logs y Condenas, abrir una edición segura, pulsar **Cancelar** y comprobar que no cambió; después guardar de manera controlada. Registrar el resultado en `PRUEBAS_DISCORD.md`. Continuar con el resto de la matriz. Sin esa verificación, no promover a producción.
+
+
+## Adenda: auditoría integral de Codex
+La información anterior es histórica. Estado remoto vuelto a comprobar: Pruebas a659b28, main 6f9f9ee, PR #12 a260fec8 abierto; Test despliega a659b28. Trabajo nuevo en codex/auditoria-integral-20261011 con cuatro correcciones y 144 pruebas offline aprobadas. Inventario reproducible, matriz y riesgos en audit/AUDITORIA_2026-10-11.md; propuestas y servidor real en audit/PROPUESTAS_Y_PLAN_REAL.md. No hubo interacciones Discord ni despliegue nuevo. Comparar cualquier avance concurrente antes de integrar. Consultar el PR de auditoría para SHA/CI remoto final. No se completó aún la auditoría funcional de todas las superficies.

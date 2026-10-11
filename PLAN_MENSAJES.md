@@ -105,3 +105,7 @@ Ver `REVISION_PR7.md` para límites, ejemplo JSON y recorrido de aceptación. Re
 - Implementado sticky por canal con conservación del estado y reposición limitada por actividad; al retirar se conserva la publicación final.
 - Implementado envío manual confirmado por webhook propio del bot, sin persistir credenciales. Los componentes interactivos de roles usan publicación directa del bot.
 - Estas funciones tienen regresiones offline, pero no pruebas reales Discord. Continúan pendientes componentes multiacción, menús independientes, editor visual completo y catálogo general. No afirmar paridad completa con Sapphire.
+
+
+## Auditoría y propuestas de catálogo — 2026-10-11
+PR #12 separa visualmente mensajes oficiales de personalizados; esa modificación ya estaba implementada y no se repite. La auditoría local añade cobertura de navegación real, corrigiendo su invocación. La propuesta de nombres fijos Condena/Perdón/Verificación/Advertencia y editor uniforme está documentada en audit/PROPUESTAS_Y_PLAN_REAL.md para decisión del propietario; no implica migración ni eliminación de plantillas guardadas. La cobertura actual y vacíos se consultan en audit/MATRIZ_COBERTURA.md.

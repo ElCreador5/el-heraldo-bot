@@ -7491,11 +7491,13 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
     async def on_submit(self, interaction: discord.Interaction) -> None:
         # El formulario acepta acciones en español; los códigos internos se
         # conservan únicamente en SQLite y nunca deben aprenderse de memoria.
+        if not await self.parent_view.interaction_check(interaction):
+            return
         requested = str(self.action).strip().casefold()
         aliases = {
             "report": "report", "reportar": "report", "solo reportar": "report",
             "solo registrar": "report", "registrar": "report",
-            "timeout": "timeout", "aislar": "timeout",
+            "timeout": "timeout", "timeout / mute": "timeout", "aislar": "timeout",
             "aislar temporalmente": "timeout", "silenciar": "timeout",
             "kick": "kick", "expulsar": "kick",
             "ban": "ban", "banear": "ban", "bloquear": "ban",
@@ -9150,10 +9152,6 @@ class HeraldoSetupView(discord.ui.View):
         select.callback = self.select_module
         self.module_select = select
         self.add_item(select)
-        # El módulo se abre desde el menú; no repetir la elección en otro botón.
-        for item in list(self.children):
-            if isinstance(item, discord.ui.Button) and item.label == "Configurar":
-                self.remove_item(item)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
@@ -9179,7 +9177,6 @@ class HeraldoSetupView(discord.ui.View):
         self.selected_module = selected
         await self.configure(interaction, None)
 
-    @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selected = self.selected_module
         if selected is None:
@@ -14318,7 +14315,8 @@ class PendingRoleRestoreView(discord.ui.View):
         if not await configuration_access(interaction, self.guild_id, self.owner_id):
             return False
         if not interaction.user.guild_permissions.manage_roles:
-            await interaction.response.send_message("Se requiere Gestionar roles.", ephemeral=True)
+            sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await sender("Se requiere Gestionar roles.", ephemeral=True)
             return False
         return True
 
@@ -14345,19 +14343,26 @@ class PendingRoleRestoreView(discord.ui.View):
                 "La lista pendiente cambió. Abra una nueva solicitud.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         member = guild.get_member(self.target_id)
         if member is None:
             try:
                 member = await guild.fetch_member(self.target_id)
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No se pudo localizar al miembro. Sus roles pendientes se conservaron.", ephemeral=True
                 )
                 return
         if not await self.interaction_check(interaction):
             return
+        if self.finished or condemnation_pending_roles_get(self.guild_id, self.target_id) != pending:
+            await interaction.followup.send("La propuesta se cerró o los roles pendientes cambiaron. Abra una nueva solicitud.", ephemeral=True)
+            return
+        if guild.me is None or not guild.me.guild_permissions.manage_roles:
+            await interaction.followup.send("El Heraldo perdió el permiso para Gestionar roles. Los pendientes se conservaron.", ephemeral=True)
+            return
         if condemnation_get(self.guild_id, self.target_id) is not None:
-            await interaction.response.send_message("La condena volvió a estar activa. No se cambiarán roles.", ephemeral=True)
+            await interaction.followup.send("La condena volvió a estar activa. No se cambiarán roles.", ephemeral=True)
             return
         assignable = []
         for rid in pending:
@@ -14370,14 +14375,14 @@ class PendingRoleRestoreView(discord.ui.View):
                 continue
             assignable.append(role)
         if not assignable:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No hay roles pendientes que este administrador y El Heraldo puedan asignar.",
                 ephemeral=True,
             )
             return
         key = (self.guild_id, self.target_id)
         if key in _condemn_inflight:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Ya se está procesando una operación de roles para este miembro.", ephemeral=True
             )
             return
@@ -14387,7 +14392,7 @@ class PendingRoleRestoreView(discord.ui.View):
             await member.add_roles(*assignable, reason="Restauración pendiente de condena confirmada")
         except discord.HTTPException:
             self.finished = False
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Discord rechazó el cambio; no se eliminó ningún rol pendiente.", ephemeral=True
             )
             return
@@ -14396,7 +14401,7 @@ class PendingRoleRestoreView(discord.ui.View):
         remaining = [rid for rid in pending if rid not in {role.id for role in assignable}]
         condemnation_pending_roles_set(self.guild_id, self.target_id, remaining)
         self.stop()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"Roles restaurados: {len(assignable)}. Aún pendientes: {len(remaining)}.", view=None,
         )
         await log_embed(

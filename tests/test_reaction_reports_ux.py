@@ -7,6 +7,64 @@ from test_safety_regressions import b
 
 
 class ReactionReportUxTests(unittest.IsolatedAsyncioTestCase):
+    async def test_all_visible_setup_sections_open_and_serialize(self):
+        guild = MagicMock(spec=b.discord.Guild)
+        guild.id, guild.name, guild.owner_id = 987610, 'Laboratorio aislado', 10
+        guild.roles, guild.channels, guild.text_channels, guild.members = [], [], [], []
+        guild.get_channel.return_value = None
+        guild.get_role.return_value = None
+        for option in b.HeraldoSetupView(guild.id, 10).module_select.options:
+            with self.subTest(section=option.value):
+                view = b.HeraldoSetupView(guild.id, 10)
+                i = NS(data={'values': [option.value]}, guild=guild,
+                       response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
+                await view.select_module(i)
+                i.response.edit_message.assert_awaited_once()
+                result = i.response.edit_message.call_args.kwargs['view']
+                self.assertTrue(result.to_components())
+
+    async def test_report_ledger_survives_connection_changes_and_isolates_guilds(self):
+        args = (987611, 987612, 20, 'flag')
+        self.assertEqual(b.moderation_report_record(*args, 11), (1, False))
+        self.assertEqual(b.moderation_report_record(*args, 11), (1, False))
+        self.assertEqual(b.moderation_report_record(*args, 12), (2, False))
+        b.moderation_report_mark_executed(*args)
+        self.assertEqual(b.moderation_report_record(*args, 13), (3, True))
+        self.assertEqual(b.moderation_report_record(987613, *args[1:], 11), (1, False))
+
+    async def test_rule_default_labels_round_trip_for_every_action(self):
+        for action in b.MODERATION_REPORT_ACTIONS:
+            with self.subTest(action=action):
+                rule = {'action': action, 'duration_minutes': 30, 'threshold': 2, 'purge_minutes': None}
+                parent = NS(_working_reactions=lambda: [rule], _rebuild_reaction_select=MagicMock(),
+                            _content=lambda _: 'Borrador', pending_reactions=None,
+                            interaction_check=AsyncMock(return_value=True))
+                modal = b.ModerationReactionRuleModal(parent, 0)
+                for field in (modal.action, modal.duration, modal.threshold, modal.purge):
+                    field._value = field.default or ''
+                i = NS(guild=NS(id=901), response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
+                await modal.on_submit(i)
+                self.assertIsNotNone(parent.pending_reactions)
+                self.assertEqual(parent.pending_reactions[0]['action'], action)
+
+    async def test_rule_modal_revoked_permission_cannot_mutate_draft(self):
+        parent = NS(_working_reactions=lambda: [{'action': 'report', 'threshold': 1}],
+                    interaction_check=AsyncMock(return_value=False), pending_reactions=None,
+                    _rebuild_reaction_select=MagicMock(), _content=lambda _: 'Borrador')
+        modal = b.ModerationReactionRuleModal(parent, 0)
+        for field in (modal.action, modal.duration, modal.threshold, modal.purge):
+            field._value = field.default or ''
+        await modal.on_submit(NS(guild=NS(id=901), response=NS(send_message=AsyncMock(), edit_message=AsyncMock())))
+        self.assertIsNone(parent.pending_reactions)
+
+    async def test_setup_selection_executes_real_navigation_callback(self):
+        view = b.HeraldoSetupView(901, 10)
+        i = NS(data={'values': ['moderation']}, guild=NS(id=901),
+               response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
+        await view.select_module(i)
+        i.response.edit_message.assert_awaited_once()
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs['view'], b.HeraldoModerationSetupView)
+
     async def test_report_condemn_delegates_purge_to_evidence_safe_path(self):
         guild = NS(id=901)
         member = NS(id=20)
