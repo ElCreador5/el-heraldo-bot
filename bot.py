@@ -12996,9 +12996,20 @@ async def condemnation_archive_evidence(
     archive_channel = guild.get_channel(get_log_channel_id(guild.id))
     if not isinstance(archive_channel, discord.TextChannel):
         return None, (message.content or "(sin texto)")[:2000]
-    # No copiar evidencias a un canal público ni al canal visible para condenados.
+    # Fallar de forma segura: las evidencias solo se archivan cuando el canal
+    # no es visible para roles ordinarios ni por excepciones individuales.
+    # Los administradores conservan su acceso inherente en Discord.
     if archive_channel.permissions_for(guild.default_role).view_channel:
         return None, None
+    for role in guild.roles:
+        if role.is_default() or role.permissions.administrator:
+            continue
+        if archive_channel.permissions_for(role).view_channel:
+            return None, None
+    for target, overwrite in archive_channel.overwrites.items():
+        if isinstance(target, discord.Member) and overwrite.view_channel is True:
+            if guild.me is None or target.id != guild.me.id:
+                return None, None
 
     me = guild.me
     if me is None:
