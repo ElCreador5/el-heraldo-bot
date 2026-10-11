@@ -18939,38 +18939,114 @@ async def suggestions_panel(interaction: discord.Interaction, canal: discord.Tex
     await interaction.followup.send(f"Panel de sugerencias configurado en {canal.mention}.", ephemeral=True)
 
 
+class SuggestionSettingsConfirmView(discord.ui.View):
+    """Confirma cambios de destinatarios sin modificar metadatos al navegar."""
+    def __init__(self, guild_id: int, owner_id: int, action: str,
+                 target_id: int | None = None, enabled: bool | None = None):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.action, self.target_id, self.enabled = action, target_id, enabled
+        self.finished = False
+        self.original_owner = suggestion_owner_enabled(guild_id)
+        self.original_reviewers = set(suggestion_reviewer_ids(guild_id))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            return
+        if (self.original_owner != suggestion_owner_enabled(self.guild_id)
+                or self.original_reviewers != set(suggestion_reviewer_ids(self.guild_id))):
+            await interaction.response.send_message(
+                "La configuración cambió durante la revisión. Abra una nueva propuesta.",
+                ephemeral=True,
+            )
+            return
+        if self.action == "add":
+            member = interaction.guild.get_member(self.target_id)
+            if member is None:
+                try:
+                    member = await interaction.guild.fetch_member(self.target_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    await interaction.response.send_message(
+                        "No se pudo verificar que el revisor siga en el servidor.", ephemeral=True
+                    )
+                    return
+            if member.bot:
+                await interaction.response.send_message("No se puede nombrar revisor a un bot.", ephemeral=True)
+                return
+        self.finished = True
+        self.stop()
+        if self.action == "owner":
+            suggestion_set_owner_enabled(self.guild_id, bool(self.enabled))
+        elif self.action == "add":
+            suggestion_add_reviewer(self.guild_id, self.target_id)
+        elif self.action == "remove":
+            suggestion_remove_reviewer(self.guild_id, self.target_id)
+        await interaction.response.edit_message(content="Destinatarios de sugerencias actualizados.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content="Cambio cancelado. No se guardó nada.", view=None)
+
+
 @suggestions_group.command(name="setup", description="Elegir si el creador del servidor también recibe las sugerencias por DM.")
 @discord.app_commands.describe(dueno="Sí = el dueño/creador recibe las sugerencias; No = solo destinatarios añadidos")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def suggestions_config(interaction: discord.Interaction, dueno: bool) -> None:
-    suggestion_set_owner_enabled(interaction.guild.id, dueno)
-    owner_text = "incluido" if dueno else "excluido"
+    if not await configuration_access(interaction):
+        return
     await interaction.response.send_message(
-        f"El dueño del servidor queda **{owner_text}** como destinatario de sugerencias.", ephemeral=True
+        "¿Confirma " + ("incluir" if dueno else "excluir")
+        + " al propietario entre quienes reciben sugerencias?",
+        view=SuggestionSettingsConfirmView(
+            interaction.guild.id, interaction.user.id, "owner", enabled=dueno
+        ), ephemeral=True,
     )
-
 
 @suggestions_group.command(name="revisor_add", description="Añadir una persona que recibirá y podrá resolver sugerencias por DM.")
 @discord.app_commands.describe(usuario="Persona que recibirá las sugerencias")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def suggestions_reviewer_add(interaction: discord.Interaction, usuario: discord.Member) -> None:
-    if usuario.bot:
-        await interaction.response.send_message("Error: No puedes añadir un bot como revisor.", ephemeral=True)
+    if not await configuration_access(interaction):
         return
-    suggestion_add_reviewer(interaction.guild.id, usuario.id)
-    await interaction.response.send_message(f"{usuario.mention} recibirá las nuevas sugerencias por DM.", ephemeral=True)
-
+    if usuario.bot:
+        await interaction.response.send_message("No puede nombrar revisor a un bot.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"¿Confirma añadir {usuario.mention} como revisor de sugerencias?",
+        view=SuggestionSettingsConfirmView(
+            interaction.guild.id, interaction.user.id, "add", target_id=usuario.id
+        ), ephemeral=True,
+    )
 
 @suggestions_group.command(name="revisor_remove", description="Quitar una persona de los destinatarios de sugerencias.")
 @discord.app_commands.describe(usuario="Persona que dejará de recibir nuevas sugerencias")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def suggestions_reviewer_remove(interaction: discord.Interaction, usuario: discord.Member) -> None:
-    removed = suggestion_remove_reviewer(interaction.guild.id, usuario.id)
+    if not await configuration_access(interaction):
+        return
+    if usuario.id not in suggestion_reviewer_ids(interaction.guild.id):
+        await interaction.response.send_message("Ese miembro no figura como revisor.", ephemeral=True)
+        return
     await interaction.response.send_message(
-        "Revisor eliminado." if removed else "Información: Esa persona no estaba configurada como revisor.",
-        ephemeral=True,
+        f"¿Confirma retirar a {usuario.mention} como revisor?",
+        view=SuggestionSettingsConfirmView(
+            interaction.guild.id, interaction.user.id, "remove", target_id=usuario.id
+        ), ephemeral=True,
     )
-
 
 @suggestions_group.command(name="lista", description="Ver el canal y las personas que reciben las sugerencias.")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
