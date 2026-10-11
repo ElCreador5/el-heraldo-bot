@@ -2771,7 +2771,7 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
 def heraldo_setup_home_content() -> str:
     return (
         "**El Heraldo · Configuración**\n\n"
-        "Selecciona un módulo en el menú desplegable y pulsa **Configurar** para abrirlo.\n"
+        "Selecciona una sección y se abrirá directamente. Guarda los cambios solo cuando estés conforme.\n"
         "Puedes volver a este menú desde las opciones de navegación de cada módulo."
     )
 
@@ -7236,7 +7236,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
+                discord.SelectOption(label="Mensajes personalizados", value="templates", description="Crear, editar y publicar mensajes con su propio nombre."),
                 discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
                 discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
                 discord.SelectOption(label="Programación", value="schedules", description="Fechas, zonas horarias y repeticiones de mensajes."),
@@ -9122,7 +9122,7 @@ class HeraldoPendingSetupModuleView(discord.ui.View):
 
 
 class HeraldoSetupView(discord.ui.View):
-    """Navegación compacta: seleccionar un módulo y luego pulsar Configurar."""
+    """Navegación directa: abrir un módulo al elegirlo, sin pasos redundantes."""
 
     MODULES = (
         ("automod", "AutoMod", "Protecciones automáticas del servidor"),
@@ -9143,7 +9143,7 @@ class HeraldoSetupView(discord.ui.View):
         self.selected_module: str | None = None
 
         select = discord.ui.Select(
-            placeholder="Selecciona el módulo que deseas configurar",
+            placeholder="Elige una sección para abrirla",
             min_values=1,
             max_values=1,
             row=0,
@@ -9154,11 +9154,16 @@ class HeraldoSetupView(discord.ui.View):
                     description=description,
                 )
                 for key, label, description in self.MODULES
+                if key not in {"role_connections", "language"}
             ],
         )
         select.callback = self.select_module
         self.module_select = select
         self.add_item(select)
+        # El módulo se abre desde el menú; no repetir la elección en otro botón.
+        for item in list(self.children):
+            if isinstance(item, discord.ui.Button) and item.label == "Configurar":
+                self.remove_item(item)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
@@ -9182,13 +9187,7 @@ class HeraldoSetupView(discord.ui.View):
             await interaction.response.send_message("Módulo no válido.", ephemeral=True)
             return
         self.selected_module = selected
-        # Discord reconstruye el desplegable después de edit_message. Debemos
-        # marcar la opción escogida en el propio componente; de lo contrario
-        # el cliente vuelve a mostrar el placeholder aunque el estado interno
-        # guarde correctamente la selección.
-        for option in self.module_select.options:
-            option.default = option.value == selected
-        await interaction.response.edit_message(view=self)
+        await self.configure(interaction, None)
 
     @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -14153,7 +14152,7 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
     )
     embed.add_field(name="Canal", value=channel.mention, inline=True)
     embed.add_field(name="Acción", value=f"{HONEYPOT_ACTION_LABELS.get(action, action)} — {note}", inline=False)
-    embed.add_field(name="Mensaje", value=f"```{evidence}```", inline=False)
+    embed.add_field(name="Mensaje", value=evidence, inline=False)
     embed.set_thumbnail(url=member.display_avatar.url)
     role_id = hp_ping_role_id(guild.id)
     try:
@@ -15821,7 +15820,7 @@ async def honeypot_history(
             value=(
                 f"<#{r['channel_id']}> · {HONEYPOT_ACTION_LABELS.get(r['action'], r['action'])}\n"
                 f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}\n"
-                f"```{content}```"
+                content
             ),
             inline=False,
         )
