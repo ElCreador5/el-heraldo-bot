@@ -11509,6 +11509,36 @@ def condemnation_save(
     conn.close()
 
 
+def condemnation_pending_roles_get(guild_id: int, user_id: int) -> list[int]:
+    """Roles que aún faltan después de levantar una condena, aislados por servidor."""
+    raw = guild_config_get(guild_id, f"condemnation_pending_roles:{user_id}")
+    if not raw:
+        return []
+    try:
+        values = json.loads(raw)
+        if not isinstance(values, list):
+            return []
+        return sorted({int(value) for value in values if int(value) > 0})
+    except (TypeError, ValueError, OverflowError):
+        return []
+
+
+def condemnation_pending_roles_set(guild_id: int, user_id: int, role_ids: list[int]) -> None:
+    key = f"condemnation_pending_roles:{user_id}"
+    clean = sorted({int(rid) for rid in role_ids if int(rid) > 0})
+    if clean:
+        guild_config_set(guild_id, key, json.dumps(clean))
+    else:
+        conn = db_connect()
+        try:
+            conn.execute(
+                "DELETE FROM guild_settings WHERE guild_id = ? AND key = ?",
+                (guild_id, key),
+            )
+        finally:
+            conn.close()
+
+
 def condemnation_deactivate(
     guild_id: int, user_id: int, *, resolution: str | None = None, resolved_by: int | None = None
 ) -> None:
@@ -13872,6 +13902,13 @@ async def _release_condemned_member_inner(
     finally:
         _condemn_sync_busy.discard((member.guild.id, member.id))
 
+    # La liberación ya tuvo éxito en Discord. Conservar los roles irrecuperables
+    # aunque se cierre el expediente, para permitir un reintento administrativo.
+    previous_pending = condemnation_pending_roles_get(member.guild.id, member.id)
+    assigned_ids = {role.id for role in new_roles}
+    new_pending = sorted((set(previous_pending) | set(missing_role_ids)) - assigned_ids)
+    condemnation_pending_roles_set(member.guild.id, member.id, new_pending)
+
     linked_case_number = (
         int(row["moderation_case_number"])
         if row is not None and "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
@@ -14272,6 +14309,148 @@ async def condenar_error(interaction: discord.Interaction, error: discord.app_co
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+class PendingRoleRestoreView(discord.ui.View):
+    """Reintento no destructivo y explícito de roles pendientes de una condena."""
+    def __init__(self, guild_id: int, owner_id: int, target_id: int):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id, self.target_id = guild_id, owner_id, target_id
+        self.original = condemnation_pending_roles_get(guild_id, target_id)
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return False
+        if not interaction.user.guild_permissions.manage_roles:
+            await interaction.response.send_message("Se requiere Gestionar roles.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Reintentar restauración", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        guild = interaction.guild
+        bot_member = guild.me
+        if bot_member is None or not bot_member.guild_permissions.manage_roles:
+            await interaction.response.send_message("El Heraldo no tiene permiso para Gestionar roles.", ephemeral=True)
+            return
+        if condemnation_get(self.guild_id, self.target_id) is not None:
+            await interaction.response.send_message(
+                "No se pueden restaurar roles mientras la condena siga activa.", ephemeral=True
+            )
+            return
+        pending = condemnation_pending_roles_get(self.guild_id, self.target_id)
+        if not pending or pending != self.original:
+            await interaction.response.send_message(
+                "La lista pendiente cambió. Abra una nueva solicitud.", ephemeral=True
+            )
+            return
+        member = guild.get_member(self.target_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(self.target_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                await interaction.response.send_message(
+                    "No se pudo localizar al miembro. Sus roles pendientes se conservaron.", ephemeral=True
+                )
+                return
+        if not await self.interaction_check(interaction):
+            return
+        if condemnation_get(self.guild_id, self.target_id) is not None:
+            await interaction.response.send_message("La condena volvió a estar activa. No se cambiarán roles.", ephemeral=True)
+            return
+        assignable = []
+        for rid in pending:
+            role = guild.get_role(rid)
+            if role is None or role.managed or not role.is_assignable():
+                continue
+            if (not interaction.user.guild_permissions.administrator
+                    and interaction.user.id != guild.owner_id
+                    and role >= interaction.user.top_role):
+                continue
+            assignable.append(role)
+        if not assignable:
+            await interaction.response.send_message(
+                "No hay roles pendientes que este administrador y El Heraldo puedan asignar.",
+                ephemeral=True,
+            )
+            return
+        key = (self.guild_id, self.target_id)
+        if key in _condemn_inflight:
+            await interaction.response.send_message(
+                "Ya se está procesando una operación de roles para este miembro.", ephemeral=True
+            )
+            return
+        _condemn_inflight.add(key)
+        self.finished = True
+        try:
+            await member.add_roles(*assignable, reason="Restauración pendiente de condena confirmada")
+        except discord.HTTPException:
+            self.finished = False
+            await interaction.response.send_message(
+                "Discord rechazó el cambio; no se eliminó ningún rol pendiente.", ephemeral=True
+            )
+            return
+        finally:
+            _condemn_inflight.discard(key)
+        remaining = [rid for rid in pending if rid not in {role.id for role in assignable}]
+        condemnation_pending_roles_set(self.guild_id, self.target_id, remaining)
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"Roles restaurados: {len(assignable)}. Aún pendientes: {len(remaining)}.", view=None,
+        )
+        await log_embed(
+            guild, "Restauración pendiente ejecutada",
+            f"Administrador: {interaction.user.mention}\n"
+            f"Miembro: <@{self.target_id}>\n"
+            f"Restaurados: {len(assignable)}; pendientes: {len(remaining)}.",
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content="Restauración cancelada. No se modificaron los roles.", view=None,
+        )
+
+
+@bot.tree.command(name="restaurar_roles_pendientes",
+                  description="Reintentar los roles que no se pudieron devolver al levantar una condena.")
+@discord.app_commands.describe(miembro="Miembro con roles pendientes de restauración")
+@discord.app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+@discord.app_commands.guild_only()
+async def restaurar_roles_pendientes(interaction: discord.Interaction, miembro: discord.Member) -> None:
+    if not await configuration_access(interaction):
+        return
+    if not interaction.user.guild_permissions.manage_roles:
+        await interaction.response.send_message("Se requiere Gestionar roles.", ephemeral=True)
+        return
+    pending = condemnation_pending_roles_get(interaction.guild.id, miembro.id)
+    if not pending:
+        await interaction.response.send_message("El miembro no tiene roles pendientes de restauración.", ephemeral=True)
+        return
+    if condemnation_get(interaction.guild.id, miembro.id) is not None:
+        await interaction.response.send_message(
+            "Primero debe levantarse la condena activa.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(
+        f"Hay {len(pending)} rol(es) pendiente(s) para {miembro.mention}. "
+        "Revise los permisos y confirme el reintento.",
+        view=PendingRoleRestoreView(interaction.guild.id, interaction.user.id, miembro.id),
+        ephemeral=True,
+    )
 
 
 @bot.tree.command(name="liberar", description="Levantar una condena y devolver los roles guardados.")

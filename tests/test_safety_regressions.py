@@ -472,6 +472,46 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.guild_config_get(901, 'condemned_channel_id'), '123')
 
 
+    async def test_pending_roles_are_scoped_and_persist_after_case_closed(self):
+        b.condemnation_pending_roles_set(901, 40301, [9007, 9008, 9007])
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40301), [9007, 9008])
+        self.assertEqual(b.condemnation_pending_roles_get(902, 40301), [])
+        b.condemnation_pending_roles_set(901, 40301, [])
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40301), [])
+
+    async def test_pending_restore_cancel_never_assigns_roles(self):
+        b.condemnation_pending_roles_set(901, 40302, [9007])
+        view = b.PendingRoleRestoreView(901, 10, 40302)
+        i = interaction()
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=True, manage_roles=True)
+        await view.cancel.callback(i)
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40302), [9007])
+
+    async def test_pending_restore_confirm_assigns_and_clears_pending(self):
+        b.condemnation_pending_roles_set(901, 40303, [9007, 9008])
+        i = interaction()
+        i.user.guild_permissions = b.discord.Permissions(
+            manage_guild=True, manage_roles=True, administrator=True
+        )
+        role = NS(id=9007, managed=False, is_assignable=lambda: True)
+        i.guild.get_role = lambda rid: role if rid == 9007 else None
+        member = NS(id=40303, add_roles=AsyncMock())
+        i.guild.get_member = lambda uid: member
+        i.guild.me = NS(guild_permissions=NS(manage_roles=True))
+        view = b.PendingRoleRestoreView(901, 10, 40303)
+        with (patch.object(b, 'condemnation_get', return_value=None),
+              patch.object(b, 'log_embed', new=AsyncMock())):
+            await view.confirm.callback(i)
+        member.add_roles.assert_awaited_once()
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40303), [9008])
+
+    async def test_pending_restore_denies_revoked_permissions(self):
+        b.condemnation_pending_roles_set(901, 40304, [9007])
+        view = b.PendingRoleRestoreView(901, 10, 40304)
+        self.assertFalse(await view.interaction_check(interaction(allowed=False)))
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40304), [9007])
+
+
 
 if __name__ == '__main__':
     unittest.main()
