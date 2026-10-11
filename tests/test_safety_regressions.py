@@ -329,6 +329,36 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             setter.assert_not_called()
 
 
+    async def test_verify_setup_cancel_preserves_previous_settings(self):
+        b.guild_config_set(901, 'verify_enabled', '1')
+        i = interaction()
+        await b.verify_config.callback(i, activado=False)
+        self.assertEqual(b.guild_config_get(901, 'verify_enabled'), '1')
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.cancel.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'verify_enabled'), '1')
+
+    async def test_joinroles_add_cancel_preserves_existing_roles(self):
+        b.guild_config_set(901, 'join_role_ids', '[]')
+        role = NS(id=771, mention='<@&771>')
+        i = interaction()
+        with patch.object(b, '_joinroles_validate_command_roles', return_value=None):
+            await b.joinroles_add.callback(i, rol=role)
+        self.assertEqual(b.get_join_role_ids(901), [])
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.cancel.callback(interaction())
+        self.assertEqual(b.get_join_role_ids(901), [])
+
+    async def test_motw_schedule_cancel_preserves_values(self):
+        b.guild_config_set(901, 'motw_hour', '9')
+        i = interaction()
+        await b.motw_set_schedule.callback(i, NS(value=2, name='Miércoles'), 18)
+        self.assertEqual(b.guild_config_get(901, 'motw_hour'), '9')
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.cancel.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'motw_hour'), '9')
+
+
 
 if __name__ == '__main__':
     unittest.main()
