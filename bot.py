@@ -15193,161 +15193,176 @@ async def honeypot_config(
     # Todos los cambios pasan por un borrador efímero. Cancelar no escribe.
     await confirm_configuration(interaction, guild.id, changes)
 
+class HoneypotTrapActionConfirmView(discord.ui.View):
+    """Confirma y revalida cambios de canales trampa antes de ejecutarlos."""
+    def __init__(self, guild_id: int, owner_id: int, action: str, channel_id: int | None = None):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.action, self.channel_id = action, channel_id
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("La solicitud ya se resolvió.", ephemeral=True)
+            return
+        guild = interaction.guild
+        me = guild.me
+        channel = guild.get_channel(self.channel_id) if self.channel_id is not None else None
+        if self.action == "create":
+            if not interaction.user.guild_permissions.manage_channels or (
+                me is None or not me.guild_permissions.manage_channels
+            ):
+                await interaction.response.send_message(
+                    "Se requiere Gestionar canales tanto para el administrador como para el Heraldo.",
+                    ephemeral=True,
+                )
+                return
+        else:
+            if not isinstance(channel, discord.TextChannel):
+                await interaction.response.send_message("El canal ya no existe.", ephemeral=True)
+                return
+            registered = channel.id in hp_traps(guild.id)
+            if (self.action == "add" and registered) or (self.action == "remove" and not registered):
+                await interaction.response.send_message("La configuración cambió. Abre una nueva propuesta.", ephemeral=True)
+                return
+            if self.action == "add":
+                reason = hp_protected_channel_reason(channel)
+                perms = channel.permissions_for(me) if me is not None else None
+                if reason or perms is None or not (
+                    perms.view_channel and perms.send_messages and perms.manage_messages
+                ):
+                    await interaction.response.send_message(
+                        "El canal ya no cumple las condiciones o permisos necesarios.", ephemeral=True
+                    )
+                    return
+        self.finished = True
+        self.stop()
+        await interaction.response.defer(ephemeral=True)
+        if self.action == "add":
+            hp_add_trap(guild.id, channel.id)
+            warning = await hp_sync_warning(channel)
+            await interaction.followup.send(
+                f"{channel.mention} se añadió como canal trampa."
+                + (f"\nAdvertencia: {warning}" if warning else ""), ephemeral=True,
+            )
+            await log_embed(guild, "Canal trampa añadido",
+                            f"{interaction.user.mention} confirmó {channel.mention}.")
+        elif self.action == "remove":
+            old_message_id = hp_traps(guild.id).get(channel.id)
+            if old_message_id:
+                try:
+                    await (await channel.fetch_message(old_message_id)).delete()
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
+            hp_remove_trap(guild.id, channel.id)
+            extra = ""
+            if not hp_traps(guild.id) and honeypot_enabled(guild.id):
+                hp_setting_set(guild.id, "honeypot_enabled", "0")
+                extra = " Se desactivó el honeypot porque no quedan canales trampa."
+            await interaction.followup.send(
+                f"{channel.mention} dejó de ser canal trampa.{extra}", ephemeral=True
+            )
+            await log_embed(guild, "Canal trampa quitado",
+                            f"{interaction.user.mention} confirmó la retirada de {channel.mention}.")
+        elif self.action == "create":
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, create_public_threads=False,
+                    create_private_threads=False, send_messages_in_threads=False,
+                )
+            }
+            try:
+                channel = await guild.create_text_channel(
+                    "honeypot", overwrites=overwrites, reason="Creación de honeypot confirmada"
+                )
+            except discord.HTTPException:
+                await interaction.followup.send(
+                    "No se pudo crear el canal trampa. Revise los permisos y reintente.", ephemeral=True
+                )
+                return
+            hp_add_trap(guild.id, channel.id)
+            warning = await hp_sync_warning(channel)
+            await interaction.followup.send(
+                f"Se creó {channel.mention} como canal trampa."
+                + (f"\nAdvertencia: {warning}" if warning else "")
+                + "\nPara activarlo, use /honeypot setup y confirme los cambios.",
+                ephemeral=True,
+            )
+            await log_embed(guild, "Canal trampa creado",
+                            f"{interaction.user.mention} confirmó la creación de {channel.mention}.")
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("La solicitud ya se resolvió.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content="Operación cancelada. No se realizaron cambios.", view=None,
+        )
+
+
 @honeypot_group.command(name="add", description="Convertir un canal de texto existente en canal trampa.")
 @discord.app_commands.describe(canal="Canal de texto que todos puedan ver y en el que puedan escribir")
 async def honeypot_add(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
-    guild = interaction.guild
-    if canal.id in hp_traps(guild.id):
-        await interaction.response.send_message(f"{canal.mention} ya es un canal trampa.", ephemeral=True)
+    if not await configuration_access(interaction):
         return
-    reason = hp_protected_channel_reason(canal)
-    if reason:
-        await interaction.response.send_message(
-            f"Error: No puedo usar {canal.mention} como trampa: {reason}. Elige un canal que nadie use de verdad.",
-            ephemeral=True,
-        )
+    if canal.id in hp_traps(interaction.guild.id):
+        await interaction.response.send_message("El canal ya está registrado como trampa.", ephemeral=True)
         return
-    perms = canal.permissions_for(guild.me)
-    if not (perms.view_channel and perms.send_messages and perms.manage_messages):
-        await interaction.response.send_message(
-            f"Error: El Heraldo necesita Ver canal, Enviar mensajes y Gestionar mensajes en {canal.mention}.",
-            ephemeral=True,
-        )
+    if hp_protected_channel_reason(canal):
+        await interaction.response.send_message("Este canal está protegido y no puede usarse como trampa.", ephemeral=True)
         return
-    everyone = canal.permissions_for(guild.default_role)
-    hp_add_trap(guild.id, canal.id)
-    await interaction.response.defer(ephemeral=True)
-    err = await hp_sync_warning(canal)
-    notes: list[str] = []
-    if not (everyone.view_channel and everyone.send_messages):
-        notes.append("Advertencia: @everyone no puede ver o escribir ahí: los bots que entren no lo verán y no atrapará nada.")
-    if err:
-        notes.append("Advertencia: " + err)
-    await interaction.followup.send(
-        f"{canal.mention} añadido como canal trampa." + ("\n" + "\n".join(notes) if notes else ""),
+    me = interaction.guild.me
+    perms = canal.permissions_for(me) if me is not None else None
+    if perms is None or not (perms.view_channel and perms.send_messages and perms.manage_messages):
+        await interaction.response.send_message("Faltan permisos del bot en el canal.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"¿Confirma añadir {canal.mention} como canal trampa?",
+        view=HoneypotTrapActionConfirmView(interaction.guild.id, interaction.user.id, "add", canal.id),
         ephemeral=True,
     )
-    await log_embed(guild, "Canal trampa añadido", f"{interaction.user.mention} añadió {canal.mention}.")
-
 
 @honeypot_group.command(name="create", description="Crear #honeypot ya configurado (visible, con aviso fijado).")
 async def honeypot_create(interaction: discord.Interaction) -> None:
-    guild = interaction.guild
-    await interaction.response.defer(ephemeral=True)
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(
-            view_channel=True,
-            send_messages=True,
-            create_public_threads=False,
-            create_private_threads=False,
-            send_messages_in_threads=False,
-        )
-    }
-    try:
-        channel = await guild.create_text_channel(
-            "honeypot", overwrites=overwrites, reason=f"Honeypot creado por {interaction.user}"
-        )
-    except discord.HTTPException as e:
-        await interaction.followup.send(f"Error: No pude crear el canal: `{e}`", ephemeral=True)
+    if not await configuration_access(interaction):
         return
-    hp_add_trap(guild.id, channel.id)
-    err = await hp_sync_warning(channel)
-    await interaction.followup.send(
-        f"Creé {channel.mention} y lo añadí como trampa." + (f"\nAdvertencia: {err}" if err else "")
-        + "\nActívalo con `/honeypot setup activado:True` (empieza con `accion: Solo registrar` si quieres probar).",
+    me = interaction.guild.me
+    if not interaction.user.guild_permissions.manage_channels or (
+        me is None or not me.guild_permissions.manage_channels
+    ):
+        await interaction.response.send_message(
+            "Se requiere Gestionar canales para crear una trampa.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(
+        "¿Confirma crear un nuevo canal de texto para el honeypot?",
+        view=HoneypotTrapActionConfirmView(interaction.guild.id, interaction.user.id, "create"),
         ephemeral=True,
     )
-    await log_embed(guild, "Canal trampa creado", f"{interaction.user.mention} creó {channel.mention}.")
-
 
 @honeypot_group.command(name="remove", description="Quitar un canal del honeypot (no lo borra).")
 async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
-    traps = hp_traps(interaction.guild.id)
-    if canal.id not in traps:
-        await interaction.response.send_message(f"{canal.mention} no es un canal trampa.", ephemeral=True)
+    if not await configuration_access(interaction):
         return
-    await interaction.response.defer(ephemeral=True)
-    msg_id = traps[canal.id]
-    if msg_id:
-        try:
-            await (await canal.fetch_message(msg_id)).delete()
-        except discord.HTTPException:
-            pass
-    hp_remove_trap(interaction.guild.id, canal.id)
-    extra = ""
-    if not hp_traps(interaction.guild.id) and honeypot_enabled(interaction.guild.id):
-        hp_setting_set(interaction.guild.id, "honeypot_enabled", "0")
-        extra = "\nInformación: Era el último canal trampa: desactivé el honeypot."
-    await interaction.followup.send(f"{canal.mention} ya no es un canal trampa.{extra}", ephemeral=True)
-    await log_embed(interaction.guild, "Canal trampa quitado", f"{interaction.user.mention} quitó {canal.mention}.")
-
-
-class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del aviso"):
-    title_input = discord.ui.TextInput(
-        label="Título",
-        required=False,
-        max_length=256,
+    if canal.id not in hp_traps(interaction.guild.id):
+        await interaction.response.send_message("El canal no figura como trampa.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"¿Confirma retirar {canal.mention} de los canales trampa? El canal permanecerá en Discord.",
+        view=HoneypotTrapActionConfirmView(interaction.guild.id, interaction.user.id, "remove", canal.id),
+        ephemeral=True,
     )
-    description_input = discord.ui.TextInput(
-        label="Descripción",
-        style=discord.TextStyle.paragraph,
-        required=True,
-        max_length=4000,
-    )
-    color_input = discord.ui.TextInput(
-        label="Color HEX (ej. F1C40F o #F1C40F)",
-        required=True,
-        max_length=7,
-    )
-    image_input = discord.ui.TextInput(
-        label="Imagen URL (opcional)",
-        required=False,
-        max_length=2000,
-    )
-    footer_input = discord.ui.TextInput(
-        label="Pie del embed (opcional)",
-        required=False,
-        max_length=2048,
-    )
-
-    def __init__(self, guild_id: int) -> None:
-        super().__init__()
-        self.guild_id = guild_id
-        cfg = hp_warning_custom(guild_id)
-        self.title_input.default = cfg["title"]
-        self.description_input.default = cfg["description"]
-        self.color_input.default = cfg["color"]
-        self.image_input.default = cfg["image"]
-        self.footer_input.default = cfg["footer"]
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        title = str(self.title_input).strip()
-        description = str(self.description_input).strip()
-        color = str(self.color_input).strip().lstrip("#")
-        image = str(self.image_input).strip()
-        footer = str(self.footer_input).strip()
-
-        if not description:
-            await interaction.response.send_message("Error: La descripción no puede quedar vacía.", ephemeral=True)
-            return
-        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
-            await interaction.response.send_message("Error: El color debe ser HEX de 6 dígitos, por ejemplo `F1C40F`.", ephemeral=True)
-            return
-        for label, url in (("imagen", image),):
-            if url and not re.match(r"^https?://", url, re.IGNORECASE) and not VAR_PATTERN.search(url):
-                await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
-                return
-
-        await confirm_configuration(interaction, self.guild_id, {
-            "honeypot_warning_title": title,
-            "honeypot_warning_description": description,
-            "honeypot_warning_color": color.upper(),
-            "honeypot_warning_image": image,
-            "honeypot_warning_thumbnail": "",
-            "honeypot_warning_footer": footer,
-            "honeypot_warning_style": "custom",
-        })
-
 
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
 async def honeypot_warning_embed_cmd(interaction: discord.Interaction) -> None:
