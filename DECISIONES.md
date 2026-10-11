@@ -64,3 +64,7 @@ Una nueva decisión debe indicar fecha, motivo y qué regla reemplaza. No modifi
 ## Criterio técnico aplicado en auditoría — 2026-10-11
 
 En la rama de PR #10 se reutilizó el flujo de propuesta, confirmación explícita y comprobación de permisos al pulsar «Guardar cambios» para los comandos administrativos heredados. Cancelar no debe escribir. Operaciones de creación/retiro de canales, destinatarios o exenciones usan confirmaciones específicas con identidad y permisos revalidados. Este criterio desarrolla el acuerdo vigente de configuración consciente; **no autoriza despliegue en producción** ni sustituye pruebas en Discord.
+
+## Continuidad de restauraciones parciales — 2026-10-11
+
+Para evitar perder información al levantar una condena, el registro de roles que no pudieron devolverse se conserva por servidor/miembro y el administrador puede reintentar su restauración con confirmación explícita, permisos de Gestionar roles, control de jerarquía y rechazo de condena activa. Esta implementación está propuesta en PR #11 para el laboratorio y exige prueba interactiva antes de producción.
