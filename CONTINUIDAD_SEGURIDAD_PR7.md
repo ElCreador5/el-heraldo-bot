@@ -23,3 +23,11 @@ Cerrar los hallazgos A (confirmaciones heredadas), B (roles parcialmente restaur
 3. Diseñar control de acceso y retención para evidencia independiente de logs generales.
 4. Integrar los PR en orden revisado, desplegar solo El Heraldo Test en Heraldo's Lab y registrar pruebas manuales en `PRUEBAS_DISCORD.md`.
 5. Exigir revisión, respaldo SQLite y autorización concreta antes de `main`.
+
+## Avance adicional — 2026-10-11 UTC
+- Commits en la rama de auditoría: confirmación en `/honeypot setup`, `/honeypot resume`, `/heraldo_log_channel`, `/verify_setup`, Join Roles add/remove/user_add/user_remove y `/motw_set_schedule` / `/motw_set_channel`. Se reutilizó `ConfigurationConfirmView` con comprobaciones de permisos al guardar y control de propuestas obsoletas.
+- Regresiones agregadas en `tests/test_safety_regressions.py`; GitHub Actions **SUCCESS** en el commit `55f62790eb` (matriz offline). Hubo fallos intermedios de dobles de prueba corregidos posteriormente; no se deben confundir con el resultado final.
+- Última rama revisada: `fix/auditoria-seguridad-pr7-20261010@55f62790eb`, PR #10 sigue en borrador contra `Pruebas`.
+- Railway laboratorio: último despliegue observable **SUCCESS** en `Pruebas@34fa94f`; estos cambios **NO** están desplegados en Discord.
+- **Pendientes:** otros comandos administrativos heredados aún pueden guardar sin confirmación (raid, sugerencias, honeypot add/create/remove/exenciones, etc.); tratar por módulos con pruebas. Restauración parcial requiere flujo operativo y política de acceso a evidencias exige comprobación del modelo de moderadores. Verificaciones interactivas de Discord NO REALIZADAS.
+- No se modificó ni fusionó `main` ni `Pruebas`. Para integrar, revisar orden entre PR #7 y PR #10, CI sobre la rama fusionada y autorizar despliegue al laboratorio primero.
