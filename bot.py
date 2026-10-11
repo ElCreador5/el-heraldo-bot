@@ -11093,20 +11093,12 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
 async def motw_set_schedule(interaction: discord.Interaction, dia: discord.app_commands.Choice[int], hora: discord.app_commands.Range[int, 0, 23]) -> None:
-    set_motw_schedule(interaction.guild.id, dia.value, hora)
-    motw_mark_current_slot(interaction.guild.id)
-    now = datetime.now(STREAK_TZ)
-    next_run = motw_last_scheduled(interaction.guild.id, now) + timedelta(days=7)
-    await interaction.response.send_message(
-        f"Miembro de la Semana ahora se anuncia los **{dia.name}** a las **{hora}:00** (hora de RD).\n"
-        f"Próximo anuncio: **{MOTW_WEEKDAY_NAMES[next_run.weekday()]} {next_run.day}/{next_run.month} a las {next_run.hour}:00**.",
-        ephemeral=True,
-    )
-    await log_embed(
-        interaction.guild, "Horario de Miembro de la Semana actualizado",
-        f"{interaction.user.mention} lo cambió a {dia.name} {hora}:00 (hora de RD).",
-        discord.Color.blurple(),
-    )
+    if not await configuration_access(interaction):
+        return
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "motw_weekday": str(dia.value),
+        "motw_hour": str(hora),
+    })
 
 
 @motw_set_schedule.error
@@ -11122,33 +11114,19 @@ async def motw_set_schedule_error(interaction: discord.Interaction, error: disco
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
 async def motw_set_channel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
-    # Validar antes de guardar: así no se configura un canal donde el bot no puede escribir.
-    perms = canal.permissions_for(canal.guild.me)
-    missing = [
-        name for name, ok in (
-            ("Ver canal", perms.view_channel),
-            ("Enviar mensajes", perms.send_messages),
-            ("Insertar enlaces", perms.embed_links),
-        ) if not ok
-    ]
-    if missing:
-        await interaction.response.send_message(
-            f"Error: No guardé el cambio: el Heraldo no tiene estos permisos en {canal.mention}: "
-            f"**{', '.join(missing)}**. Dáselos y vuelve a intentarlo.",
-            ephemeral=True,
-        )
+    if not await configuration_access(interaction):
         return
-
-    set_motw_channel_id(interaction.guild.id, canal.id)
-    await interaction.response.send_message(
-        f"Miembro de la Semana se anunciará en {canal.mention}. Usa `/motw_test` para probarlo.",
-        ephemeral=True,
-    )
-    await log_embed(
-        interaction.guild, "Canal de Miembro de la Semana actualizado",
-        f"{interaction.user.mention} lo cambió a {canal.mention}.",
-        discord.Color.blurple(),
-    )
+    me = interaction.guild.me
+    if me is None:
+        await interaction.response.send_message("No puedo verificar los permisos del bot.", ephemeral=True)
+        return
+    perms = canal.permissions_for(me)
+    if not (perms.view_channel and perms.send_messages and perms.embed_links):
+        await interaction.response.send_message("Faltan permisos para publicar el anuncio en ese canal.", ephemeral=True)
+        return
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "motw_channel_id": str(canal.id),
+    })
 
 
 @motw_set_channel.error
@@ -14358,6 +14336,17 @@ class ConfigurationConfirmView(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
+        # Un canal de anuncio puede haber sido eliminado o restringido.
+        if "motw_channel_id" in self.changes:
+            channel = interaction.guild.get_channel(int(self.changes["motw_channel_id"]))
+            me = interaction.guild.me
+            if not isinstance(channel, discord.TextChannel) or me is None:
+                await interaction.response.send_message("El canal de anuncio ya no existe.", ephemeral=True)
+                return
+            perms = channel.permissions_for(me)
+            if not (perms.view_channel and perms.send_messages and perms.embed_links):
+                await interaction.response.send_message("El bot perdió permisos en el canal de anuncio.", ephemeral=True)
+                return
         # Revalidar los roles nuevos al guardar, no solo al abrir el comando.
         new_role_ids: set[int] = set()
         if "join_role_ids" in self.changes:
