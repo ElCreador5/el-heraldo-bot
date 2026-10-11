@@ -20,7 +20,7 @@ b.honeypot_db_init()
 
 def interaction(allowed=True, guild_id=901):
     return NS(guild=NS(id=guild_id), guild_id=guild_id,
-              user=NS(id=10, guild_permissions=b.discord.Permissions(manage_guild=allowed)),
+              user=NS(id=10, mention='<@10>', guild_permissions=b.discord.Permissions(manage_guild=allowed)),
               response=NS(is_done=lambda: False, send_message=AsyncMock(), edit_message=AsyncMock()),
               followup=NS(send=AsyncMock()))
 
