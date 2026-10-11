@@ -458,6 +458,20 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             publish.assert_not_awaited()
 
 
+    async def test_condemnation_channel_cancel_preserves_setting(self):
+        b.guild_config_set(901, 'condemned_channel_id', '123')
+        i = interaction()
+        i.guild.me = NS(id=777)
+        destination = NS(id=2468, mention='#condenados', permissions_for=lambda me: NS(
+            view_channel=True, send_messages=True, embed_links=True
+        ))
+        await b.condenar_config.callback(i, canal=destination)
+        self.assertEqual(b.guild_config_get(901, 'condemned_channel_id'), '123')
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.cancel.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'condemned_channel_id'), '123')
+
+
 
 if __name__ == '__main__':
     unittest.main()
