@@ -14359,7 +14359,10 @@ class PendingRoleRestoreView(discord.ui.View):
                     "No se pudo localizar al miembro. Sus roles pendientes se conservaron.", ephemeral=True
                 )
                 return
-        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+        if not await self.interaction_check(interaction):
+            return
+        if condemnation_get(self.guild_id, self.target_id) is not None:
+            await interaction.response.send_message("La condena volvió a estar activa. No se cambiarán roles.", ephemeral=True)
             return
         assignable = []
         for rid in pending:
