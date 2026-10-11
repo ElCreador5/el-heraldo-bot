@@ -129,3 +129,11 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Fallos intermedios detectados y corregidos: clases de modales/vistas retiradas accidentalmente por cambios de código, mocks incompletos y aserciones antiguas incompatibles con guardado confirmado. El último CI correcto no garantiza funcionamiento interactivo.
 - Railway laboratorio antes de integración: último despliegue observado `Pruebas@34fa94f`; las correcciones del PR #10 **no estaban desplegadas** al registrar este estado.
 - **Pendiente antes de producción:** revisión y merge controlado a `Pruebas`, arranque/despliegue en Railway Test, validación real por un administrador en Heraldo's Lab y cierre del flujo operativo de roles no restaurados. Mensajes/Sapphire mantiene las fases incompletas descritas en `PLAN_MENSAJES.md`. No afirmar acabado todo el alcance.
+
+## Integración en laboratorio y siguiente mejora — 2026-10-11
+
+- GitHub: PR #10 fusionado en `Pruebas` mediante `d190c11a95`, incorporando PR #7. Ambos figuran como fusionados. `main@6f9f9ee0a7` sin cambios.
+- CI tras integración: `Heraldo Lab - Python regressions` y `Mensajes - verificación de regresiones` **SUCCESS** para `d190c11a95`.
+- Railway (proyecto aislado El Heraldo Test): despliegue de `Pruebas@d190c11a95` **SUCCESS** el 2026-10-11. Logs del despliegue: Discord Gateway conectado, autoprueba `/setup` correcta en Heraldo's Lab y El Heraldo Test conectado. Esto **no prueba clics reales**.
+- Rama siguiente: `fix/recuperacion-roles-pendientes-20261011` / PR #11 (borrador): guarda por servidor y miembro los roles faltantes tras liberar condena, añade `/restaurar_roles_pendientes` con confirmación administrativa, comprobaciones de jerarquía, permisos y condena activa; aún no desplegado en laboratorio.
+- Pendientes: pruebas interactivas de módulos modificados; accesos y retención del archivo de evidencia; funcionalidades avanzadas de Mensajes/Reaction Roles según plan; aprobación explícita antes de cualquier actualización de producción.
