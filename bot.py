@@ -15364,6 +15364,73 @@ async def honeypot_remove(interaction: discord.Interaction, canal: discord.TextC
         ephemeral=True,
     )
 
+class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del aviso"):
+    title_input = discord.ui.TextInput(
+        label="Título",
+        required=False,
+        max_length=256,
+    )
+    description_input = discord.ui.TextInput(
+        label="Descripción",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=4000,
+    )
+    color_input = discord.ui.TextInput(
+        label="Color HEX (ej. F1C40F o #F1C40F)",
+        required=True,
+        max_length=7,
+    )
+    image_input = discord.ui.TextInput(
+        label="Imagen URL (opcional)",
+        required=False,
+        max_length=2000,
+    )
+    footer_input = discord.ui.TextInput(
+        label="Pie del embed (opcional)",
+        required=False,
+        max_length=2048,
+    )
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        cfg = hp_warning_custom(guild_id)
+        self.title_input.default = cfg["title"]
+        self.description_input.default = cfg["description"]
+        self.color_input.default = cfg["color"]
+        self.image_input.default = cfg["image"]
+        self.footer_input.default = cfg["footer"]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        title = str(self.title_input).strip()
+        description = str(self.description_input).strip()
+        color = str(self.color_input).strip().lstrip("#")
+        image = str(self.image_input).strip()
+        footer = str(self.footer_input).strip()
+
+        if not description:
+            await interaction.response.send_message("Error: La descripción no puede quedar vacía.", ephemeral=True)
+            return
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            await interaction.response.send_message("Error: El color debe ser HEX de 6 dígitos, por ejemplo `F1C40F`.", ephemeral=True)
+            return
+        for label, url in (("imagen", image),):
+            if url and not re.match(r"^https?://", url, re.IGNORECASE) and not VAR_PATTERN.search(url):
+                await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
+                return
+
+        await confirm_configuration(interaction, self.guild_id, {
+            "honeypot_warning_title": title,
+            "honeypot_warning_description": description,
+            "honeypot_warning_color": color.upper(),
+            "honeypot_warning_image": image,
+            "honeypot_warning_thumbnail": "",
+            "honeypot_warning_footer": footer,
+            "honeypot_warning_style": "custom",
+        })
+
+
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
 async def honeypot_warning_embed_cmd(interaction: discord.Interaction) -> None:
     await interaction.response.send_modal(HoneypotWarningEmbedModal(interaction.guild.id))
