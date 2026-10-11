@@ -15374,6 +15374,56 @@ async def honeypot_warning_text_cmd(interaction: discord.Interaction) -> None:
     await interaction.response.send_modal(HoneypotWarningModal(interaction.guild.id))
 
 
+class HoneypotExemptionConfirmView(discord.ui.View):
+    """Confirmación personal para exenciones de usuario o rol."""
+    def __init__(self, guild_id: int, owner_id: int, kind: str, target_id: int, add: bool):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id, self.kind = guild_id, owner_id, kind
+        self.target_id, self.add, self.finished = target_id, add, False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            return
+        if self.kind == "role" and interaction.guild.get_role(self.target_id) is None:
+            await interaction.response.send_message("El rol seleccionado ya no existe.", ephemeral=True)
+            return
+        if self.kind == "member" and interaction.guild.get_member(self.target_id) is None:
+            try:
+                await interaction.guild.fetch_member(self.target_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                await interaction.response.send_message("No se pudo comprobar la pertenencia del miembro.", ephemeral=True)
+                return
+        self.finished = True
+        self.stop()
+        if self.add:
+            hp_exempt_add(self.guild_id, self.kind, self.target_id)
+        else:
+            hp_exempt_remove(self.guild_id, self.kind, self.target_id)
+        await interaction.response.edit_message(
+            content="Exención guardada." if self.add else "Exención retirada.", view=None,
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content="Cambio cancelado. No se guardó la exención.", view=None,
+        )
+
+
 @honeypot_group.command(name="exempt_add", description="Eximir a un rol o miembro de la trampa.")
 @discord.app_commands.describe(rol="Rol a eximir", miembro="Miembro a eximir")
 async def honeypot_exempt_add(
@@ -15381,16 +15431,23 @@ async def honeypot_exempt_add(
     rol: Optional[discord.Role] = None,
     miembro: Optional[discord.Member] = None,
 ) -> None:
-    if (rol is None) == (miembro is None):
-        await interaction.response.send_message("Elige **uno**: `rol` o `miembro`.", ephemeral=True)
+    if not await configuration_access(interaction):
         return
-    if rol is not None:
-        hp_exempt_add(interaction.guild.id, "role", rol.id)
-        text = f"rol {rol.mention}"
-    else:
-        hp_exempt_add(interaction.guild.id, "member", miembro.id)
-        text = f"miembro {miembro.mention}"
-    await interaction.response.send_message(f"Eximido: {text}.", ephemeral=True)
+    if (rol is None) == (miembro is None):
+        await interaction.response.send_message(
+            "Debe indicar exactamente un rol o un miembro.", ephemeral=True
+        )
+        return
+    target = rol if rol is not None else miembro
+    kind = "role" if rol is not None else "member"
+    await interaction.response.send_message(
+        "Revise y confirme " + ("la creación" if true else "la retirada")
+        + f" de la exención para {target.mention}.",
+        view=HoneypotExemptionConfirmView(
+            interaction.guild.id, interaction.user.id, kind, target.id, true
+        ),
+        ephemeral=True,
+    )
 
 
 @honeypot_group.command(name="exempt_remove", description="Quitar la exención de un rol o miembro.")
@@ -15400,16 +15457,23 @@ async def honeypot_exempt_remove(
     rol: Optional[discord.Role] = None,
     miembro: Optional[discord.Member] = None,
 ) -> None:
-    if (rol is None) == (miembro is None):
-        await interaction.response.send_message("Elige **uno**: `rol` o `miembro`.", ephemeral=True)
+    if not await configuration_access(interaction):
         return
-    if rol is not None:
-        hp_exempt_remove(interaction.guild.id, "role", rol.id)
-        text = f"rol {rol.mention}"
-    else:
-        hp_exempt_remove(interaction.guild.id, "member", miembro.id)
-        text = f"miembro {miembro.mention}"
-    await interaction.response.send_message(f"Exención quitada: {text}.", ephemeral=True)
+    if (rol is None) == (miembro is None):
+        await interaction.response.send_message(
+            "Debe indicar exactamente un rol o un miembro.", ephemeral=True
+        )
+        return
+    target = rol if rol is not None else miembro
+    kind = "role" if rol is not None else "member"
+    await interaction.response.send_message(
+        "Revise y confirme " + ("la creación" if false else "la retirada")
+        + f" de la exención para {target.mention}.",
+        view=HoneypotExemptionConfirmView(
+            interaction.guild.id, interaction.user.id, kind, target.id, false
+        ),
+        ephemeral=True,
+    )
 
 
 @honeypot_group.command(name="history", description="Ver los últimos miembros atrapados.")
