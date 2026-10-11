@@ -17,5 +17,13 @@
 - Los documentos heredados pueden describir etapas anteriores; no reinterpretarlos como resultados actuales.
 - Las pruebas interactivas del lote PR #7 **no están acreditadas** en la transferencia de Claude.
 
+## Flujo de ramas vigente (criterio de organización)
+- `Pruebas` es la rama permanente para desarrollo, auditoría, documentación y laboratorio.
+- `main` es producción; requiere aprobación expresa para modificarla o desplegarla.
+- Pueden existir ramas temporales para cambios que necesiten revisión y CI; deben integrarse en `Pruebas` una vez aprobadas.
+- No fusionar automáticamente ramas históricas ya integradas ni cambios obsoletos.
+- Las notas de estado fechadas son **históricas**, no sustituyen una consulta actual a GitHub.
+- Para la bóveda habitual de Obsidian, usar la copia local de `Pruebas` y actualizarla con GitHub Desktop.
+
 ## Regla de actualización
 Cada afirmación de implementación o prueba debe indicar rama, commit, fecha, entorno y fuente; distinguir código, CI y Discord. Ante discrepancias, contrastar GitHub y registrar la corrección sin borrar el historial.
