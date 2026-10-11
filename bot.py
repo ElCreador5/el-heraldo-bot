@@ -14347,6 +14347,29 @@ class ConfigurationConfirmView(discord.ui.View):
             if not (perms.view_channel and perms.send_messages and perms.embed_links):
                 await interaction.response.send_message("El bot perdió permisos en el canal de anuncio.", ephemeral=True)
                 return
+        # Mantener las validaciones de Raid Protection si pasan varios minutos
+        # entre la vista previa y el guardado.
+        if any(key.startswith("raid_") for key in self.changes):
+            current_age = raid_min_age_seconds(self.guild_id)
+            current_ratio = raid_new_account_ratio(self.guild_id)
+            final_age = int(self.changes.get("raid_min_age_seconds", current_age))
+            final_ratio = int(self.changes.get("raid_new_account_ratio", current_ratio))
+            if final_ratio > 0 and final_age <= 0:
+                await interaction.response.send_message(
+                    "Configure una edad de cuenta mayor que cero para usar la proporción de cuentas nuevas.",
+                    ephemeral=True,
+                )
+                return
+            enabled = self.changes.get("raid_enabled", "1" if raid_enabled(self.guild_id) else "0") == "1"
+            action = self.changes.get("raid_action", raid_action(self.guild_id))
+            if enabled and action == "condemn" and (
+                interaction.guild.get_role(condemnation_role_id(guild_id=self.guild_id)) is None
+            ):
+                await interaction.response.send_message(
+                    "No se puede activar la protección con la acción Condenar sin un rol Condenado válido.",
+                    ephemeral=True,
+                )
+                return
         # Revalidar los roles nuevos al guardar, no solo al abrir el comando.
         new_role_ids: set[int] = set()
         if "join_role_ids" in self.changes:
@@ -16914,6 +16937,8 @@ async def raid_config(
     purgar: Optional[bool] = None,
     ping_rol: Optional[discord.Role] = None,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     guild = interaction.guild
     values = (
         activado, ingresos, ventana, duracion, accion, edad_cuenta,
@@ -16955,44 +16980,28 @@ async def raid_config(
         )
         return
 
-    changes: list[str] = []
+    changes: dict[str, str] = {}
     if activado is not None:
-        guild_config_set(guild.id, "raid_enabled", "1" if activado else "0")
-        changes.append("activada" if activado else "desactivada")
+        changes["raid_enabled"] = "1" if activado else "0"
     if ingresos is not None:
-        guild_config_set(guild.id, "raid_threshold", str(ingresos))
-        changes.append(f"ingresos → {ingresos}")
+        changes["raid_threshold"] = str(ingresos)
     if ventana_s is not None:
-        guild_config_set(guild.id, "raid_window_seconds", str(ventana_s))
-        changes.append(f"ventana → {format_flex_duration(ventana_s)}")
+        changes["raid_window_seconds"] = str(ventana_s)
     if duracion_s is not None:
-        guild_config_set(guild.id, "raid_duration_seconds", str(duracion_s))
-        changes.append(f"duración → {format_flex_duration(duracion_s)}")
+        changes["raid_duration_seconds"] = str(duracion_s)
     if accion is not None:
-        guild_config_set(guild.id, "raid_action", accion.value)
-        changes.append(f"acción → {accion.name}")
+        changes["raid_action"] = accion.value
     if edad_s is not None:
-        guild_config_set(guild.id, "raid_min_age_seconds", str(edad_s))
-        changes.append(f"edad de cuenta → {format_flex_duration(edad_s) if edad_s else 'sin filtro'}")
+        changes["raid_min_age_seconds"] = str(edad_s)
     if proporcion_cuentas_nuevas is not None:
-        guild_config_set(guild.id, "raid_new_account_ratio", str(int(proporcion_cuentas_nuevas)))
-        changes.append(
-            "proporción de cuentas nuevas → "
-            + (f"{int(proporcion_cuentas_nuevas)}%" if int(proporcion_cuentas_nuevas) else "desactivada")
-        )
+        changes["raid_new_account_ratio"] = str(int(proporcion_cuentas_nuevas))
     if pausar_invitaciones is not None:
-        guild_config_set(guild.id, "raid_lock_invites", "1" if pausar_invitaciones else "0")
-        changes.append("pausar invitaciones: " + ("sí" if pausar_invitaciones else "no"))
+        changes["raid_lock_invites"] = "1" if pausar_invitaciones else "0"
     if purgar is not None:
-        guild_config_set(guild.id, "raid_purge", "1" if purgar else "0")
-        changes.append("purgar: " + ("sí" if purgar else "no"))
+        changes["raid_purge"] = "1" if purgar else "0"
     if ping_rol is not None:
-        guild_config_set(guild.id, "raid_ping_role", str(ping_rol.id))
-        changes.append(f"rol de alerta → {ping_rol.mention}")
-    await interaction.response.send_message(
-        "Guardado: " + "; ".join(changes) + "\n\n" + raid_config_summary(guild), ephemeral=True,
-    )
-    await log_embed(guild, "Raid Protection actualizada", f"{interaction.user.mention}: " + "; ".join(changes))
+        changes["raid_ping_role"] = str(ping_rol.id)
+    await confirm_configuration(interaction, guild.id, changes)
 
 
 @raid_group.command(name="status", description="Ver si hay un raid activo y la configuración actual.")
