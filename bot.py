@@ -15441,10 +15441,10 @@ async def honeypot_exempt_add(
     target = rol if rol is not None else miembro
     kind = "role" if rol is not None else "member"
     await interaction.response.send_message(
-        "Revise y confirme " + ("la creación" if true else "la retirada")
+        "Revise y confirme " + ("la creación" if True else "la retirada")
         + f" de la exención para {target.mention}.",
         view=HoneypotExemptionConfirmView(
-            interaction.guild.id, interaction.user.id, kind, target.id, true
+            interaction.guild.id, interaction.user.id, kind, target.id, True
         ),
         ephemeral=True,
     )
@@ -15467,10 +15467,10 @@ async def honeypot_exempt_remove(
     target = rol if rol is not None else miembro
     kind = "role" if rol is not None else "member"
     await interaction.response.send_message(
-        "Revise y confirme " + ("la creación" if false else "la retirada")
+        "Revise y confirme " + ("la creación" if False else "la retirada")
         + f" de la exención para {target.mention}.",
         view=HoneypotExemptionConfirmView(
-            interaction.guild.id, interaction.user.id, kind, target.id, false
+            interaction.guild.id, interaction.user.id, kind, target.id, False
         ),
         ephemeral=True,
     )
