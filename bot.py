@@ -12038,6 +12038,7 @@ MODERATION_REPORT_REACTION_DEFAULTS = (
     {"emoji": "🔞", "label": "Posible menor de edad", "action": "ban", "duration_minutes": None, "threshold": 2, "purge_minutes": 30},
 )
 _moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
+_moderation_report_pending: set[tuple[int, int, str]] = set()
 _reaction_condemn_pending: set[tuple[int, int]] = set()
 
 
@@ -15056,8 +15057,17 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
         message = await channel.fetch_message(payload.message_id)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         return
+    # fetch_message puede devolver User sin el objeto Member; no descartar por ello
+    # una reacción válida. Resolver el miembro real antes de evaluar sus roles.
     target = message.author
-    if not isinstance(target, discord.Member) or target.bot:
+    if not isinstance(target, discord.Member):
+        target = guild.get_member(message.author.id)
+        if target is None:
+            try:
+                target = await guild.fetch_member(message.author.id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return
+    if target.bot or target.id == actor.id:
         return
 
     if is_condemn:
@@ -15093,7 +15103,10 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
             _reaction_condemn_pending.discard(pending_key)
         return
 
-    report_channel = guild.get_channel(moderation_report_channel_id(guild.id))
+    # Si no hay un destino exclusivo, reutilizar los registros del servidor.
+    # Una configuración incompleta no debe desactivar silenciosamente las reglas.
+    report_channel_id = moderation_report_channel_id(guild.id) or get_log_channel_id(guild.id)
+    report_channel = guild.get_channel(report_channel_id)
     if not isinstance(report_channel, discord.TextChannel):
         return
 
@@ -15114,42 +15127,62 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
             if stamp < cutoff:
                 _moderation_report_dedupe.pop(key, None)
 
+    # Publicar únicamente el primer aviso y el resultado final del umbral.
+    # No emitir además un segundo embed de logs por la misma acción.
+    if action_executed or (1 < reporter_count < threshold):
+        return
+
+    action_result: tuple[bool, str] | None = None
+    if report_rule and reporter_count >= threshold and not action_executed:
+        action_key = (guild.id, message.id, emoji_key)
+        if action_key in _moderation_report_pending:
+            return
+        _moderation_report_pending.add(action_key)
+        try:
+            action_result = await execute_moderation_report_action(
+                guild, target, message, report_rule, reporter_count
+            )
+            if action_result[0]:
+                moderation_report_mark_executed(guild.id, message.id, target.id, emoji_key)
+        except Exception:
+            traceback.print_exc()
+            action_result = (False, "Error al ejecutar la acción; revise permisos y configuración.")
+        finally:
+            _moderation_report_pending.discard(action_key)
+
     embed = discord.Embed(
-        title="Reporte de usuario por reacción",
-        description=f"**Tipo:** {report_type}",
+        title="Reporte por reacción",
+        description=f"**Motivo:** {report_type}",
         color=discord.Color.orange(),
         timestamp=datetime.now(timezone.utc),
     )
-    embed.add_field(name="Reportado", value=f"{target.mention}\nID: {target.id}", inline=True)
-    embed.add_field(name="Reportó", value=f"{actor.mention}\nID: {actor.id}", inline=True)
-    embed.add_field(name="Dónde", value=message.channel.mention, inline=True)
-    content = (message.content or "(mensaje sin texto)")[:1500]
-    embed.add_field(name="Mensaje", value=content, inline=False)
-    if message.attachments:
-        attachments = "\n".join(a.url for a in message.attachments[:5])
-        embed.add_field(name="Adjuntos", value=attachments[:1024], inline=False)
-    embed.add_field(name="Referencia", value=f"[Abrir mensaje]({message.jump_url})", inline=False)
-    embed.add_field(name="Reportes distintos", value=f"{reporter_count}/{threshold}", inline=True)
+    embed.add_field(name="Miembro", value=target.mention, inline=True)
+    embed.add_field(name="Reportado por", value=actor.mention, inline=True)
+    embed.add_field(name="Canal", value=message.channel.mention, inline=True)
+    embed.add_field(name="Reportes recibidos", value=f"{reporter_count}/{threshold}", inline=True)
     embed.add_field(
-        name="Acción configurada",
+        name="Acción prevista",
         value=moderation_action_label(str(report_rule.get("action", "report"))) if report_rule else "Solo reportar",
         inline=True,
     )
+    if action_result is not None:
+        success, explanation = action_result
+        embed.add_field(
+            name="Resultado",
+            value=("Completada: " if success else "No completada: ") + explanation[:950],
+            inline=False,
+        )
+        embed.color = discord.Color.green() if success else discord.Color.orange()
+    if message.content:
+        embed.add_field(name="Mensaje", value=message.content[:1000], inline=False)
+    embed.add_field(name="Referencia", value=f"[Abrir mensaje]({message.jump_url})", inline=False)
     try:
         await report_channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         _moderation_report_dedupe.pop(dedupe_key, None)
-
-    if report_rule and reporter_count >= threshold and not action_executed:
-        ok, note = await execute_moderation_report_action(guild, target, message, report_rule, reporter_count)
-        if ok:
-            moderation_report_mark_executed(guild.id, message.id, target.id, emoji_key)
-        await log_embed(
-            guild,
-            "Moderation · Acción automática de reporte" if ok else "Moderation · Acción automática rechazada",
-            f"{target.mention} · {report_type}\nReportes: {reporter_count}/{threshold}\nResultado: {note}\n{message.jump_url}",
-            discord.Color.green() if ok else discord.Color.orange(),
-        )
+        # Nunca informar como ejecutada una acción cuya trazabilidad no se pudo publicar.
+        # El estado real de la acción se conserva para no aplicarla dos veces.
+        print("Moderation: no se pudo publicar el resultado de reporte en su canal.")
 
 
 class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción"):
