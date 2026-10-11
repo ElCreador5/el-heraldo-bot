@@ -21,8 +21,8 @@ b.suggestion_db_init()
 
 
 def interaction(guild):
-    return SimpleNamespace(guild=guild, user=SimpleNamespace(id=99, mention='<@99>'),
-        data={'values': []}, response=SimpleNamespace(send_message=AsyncMock(),
+    return SimpleNamespace(guild=guild, user=SimpleNamespace(id=99, mention='<@99>', guild_permissions=b.discord.Permissions(manage_guild=True)),
+        data={'values': []}, response=SimpleNamespace(is_done=lambda: False, send_message=AsyncMock(),
         edit_message=AsyncMock(), defer=AsyncMock(), send_modal=AsyncMock()), followup=SimpleNamespace(send=AsyncMock()),
         edit_original_response=AsyncMock())
 
@@ -175,6 +175,10 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         i.response.send_message.assert_awaited_once()
         with patch.object(b, 'log_embed', new=AsyncMock()):
             await b.raid_config.callback(i, ingresos=17)
+            self.assertNotEqual(b.raid_threshold(777), 17)
+            view = i.response.send_message.call_args.kwargs['view']
+            self.assertIsInstance(view, b.ConfigurationConfirmView)
+            await view.save.callback(interaction(self.guild))
         self.assertEqual(b.raid_threshold(777), 17)
 
     async def test_startup_layouts_and_serialization(self):
@@ -372,6 +376,9 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
     async def test_reaction_add_remove_and_reverse(self):
         role = MagicMock(id=1)
         role.is_assignable.return_value = True
+        role.is_default.return_value = False
+        role.managed = False
+        role.permissions = b.discord.Permissions.none()
         self.guild.get_role.return_value = role
         for reverse in (False, True):
             for added in (False, True):
@@ -509,6 +516,9 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
         self.message.reactions = [SimpleNamespace(emoji=e, users=users) for e in ('👍', '👎')]
         role = MagicMock(id=2)
         role.is_assignable.return_value = True
+        role.is_default.return_value = False
+        role.managed = False
+        role.permissions = b.discord.Permissions.none()
         self.guild.get_role.return_value = role
         payloads = [SimpleNamespace(guild_id=777, message_id=20, channel_id=10, user_id=99, member=self.member, emoji=e) for e in ('👍', '👎')]
         await asyncio.gather(*(b.rr_handle_reaction(p, True) for p in payloads))
