@@ -153,3 +153,9 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Corrección en la rama de PR #13: bloqueo común por servidor/miembro, lectura del estado persistido y resolución conjunta de ambos pendientes en una escritura SQLite. El respaldo delega al flujo principal cuando existe, respeta ban/solo registrar y el plazo vigente. Conserva respaldo independiente para ingresos con solo Sin Verificar.
 - Un fallo HTTP conserva pendientes; solo un éxito genera el registro de expulsión. Miembros ya verificados y temporizadores antiguos no sancionan.
 - Verificación actual: 155 pruebas offline aprobadas (39 + 116), compilación y diff correctos. No desplegado ni probado interactivamente por Codex. La captura acredita una observación del propietario de la versión anterior, no el resultado de la corrección.
+
+## Continuación autorizada — H-01, 2026-10-11
+- Base remota verificada: Pruebas@da551f3; main@6f9f9ee intacta. Copia limpia el-heraldo-pruebas; se conserva la copia local divergente anterior. No se crearon ramas.
+- H-01: tres regresiones recibidas aprobadas; añadidas dos regresiones de ejecución/normalización. Línea base completa: 158 pruebas offline aprobadas (119 + 39).
+- CI de da551f3: dos workflows SUCCESS. Railway Test: despliegue 712214ac SUCCESS de ese SHA. Volumen /data de 500 MB; sin buckets observados. No demuestra respaldo externo ni pruebas interactivas.
+- Sin conector Obsidian disponible: continuidad mediante Markdown de GitHub. H-02 y H-03 pendientes; continúan las etapas D–G.
