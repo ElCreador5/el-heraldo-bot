@@ -18915,92 +18915,90 @@ suggestions_group = discord.app_commands.Group(
 )
 
 
-@suggestions_group.command(name="panel", description="Publicar o reconstruir el panel sticky de sugerencias en un canal.")
-@discord.app_commands.describe(canal="Canal donde quedará el botón para crear sugerencias")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-async def suggestions_panel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
-    perms = canal.permissions_for(interaction.guild.me)
-    missing = [
-        name for name, ok in (
-            ("Ver canal", perms.view_channel),
-            ("Enviar mensajes", perms.send_messages),
-            ("Insertar enlaces", perms.embed_links),
-            ("Gestionar mensajes", perms.manage_messages),
-        ) if not ok
-    ]
-    if missing:
-        await interaction.response.send_message(
-            f"Error: El Heraldo no tiene en {canal.mention}: **{', '.join(missing)}**.", ephemeral=True
-        )
-        return
-    await interaction.response.defer(ephemeral=True)
-    suggestion_set_channel_id(interaction.guild.id, canal.id)
-    await suggestion_ensure_panel(interaction.guild)
-    await interaction.followup.send(f"Panel de sugerencias configurado en {canal.mention}.", ephemeral=True)
-
-
-class SuggestionSettingsConfirmView(discord.ui.View):
-    """Confirma cambios de destinatarios sin modificar metadatos al navegar."""
-    def __init__(self, guild_id: int, owner_id: int, action: str,
-                 target_id: int | None = None, enabled: bool | None = None):
+class SuggestionPanelConfirmView(discord.ui.View):
+    """Previsualiza el destino y publica solo con confirmación administrativa."""
+    def __init__(self, guild_id: int, owner_id: int, channel_id: int):
         super().__init__(timeout=300)
-        self.guild_id, self.owner_id = guild_id, owner_id
-        self.action, self.target_id, self.enabled = action, target_id, enabled
+        self.guild_id, self.owner_id, self.channel_id = guild_id, owner_id, channel_id
+        self.original_channel_id = suggestion_get_channel_id(guild_id)
         self.finished = False
-        self.original_owner = suggestion_owner_enabled(guild_id)
-        self.original_reviewers = set(suggestion_reviewer_ids(guild_id))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Publicar panel", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
         if self.finished:
-            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            await interaction.response.send_message("La propuesta ya fue resuelta.", ephemeral=True)
             return
-        if (self.original_owner != suggestion_owner_enabled(self.guild_id)
-                or self.original_reviewers != set(suggestion_reviewer_ids(self.guild_id))):
+        if suggestion_get_channel_id(self.guild_id) != self.original_channel_id:
             await interaction.response.send_message(
-                "La configuración cambió durante la revisión. Abra una nueva propuesta.",
+                "El destino cambió mientras se revisaba la propuesta. Inicie de nuevo.",
                 ephemeral=True,
             )
             return
-        if self.action == "add":
-            member = interaction.guild.get_member(self.target_id)
-            if member is None:
-                try:
-                    member = await interaction.guild.fetch_member(self.target_id)
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    await interaction.response.send_message(
-                        "No se pudo verificar que el revisor siga en el servidor.", ephemeral=True
-                    )
-                    return
-            if member.bot:
-                await interaction.response.send_message("No se puede nombrar revisor a un bot.", ephemeral=True)
-                return
+        channel = interaction.guild.get_channel(self.channel_id)
+        me = interaction.guild.me
+        if not isinstance(channel, discord.TextChannel) or me is None:
+            await interaction.response.send_message("El canal ya no está disponible.", ephemeral=True)
+            return
+        perms = channel.permissions_for(me)
+        if not (perms.view_channel and perms.send_messages and perms.embed_links and perms.manage_messages):
+            await interaction.response.send_message(
+                "El bot ya no tiene permisos suficientes para el panel.", ephemeral=True
+            )
+            return
         self.finished = True
         self.stop()
-        if self.action == "owner":
-            suggestion_set_owner_enabled(self.guild_id, bool(self.enabled))
-        elif self.action == "add":
-            suggestion_add_reviewer(self.guild_id, self.target_id)
-        elif self.action == "remove":
-            suggestion_remove_reviewer(self.guild_id, self.target_id)
-        await interaction.response.edit_message(content="Destinatarios de sugerencias actualizados.", view=None)
+        await interaction.response.defer(ephemeral=True)
+        suggestion_set_channel_id(self.guild_id, self.channel_id)
+        try:
+            await suggestion_ensure_panel(interaction.guild)
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(
+                "Se guardó el canal, pero Discord impidió publicar el panel. Revise los permisos.",
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send("Panel de sugerencias publicado en el canal confirmado.", ephemeral=True)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
         if self.finished:
-            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            await interaction.response.send_message("La propuesta ya fue resuelta.", ephemeral=True)
             return
         self.finished = True
         self.stop()
-        await interaction.response.edit_message(content="Cambio cancelado. No se guardó nada.", view=None)
+        await interaction.response.edit_message(
+            content="Publicación cancelada. No se cambió el destino.", view=None,
+        )
 
+
+@suggestions_group.command(name="panel", description="Publicar o reconstruir el panel sticky de sugerencias en un canal.")
+@discord.app_commands.describe(canal="Canal donde quedará el botón para crear sugerencias")
+@discord.app_commands.checks.has_permissions(manage_guild=True)
+async def suggestions_panel(interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+    if not await configuration_access(interaction):
+        return
+    me = interaction.guild.me
+    perms = canal.permissions_for(me) if me is not None else None
+    if perms is None or not (
+        perms.view_channel and perms.send_messages and perms.embed_links and perms.manage_messages
+    ):
+        await interaction.response.send_message(
+            "El Heraldo necesita Ver canal, Enviar mensajes, Insertar enlaces y Gestionar mensajes.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        f"¿Confirma publicar el panel de sugerencias en {canal.mention}?",
+        view=SuggestionPanelConfirmView(interaction.guild.id, interaction.user.id, canal.id),
+        ephemeral=True,
+    )
 
 @suggestions_group.command(name="setup", description="Elegir si el creador del servidor también recibe las sugerencias por DM.")
 @discord.app_commands.describe(dueno="Sí = el dueño/creador recibe las sugerencias; No = solo destinatarios añadidos")
