@@ -12204,24 +12204,11 @@ async def execute_moderation_report_action(
         return False, f"Acción bloqueada: {protection}."
 
     notes: list[str] = []
-    if purge_minutes:
-        after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
-        result = await run_purge_job(
-            guild,
-            target,
-            scope_text=f"mensajes de los últimos {format_duration(purge_minutes)}",
-            requested_by=f"Moderation · {rule.get('label', 'reporte')}",
-            after=after,
-            title="Moderation · Purga automática completada",
-        )
-        if result is None:
-            notes.append("purga ya en curso")
-        else:
-            notes.append(f"purga reciente: {purge_result_text(result)}")
+    if action == "report" and not purge_minutes:
+        return True, "Reporte registrado"
 
-    if action == "report":
-        return True, "; ".join(notes) if notes else "solo registrado"
-
+    # No eliminar mensajes antes de comprobar la acción ni antes de archivar
+    # la evidencia necesaria para una condena.
     try:
         if action == "timeout":
             if duration_minutes is None:
@@ -12240,7 +12227,7 @@ async def execute_moderation_report_action(
                 target,
                 reason=reason,
                 duration_minutes=duration_minutes,
-                purge_spec=None,
+                purge_spec=("time", purge_minutes) if purge_minutes else None,
                 origin="reaction_report",
                 applied_by=None,
                 source_message_url=message.jump_url,
@@ -12251,6 +12238,24 @@ async def execute_moderation_report_action(
             notes.append("condena aplicada")
     except discord.HTTPException as exc:
         return False, f"Discord rechazó la acción: {exc}"
+
+    if purge_minutes and action != "condemn":
+        after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
+        try:
+            result = await run_purge_job(
+                guild,
+                target,
+                scope_text=f"mensajes de los últimos {format_duration(purge_minutes)}",
+                requested_by=f"Moderation · {rule.get('label', 'reporte')}",
+                after=after,
+                title="Moderation · Purga automática completada",
+            )
+        except discord.HTTPException as exc:
+            notes.append(f"purga no disponible: {exc}")
+        else:
+            notes.append("purga ya en curso" if result is None else f"purga: {purge_result_text(result)}")
+    if action == "condemn" and purge_minutes:
+        notes.append("la purga depende del archivo seguro de la evidencia")
 
     return True, "; ".join(notes) if notes else moderation_action_label(action)
 
