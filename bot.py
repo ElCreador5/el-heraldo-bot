@@ -6530,8 +6530,8 @@ def heraldo_messages_command_content() -> str:
 
 def heraldo_messages_setup_content() -> str:
     return (
-        "✉️ **El Heraldo · Mensajes y paneles**\n\n"
-        "Edita los mensajes persistentes y plantillas visuales del servidor desde un solo lugar. "
+        "**El Heraldo · Mensajes**\n\n"
+        "Elige el mensaje que deseas editar. Los mensajes del sistema tienen nombres fijos; las plantillas con nombres propios son opcionales y se encuentran en Mensajes personalizados. "
         "Los cambios quedan aislados por servidor y los paneles publicados se sincronizan cuando corresponde.\n\n"
         "**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot, Condenas y Logs.\n"
         "**Excluidos a propósito:** Variables, comandos, listas, estados, perfiles, historiales, "
@@ -7236,43 +7236,19 @@ class HeraldoMessagesSetupView(discord.ui.View):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="Mensajes personalizados", value="templates", description="Crear, editar y publicar mensajes con su propio nombre."),
-                discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
-                discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
-                discord.SelectOption(label="Programación", value="schedules", description="Fechas, zonas horarias y repeticiones de mensajes."),
-                discord.SelectOption(label="Autorespuestas", value="autoresponses", description="Responder a palabras o frases, con límites de frecuencia."),
-                discord.SelectOption(label="Sticky", value="sticky", description="Mantener una plantilla al final del canal."),
-                discord.SelectOption(label="Webhooks", value="webhooks", description="Publicación confirmada mediante webhooks del bot."),
-                discord.SelectOption(
-                    label="Verificación",
-                    value="verification",
-                    description="Texto del panel, botón y mensaje de éxito.",
-                ),
-                discord.SelectOption(
-                    label="DM de verificación",
-                    value="verify_dm",
-                    description="Embed enviado al miembro después de verificarse.",
-                ),
-                discord.SelectOption(
-                    label="Sugerencias",
-                    value="suggestions",
-                    description="Título, descripción, color, imágenes y botón.",
-                ),
-                discord.SelectOption(
-                    label="Honeypot",
-                    value="honeypot",
-                    description="Aviso persistente de los canales trampa.",
-                ),
-                discord.SelectOption(
-                    label="Condenas",
-                    value="condemnation",
-                    description="Plantilla de la tarjeta de condenados.",
-                ),
-                discord.SelectOption(
-                    label="Logs",
-                    value="logs",
-                    description="Plantillas visuales de los registros del Heraldo.",
-                ),
+                discord.SelectOption(label="Verificación", value="verification", description="Panel, botón y respuesta al verificar."),
+                discord.SelectOption(label="DM de verificación", value="verify_dm", description="Mensaje privado de verificación."),
+                discord.SelectOption(label="Condenas", value="condemnation", description="Tarjeta fija de condenados y perdonados."),
+                discord.SelectOption(label="Sugerencias", value="suggestions", description="Mensaje y panel de sugerencias."),
+                discord.SelectOption(label="Honeypot", value="honeypot", description="Aviso de los canales trampa."),
+                discord.SelectOption(label="Logs", value="logs", description="Registros de moderación y del servidor."),
+                discord.SelectOption(label="Mensajes personalizados", value="templates", description="Mensajes adicionales creados por el administrador."),
+                discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles."),
+                discord.SelectOption(label="Programación", value="schedules", description="Envíos automáticos con fecha u horario."),
+                discord.SelectOption(label="Autorespuestas", value="autoresponses", description="Respuestas a palabras o frases."),
+                discord.SelectOption(label="Sticky", value="sticky", description="Mensaje mantenido al final de un canal."),
+                discord.SelectOption(label="Webhooks", value="webhooks", description="Publicación mediante un webhook del bot."),
+                discord.SelectOption(label="Kits de mensajes", value="kits", description="Importar o exportar mensajes personalizados."),
             ],
             row=0,
         )
@@ -7494,18 +7470,18 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
 
-class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla del reporte"):
-    action = discord.ui.TextInput(label="Acción", required=True, max_length=20, placeholder="report, timeout, kick, ban o condemn")
-    duration = discord.ui.TextInput(label="Duración", required=False, max_length=30, placeholder="30m, 1d o -")
-    threshold = discord.ui.TextInput(label="Umbral", required=True, max_length=2, placeholder="2")
-    purge = discord.ui.TextInput(label="Ventana de purga", required=False, max_length=30, placeholder="30m o -")
+class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacción de reporte"):
+    action = discord.ui.TextInput(label="¿Qué debe hacer el bot?", required=True, max_length=30, placeholder="Reportar, condenar, aislar, expulsar o banear")
+    duration = discord.ui.TextInput(label="Duración (opcional)", required=False, max_length=30, placeholder="30m, 1d o vacío")
+    threshold = discord.ui.TextInput(label="Reportes necesarios", required=True, max_length=2, placeholder="2")
+    purge = discord.ui.TextInput(label="Borrar mensajes recientes", required=False, max_length=30, placeholder="30m o vacío")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int) -> None:
         super().__init__()
         self.parent_view = parent_view
         self.index = index
         item = parent_view._working_reactions()[index]
-        self.action.default = str(item.get("action", "report"))
+        self.action.default = moderation_action_label(str(item.get("action", "report")))
         duration = item.get("duration_minutes")
         self.duration.default = format_duration(int(duration)) if duration else "-"
         self.threshold.default = str(item.get("threshold", 1))
@@ -7513,9 +7489,23 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla d
         self.purge.default = format_duration(int(purge)) if purge else "-"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        action = str(self.action).strip().lower()
+        # El formulario acepta acciones en español; los códigos internos se
+        # conservan únicamente en SQLite y nunca deben aprenderse de memoria.
+        requested = str(self.action).strip().casefold()
+        aliases = {
+            "report": "report", "reportar": "report", "solo reportar": "report",
+            "solo registrar": "report", "registrar": "report",
+            "timeout": "timeout", "aislar": "timeout",
+            "aislar temporalmente": "timeout", "silenciar": "timeout",
+            "kick": "kick", "expulsar": "kick",
+            "ban": "ban", "banear": "ban", "bloquear": "ban",
+            "condemn": "condemn", "condenar": "condemn",
+        }
+        action = aliases.get(requested)
         if action not in MODERATION_REPORT_ACTIONS:
-            await interaction.response.send_message("Acciones válidas: report, timeout, kick, ban o condemn.", ephemeral=True)
+            await interaction.response.send_message(
+                "Elige una acción: reportar, condenar, aislar, expulsar o banear.", ephemeral=True
+            )
             return
         try:
             threshold = int(str(self.threshold).strip())
@@ -12292,7 +12282,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){purge_text}"
     mapping_text = "\n".join(rule_line(item) for item in mappings) or "• Sin reacciones configuradas"
     return (
-        f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
+        f"**Registro de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'Canal general de logs'}\n"
         f"**Reacciones de reporte:**\n{mapping_text}\n"
         f"**Reacción para condenar:** {condemn_emoji or get_condemnation_emoji(guild.id)}\n\n"
         "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
