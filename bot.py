@@ -15810,7 +15810,7 @@ async def honeypot_history(
             value=(
                 f"<#{r['channel_id']}> · {HONEYPOT_ACTION_LABELS.get(r['action'], r['action'])}\n"
                 f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}\n"
-                content
+                + content
             ),
             inline=False,
         )
