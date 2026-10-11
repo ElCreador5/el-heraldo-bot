@@ -10386,6 +10386,8 @@ async def joinroles_add(
     rol4: Optional[discord.Role] = None,
     rol5: Optional[discord.Role] = None,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     roles = _joinroles_command_roles(rol, rol2, rol3, rol4, rol5)
     issue = _joinroles_validate_command_roles(interaction.guild, roles)
     if issue:
@@ -10395,7 +10397,11 @@ async def joinroles_add(
     for role in roles:
         if role.id not in current:
             current.append(role.id)
-    set_join_role_ids(interaction.guild.id, current[:JOIN_ROLES_MAX])
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "join_role_ids": json.dumps(current[:JOIN_ROLES_MAX]),
+        "join_roles_enabled": "1",
+    })
+    return
     guild_config_set(interaction.guild.id, "join_roles_enabled", "1")
     await interaction.response.send_message(
         "Join Roles actualizados:\n" + _join_roles_render(interaction.guild, get_join_role_ids(interaction.guild.id)),
@@ -10413,9 +10419,14 @@ async def joinroles_remove(
     rol4: Optional[discord.Role] = None,
     rol5: Optional[discord.Role] = None,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     remove_ids = {role.id for role in _joinroles_command_roles(rol, rol2, rol3, rol4, rol5)}
     current = [role_id for role_id in get_join_role_ids(interaction.guild.id) if role_id not in remove_ids]
-    set_join_role_ids(interaction.guild.id, current)
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "join_role_ids": json.dumps(current),
+    })
+    return
     await interaction.response.send_message(
         "Join Roles actualizados:\n" + _join_roles_render(interaction.guild, current),
         ephemeral=True,
@@ -10429,6 +10440,8 @@ async def joinroles_user_add(
     user_id: str,
     rol: discord.Role,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     try:
         target_id = int(user_id.strip())
         if target_id <= 0:
@@ -10444,7 +10457,11 @@ async def joinroles_user_add(
     roles = mapping.get(target_id, [])
     if rol.id not in roles:
         roles.append(rol.id)
-    set_join_specific_user_roles(interaction.guild.id, target_id, roles)
+    mapping[target_id] = roles[:JOIN_ROLES_MAX]
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "join_specific_roles": json.dumps({str(k): v for k, v in mapping.items()}),
+    })
+    return
     await interaction.response.send_message(
         f"<@{target_id}> recibirá {rol.mention} cuando ingrese.", ephemeral=True
     )
@@ -10457,6 +10474,8 @@ async def joinroles_user_remove(
     user_id: str,
     rol: Optional[discord.Role] = None,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     try:
         target_id = int(user_id.strip())
         if target_id <= 0:
@@ -10470,16 +10489,16 @@ async def joinroles_user_remove(
         await interaction.response.send_message("Información: Ese User ID no está configurado.", ephemeral=True)
         return
     if rol is None:
-        remove_join_specific_user(interaction.guild.id, target_id)
-        await interaction.response.send_message("Usuario eliminado de la lista.", ephemeral=True)
-        return
-
-    roles = [role_id for role_id in mapping[target_id] if role_id != rol.id]
-    set_join_specific_user_roles(interaction.guild.id, target_id, roles)
-    await interaction.response.send_message(
-        f"{rol.mention} eliminado de los roles específicos de <@{target_id}>.",
-        ephemeral=True,
-    )
+        mapping.pop(target_id, None)
+    else:
+        roles = [role_id for role_id in mapping[target_id] if role_id != rol.id]
+        if roles:
+            mapping[target_id] = roles
+        else:
+            mapping.pop(target_id, None)
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "join_specific_roles": json.dumps({str(k): v for k, v in mapping.items()}),
+    })
 
 
 @joinroles_group.error
