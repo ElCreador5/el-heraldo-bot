@@ -15159,7 +15159,7 @@ async def honeypot_config(
             return
     effective_action = accion.value if accion is not None else hp_action(guild.id)
     effective_role_id = rol_castigo.id if rol_castigo is not None else hp_punish_role_id(guild.id)
-    if effective_action == "role" and guild.get_role(effective_role_id) is None and (activado or accion is not None):
+    if effective_action == "role" and (activado or accion is not None) and guild.get_role(effective_role_id) is None:
         await interaction.response.send_message(
             "Error: No guardé nada: la acción «rol de castigo» necesita un rol. Elígelo con `rol_castigo`.",
             ephemeral=True,
