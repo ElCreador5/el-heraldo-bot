@@ -16,6 +16,7 @@ sys.modules[spec.name] = b
 spec.loader.exec_module(b)
 b.db_init()
 b.honeypot_db_init()
+b.suggestion_db_init()
 
 
 def interaction(allowed=True, guild_id=901):
@@ -408,6 +409,52 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             view = i.response.send_message.call_args.kwargs['view']
             await view.cancel.callback(interaction())
             add.assert_not_called()
+
+
+
+    async def test_raid_setup_cancel_keeps_threshold(self):
+        b.guild_config_set(901, 'raid_threshold', '5')
+        i = interaction()
+        await b.raid_config.callback(i, ingresos=11)
+        self.assertEqual(b.guild_config_get(901, 'raid_threshold'), '5')
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.cancel.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'raid_threshold'), '5')
+
+    async def test_suggestion_owner_cancel_keeps_current_state(self):
+        i = interaction()
+        previous = b.suggestion_owner_enabled(901)
+        with patch.object(b, 'suggestion_set_owner_enabled') as update:
+            await b.suggestions_config.callback(i, dueno=not previous)
+            view = i.response.send_message.call_args.kwargs['view']
+            update.assert_not_called()
+            await view.cancel.callback(interaction())
+            update.assert_not_called()
+
+    async def test_suggestion_reviewer_cancel_keeps_list(self):
+        i = interaction()
+        reviewer = NS(id=987651, mention='<@987651>', bot=False)
+        with patch.object(b, 'suggestion_add_reviewer') as update:
+            await b.suggestions_reviewer_add.callback(i, usuario=reviewer)
+            view = i.response.send_message.call_args.kwargs['view']
+            update.assert_not_called()
+            await view.cancel.callback(interaction())
+            update.assert_not_called()
+
+    async def test_suggestion_panel_cancel_does_not_publish(self):
+        i = interaction()
+        i.guild.me = NS(id=777)
+        channel = NS(id=987652, mention='#sugerencias',
+            permissions_for=lambda me: NS(
+                view_channel=True, send_messages=True, embed_links=True, manage_messages=True
+            ))
+        with (patch.object(b, 'suggestion_set_channel_id') as setter,
+              patch.object(b, 'suggestion_ensure_panel', new=AsyncMock()) as publish):
+            await b.suggestions_panel.callback(i, canal=channel)
+            view = i.response.send_message.call_args.kwargs['view']
+            await view.cancel.callback(interaction())
+            setter.assert_not_called()
+            publish.assert_not_awaited()
 
 
 
