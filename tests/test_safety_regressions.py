@@ -415,6 +415,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
     async def test_raid_setup_cancel_keeps_threshold(self):
         b.guild_config_set(901, 'raid_threshold', '5')
         i = interaction()
+        i.guild.get_role = lambda role_id: None
         await b.raid_config.callback(i, ingresos=11)
         self.assertEqual(b.guild_config_get(901, 'raid_threshold'), '5')
         view = i.response.send_message.call_args.kwargs['view']
