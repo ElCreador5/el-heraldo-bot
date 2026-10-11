@@ -114,6 +114,7 @@ from collections import deque
 import json
 import message_payload
 import message_components
+import evidence_archive
 import io
 import os
 import re
@@ -12852,36 +12853,47 @@ async def _collect_user_messages(
     return ids
 
 
+_evidence_delete_inflight: set[tuple[int, int, int]] = set()
+
+
+async def delete_with_evidence(channel, message_id: int) -> bool:
+    """La única ruta de borrado moderativo: copia privada verificada o no borra."""
+    guild = channel.guild
+    key = (guild.id, channel.id, message_id)
+    if key in _evidence_delete_inflight or not bot.intents.message_content:
+        return False
+    _evidence_delete_inflight.add(key)
+    try:
+        message = await channel.fetch_message(message_id)
+        archive = guild.get_channel(get_log_channel_id(guild.id))
+        reference = await evidence_archive.preserve(message, archive, DB_PATH)
+        if not reference:
+            print("Evidencias: borrado bloqueado; archivo privado incompleto o pendiente de revisión.")
+            return False
+        # Releer: una edición durante la copia exige archivar la nueva versión.
+        current = await channel.fetch_message(message_id)
+        if evidence_archive.snapshot(current) != evidence_archive.snapshot(message):
+            return False
+        if not evidence_archive.private_channel(guild, archive):
+            return False
+        await current.delete()
+        return True
+    except Exception as exc:
+        # No volcar contenido, respuestas HTTP ni URLs privadas a stdout.
+        print(f"Evidencias: borrado bloqueado ({type(exc).__name__}).")
+        return False
+    finally:
+        _evidence_delete_inflight.discard(key)
+
+
 async def _delete_ids(ch, ids: list[int]) -> tuple[int, int]:
-    """Borra mensajes por id: en bloques de 100 los de menos de 14 días, uno a uno los antiguos."""
-    bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=14) + timedelta(minutes=10)
-    recent = [i for i in ids if discord.utils.snowflake_time(i) > bulk_cutoff]
-    old = [i for i in ids if discord.utils.snowflake_time(i) <= bulk_cutoff]
+    """Cada id requiere su copia completa; un fallo no autoriza borrar ese mensaje."""
     deleted = failed = 0
-
-    async def delete_one(message_id: int) -> None:
-        nonlocal deleted, failed
-        try:
-            await ch.get_partial_message(message_id).delete()
+    for message_id in dict.fromkeys(ids):
+        if await delete_with_evidence(ch, message_id):
             deleted += 1
-        except discord.NotFound:
-            pass  # ya no existe
-        except discord.HTTPException:
+        else:
             failed += 1
-
-    for start in range(0, len(recent), 100):
-        chunk = recent[start:start + 100]
-        if len(chunk) == 1:
-            await delete_one(chunk[0])
-            continue
-        try:
-            await ch.delete_messages([discord.Object(i) for i in chunk])
-            deleted += len(chunk)
-        except discord.HTTPException:
-            for message_id in chunk:  # un id inválido tumba el bloque: reintento uno a uno
-                await delete_one(message_id)
-    for message_id in old:
-        await delete_one(message_id)
     return deleted, failed
 
 
@@ -12950,7 +12962,7 @@ async def purge_user_messages(
 def purge_result_text(result: PurgeResult) -> str:
     text = f"**{result.deleted}** mensaje(s) borrado(s) en {result.channels_scanned} canal(es)/hilo(s)"
     if result.failed:
-        text += f"; {result.failed} no se pudieron borrar"
+        text += f"; {result.failed} no se pudieron borrar (evidencia o permisos insuficientes)"
     if result.channels_skipped:
         text += f"; {result.channels_skipped} omitido(s) por falta de permisos"
     return text
@@ -13087,120 +13099,19 @@ async def condemnation_archive_evidence(
     reason: str,
     applied_by: discord.abc.User | None,
 ) -> tuple[str | None, str | None]:
-    """Preserva la prueba antes de cualquier purga.
-
-    La URL del mensaje original se conserva solo como referencia. La evidencia real
-    es una copia del texto y, cuando Discord lo permite, de los adjuntos re-subidos
-    por El Heraldo a un canal de Logs privado. Una copia parcial no autoriza purgar.
-    """
+    """Conserva el contrato de expedientes usando el archivo verificable común."""
     message = await condemnation_fetch_source_message(guild, source_message_url)
     if message is None or message.author.id != member.id:
         return None, None
-
     archive_channel = guild.get_channel(get_log_channel_id(guild.id))
-    if not isinstance(archive_channel, discord.TextChannel):
-        return None, (message.content or "(sin texto)")[:2000]
-    # Fallar de forma segura: las evidencias solo se archivan cuando el canal
-    # no es visible para roles ordinarios ni por excepciones individuales.
-    # Los administradores conservan su acceso inherente en Discord.
-    if archive_channel.permissions_for(guild.default_role).view_channel:
+    if not bot.intents.message_content or not evidence_archive.private_channel(guild, archive_channel):
         return None, None
-    for role in guild.roles:
-        if role.is_default() or role.permissions.administrator:
-            continue
-        if archive_channel.permissions_for(role).view_channel:
-            return None, None
-    for target, overwrite in archive_channel.overwrites.items():
-        if isinstance(target, discord.Member) and overwrite.view_channel is True:
-            if guild.me is None or target.id != guild.me.id:
-                return None, None
-
-    me = guild.me
-    if me is None:
-        return None, (message.content or "(sin texto)")[:2000]
-    perms = archive_channel.permissions_for(me)
-    if not (perms.view_channel and perms.send_messages and perms.embed_links):
-        return None, (message.content or "(sin texto)")[:2000]
-
-    snapshot_text = (message.content or "(mensaje sin texto)")[:3500]
-    evidence = discord.Embed(
-        title="Evidencia archivada · Condena",
-        description=snapshot_text,
-        color=discord.Color.dark_red(),
-        timestamp=message.created_at,
-    )
-    evidence.add_field(name="Autor original", value=f"{member.mention}\nID: {member.id}", inline=True)
-    evidence.add_field(name="Canal original", value=message.channel.mention, inline=True)
-    evidence.add_field(
-        name="Moderador",
-        value=applied_by.mention if applied_by else "El Heraldo",
-        inline=True,
-    )
-    evidence.add_field(name="Motivo", value=reason[:1024], inline=False)
-    if source_message_url:
-        evidence.add_field(
-            name="Referencia original",
-            value=f"[Mensaje original]({source_message_url}) · puede dejar de existir tras la purga.",
-            inline=False,
-        )
-    conn = db_connect()
-    recent_rows = conn.execute(
-        "SELECT channel_id, message_id, content, created_at FROM moderation_message_cache "
-        "WHERE guild_id = ? AND user_id = ? AND message_id != ? "
-        "ORDER BY created_at DESC LIMIT 8",
-        (guild.id, member.id, message.id),
-    ).fetchall()
-    conn.close()
-    if recent_rows:
-        context_lines: list[str] = []
-        for channel_id, message_id, cached_content, created_at in recent_rows:
-            excerpt = (cached_content or "(sin texto)").replace("\n", " ")[:180]
-            context_lines.append(f"<#{channel_id}> · {excerpt}")
-        evidence.add_field(
-            name="Contexto reciente preservado",
-            value="\n".join(context_lines)[:1024],
-            inline=False,
-        )
-
-    evidence.set_footer(text="Copia preservada antes de la purga por El Heraldo")
-
-    files: list[discord.File] = []
-    archived_names: list[str] = []
-    max_size = int(getattr(guild, "filesize_limit", 8 * 1024 * 1024))
-    complete = (len(message.content or "") <= 3500 and len(message.attachments) <= 10
-                and (not message.attachments or perms.attach_files))
-    for attachment in message.attachments[:10] if perms.attach_files else []:
-        if attachment.size > max_size:
-            complete = False
-            archived_names.append(f"{attachment.filename} (demasiado grande para re-subir)")
-            continue
-        try:
-            data = await attachment.read(use_cached=True)
-            files.append(discord.File(io.BytesIO(data), filename=attachment.filename))
-            archived_names.append(attachment.filename)
-        except (discord.HTTPException, OSError):
-            complete = False
-            archived_names.append(f"{attachment.filename} (no se pudo copiar)")
-
-    if archived_names:
-        evidence.add_field(
-            name="Adjuntos preservados",
-            value="\n".join(f"• {name}" for name in archived_names)[:1024],
-            inline=False,
-        )
-
     try:
-        archived = await archive_channel.send(
-            embed=evidence,
-            files=files,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        return (archived.jump_url if complete else None), snapshot_text
-    except discord.HTTPException:
-        return None, snapshot_text
-    finally:
-        for file in files:
-            file.close()
+        reference = await evidence_archive.preserve(message, archive_channel, DB_PATH)
+        return reference, (message.content or "(sin texto)")[:3500]
+    except Exception as exc:
+        print(f"Evidencias: archivo de condena bloqueado ({type(exc).__name__}).")
+        return None, None
 
 
 async def condemnation_send_pardon_dm(
@@ -14216,7 +14127,7 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
 
     # Borra el mensaje trampa (si el castigo no lo purga ya).
     try:
-        await message.delete()
+        await delete_with_evidence(message.channel, message.id)
     except discord.HTTPException:
         pass
 
@@ -14257,13 +14168,13 @@ async def honeypot_listener(message: discord.Message) -> None:
     punish_id = hp_punish_role_id(message.guild.id)
     if punish_id and any(r.id == punish_id for r in member.roles):
         try:
-            await message.delete()  # ya está castigado: solo se borra lo que siga escribiendo
+            await delete_with_evidence(message.channel, message.id)
         except discord.HTTPException:
             pass
         return
     if member.id in _hp_busy:
         try:
-            await message.delete()
+            await delete_with_evidence(message.channel, message.id)
         except discord.HTTPException:
             pass
         return
@@ -17014,16 +16925,14 @@ async def raid_act_on_member(member: discord.Member) -> bool:
         elif action == "kick":
             await member.kick(reason=reason)
         else:  # ban
-            joined = member.joined_at
-            secs = int((datetime.now(timezone.utc) - joined).total_seconds()) + 60 if joined else 3600
-            await member.ban(reason=reason, delete_message_seconds=min(max(secs, 60), 7 * 24 * 3600))
+            await member.ban(reason=reason, delete_message_seconds=0)
     except discord.HTTPException as e:
         stats["failed"] += 1
         print(f"Raid Protection: no pude aplicar «{action}» a {member.id}: {e}")
         return False
     stats["acted"] += 1
     stats["ids"].append(member.id)
-    if raid_purge_enabled(guild.id) and action in ("condemn", "kick"):
+    if raid_purge_enabled(guild.id) and action in ("condemn", "kick", "ban"):
         asyncio.create_task(_raid_purge_member(member, stats))
     return True
 

@@ -49,3 +49,11 @@ El repositorio contiene Markdown compatible con Obsidian. En el equipo local, cl
 - Pruebas remota da551f3, copia activa el-heraldo-pruebas. Copia el-heraldo-bot preservada: Pruebas local divergente, fetch genérico apunta a una rama eliminada; no mezclar historiales antiguos.
 - H-01 validado con tres pruebas recibidas y dos nuevas pruebas runtime. Base: 158 pruebas, compilación y dependencias correctas. Railway Test 712214ac SUCCESS y CI correcto. Discord no realizado.
 - Siguiente: archivo verificable de cada mensaje en purgas/Honeypot/raid; impedir borrado API en ban; después respaldo SQLite y evidencias. No hay acceso directo Obsidian; usar Markdown.
+
+## H-02: barrera de conservación — 2026-10-11
+- Purga general, condenas, reportes, Honeypot (incluidos mensajes durante otra sanción) y raid pasan por archivo individual antes del borrado. Baneos usan delete_message_seconds=0; la purga configurada se ejecuta separadamente con archivo.
+- evidence_archive.py conserva JSON íntegro y adjuntos en el canal privado de Logs existente; verifica tamaño y SHA-256 leyendo cada copia desde Discord. Ledger SQLite durable y exclusión por mensaje: una interrupción incierta bloquea reenvío/borrado. Condenas conservan el contrato de referencia y texto, sin migrar expedientes previos.
+- Si no hay intent de contenido, canal privado, permisos o copia íntegra, no se borra. Archivos superiores al menor límite de Discord/25 MiB, stickers, encuestas y mensajes reenviados quedan conservados en origen. No se crearon almacenamiento ni credenciales.
+- Se vuelve a leer el origen para detectar ediciones y comprobar privacidad antes del borrado. Discord no ofrece transacción atómica entre edición, permisos y delete: queda una ventana remota mínima y requiere validación humana. Una copia borrada/corrupta o ledger pendiente exige revisión; no se reintenta un envío incierto automáticamente.
+- Pruebas base tras integración: 129 tests y 39 raíz/Logs correctos; añadidas luego tres comprobaciones de roles, excepciones individuales y formatos no soportados. El primer ensayo detectó conexiones SQLite sin cerrar; corregidas con cierre explícito.
+- Discord real: no realizado. Pendiente validar CI/Railway del nuevo SHA y copia/recuperación en laboratorio. H-03 y etapas posteriores continúan pendientes.

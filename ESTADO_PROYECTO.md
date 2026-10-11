@@ -159,3 +159,11 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - H-01: tres regresiones recibidas aprobadas; añadidas dos regresiones de ejecución/normalización. Línea base completa: 158 pruebas offline aprobadas (119 + 39).
 - CI de da551f3: dos workflows SUCCESS. Railway Test: despliegue 712214ac SUCCESS de ese SHA. Volumen /data de 500 MB; sin buckets observados. No demuestra respaldo externo ni pruebas interactivas.
 - Sin conector Obsidian disponible: continuidad mediante Markdown de GitHub. H-02 y H-03 pendientes; continúan las etapas D–G.
+
+## H-02: barrera de conservación — 2026-10-11
+- Purga general, condenas, reportes, Honeypot (incluidos mensajes durante otra sanción) y raid pasan por archivo individual antes del borrado. Baneos usan delete_message_seconds=0; la purga configurada se ejecuta separadamente con archivo.
+- evidence_archive.py conserva JSON íntegro y adjuntos en el canal privado de Logs existente; verifica tamaño y SHA-256 leyendo cada copia desde Discord. Ledger SQLite durable y exclusión por mensaje: una interrupción incierta bloquea reenvío/borrado. Condenas conservan el contrato de referencia y texto, sin migrar expedientes previos.
+- Si no hay intent de contenido, canal privado, permisos o copia íntegra, no se borra. Archivos superiores al menor límite de Discord/25 MiB, stickers, encuestas y mensajes reenviados quedan conservados en origen. No se crearon almacenamiento ni credenciales.
+- Se vuelve a leer el origen para detectar ediciones y comprobar privacidad antes del borrado. Discord no ofrece transacción atómica entre edición, permisos y delete: queda una ventana remota mínima y requiere validación humana. Una copia borrada/corrupta o ledger pendiente exige revisión; no se reintenta un envío incierto automáticamente.
+- Pruebas base tras integración: 129 tests y 39 raíz/Logs correctos; añadidas luego tres comprobaciones de roles, excepciones individuales y formatos no soportados. El primer ensayo detectó conexiones SQLite sin cerrar; corregidas con cierre explícito.
+- Discord real: no realizado. Pendiente validar CI/Railway del nuevo SHA y copia/recuperación en laboratorio. H-03 y etapas posteriores continúan pendientes.

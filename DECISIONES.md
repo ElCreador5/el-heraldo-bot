@@ -85,3 +85,6 @@ Para evitar perder información al levantar una condena, el registro de roles qu
 ## Alcance confirmado por el propietario — 2026-10-11
 - Continuar directamente en Pruebas, sin ramas adicionales ni PR temporales; conservar la copia local histórica divergente y trabajar desde remoto reconciliado.
 - Prioridad: H-01, conservación integral de evidencias, respaldo/restauración, hallazgos confirmados y laboratorio. Producción e infraestructura sensible requieren autorización independiente.
+
+## Aplicación de conservación integral — 2026-10-11
+La autorización de H-02 se implementa reutilizando el canal privado y SQLite existentes. Ninguna copia parcial autoriza borrar; los recursos no soportados se conservan en origen. El rol administrado del propio bot puede acceder al archivo, junto al acceso inherente de administradores; otros roles visibles bloquean el archivo. No se crean ni reconfiguran canales. Los envíos inciertos requieren revisión y se conservan, sin retención destructiva automática.
