@@ -360,5 +360,56 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+    async def test_honeypot_add_cancel_keeps_channel_unregistered(self):
+        i = interaction()
+        i.guild.me = NS(id=777)
+        channel = NS(id=90123, mention='#trampa', permissions_for=lambda me: NS(
+            view_channel=True, send_messages=True, manage_messages=True
+        ))
+        with (patch.object(b, 'hp_traps', return_value={}),
+              patch.object(b, 'hp_protected_channel_reason', return_value=None),
+              patch.object(b, 'hp_add_trap') as add):
+            await b.honeypot_add.callback(i, channel)
+            add.assert_not_called()
+            view = i.response.send_message.call_args.kwargs['view']
+            await view.cancel.callback(interaction())
+            add.assert_not_called()
+
+    async def test_honeypot_remove_cancel_keeps_channel_registered(self):
+        i = interaction()
+        channel = NS(id=90124, mention='#trampa')
+        with (patch.object(b, 'hp_traps', return_value={90124: None}),
+              patch.object(b, 'hp_remove_trap') as remove):
+            await b.honeypot_remove.callback(i, channel)
+            remove.assert_not_called()
+            view = i.response.send_message.call_args.kwargs['view']
+            await view.cancel.callback(interaction())
+            remove.assert_not_called()
+
+    async def test_honeypot_create_cancel_creates_no_channel(self):
+        i = interaction()
+        i.user.guild_permissions = b.discord.Permissions(
+            manage_guild=True, manage_channels=True
+        )
+        i.guild.me = NS(guild_permissions=NS(manage_channels=True))
+        i.guild.create_text_channel = AsyncMock()
+        await b.honeypot_create.callback(i)
+        i.guild.create_text_channel.assert_not_awaited()
+        view = i.response.send_message.call_args.kwargs['view']
+        await view.cancel.callback(interaction())
+        i.guild.create_text_channel.assert_not_awaited()
+
+    async def test_honeypot_exemption_cancel_has_no_database_write(self):
+        i = interaction()
+        role = NS(id=90125, mention='<@&90125>')
+        with patch.object(b, 'hp_exempt_add') as add:
+            await b.honeypot_exempt_add.callback(i, rol=role)
+            add.assert_not_called()
+            view = i.response.send_message.call_args.kwargs['view']
+            await view.cancel.callback(interaction())
+            add.assert_not_called()
+
+
+
 if __name__ == '__main__':
     unittest.main()
