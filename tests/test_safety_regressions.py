@@ -22,7 +22,8 @@ b.suggestion_db_init()
 def interaction(allowed=True, guild_id=901):
     return NS(guild=NS(id=guild_id), guild_id=guild_id,
               user=NS(id=10, mention='<@10>', guild_permissions=b.discord.Permissions(manage_guild=allowed)),
-              response=NS(is_done=lambda: False, send_message=AsyncMock(), edit_message=AsyncMock()),
+              response=NS(is_done=lambda: False, send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock()),
+              edit_original_response=AsyncMock(),
               followup=NS(send=AsyncMock()))
 
 
@@ -510,6 +511,66 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         view = b.PendingRoleRestoreView(901, 10, 40304)
         self.assertFalse(await view.interaction_check(interaction(allowed=False)))
         self.assertEqual(b.condemnation_pending_roles_get(901, 40304), [9007])
+
+    async def test_pending_restore_defers_before_fetch_and_preserves_roles_on_api_error(self):
+        b.condemnation_pending_roles_set(901, 40305, [9007])
+        i = interaction()
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=True, manage_roles=True, administrator=True)
+        i.guild.me = NS(guild_permissions=NS(manage_roles=True))
+        i.guild.get_member = lambda _: None
+        i.guild.get_role = lambda _: NS(id=9007, managed=False, is_assignable=lambda: True)
+        error = b.discord.HTTPException(NS(status=500, reason='Simulado'), 'Error simulado')
+        member = NS(add_roles=AsyncMock(side_effect=error))
+        async def fetch(_):
+            i.response.defer.assert_awaited_once()
+            return member
+        i.guild.fetch_member = fetch
+        view = b.PendingRoleRestoreView(901, 10, 40305)
+        with patch.object(b, 'condemnation_get', return_value=None):
+            await view.confirm.callback(i)
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40305), [9007])
+        self.assertFalse(view.finished)
+        self.assertNotIn((901, 40305), b._condemn_inflight)
+        self.assertIn('Discord rechazó', i.followup.send.call_args.args[0])
+
+    async def test_pending_restore_rechecks_roles_permission_after_fetch(self):
+        b.condemnation_pending_roles_set(901, 40306, [9007])
+        i = interaction()
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=True, manage_roles=True)
+        i.guild.me = NS(guild_permissions=NS(manage_roles=True))
+        i.guild.get_member = lambda _: None
+        member = NS(add_roles=AsyncMock())
+        async def fetch(_):
+            i.response.defer.assert_awaited_once()
+            i.response.is_done = lambda: True
+            i.user.guild_permissions = b.discord.Permissions(manage_guild=True)
+            return member
+        i.guild.fetch_member = fetch
+        view = b.PendingRoleRestoreView(901, 10, 40306)
+        with patch.object(b, 'condemnation_get', return_value=None):
+            await view.confirm.callback(i)
+        member.add_roles.assert_not_awaited()
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40306), [9007])
+        i.followup.send.assert_awaited_once()
+
+    async def test_pending_restore_cancel_during_fetch_prevents_role_assignment(self):
+        b.condemnation_pending_roles_set(901, 40307, [9007])
+        i = interaction()
+        i.user.guild_permissions = b.discord.Permissions(manage_guild=True, manage_roles=True)
+        i.guild.me = NS(guild_permissions=NS(manage_roles=True))
+        i.guild.get_member = lambda _: None
+        member = NS(add_roles=AsyncMock())
+        view = b.PendingRoleRestoreView(901, 10, 40307)
+        async def fetch(_):
+            cancel = interaction()
+            cancel.user.guild_permissions = i.user.guild_permissions
+            await view.cancel.callback(cancel)
+            return member
+        i.guild.fetch_member = fetch
+        with patch.object(b, 'condemnation_get', return_value=None):
+            await view.confirm.callback(i)
+        member.add_roles.assert_not_awaited()
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40307), [9007])
 
 
 

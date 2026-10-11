@@ -2409,38 +2409,81 @@ async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: 
     await evaluate_sin_verificado(guild_id, user_id)
 
 
+_verification_expiry_inflight: set[tuple[int, int]] = set()
+
+
+def clear_verification_expiry(guild_id: int, user_id: int) -> None:
+    """Resolver ambos temporizadores que pertenecen a la misma verificación."""
+    conn = db_connect()
+    try:
+        conn.execute("UPDATE guild_members SET verify_pending_at = NULL, sin_verificado_at = NULL WHERE guild_id = ? AND user_id = ?",
+                     (guild_id, user_id))
+    finally:
+        conn.close()
+
+
+async def run_verification_expiry(guild_id: int, user_id: int, evaluator) -> None:
+    key = (guild_id, user_id)
+    if key in _verification_expiry_inflight:
+        return
+    _verification_expiry_inflight.add(key)
+    try:
+        await evaluator(guild_id, user_id)
+    finally:
+        _verification_expiry_inflight.discard(key)
+
+
 async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
-    """Respaldo del timeout de Sin Verificar (299s). Si a los 300s el
-    miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
+    await run_verification_expiry(guild_id, user_id, _evaluate_sin_verificado_inner)
+
+
+async def _evaluate_sin_verificado_inner(guild_id: int, user_id: int) -> None:
+    """Respaldo independiente solo cuando no existe una verificación principal."""
     if condemnation_get(guild_id, user_id) is not None:
-        db_clear_sin_verificado(guild_id, user_id)
+        clear_verification_expiry(guild_id, user_id)
+        return
+    row = db_get(guild_id, user_id)
+    if row is None:
+        return
+    if row['verify_pending_at'] is not None and verify_enabled(guild_id):
+        # El respaldo no puede acortar el plazo ni sustituir ban/solo registrar
+        # por una expulsión. Ya se posee el bloqueo compartido.
+        await _evaluate_verify_timeout_inner(guild_id, user_id)
+        return
+    if row['sin_verificado_at'] is None:
+        return
+    deadline = datetime.fromisoformat(row['sin_verificado_at']) + get_sin_verificado_window(guild_id)
+    if datetime.now(timezone.utc) < deadline:
         return
     guild = bot.get_guild(guild_id)
     if guild is None:
         return
     member = guild.get_member(user_id)
     if member is None:
-        db_clear_sin_verificado(guild_id, user_id)  # ya lo expulsaron — nada que hacer
+        clear_verification_expiry(guild_id, user_id)
         return
 
-    if get_sin_verificado_role_id(guild_id) not in {r.id for r in member.roles}:
-        db_clear_sin_verificado(guild_id, user_id)  # ya verificó a tiempo
+    role_ids = {r.id for r in member.roles}
+    if (get_sin_verificado_role_id(guild_id) not in role_ids
+            or get_verify_role_id(guild_id) in role_ids or role_ids & get_eval_role_ids(guild_id)):
+        clear_verification_expiry(guild_id, user_id)
         return
 
-    db_clear_sin_verificado(guild_id, user_id)
     try:
         await member.kick(reason="No completó la verificación dentro del plazo establecido.")
-        await log_embed(
-            guild, "Expulsión por falta de verificación",
-            f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
-            discord.Color.red(),
-        )
-    except discord.Forbidden:
+    except discord.HTTPException:
         await log_embed(
             guild, "Advertencia: Error al expulsar",
-            f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
+            f"Discord rechazó la expulsión de {member.mention}. Compruebe los permisos y la jerarquía de roles. La verificación continúa pendiente.",
             discord.Color.dark_red(),
         )
+        return
+    clear_verification_expiry(guild_id, user_id)
+    await log_embed(
+        guild, "Expulsión por falta de verificación",
+        f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
+        discord.Color.red(),
+    )
 
 
 async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> None:
@@ -2771,7 +2814,7 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
 def heraldo_setup_home_content() -> str:
     return (
         "**El Heraldo · Configuración**\n\n"
-        "Selecciona un módulo en el menú desplegable y pulsa **Configurar** para abrirlo.\n"
+        "Selecciona una sección y se abrirá directamente. Guarda los cambios solo cuando estés conforme.\n"
         "Puedes volver a este menú desde las opciones de navegación de cada módulo."
     )
 
@@ -6530,8 +6573,8 @@ def heraldo_messages_command_content() -> str:
 
 def heraldo_messages_setup_content() -> str:
     return (
-        "✉️ **El Heraldo · Mensajes y paneles**\n\n"
-        "Edita los mensajes persistentes y plantillas visuales del servidor desde un solo lugar. "
+        "**El Heraldo · Mensajes**\n\n"
+        "Elige el mensaje que deseas editar. Los mensajes del sistema tienen nombres fijos; las plantillas con nombres propios son opcionales y se encuentran en Mensajes personalizados. "
         "Los cambios quedan aislados por servidor y los paneles publicados se sincronizan cuando corresponde.\n\n"
         "**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot, Condenas y Logs.\n"
         "**Excluidos a propósito:** Variables, comandos, listas, estados, perfiles, historiales, "
@@ -7236,43 +7279,19 @@ class HeraldoMessagesSetupView(discord.ui.View):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="Plantillas", value="templates", description="Crear, editar y publicar mensajes con embeds y enlaces."),
-                discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles configurables."),
-                discord.SelectOption(label="Kits de mensajes", value="kits", description="Exportar e importar plantillas del servidor."),
-                discord.SelectOption(label="Programación", value="schedules", description="Fechas, zonas horarias y repeticiones de mensajes."),
-                discord.SelectOption(label="Autorespuestas", value="autoresponses", description="Responder a palabras o frases, con límites de frecuencia."),
-                discord.SelectOption(label="Sticky", value="sticky", description="Mantener una plantilla al final del canal."),
-                discord.SelectOption(label="Webhooks", value="webhooks", description="Publicación confirmada mediante webhooks del bot."),
-                discord.SelectOption(
-                    label="Verificación",
-                    value="verification",
-                    description="Texto del panel, botón y mensaje de éxito.",
-                ),
-                discord.SelectOption(
-                    label="DM de verificación",
-                    value="verify_dm",
-                    description="Embed enviado al miembro después de verificarse.",
-                ),
-                discord.SelectOption(
-                    label="Sugerencias",
-                    value="suggestions",
-                    description="Título, descripción, color, imágenes y botón.",
-                ),
-                discord.SelectOption(
-                    label="Honeypot",
-                    value="honeypot",
-                    description="Aviso persistente de los canales trampa.",
-                ),
-                discord.SelectOption(
-                    label="Condenas",
-                    value="condemnation",
-                    description="Plantilla de la tarjeta de condenados.",
-                ),
-                discord.SelectOption(
-                    label="Logs",
-                    value="logs",
-                    description="Plantillas visuales de los registros del Heraldo.",
-                ),
+                discord.SelectOption(label="Verificación", value="verification", description="Panel, botón y respuesta al verificar."),
+                discord.SelectOption(label="DM de verificación", value="verify_dm", description="Mensaje privado de verificación."),
+                discord.SelectOption(label="Condenas", value="condemnation", description="Tarjeta fija de condenados y perdonados."),
+                discord.SelectOption(label="Sugerencias", value="suggestions", description="Mensaje y panel de sugerencias."),
+                discord.SelectOption(label="Honeypot", value="honeypot", description="Aviso de los canales trampa."),
+                discord.SelectOption(label="Logs", value="logs", description="Registros de moderación y del servidor."),
+                discord.SelectOption(label="Mensajes personalizados", value="templates", description="Mensajes adicionales creados por el administrador."),
+                discord.SelectOption(label="Componentes", value="components", description="Botones y menús de roles."),
+                discord.SelectOption(label="Programación", value="schedules", description="Envíos automáticos con fecha u horario."),
+                discord.SelectOption(label="Autorespuestas", value="autoresponses", description="Respuestas a palabras o frases."),
+                discord.SelectOption(label="Sticky", value="sticky", description="Mensaje mantenido al final de un canal."),
+                discord.SelectOption(label="Webhooks", value="webhooks", description="Publicación mediante un webhook del bot."),
+                discord.SelectOption(label="Kits de mensajes", value="kits", description="Importar o exportar mensajes personalizados."),
             ],
             row=0,
         )
@@ -7494,18 +7513,18 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
 
-class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla del reporte"):
-    action = discord.ui.TextInput(label="Acción", required=True, max_length=20, placeholder="report, timeout, kick, ban o condemn")
-    duration = discord.ui.TextInput(label="Duración", required=False, max_length=30, placeholder="30m, 1d o -")
-    threshold = discord.ui.TextInput(label="Umbral", required=True, max_length=2, placeholder="2")
-    purge = discord.ui.TextInput(label="Ventana de purga", required=False, max_length=30, placeholder="30m o -")
+class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacción de reporte"):
+    action = discord.ui.TextInput(label="¿Qué debe hacer el bot?", required=True, max_length=30, placeholder="Reportar, condenar, aislar, expulsar o banear")
+    duration = discord.ui.TextInput(label="Duración (opcional)", required=False, max_length=30, placeholder="30m, 1d o vacío")
+    threshold = discord.ui.TextInput(label="Reportes necesarios", required=True, max_length=2, placeholder="2")
+    purge = discord.ui.TextInput(label="Borrar mensajes recientes", required=False, max_length=30, placeholder="30m o vacío")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int) -> None:
         super().__init__()
         self.parent_view = parent_view
         self.index = index
         item = parent_view._working_reactions()[index]
-        self.action.default = str(item.get("action", "report"))
+        self.action.default = moderation_action_label(str(item.get("action", "report")))
         duration = item.get("duration_minutes")
         self.duration.default = format_duration(int(duration)) if duration else "-"
         self.threshold.default = str(item.get("threshold", 1))
@@ -7513,9 +7532,25 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Moderation · Regla d
         self.purge.default = format_duration(int(purge)) if purge else "-"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        action = str(self.action).strip().lower()
+        # El formulario acepta acciones en español; los códigos internos se
+        # conservan únicamente en SQLite y nunca deben aprenderse de memoria.
+        if not await self.parent_view.interaction_check(interaction):
+            return
+        requested = str(self.action).strip().casefold()
+        aliases = {
+            "report": "report", "reportar": "report", "solo reportar": "report",
+            "solo registrar": "report", "registrar": "report",
+            "timeout": "timeout", "timeout / mute": "timeout", "aislar": "timeout",
+            "aislar temporalmente": "timeout", "silenciar": "timeout",
+            "kick": "kick", "expulsar": "kick",
+            "ban": "ban", "banear": "ban", "bloquear": "ban",
+            "condemn": "condemn", "condenar": "condemn",
+        }
+        action = aliases.get(requested)
         if action not in MODERATION_REPORT_ACTIONS:
-            await interaction.response.send_message("Acciones válidas: report, timeout, kick, ban o condemn.", ephemeral=True)
+            await interaction.response.send_message(
+                "Elige una acción: reportar, condenar, aislar, expulsar o banear.", ephemeral=True
+            )
             return
         try:
             threshold = int(str(self.threshold).strip())
@@ -9122,7 +9157,7 @@ class HeraldoPendingSetupModuleView(discord.ui.View):
 
 
 class HeraldoSetupView(discord.ui.View):
-    """Navegación compacta: seleccionar un módulo y luego pulsar Configurar."""
+    """Navegación directa: abrir un módulo al elegirlo, sin pasos redundantes."""
 
     MODULES = (
         ("automod", "AutoMod", "Protecciones automáticas del servidor"),
@@ -9143,7 +9178,7 @@ class HeraldoSetupView(discord.ui.View):
         self.selected_module: str | None = None
 
         select = discord.ui.Select(
-            placeholder="Selecciona el módulo que deseas configurar",
+            placeholder="Elige una sección para abrirla",
             min_values=1,
             max_values=1,
             row=0,
@@ -9154,6 +9189,7 @@ class HeraldoSetupView(discord.ui.View):
                     description=description,
                 )
                 for key, label, description in self.MODULES
+                if key not in {"role_connections", "language"}
             ],
         )
         select.callback = self.select_module
@@ -9182,15 +9218,8 @@ class HeraldoSetupView(discord.ui.View):
             await interaction.response.send_message("Módulo no válido.", ephemeral=True)
             return
         self.selected_module = selected
-        # Discord reconstruye el desplegable después de edit_message. Debemos
-        # marcar la opción escogida en el propio componente; de lo contrario
-        # el cliente vuelve a mostrar el placeholder aunque el estado interno
-        # guarde correctamente la selección.
-        for option in self.module_select.options:
-            option.default = option.value == selected
-        await interaction.response.edit_message(view=self)
+        await self.configure(interaction, None)
 
-    @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selected = self.selected_module
         if selected is None:
@@ -9885,11 +9914,15 @@ async def schedule_verify_timeout(guild_id: int, user_id: int, pending_at: datet
 
 
 async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
+    await run_verification_expiry(guild_id, user_id, _evaluate_verify_timeout_inner)
+
+
+async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
     """Aplica la acción configurada si el miembro no se verificó dentro del timeout.
     Lee siempre la configuración actual: si el timeout se alargó mientras esperaba, no
     actúa todavía (check_pending_verifications lo retoma al vencer el nuevo plazo)."""
     if condemnation_get(guild_id, user_id) is not None:
-        db_clear_verify_pending(guild_id, user_id)
+        clear_verification_expiry(guild_id, user_id)
         return
     row = db_get(guild_id, user_id)
     if row is None or row["verify_pending_at"] is None:
@@ -9899,7 +9932,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         return
     member = guild.get_member(user_id)
     if member is None or not verify_enabled(guild.id):
-        db_clear_verify_pending(guild_id, user_id)  # se fue, o la verificación se desactivó
+        clear_verification_expiry(guild_id, user_id)  # se fue, o la verificación se desactivó
         return
 
     timeout = get_verify_timeout(guild_id)
@@ -9908,15 +9941,16 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         return
 
     role_ids = {r.id for r in member.roles}
-    db_clear_verify_pending(guild_id, user_id)
     if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
+        clear_verification_expiry(guild_id, user_id)
         return  # se verificó a tiempo (o un admin le dio un rol de orientación)
 
     action = get_verify_action(guild.id)
     if action == "none":
+        clear_verification_expiry(guild_id, user_id)
         await log_embed(
             guild, "Verificación vencida",
-            f"{member.mention} (`{member.id}`) no se verificó en {timeout} s. "
+            f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido. "
             f"Acción configurada: solo registrar.",
             discord.Color.orange(),
         )
@@ -9934,9 +9968,10 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
             discord.Color.dark_red(),
         )
         return
+    clear_verification_expiry(guild_id, user_id)
     await log_embed(
         guild, "Expulsión permanente por falta de verificación" if action == "ban" else "Expulsión por falta de verificación",
-        f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
+        f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
         discord.Color.red(),
     )
 
@@ -12038,6 +12073,7 @@ MODERATION_REPORT_REACTION_DEFAULTS = (
     {"emoji": "🔞", "label": "Posible menor de edad", "action": "ban", "duration_minutes": None, "threshold": 2, "purge_minutes": 30},
 )
 _moderation_report_dedupe: dict[tuple[int, int, int, str], float] = {}
+_moderation_report_pending: set[tuple[int, int, str]] = set()
 _reaction_condemn_pending: set[tuple[int, int]] = set()
 
 
@@ -12203,24 +12239,11 @@ async def execute_moderation_report_action(
         return False, f"Acción bloqueada: {protection}."
 
     notes: list[str] = []
-    if purge_minutes:
-        after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
-        result = await run_purge_job(
-            guild,
-            target,
-            scope_text=f"mensajes de los últimos {format_duration(purge_minutes)}",
-            requested_by=f"Moderation · {rule.get('label', 'reporte')}",
-            after=after,
-            title="Moderation · Purga automática completada",
-        )
-        if result is None:
-            notes.append("purga ya en curso")
-        else:
-            notes.append(f"purga reciente: {purge_result_text(result)}")
+    if action == "report" and not purge_minutes:
+        return True, "Reporte registrado"
 
-    if action == "report":
-        return True, "; ".join(notes) if notes else "solo registrado"
-
+    # No eliminar mensajes antes de comprobar la acción ni antes de archivar
+    # la evidencia necesaria para una condena.
     try:
         if action == "timeout":
             if duration_minutes is None:
@@ -12239,7 +12262,7 @@ async def execute_moderation_report_action(
                 target,
                 reason=reason,
                 duration_minutes=duration_minutes,
-                purge_spec=None,
+                purge_spec=("time", purge_minutes) if purge_minutes else None,
                 origin="reaction_report",
                 applied_by=None,
                 source_message_url=message.jump_url,
@@ -12250,6 +12273,24 @@ async def execute_moderation_report_action(
             notes.append("condena aplicada")
     except discord.HTTPException as exc:
         return False, f"Discord rechazó la acción: {exc}"
+
+    if purge_minutes and action != "condemn":
+        after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
+        try:
+            result = await run_purge_job(
+                guild,
+                target,
+                scope_text=f"mensajes de los últimos {format_duration(purge_minutes)}",
+                requested_by=f"Moderation · {rule.get('label', 'reporte')}",
+                after=after,
+                title="Moderation · Purga automática completada",
+            )
+        except discord.HTTPException as exc:
+            notes.append(f"purga no disponible: {exc}")
+        else:
+            notes.append("purga ya en curso" if result is None else f"purga: {purge_result_text(result)}")
+    if action == "condemn" and purge_minutes:
+        notes.append("la purga depende del archivo seguro de la evidencia")
 
     return True, "; ".join(notes) if notes else moderation_action_label(action)
 
@@ -12287,7 +12328,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){purge_text}"
     mapping_text = "\n".join(rule_line(item) for item in mappings) or "• Sin reacciones configuradas"
     return (
-        f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
+        f"**Registro de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'Canal general de logs'}\n"
         f"**Reacciones de reporte:**\n{mapping_text}\n"
         f"**Reacción para condenar:** {condemn_emoji or get_condemnation_emoji(guild.id)}\n\n"
         "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
@@ -14147,7 +14188,7 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
     )
     embed.add_field(name="Canal", value=channel.mention, inline=True)
     embed.add_field(name="Acción", value=f"{HONEYPOT_ACTION_LABELS.get(action, action)} — {note}", inline=False)
-    embed.add_field(name="Mensaje", value=f"```{evidence}```", inline=False)
+    embed.add_field(name="Mensaje", value=evidence, inline=False)
     embed.set_thumbnail(url=member.display_avatar.url)
     role_id = hp_ping_role_id(guild.id)
     try:
@@ -14323,7 +14364,8 @@ class PendingRoleRestoreView(discord.ui.View):
         if not await configuration_access(interaction, self.guild_id, self.owner_id):
             return False
         if not interaction.user.guild_permissions.manage_roles:
-            await interaction.response.send_message("Se requiere Gestionar roles.", ephemeral=True)
+            sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await sender("Se requiere Gestionar roles.", ephemeral=True)
             return False
         return True
 
@@ -14350,19 +14392,26 @@ class PendingRoleRestoreView(discord.ui.View):
                 "La lista pendiente cambió. Abra una nueva solicitud.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         member = guild.get_member(self.target_id)
         if member is None:
             try:
                 member = await guild.fetch_member(self.target_id)
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No se pudo localizar al miembro. Sus roles pendientes se conservaron.", ephemeral=True
                 )
                 return
         if not await self.interaction_check(interaction):
             return
+        if self.finished or condemnation_pending_roles_get(self.guild_id, self.target_id) != pending:
+            await interaction.followup.send("La propuesta se cerró o los roles pendientes cambiaron. Abra una nueva solicitud.", ephemeral=True)
+            return
+        if guild.me is None or not guild.me.guild_permissions.manage_roles:
+            await interaction.followup.send("El Heraldo perdió el permiso para Gestionar roles. Los pendientes se conservaron.", ephemeral=True)
+            return
         if condemnation_get(self.guild_id, self.target_id) is not None:
-            await interaction.response.send_message("La condena volvió a estar activa. No se cambiarán roles.", ephemeral=True)
+            await interaction.followup.send("La condena volvió a estar activa. No se cambiarán roles.", ephemeral=True)
             return
         assignable = []
         for rid in pending:
@@ -14375,14 +14424,14 @@ class PendingRoleRestoreView(discord.ui.View):
                 continue
             assignable.append(role)
         if not assignable:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No hay roles pendientes que este administrador y El Heraldo puedan asignar.",
                 ephemeral=True,
             )
             return
         key = (self.guild_id, self.target_id)
         if key in _condemn_inflight:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Ya se está procesando una operación de roles para este miembro.", ephemeral=True
             )
             return
@@ -14392,7 +14441,7 @@ class PendingRoleRestoreView(discord.ui.View):
             await member.add_roles(*assignable, reason="Restauración pendiente de condena confirmada")
         except discord.HTTPException:
             self.finished = False
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Discord rechazó el cambio; no se eliminó ningún rol pendiente.", ephemeral=True
             )
             return
@@ -14401,7 +14450,7 @@ class PendingRoleRestoreView(discord.ui.View):
         remaining = [rid for rid in pending if rid not in {role.id for role in assignable}]
         condemnation_pending_roles_set(self.guild_id, self.target_id, remaining)
         self.stop()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"Roles restaurados: {len(assignable)}. Aún pendientes: {len(remaining)}.", view=None,
         )
         await log_embed(
@@ -15056,8 +15105,17 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
         message = await channel.fetch_message(payload.message_id)
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         return
+    # fetch_message puede devolver User sin el objeto Member; no descartar por ello
+    # una reacción válida. Resolver el miembro real antes de evaluar sus roles.
     target = message.author
-    if not isinstance(target, discord.Member) or target.bot:
+    if not isinstance(target, discord.Member):
+        target = guild.get_member(message.author.id)
+        if target is None:
+            try:
+                target = await guild.fetch_member(message.author.id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return
+    if target.bot or target.id == actor.id:
         return
 
     if is_condemn:
@@ -15093,7 +15151,10 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
             _reaction_condemn_pending.discard(pending_key)
         return
 
-    report_channel = guild.get_channel(moderation_report_channel_id(guild.id))
+    # Si no hay un destino exclusivo, reutilizar los registros del servidor.
+    # Una configuración incompleta no debe desactivar silenciosamente las reglas.
+    report_channel_id = moderation_report_channel_id(guild.id) or get_log_channel_id(guild.id)
+    report_channel = guild.get_channel(report_channel_id)
     if not isinstance(report_channel, discord.TextChannel):
         return
 
@@ -15114,42 +15175,62 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
             if stamp < cutoff:
                 _moderation_report_dedupe.pop(key, None)
 
+    # Publicar únicamente el primer aviso y el resultado final del umbral.
+    # No emitir además un segundo embed de logs por la misma acción.
+    if action_executed or (1 < reporter_count < threshold):
+        return
+
+    action_result: tuple[bool, str] | None = None
+    if report_rule and reporter_count >= threshold and not action_executed:
+        action_key = (guild.id, message.id, emoji_key)
+        if action_key in _moderation_report_pending:
+            return
+        _moderation_report_pending.add(action_key)
+        try:
+            action_result = await execute_moderation_report_action(
+                guild, target, message, report_rule, reporter_count
+            )
+            if action_result[0]:
+                moderation_report_mark_executed(guild.id, message.id, target.id, emoji_key)
+        except Exception:
+            traceback.print_exc()
+            action_result = (False, "Error al ejecutar la acción; revise permisos y configuración.")
+        finally:
+            _moderation_report_pending.discard(action_key)
+
     embed = discord.Embed(
-        title="Reporte de usuario por reacción",
-        description=f"**Tipo:** {report_type}",
+        title="Reporte por reacción",
+        description=f"**Motivo:** {report_type}",
         color=discord.Color.orange(),
         timestamp=datetime.now(timezone.utc),
     )
-    embed.add_field(name="Reportado", value=f"{target.mention}\nID: {target.id}", inline=True)
-    embed.add_field(name="Reportó", value=f"{actor.mention}\nID: {actor.id}", inline=True)
-    embed.add_field(name="Dónde", value=message.channel.mention, inline=True)
-    content = (message.content or "(mensaje sin texto)")[:1500]
-    embed.add_field(name="Mensaje", value=content, inline=False)
-    if message.attachments:
-        attachments = "\n".join(a.url for a in message.attachments[:5])
-        embed.add_field(name="Adjuntos", value=attachments[:1024], inline=False)
-    embed.add_field(name="Referencia", value=f"[Abrir mensaje]({message.jump_url})", inline=False)
-    embed.add_field(name="Reportes distintos", value=f"{reporter_count}/{threshold}", inline=True)
+    embed.add_field(name="Miembro", value=target.mention, inline=True)
+    embed.add_field(name="Reportado por", value=actor.mention, inline=True)
+    embed.add_field(name="Canal", value=message.channel.mention, inline=True)
+    embed.add_field(name="Reportes recibidos", value=f"{reporter_count}/{threshold}", inline=True)
     embed.add_field(
-        name="Acción configurada",
+        name="Acción prevista",
         value=moderation_action_label(str(report_rule.get("action", "report"))) if report_rule else "Solo reportar",
         inline=True,
     )
+    if action_result is not None:
+        success, explanation = action_result
+        embed.add_field(
+            name="Resultado",
+            value=("Completada: " if success else "No completada: ") + explanation[:950],
+            inline=False,
+        )
+        embed.color = discord.Color.green() if success else discord.Color.orange()
+    if message.content:
+        embed.add_field(name="Mensaje", value=message.content[:1000], inline=False)
+    embed.add_field(name="Referencia", value=f"[Abrir mensaje]({message.jump_url})", inline=False)
     try:
         await report_channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         _moderation_report_dedupe.pop(dedupe_key, None)
-
-    if report_rule and reporter_count >= threshold and not action_executed:
-        ok, note = await execute_moderation_report_action(guild, target, message, report_rule, reporter_count)
-        if ok:
-            moderation_report_mark_executed(guild.id, message.id, target.id, emoji_key)
-        await log_embed(
-            guild,
-            "Moderation · Acción automática de reporte" if ok else "Moderation · Acción automática rechazada",
-            f"{target.mention} · {report_type}\nReportes: {reporter_count}/{threshold}\nResultado: {note}\n{message.jump_url}",
-            discord.Color.green() if ok else discord.Color.orange(),
-        )
+        # Nunca informar como ejecutada una acción cuya trazabilidad no se pudo publicar.
+        # El estado real de la acción se conserva para no aplicarla dos veces.
+        print("Moderation: no se pudo publicar el resultado de reporte en su canal.")
 
 
 class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción"):
@@ -15783,7 +15864,7 @@ async def honeypot_history(
             value=(
                 f"<#{r['channel_id']}> · {HONEYPOT_ACTION_LABELS.get(r['action'], r['action'])}\n"
                 f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}\n"
-                f"```{content}```"
+                + content
             ),
             inline=False,
         )

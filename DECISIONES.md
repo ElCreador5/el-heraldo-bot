@@ -68,3 +68,16 @@ En la rama de PR #10 se reutilizó el flujo de propuesta, confirmación explíci
 ## Continuidad de restauraciones parciales — 2026-10-11
 
 Para evitar perder información al levantar una condena, el registro de roles que no pudieron devolverse se conserva por servidor/miembro y el administrador puede reintentar su restauración con confirmación explícita, permisos de Gestionar roles, control de jerarquía y rechazo de condena activa. Esta implementación está propuesta en PR #11 para el laboratorio y exige prueba interactiva antes de producción.
+
+
+## Coordinación y auditoría integral — 2026-10-11
+- Codex asume el trabajo técnico directamente; ChatGPT coordina propuestas y el propietario decide producto y producción. GitHub es la continuidad compartida. No se añadieron agentes/conexiones.
+- Separar inventario estático, pruebas offline, arranque Gateway y pruebas humanas. Una CI verde no prueba el recorrido si sustituye el callback que pretende verificar.
+- Mantener códigos de expedientes trazables; la simplificación de títulos, catálogo oficial, purga en «Solo reportar» y navegación común se presenta como propuesta, sin alterar datos existentes por inferencia.
+- Servidor real: nombre y autorización pendientes. No conectar, sancionar ni activar automatismos allí; plan supervisado en audit/PROPUESTAS_Y_PLAN_REAL.md. main requiere autorización independiente.
+
+
+## Coordinación de verificación y respaldo — 2026-10-11
+- Los temporizadores de verificación y del rol Sin Verificar pertenecen al mismo proceso cuando ambos están pendientes: comparten exclusión y resolución. El respaldo respeta la acción y plazo configurados del proceso principal.
+- Una expulsión confirmada produce un solo registro por estos dos temporizadores. Las opciones ban y solo registrar se conservan; no suprimir registros de moderación necesarios para ocultar duplicados.
+- Al fallar la operación remota no se anuncia éxito ni se descarta el pendiente. La prueba de laboratorio debe verificar la corrección después del despliegue, conservando la captura anterior como observación del propietario.
