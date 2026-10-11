@@ -14297,24 +14297,26 @@ async def liberar_error(interaction: discord.Interaction, error: discord.app_com
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
 async def condenar_config(interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None) -> None:
+    if not await configuration_access(interaction):
+        return
     if canal is None:
         current = interaction.guild.get_channel(condemnation_channel_id(interaction.guild.id))
         await interaction.response.send_message(
-            f"**Canal de condenas:** {current.mention if current else 'no configurado'}",
+            f"Canal de condenas: {current.mention if current else 'no configurado'}",
             ephemeral=True,
         )
         return
-    perms = canal.permissions_for(interaction.guild.me)
-    missing = [name for name, ok in (("Ver canal", perms.view_channel), ("Enviar mensajes", perms.send_messages), ("Insertar enlaces", perms.embed_links)) if not ok]
-    if missing:
+    me = interaction.guild.me
+    perms = canal.permissions_for(me) if me is not None else None
+    if perms is None or not (perms.view_channel and perms.send_messages and perms.embed_links):
         await interaction.response.send_message(
-            f"Error: No guardé el cambio: faltan **{', '.join(missing)}** en {canal.mention}.", ephemeral=True
+            "El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces para anunciar condenas.",
+            ephemeral=True,
         )
         return
-    set_condemnation_channel_id(canal.id, interaction.guild.id)
-    guild_resource_set(interaction.guild.id, "channel", "condemned", canal.id)
-    await interaction.response.send_message(f"Los avisos de condena se publicarán en {canal.mention}.", ephemeral=True)
-    await log_embed(interaction.guild, "Canal de condenas actualizado", f"{interaction.user.mention} lo cambió a {canal.mention}.")
+    await confirm_configuration(interaction, interaction.guild.id, {
+        "condemned_channel_id": str(canal.id),
+    })
 
 
 class ConfigurationConfirmView(discord.ui.View):
@@ -14336,6 +14338,18 @@ class ConfigurationConfirmView(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
+        if "condemned_channel_id" in self.changes:
+            channel = interaction.guild.get_channel(int(self.changes["condemned_channel_id"]))
+            me = interaction.guild.me
+            if not isinstance(channel, discord.TextChannel) or me is None:
+                await interaction.response.send_message("El canal de condenas ya no está disponible.", ephemeral=True)
+                return
+            perms = channel.permissions_for(me)
+            if not (perms.view_channel and perms.send_messages and perms.embed_links):
+                await interaction.response.send_message(
+                    "El Heraldo perdió permisos en el canal de condenas.", ephemeral=True
+                )
+                return
         # Un canal de anuncio puede haber sido eliminado o restringido.
         if "motw_channel_id" in self.changes:
             channel = interaction.guild.get_channel(int(self.changes["motw_channel_id"]))
@@ -14436,6 +14450,8 @@ class ConfigurationConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Configuración guardada. Puede volver al editor para consultar la vista previa.", view=None)
         try:
+            if 'condemned_channel_id' in self.changes:
+                guild_resource_set(self.guild_id, "channel", "condemned", int(self.changes['condemned_channel_id']))
             if 'honeypot_retention_minutes' in self.changes:
                 hp_prune_history(self.guild_id)
             if any(key.startswith('honeypot_warning_') for key in self.changes):
