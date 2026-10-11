@@ -10233,6 +10233,8 @@ async def verify_config(
     accion: Optional[discord.app_commands.Choice[str]] = None,
     activado: Optional[bool] = None,
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     guild = interaction.guild
     if rol is None and timeout is None and accion is None and activado is None:
         await interaction.response.send_message(verify_config_summary(guild), ephemeral=True)
@@ -10277,37 +10279,27 @@ async def verify_config(
             )
             return
 
-    # 2) Guardar.
-    changes: list[str] = []
+    # Crear una propuesta atómica, sin escribir hasta pulsar Guardar cambios.
+    changes: dict[str, str] = {}
     if rol is not None:
-        guild_config_set(interaction.guild.id, "verify_role_id", str(rol.id))
-        changes.append(f"rol → {rol.mention}")
+        changes["verify_role_id"] = str(rol.id)
     if timeout_seconds is not None:
-        guild_config_set(interaction.guild.id, "verify_timeout", str(timeout_seconds))
-        changes.append(f"timeout → {format_duration(timeout_seconds // 60)}")
+        changes["verify_timeout"] = str(timeout_seconds)
     if accion is not None:
-        guild_config_set(interaction.guild.id, "verify_action", accion.value)
-        changes.append(f"acción → {accion.name}")
+        changes["verify_action"] = accion.value
     if activado is not None:
-        guild_config_set(interaction.guild.id, "verify_enabled", "1" if activado else "0")
-        changes.append("activada" if activado else "desactivada")
+        changes["verify_enabled"] = "1" if activado else "0"
 
+    await confirm_configuration(interaction, guild.id, changes)
     warnings: list[str] = []
-    if get_verify_timeout(guild.id) > get_sin_verificado_window(guild.id).total_seconds():
-        warnings.append("Advertencia: El respaldo de Sin Verificar sigue en 300 s: quien tenga ese rol será expulsado antes que este timeout.")
-    if get_verify_role_id(guild.id) != get_tentado_role_id(guild.id):
-        warnings.append("Advertencia: El timer de orientación (10 min) solo se arma con Tentad@; con otro rol no se activará.")
-
-    await interaction.response.send_message(
-        "Guardado: " + "; ".join(changes) + "\n\n" + verify_config_summary(guild)
-        + ("\n\n" + "\n".join(warnings) if warnings else ""),
-        ephemeral=True,
-    )
-    await log_embed(
-        guild, "Verificación actualizada",
-        f"{interaction.user.mention}: " + "; ".join(changes),
-        discord.Color.blurple(),
-    )
+    proposed_timeout = timeout_seconds if timeout_seconds is not None else get_verify_timeout(guild.id)
+    proposed_role_id = rol.id if rol is not None else get_verify_role_id(guild.id)
+    if proposed_timeout > get_sin_verificado_window(guild.id).total_seconds():
+        warnings.append("El respaldo de Sin Verificar puede actuar antes que este timeout.")
+    if proposed_role_id != get_tentado_role_id(guild.id):
+        warnings.append("La orientación solo se programa para el rol Tentad@.")
+    if warnings:
+        await interaction.followup.send("Advertencias sobre la propuesta:\n" + "\n".join(warnings), ephemeral=True)
 
 
 async def verify_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
@@ -14359,6 +14351,19 @@ class ConfigurationConfirmView(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
+        # Revalidar antes de persistir configuraciones de verificación.
+        if self.changes.get("verify_enabled") == "1":
+            role_id = int(self.changes.get("verify_role_id") or get_verify_role_id(self.guild_id))
+            role = interaction.guild.get_role(role_id)
+            if role is None or verify_role_problem(role, interaction.guild):
+                await interaction.response.send_message("El rol de verificación ya no es válido.", ephemeral=True)
+                return
+            panel_ref = guild_config_get(self.guild_id, "verify_panel_ref")
+            if panel_ref is None and legacy_fallback_allowed(self.guild_id):
+                panel_ref = db_meta_get("verify_panel_ref")
+            if not panel_ref:
+                await interaction.response.send_message("Publique el panel de verificación antes de activarlo.", ephemeral=True)
+                return
         # Evitar propuestas obsoletas de la configuración sensible.
         if self.changes.get("honeypot_enabled") == "1" and not hp_traps(self.guild_id):
             await interaction.response.send_message("No se puede activar el honeypot sin canales trampa.", ephemeral=True)
