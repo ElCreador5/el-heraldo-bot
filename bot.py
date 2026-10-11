@@ -2409,38 +2409,81 @@ async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: 
     await evaluate_sin_verificado(guild_id, user_id)
 
 
+_verification_expiry_inflight: set[tuple[int, int]] = set()
+
+
+def clear_verification_expiry(guild_id: int, user_id: int) -> None:
+    """Resolver ambos temporizadores que pertenecen a la misma verificación."""
+    conn = db_connect()
+    try:
+        conn.execute("UPDATE guild_members SET verify_pending_at = NULL, sin_verificado_at = NULL WHERE guild_id = ? AND user_id = ?",
+                     (guild_id, user_id))
+    finally:
+        conn.close()
+
+
+async def run_verification_expiry(guild_id: int, user_id: int, evaluator) -> None:
+    key = (guild_id, user_id)
+    if key in _verification_expiry_inflight:
+        return
+    _verification_expiry_inflight.add(key)
+    try:
+        await evaluator(guild_id, user_id)
+    finally:
+        _verification_expiry_inflight.discard(key)
+
+
 async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
-    """Respaldo del timeout de Sin Verificar (299s). Si a los 300s el
-    miembro sigue con Sin Verificar, se expulsa directo — sin DM."""
+    await run_verification_expiry(guild_id, user_id, _evaluate_sin_verificado_inner)
+
+
+async def _evaluate_sin_verificado_inner(guild_id: int, user_id: int) -> None:
+    """Respaldo independiente solo cuando no existe una verificación principal."""
     if condemnation_get(guild_id, user_id) is not None:
-        db_clear_sin_verificado(guild_id, user_id)
+        clear_verification_expiry(guild_id, user_id)
+        return
+    row = db_get(guild_id, user_id)
+    if row is None:
+        return
+    if row['verify_pending_at'] is not None and verify_enabled(guild_id):
+        # El respaldo no puede acortar el plazo ni sustituir ban/solo registrar
+        # por una expulsión. Ya se posee el bloqueo compartido.
+        await _evaluate_verify_timeout_inner(guild_id, user_id)
+        return
+    if row['sin_verificado_at'] is None:
+        return
+    deadline = datetime.fromisoformat(row['sin_verificado_at']) + get_sin_verificado_window(guild_id)
+    if datetime.now(timezone.utc) < deadline:
         return
     guild = bot.get_guild(guild_id)
     if guild is None:
         return
     member = guild.get_member(user_id)
     if member is None:
-        db_clear_sin_verificado(guild_id, user_id)  # ya lo expulsaron — nada que hacer
+        clear_verification_expiry(guild_id, user_id)
         return
 
-    if get_sin_verificado_role_id(guild_id) not in {r.id for r in member.roles}:
-        db_clear_sin_verificado(guild_id, user_id)  # ya verificó a tiempo
+    role_ids = {r.id for r in member.roles}
+    if (get_sin_verificado_role_id(guild_id) not in role_ids
+            or get_verify_role_id(guild_id) in role_ids or role_ids & get_eval_role_ids(guild_id)):
+        clear_verification_expiry(guild_id, user_id)
         return
 
-    db_clear_sin_verificado(guild_id, user_id)
     try:
         await member.kick(reason="No completó la verificación dentro del plazo establecido.")
-        await log_embed(
-            guild, "Expulsión por falta de verificación",
-            f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
-            discord.Color.red(),
-        )
-    except discord.Forbidden:
+    except discord.HTTPException:
         await log_embed(
             guild, "Advertencia: Error al expulsar",
-            f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
+            f"Discord rechazó la expulsión de {member.mention}. Compruebe los permisos y la jerarquía de roles. La verificación continúa pendiente.",
             discord.Color.dark_red(),
         )
+        return
+    clear_verification_expiry(guild_id, user_id)
+    await log_embed(
+        guild, "Expulsión por falta de verificación",
+        f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
+        discord.Color.red(),
+    )
 
 
 async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> None:
@@ -9871,11 +9914,15 @@ async def schedule_verify_timeout(guild_id: int, user_id: int, pending_at: datet
 
 
 async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
+    await run_verification_expiry(guild_id, user_id, _evaluate_verify_timeout_inner)
+
+
+async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
     """Aplica la acción configurada si el miembro no se verificó dentro del timeout.
     Lee siempre la configuración actual: si el timeout se alargó mientras esperaba, no
     actúa todavía (check_pending_verifications lo retoma al vencer el nuevo plazo)."""
     if condemnation_get(guild_id, user_id) is not None:
-        db_clear_verify_pending(guild_id, user_id)
+        clear_verification_expiry(guild_id, user_id)
         return
     row = db_get(guild_id, user_id)
     if row is None or row["verify_pending_at"] is None:
@@ -9885,7 +9932,7 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         return
     member = guild.get_member(user_id)
     if member is None or not verify_enabled(guild.id):
-        db_clear_verify_pending(guild_id, user_id)  # se fue, o la verificación se desactivó
+        clear_verification_expiry(guild_id, user_id)  # se fue, o la verificación se desactivó
         return
 
     timeout = get_verify_timeout(guild_id)
@@ -9894,15 +9941,16 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
         return
 
     role_ids = {r.id for r in member.roles}
-    db_clear_verify_pending(guild_id, user_id)
     if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
+        clear_verification_expiry(guild_id, user_id)
         return  # se verificó a tiempo (o un admin le dio un rol de orientación)
 
     action = get_verify_action(guild.id)
     if action == "none":
+        clear_verification_expiry(guild_id, user_id)
         await log_embed(
             guild, "Verificación vencida",
-            f"{member.mention} (`{member.id}`) no se verificó en {timeout} s. "
+            f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido. "
             f"Acción configurada: solo registrar.",
             discord.Color.orange(),
         )
@@ -9920,9 +9968,10 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
             discord.Color.dark_red(),
         )
         return
+    clear_verification_expiry(guild_id, user_id)
     await log_embed(
         guild, "Expulsión permanente por falta de verificación" if action == "ban" else "Expulsión por falta de verificación",
-        f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
+        f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
         discord.Color.red(),
     )
 

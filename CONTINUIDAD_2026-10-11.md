@@ -34,3 +34,7 @@ Pedir al administrador abrir Heraldo's Lab y ejecutar **/setup**: navegar Mensaj
 
 ## Adenda: auditoría integral de Codex
 La información anterior es histórica. Estado remoto vuelto a comprobar: Pruebas a659b28, main 6f9f9ee, PR #12 a260fec8 abierto; Test despliega a659b28. Trabajo nuevo en codex/auditoria-integral-20261011 con cuatro correcciones y 144 pruebas offline aprobadas. Inventario reproducible, matriz y riesgos en audit/AUDITORIA_2026-10-11.md; propuestas y servidor real en audit/PROPUESTAS_Y_PLAN_REAL.md. No hubo interacciones Discord ni despliegue nuevo. Comparar cualquier avance concurrente antes de integrar. Consultar el PR de auditoría para SHA/CI remoto final. No se completó aún la auditoría funcional de todas las superficies.
+
+
+## Adenda: captura de expulsión duplicada
+El propietario aportó una captura con dos registros del mismo evento de verificación. PR #13 se amplía para coordinar los temporizadores principal y Sin Verificar, con 11 regresiones nuevas y 155 pruebas offline totales aprobadas. Documentos e inventario actualizados; todavía sin integración/despliegue de esta corrección ni validación humana de la nueva versión. Ver PRUEBAS_DISCORD.md para reproducción y recorrido de aceptación.

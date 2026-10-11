@@ -61,3 +61,6 @@ No se enviaron mensajes a otros chats/agentes ni se realizaron acciones sobre mi
 ## Verificación final local
 
 `python -m unittest test_regressions.py test_member_logs.py`: 39 correctas. `python -m unittest discover -s tests -p test_*.py`: 105 correctas. Compilación, pip check y git diff --check correctos en Python 3.12.10 / discord.py 2.7.1. Ejecución aislada, sin Gateway. Los fallos iniciales del selector y etiqueta timeout se reprodujeron antes de corregirlos; no se ocultan como pruebas pasadas. La CI del nuevo PR debe comprobarse sobre su SHA final.
+
+## Adenda: duplicación observada por el propietario
+La captura de dos registros de expulsión se trazó a los evaluadores de timeout principal y Sin Verificar. Se reprodujo el doble kick/log y se corrigió con coordinación por servidor/miembro y resolución conjunta persistida, conservando ban/solo registrar, ampliaciones de plazo y reintentos ante fallo HTTP. Suite vigente: 155 pruebas (39 + 116), compilación y diff correctos; inventario vigente: 1245 definiciones y 155 pruebas. No acredita validación Discord de la nueva versión.

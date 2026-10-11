@@ -18,7 +18,7 @@ Estado: 2026-10-11, rama de auditoría basada en PR #12. **Todas las filas tiene
 | Purgas | L | L | L | — | L | No hay validación integral de archivo de cada mensaje eliminado; no probar en contenido real |
 | Honeypot | P | P | P | P | P | Cancelar add/create/remove/exención/setup; flujo captura-sanción-retención completo pendiente |
 | Raid Protection | P | P | P | L | P | setup confirmado y mocks de rol; ráfagas/reingreso/reinicio pendientes |
-| Verificación | P | P | P | P | L | Avisos y setup; eventos completos, caducidad y reingreso pendientes |
+| Verificación | P | P | P | P | L | Avisos, setup y expiración coordinada: acción, plazo, concurrencia, fallos HTTP y estado SQLite; reingreso y recorrido real pendientes |
 | Orientación | L | P | P | L | L | Modal y cola localizados; no acreditar prueba integral de expulsión/restauración |
 | Join Roles | P | P | P | P | P | Cola SQLite, demora, reglas, fallo API; desconexión real y eventos no recibidos pendientes |
 | Sugerencias | P | P | P | P | L | Cancelar destinatarios/panel sin publicación; ciclo completo de revisión pendiente |

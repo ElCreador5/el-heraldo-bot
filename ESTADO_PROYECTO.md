@@ -145,3 +145,11 @@ Cada agente debe registrar fecha, commit, resultado y riesgos reales; preservar 
 - Cuatro correcciones: navegación real de setup (Button no invocable), etiqueta inicial de aislamiento aceptada por el modal, permisos revalidados al enviar ese modal, defer antes de consultas/asignación en restauración pendiente. No duplica implementación de #10/#11.
 - Verificación local: 144 pruebas (39 + 105), compilación, pip check y diff correctos. Pruebas de evidencias ahora comprueban ejecución y efectos, además de las comprobaciones estáticas preexistentes.
 - Auditoría global en curso: no se acredita cada callback en Discord; quedan riesgos de purgas/retención, operaciones interrumpidas y respaldo SQLite. No se integra ni despliega este corte hasta revisión. Ver audit/AUDITORIA_2026-10-11.md.
+
+
+## Duplicación de expulsión por verificación — 2026-10-11
+- Captura aportada por el propietario: dos registros de expulsión por falta de verificación para el mismo miembro. No se almacenan sus datos ni la captura en el repositorio.
+- Causa reproducida: evaluate_verify_timeout y evaluate_sin_verificado podían ejecutar cada uno kick y log; la resolución de uno no cancelaba el pendiente del otro.
+- Corrección en la rama de PR #13: bloqueo común por servidor/miembro, lectura del estado persistido y resolución conjunta de ambos pendientes en una escritura SQLite. El respaldo delega al flujo principal cuando existe, respeta ban/solo registrar y el plazo vigente. Conserva respaldo independiente para ingresos con solo Sin Verificar.
+- Un fallo HTTP conserva pendientes; solo un éxito genera el registro de expulsión. Miembros ya verificados y temporizadores antiguos no sancionan.
+- Verificación actual: 155 pruebas offline aprobadas (39 + 116), compilación y diff correctos. No desplegado ni probado interactivamente por Codex. La captura acredita una observación del propietario de la versión anterior, no el resultado de la corrección.
