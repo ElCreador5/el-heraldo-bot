@@ -1,40 +1,34 @@
 #!/usr/bin/env bash
-# Entorno de desarrollo de El Heraldo. No inicia el bot ni modifica datos de Discord.
+# Prepara dependencias de Codex sin cambiar la rama de la tarea.
+# Sin inicio del bot, sin despliegues, sin modificaciones a SQLite.
 set -Eeuo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-echo "[El Heraldo] Comprobando repositorio..."
-git status --short
-CURRENT="$(git rev-parse HEAD)"
-echo "Rama local: $(git branch --show-current)"
-echo "HEAD local: $CURRENT"
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "Hay cambios locales; no se prepara el entorno para evitar pisar trabajo." >&2
-  exit 1
-fi
-
-# Una rama 'work' de Codex es válida si su contenido proviene de Pruebas.
-# Nunca cambiar de rama automáticamente ni hacer reset/merge/push.
+echo "[El Heraldo] Rama de tarea: $(git branch --show-current)"
+echo "[El Heraldo] HEAD: $(git rev-parse HEAD)"
+# En Codex Cloud, 'work' puede ser la rama interna normal. No exigir igualdad
+# con origin/Pruebas: una tarea válida puede contener commits propios.
+# Mostrar la referencia remota cuando esté disponible, sin modificar el checkout.
 if git remote get-url origin >/dev/null 2>&1; then
   if git fetch --no-tags origin refs/heads/Pruebas; then
-    TARGET="$(git rev-parse FETCH_HEAD)"
-    echo "Pruebas remota: $TARGET"
-    if [[ "$CURRENT" != "$TARGET" ]]; then
-      echo "AVISO: la copia local no coincide con Pruebas. Sincronizarla de manera segura antes de desarrollar." >&2
-      exit 2
+    target="$(git rev-parse FETCH_HEAD)"
+    echo "[El Heraldo] Pruebas remota: $target"
+    if git merge-base --is-ancestor "$target" HEAD; then
+      echo "[El Heraldo] HEAD contiene la base remota de Pruebas."
+    elif git merge-base --is-ancestor HEAD "$target"; then
+      echo "AVISO: la tarea parte de una revisión anterior a Pruebas; actualizar la base antes de integrar el PR." >&2
+    else
+      echo "AVISO: historiales divergentes; revisar la base y los conflictos antes del PR." >&2
     fi
   else
-    echo "No se pudo consultar Pruebas; no se instalará sobre una base no verificada." >&2
-    exit 3
+    echo "AVISO: no se pudo consultar Pruebas; verificar la base antes de integrar el PR." >&2
   fi
 else
-  echo "No hay origen Git configurado; verifica manualmente la base de la tarea." >&2
-  exit 4
+  echo "AVISO: sin remoto origin; verificar la base del PR antes de integrar." >&2
 fi
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 "$PYTHON_BIN" -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -m compileall -q bot.py
-echo "[El Heraldo] Dependencias instaladas y compilación correcta. Bot NO iniciado."
+echo "[El Heraldo] Dependencias preparadas y compilación correcta; bot NO iniciado."
