@@ -109,3 +109,6 @@ Ver `REVISION_PR7.md` para límites, ejemplo JSON y recorrido de aceptación. Re
 
 ## Auditoría y propuestas de catálogo — 2026-10-11
 PR #12 separa visualmente mensajes oficiales de personalizados; esa modificación ya estaba implementada y no se repite. La auditoría local añade cobertura de navegación real, corrigiendo su invocación. La propuesta de nombres fijos Condena/Perdón/Verificación/Advertencia y editor uniforme está documentada en audit/PROPUESTAS_Y_PLAN_REAL.md para decisión del propietario; no implica migración ni eliminación de plantillas guardadas. La cobertura actual y vacíos se consultan en audit/MATRIZ_COBERTURA.md.
+
+## Continuación del editor visual — 2026-10-12
+Rama temporal Codex `codex/h03-recuperacion-20261012`: selector de embeds limitado a los existentes; selector de hasta 25 campos con nombre, valor e inline precargados en el modal. La selección mantiene borrador/versión y no guarda automáticamente. Cambiar embed invalida formularios anteriores, retirar embed reconstruye selectores y permisos revocados bloquean el modal. Cuatro regresiones nuevas y suites de Mensajes/Reaction Roles previas correctas, sin prueba Discord real. No se completaron editor visual de acciones, importación segura por enlace/ID, comparación por campo ni catálogo uniforme; permanecen pendientes.

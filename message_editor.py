@@ -12,6 +12,8 @@ class VisualModal(discord.ui.Modal):
                                'images': 'Imágenes del embed', 'credits': 'Autor y pie', 'fields': 'Campos del embed'}[mode])
         self.editor, self.mode, self.version = editor, mode, editor.version
         embed = editor.draft['embeds'][editor.index] if editor.draft['embeds'] else {}
+        selected_field = (embed.get('fields', [])[editor.field_index - 1]
+                          if 0 < editor.field_index <= len(embed.get('fields', [])) else {})
         definitions = {
             'content': [('content', 'Texto independiente', editor.draft.get('content', ''), 2000)],
             'text': [('title', 'Título', embed.get('title', ''), 256), ('description', 'Descripción', embed.get('description', ''), 4000),
@@ -23,8 +25,10 @@ class VisualModal(discord.ui.Modal):
                         ('author_url', 'Enlace del autor HTTPS', embed.get('author', {}).get('url', ''), 1000),
                         ('footer', 'Pie', embed.get('footer', {}).get('text', ''), 2048),
                         ('footer_icon', 'Icono del pie HTTPS', embed.get('footer', {}).get('icon_url', ''), 1000)],
-            'fields': [('index', 'Número de campo (0 = añadir)', '0', 2), ('operation', 'Acción: guardar o eliminar', 'guardar', 8),
-                       ('name', 'Nombre del campo', '', 256), ('value', 'Valor del campo', '', 1024), ('inline', 'En línea: si o no', 'no', 2)],
+            'fields': [('index', 'Número de campo (0 = añadir)', str(editor.field_index), 2), ('operation', 'Acción: guardar o eliminar', 'guardar', 8),
+                       ('name', 'Nombre del campo', selected_field.get('name', ''), 256),
+                       ('value', 'Valor del campo', selected_field.get('value', ''), 1024),
+                       ('inline', 'En línea: si o no', 'si' if selected_field.get('inline') else 'no', 2)],
         }
         self.inputs = {}
         for key, label, value, limit in definitions[mode]:
@@ -101,6 +105,7 @@ class VisualModal(discord.ui.Modal):
             return
         editor.draft = draft
         editor.version += 1
+        editor.update_selectors()
         await interaction.response.edit_message(content=editor.summary(), embeds=[], view=editor)
 
 
@@ -114,11 +119,18 @@ class VisualEditor(discord.ui.View):
         for key in ('button_label', 'button_url'):
             if key in template:
                 self.draft[key] = template[key]
-        self.index, self.version = 0, 0
+        self.index, self.version, self.field_index = 0, 0, 0
         selector = discord.ui.Select(placeholder='Seleccionar embed', row=0,
-                                     options=[discord.SelectOption(label='Embed ' + str(i + 1), value=str(i)) for i in range(10)])
+                                     options=[discord.SelectOption(label='Sin embeds', value='0')])
         selector.callback = self.select_embed
+        self.embed_selector = selector
         self.add_item(selector)
+        fields = discord.ui.Select(placeholder='Seleccionar campo para editar', row=4,
+                                   options=[discord.SelectOption(label='Sin campos', value='0')])
+        fields.callback = self.select_field
+        self.field_selector = fields
+        self.add_item(fields)
+        self.update_selectors()
         for label, mode, row in [('Contenido', 'content', 1), ('Texto y color', 'text', 1), ('Imágenes', 'images', 1),
                                  ('Autor y pie', 'credits', 1), ('Campos', 'fields', 1)]:
             button = discord.ui.Button(label=label, row=row)
@@ -148,13 +160,46 @@ class VisualEditor(discord.ui.View):
                 'Los cambios permanecen en el borrador hasta Guardar y confirmar.\n' +
                 '\n'.join(f"Campo {i + 1}: {discord.utils.escape_markdown(x['name'])}" for i, x in enumerate(fields)))[:1900]
 
+    def update_selectors(self):
+        embeds = self.draft['embeds']
+        self.embed_selector.options = [discord.SelectOption(
+            label='Embed ' + str(i + 1), value=str(i), default=i == self.index)
+            for i in range(len(embeds))] or [discord.SelectOption(label='Sin embeds', value='0')]
+        self.embed_selector.disabled = not embeds
+        fields = embeds[self.index].get('fields', []) if embeds else []
+        self.field_index = min(self.field_index, len(fields))
+        # Discord admite 25 opciones; "Añadir" queda en el formulario con índice 0.
+        self.field_selector.options = [discord.SelectOption(
+            label=f"{i + 1}. {field['name']}"[:100], value=str(i + 1), default=self.field_index == i + 1)
+            for i, field in enumerate(fields)] or [discord.SelectOption(label='Sin campos', value='0')]
+        self.field_selector.disabled = not fields
+
+    async def select_field(self, interaction):
+        try:
+            index = int(interaction.data['values'][0])
+            fields = self.draft['embeds'][self.index].get('fields', [])
+            if not 1 <= index <= len(fields):
+                raise ValueError()
+        except (ValueError, IndexError, KeyError):
+            await interaction.response.send_message('Ese campo ya no existe; vuelva a seleccionarlo.', ephemeral=True)
+            return
+        self.field_index = index
+        self.version += 1
+        self.update_selectors()
+        await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
+
     async def select_embed(self, interaction):
-        index = int(interaction.data['values'][0])
-        if index >= len(self.draft['embeds']):
+        try:
+            index = int(interaction.data['values'][0])
+            if not 0 <= index < len(self.draft['embeds']):
+                raise ValueError()
+        except (ValueError, KeyError, IndexError):
             await interaction.response.send_message('Ese embed no existe; use Añadir embed.', ephemeral=True)
             return
         self.index = index
+        self.field_index = 0
         self.version += 1
+        self.update_selectors()
         await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
 
     @discord.ui.button(label='Añadir embed', row=2)
@@ -164,7 +209,9 @@ class VisualEditor(discord.ui.View):
             return
         self.draft['embeds'].append({})
         self.index = len(self.draft['embeds']) - 1
+        self.field_index = 0
         self.version += 1
+        self.update_selectors()
         await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
 
     @discord.ui.button(label='Retirar embed', row=2)
@@ -172,7 +219,9 @@ class VisualEditor(discord.ui.View):
         if self.draft['embeds']:
             self.draft['embeds'].pop(self.index)
         self.index = max(0, min(self.index, len(self.draft['embeds']) - 1))
+        self.field_index = 0
         self.version += 1
+        self.update_selectors()
         await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
 
     @discord.ui.button(label='Vista previa', row=3)

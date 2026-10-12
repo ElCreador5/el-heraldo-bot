@@ -512,6 +512,27 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await view.interaction_check(interaction(allowed=False)))
         self.assertEqual(b.condemnation_pending_roles_get(901, 40304), [9007])
 
+    async def test_expired_pending_restore_never_fetches_or_assigns_roles(self):
+        b.condemnation_pending_roles_set(901, 40308, [9007])
+        view = b.PendingRoleRestoreView(901, 10, 40308)
+        # Mismo estado que Discord aplica al terminar el timeout del View.
+        view.stop()
+        i = interaction()
+        i.guild.fetch_member = AsyncMock()
+        await view.confirm.callback(i)
+        i.guild.fetch_member.assert_not_awaited()
+        self.assertEqual(b.condemnation_pending_roles_get(901, 40308), [9007])
+        self.assertIn('caducó', i.response.send_message.call_args.args[0])
+
+    async def test_expired_configuration_confirmation_never_writes(self):
+        b.guild_config_set(901, 'verify_timeout', '60')
+        view = b.ConfigurationConfirmView(901, 10, {'verify_timeout': '120'})
+        view.stop()
+        i = interaction()
+        await view.save.callback(i)
+        self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '60')
+        self.assertIn('caducó', i.response.send_message.call_args.args[0])
+
     async def test_pending_restore_defers_before_fetch_and_preserves_roles_on_api_error(self):
         b.condemnation_pending_roles_set(901, 40305, [9007])
         i = interaction()

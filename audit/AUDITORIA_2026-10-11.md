@@ -64,3 +64,32 @@ No se enviaron mensajes a otros chats/agentes ni se realizaron acciones sobre mi
 
 ## Adenda: duplicación observada por el propietario
 La captura de dos registros de expulsión se trazó a los evaluadores de timeout principal y Sin Verificar. Se reprodujo el doble kick/log y se corrigió con coordinación por servidor/miembro y resolución conjunta persistida, conservando ban/solo registrar, ampliaciones de plazo y reintentos ante fallo HTTP. Suite vigente: 155 pruebas (39 + 116), compilación y diff correctos; inventario vigente: 1245 definiciones y 155 pruebas. No acredita validación Discord de la nueva versión.
+
+## Continuación técnica H-03 y revisión del lote — 2026-10-12
+
+Base `Pruebas@9502cea`, rama `codex/h03-recuperacion-20261012`. La sección anterior
+es histórica; no se regeneró el inventario estático en esta sesión. Validación
+actual local: 203 tests (39 + 164), compilación y pip check correctos. No representa
+cobertura completa ni ensayo real en Discord. GitHub API bloqueada por proxy;
+Railway y CI actuales no verificados. No hubo integración o despliegue.
+
+| Área | Resultado sustentado del lote | Pendiente |
+| --- | --- | --- |
+| H-03 | SQLite online backup con integridad/FK, hash/esquema, publicación privada, restore offline/rollback y bloqueo cooperativo; 23 pruebas aisladas | Destino externo, calendario autorizado, acceso Test y recuperación remota de adjuntos |
+| A / H-02 | Instantánea anterior al await; regresiones runtime de objeto mutado, falta de intent y copia inaccesible bloquean borrado | Copia/lectura de evidencias y cambios de permiso reales en laboratorio; ventana remota entre verificación y delete sigue existiendo |
+| B / condenas | Regresiones previas de duración, roles, condena/perdón y archivo pasan; solicitud cerrada rechaza restauración tardía | Interrupción después de respuesta Discord y antes de SQLite; tarjetas/DM y restauración parcial reales |
+| C / seguridad | Suites de temporizadores coordinados, H-01 y acciones de reportes pasan sin regresión | No garantiza exactamente una acción ante crash entre Discord y SQLite; ensayos reales raid/honeypot pendientes |
+| D / setup | Navegación offline y permiso/concurrencia/cancelación previos pasan; confirmación caducada no persiste | No se recorrió cada modal/confirmación heredado ni cada callback en Discord |
+| E / Mensajes y roles | Selección de embeds existentes y campos precargados, datos/borradores intactos y denegación por permiso revocado; Reaction Roles previo pasa | Editor de acciones, kits por enlace/comparación, catálogo y recorrido humano |
+| F / calidad | Regresiones completas del repositorio, CLI y esquema real sintético del bot, compilación y dependencias | Matriz CI 3.11/3.12/3.13 remota, revisión del PR, laboratorio y autorización de producción |
+
+La herramienta de restauración se apoya en detener el servicio y en un bloqueo
+cooperativo. Procesos antiguos u otros clientes SQLite podrían ignorarlo: no borrar
+WAL/journal ni iniciar otra réplica para eludir un rechazo. El manifiesto detecta
+corrupción, no manipulación por quien también pueda reescribirlo. Restaurar SQLite
+puede reintroducir acciones antiguas: reconciliar estados inciertos antes de
+conectar Gateway. Una copia en el mismo volumen no cubre su pérdida total.
+
+El lote puede prepararse para revisión; no constituye aprobación de integración,
+activación de respaldos reales ni producción. Procedimiento y riesgos completos en
+`RESPALDOS_RECUPERACION.md`, continuidad en `CONTINUIDAD_AGENTES.md`.

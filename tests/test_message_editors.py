@@ -88,6 +88,60 @@ class EditorTests(unittest.IsolatedAsyncioTestCase):
             VisualModal(view, 'text')
         self.assertEqual(len(view.draft['embeds'][0]['description']), 4096)
 
+    async def test_visual_selectors_only_offer_existing_embeds_and_fields(self):
+        view = VisualEditor(self.host, 1, 2, {'name': 'Campos', 'embeds': [
+            {'title': 'Uno', 'fields': [{'name': 'Nombre', 'value': 'Valor', 'inline': True}]},
+            {'title': 'Dos'}]})
+        self.assertEqual([option.value for option in view.embed_selector.options], ['0', '1'])
+        self.assertEqual([option.value for option in view.field_selector.options], ['1'])
+        self.interaction.data = {'values': ['1']}
+        await view.select_field(self.interaction)
+        modal = VisualModal(view, 'fields')
+        self.assertEqual(modal.inputs['index'].default, '1')
+        self.assertEqual(modal.inputs['name'].default, 'Nombre')
+        self.assertEqual(modal.inputs['value'].default, 'Valor')
+        self.assertEqual(modal.inputs['inline'].default, 'si')
+        await view.select_embed(self.interaction)
+        self.assertTrue(view.field_selector.disabled)
+        self.assertEqual(view.field_index, 0)
+        self.assertTrue(view.to_components())
+
+    async def test_visual_selected_field_edit_preserves_other_fields_and_saved_template(self):
+        template = {'name': 'Campos', 'embeds': [{'title': 'Uno', 'fields': [
+            {'name': 'Primero', 'value': 'Original'}, {'name': 'Segundo', 'value': 'Intacto'}]}]}
+        view = VisualEditor(self.host, 1, 2, template)
+        self.interaction.data = {'values': ['1']}
+        await view.select_field(self.interaction)
+        modal = VisualModal(view, 'fields')
+        for item in modal.inputs.values():
+            item._value = item.default
+        modal.inputs['value']._value = 'Modificado'
+        await modal.on_submit(self.interaction)
+        self.assertEqual(view.draft['embeds'][0]['fields'][0]['value'], 'Modificado')
+        self.assertEqual(view.draft['embeds'][0]['fields'][1]['value'], 'Intacto')
+        self.assertEqual(template['embeds'][0]['fields'][0]['value'], 'Original')
+        self.host['confirm_configuration'].assert_not_awaited()
+
+    async def test_visual_revoked_permission_cannot_apply_field_modal(self):
+        view = VisualEditor(self.host, 1, 2, {'name': 'Campos', 'embeds': [{'title': 'Uno'}]})
+        modal = VisualModal(view, 'fields')
+        self.host['configuration_access'].return_value = False
+        for item in modal.inputs.values():
+            item._value = item.default
+        modal.inputs['name']._value = 'Nuevo'
+        modal.inputs['value']._value = 'No autorizado'
+        await modal.on_submit(self.interaction)
+        self.assertNotIn('fields', view.draft['embeds'][0])
+
+    async def test_visual_selectors_allow_25_fields_and_clear_when_embed_removed(self):
+        view = VisualEditor(self.host, 1, 2, {'name': 'Campos', 'embeds': [{'title': 'Uno', 'fields': [
+            {'name': f'Campo {i}', 'value': 'X'} for i in range(25)]}]})
+        self.assertEqual(len(view.field_selector.options), 25)
+        self.assertTrue(view.to_components())
+        await view.remove_embed.callback(self.interaction)
+        self.assertTrue(view.field_selector.disabled)
+        self.assertTrue(view.embed_selector.disabled)
+
     async def test_modal_from_closed_editor_cannot_reopen_draft(self):
         view = VisualEditor(self.host, 1, 2, self.template)
         modal = VisualModal(view, 'content')

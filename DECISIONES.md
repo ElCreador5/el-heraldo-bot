@@ -96,3 +96,6 @@ La autorización de H-02 se implementa reutilizando el canal privado y SQLite ex
 - Tras integrar o descartar, eliminar la rama temporal cuando se verifique que no conserva trabajo pendiente. No crear ramas permanentes adicionales.
 - Otros agentes pueden revisar y coordinar, pero esta excepción de creación de ramas se concede exclusivamente a Codex. La rama interna `work` en Codex no supone por sí sola un error.
 - Los cambios en `Pruebas` podrían desplegar Railway Test automáticamente; no asumir que una compilación correcta acredita interacciones Discord.
+
+## Aplicación H-03 — 2026-10-12
+La petición del propietario autoriza implementación y pruebas de respaldo/recuperación con SQLite sintético. Se usa la API online de SQLite, no una copia directa del archivo activo. La restauración exige servicio detenido, entorno y esquema explícitos, conserva la base anterior y no borra WAL/journals para forzar una instalación. Los respaldos incluyen datos privados y deben permanecer fuera de Git. La conservación configurable solo propone candidatos; no se autorizó eliminar copias ni evidencias. No se conectó almacenamiento externo ni se programaron tareas en Railway. Su destino, coste, claves, frecuencia y validación de laboratorio quedan sujetos a revisión antes de activarlos; producción sigue protegida.
