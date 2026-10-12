@@ -88,3 +88,11 @@ Para evitar perder información al levantar una condena, el registro de roles qu
 
 ## Aplicación de conservación integral — 2026-10-11
 La autorización de H-02 se implementa reutilizando el canal privado y SQLite existentes. Ninguna copia parcial autoriza borrar; los recursos no soportados se conservan en origen. El rol administrado del propio bot puede acceder al archivo, junto al acceso inherente de administradores; otros roles visibles bloquean el archivo. No se crean ni reconfiguran canales. Los envíos inciertos requieren revisión y se conservan, sin retención destructiva automática.
+
+## Excepción al flujo de ramas — 2026-10-12
+- **Nueva decisión del propietario:** se reemplaza la prohibición absoluta de ramas adicionales indicada en «Alcance confirmado por el propietario — 2026-10-11» únicamente para tareas de Codex.
+- Codex puede crear ramas **temporales** por tarea y PR exclusivamente con destino `Pruebas`. `main` permanece protegida; esta autorización no incluye PR, fusiones ni despliegues en producción.
+- Antes de integrar: contrastar base actual de `Pruebas`, revisar cambios concurrentes, verificar pruebas pertinentes y riesgos de despliegue en Railway Test. No usar `force push` ni ocultar resultados de CI/Discord.
+- Tras integrar o descartar, eliminar la rama temporal cuando se verifique que no conserva trabajo pendiente. No crear ramas permanentes adicionales.
+- Otros agentes pueden revisar y coordinar, pero esta excepción de creación de ramas se concede exclusivamente a Codex. La rama interna `work` en Codex no supone por sí sola un error.
+- Los cambios en `Pruebas` podrían desplegar Railway Test automáticamente; no asumir que una compilación correcta acredita interacciones Discord.
