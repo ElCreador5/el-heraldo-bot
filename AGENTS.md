@@ -10,7 +10,10 @@ Este archivo es el punto de entrada para ChatGPT, Codex, Claude y cualquier agen
 5. `PLAN_MENSAJES.md`: plan específico de Mensajes; actualizar cuando avance.
 
 ## Flujo obligatorio
-- Trabajar en `Pruebas`; nunca desplegar, fusionar ni modificar `main` sin aprobación explícita.
+- `Pruebas` es la única rama permanente de desarrollo; `main` es producción y no se modifica, fusiona ni despliega sin aprobación específica.
+- **Excepción autorizada 2026-10-12:** exclusivamente Codex puede crear ramas temporales por tarea y abrir PR cuyo destino sea `Pruebas`. Revisar diferencias, conflictos, CI y posibles despliegues automáticos antes de fusionar. Eliminar ramas temporales después de integrar o descartar la tarea, verificando que no contienen trabajo pendiente. Otros agentes no crean ramas nuevas sin autorización.
+- En Codex Cloud, `work` puede ser una rama interna: verificar el commit base contra `Pruebas` y registrar SHA; no exigir nombre de rama `Pruebas` ni igualdad de SHA después de introducir cambios legítimos. El script de instalación no cambia ramas, hace merge ni push.
+- Cuando la interfaz de Codex no permita un flujo determinado, reconocer el límite y no inventar controles. No publicar cambios directamente en `Pruebas` mediante Codex sin nueva aprobación explícita.
 - Comenzar con `git fetch` / `git pull` de la rama correcta; no sobrescribir cambios remotos ni forzar pushes.
 - Usar el bot de pruebas y el servidor de laboratorio; evitar acciones de prueba en servidores reales.
 - Antes de alterar una función, inspeccionar código existente, dependencias y tests; no borrar capacidades silenciosamente.
