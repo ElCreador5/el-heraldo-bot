@@ -28,6 +28,13 @@ Este archivo es el punto de entrada para ChatGPT, Codex, Claude y cualquier agen
 - Si hay cambios concurrentes, reconciliar primero mediante commits y PR; no dar por válida una versión antigua de los documentos.
 
 
+## Conservación de funcionalidades estables de producción (decisión del propietario, 2026-10-12)
+- Toda funcionalidad que ya funciona correctamente en `main` se conserva en `Pruebas` sin rediseño ni reimplementación innecesaria.
+- Una ausencia de nueva prueba manual no constituye por sí sola un fallo. Comparar primero comportamiento y código de ambas ramas antes de abrir trabajo sobre funciones existentes.
+- Modificar una función estable únicamente por petición del propietario, anomalía que observe posteriormente o defecto técnico/de seguridad demostrado. Documentar evidencia, alcance y regresión asociada.
+- Si un cambio de `Pruebas` rompe una función estable de `main`, restablecer el comportamiento esperado salvo que el propietario haya autorizado expresamente otro.
+- Priorizar cambios realmente nuevos y diferencias comprobadas, conservando interfaces, datos y configuraciones existentes.
+
 ## Precisión operativa y respeto al tiempo del propietario (obligatorio)
 A partir de ahora, para El Heraldo y cualquier herramienta que utilicemos, todos los agentes seguirán estos criterios:
 
