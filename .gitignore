@@ -6,4 +6,8 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+*.service.lock
+.recovery-history/
+backups/
+*.sqlite
 .obsidian/

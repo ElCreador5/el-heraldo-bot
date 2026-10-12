@@ -139,6 +139,28 @@ class PurgeEvidenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await self.delete())
         self.message.delete.assert_not_awaited()
 
+    async def test_in_place_edit_during_archive_blocks_delete(self):
+        send = self.channel.send.side_effect
+        async def mutate_source(**kwargs):
+            copy = await send(**kwargs)
+            self.message.content = 'Editado mientras se copiaba el objeto original'
+            return copy
+        self.channel.send.side_effect = mutate_source
+        self.assertFalse(await self.delete())
+        self.message.delete.assert_not_awaited()
+
+    async def test_gateway_without_content_intent_never_copies_or_deletes(self):
+        with patch.object(type(b.bot), 'intents', new_callable=lambda: property(lambda _: NS(message_content=False))):
+            self.assertFalse(await b.delete_with_evidence(self.source, self.message.id))
+        self.source.fetch_message.assert_not_awaited()
+        self.message.delete.assert_not_awaited()
+
+    async def test_missing_copy_after_restart_blocks_deletion(self):
+        await self.preserve()
+        self.channel.fetch_message.side_effect = b.discord.NotFound(NS(status=404, reason='Missing'), 'Missing')
+        self.assertFalse(await self.delete())
+        self.message.delete.assert_not_awaited()
+
     def test_no_ban_can_delete_without_archive(self):
         import ast
         tree = ast.parse(Path(b.__file__).read_text(encoding='utf-8'))

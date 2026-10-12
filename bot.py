@@ -12865,6 +12865,7 @@ async def delete_with_evidence(channel, message_id: int) -> bool:
     _evidence_delete_inflight.add(key)
     try:
         message = await channel.fetch_message(message_id)
+        original_snapshot = evidence_archive.snapshot(message)
         archive = guild.get_channel(get_log_channel_id(guild.id))
         reference = await evidence_archive.preserve(message, archive, DB_PATH)
         if not reference:
@@ -12872,7 +12873,7 @@ async def delete_with_evidence(channel, message_id: int) -> bool:
             return False
         # Releer: una edición durante la copia exige archivar la nueva versión.
         current = await channel.fetch_message(message_id)
-        if evidence_archive.snapshot(current) != evidence_archive.snapshot(message):
+        if evidence_archive.snapshot(current) != original_snapshot:
             return False
         if not evidence_archive.private_channel(guild, archive):
             return False
@@ -14279,6 +14280,10 @@ class PendingRoleRestoreView(discord.ui.View):
         self.finished = False
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.is_finished():
+            sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await sender("La solicitud de restauración caducó o se cerró. Abra una nueva solicitud.", ephemeral=True)
+            return False
         if not await configuration_access(interaction, self.guild_id, self.owner_id):
             return False
         if not interaction.user.guild_permissions.manage_roles:
@@ -14475,6 +14480,10 @@ class ConfigurationConfirmView(discord.ui.View):
         self.finished = False
 
     async def interaction_check(self, interaction):
+        if self.is_finished():
+            sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await sender("La propuesta caducó o se cerró. Abra una nueva solicitud.", ephemeral=True)
+            return False
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
@@ -19494,7 +19503,11 @@ if __name__ == "__main__":
             "(Variables del servicio) antes de desplegar."
         )
     try:
-        bot.run(token)
+        # Impide restaurar SQLite mientras este proceso mantiene el Gateway vivo.
+        # El bloqueo se libera al cerrar o interrumpirse el proceso.
+        from sqlite_recovery import service_lock
+        with service_lock(DB_PATH):
+            bot.run(token)
     except discord.PrivilegedIntentsRequired:
         if os.environ.get("MESSAGE_CONTENT_INTENT") != "1":
             raise
