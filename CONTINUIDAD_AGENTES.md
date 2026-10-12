@@ -10,8 +10,8 @@
 5. Al finalizar, actualizar los documentos pertinentes, registrar pruebas realizadas y guardar commits/PR; no afirmar que hubo guardado si faltan permisos.
 
 ## Protocolo compartido actual
-- **Rama única de desarrollo habitual:** `Pruebas`. Producción: `main`, protegida por autorización explícita.
-- Las ramas de tarea y PR abiertos son temporales, usados para revisión, pruebas y prevención de conflictos. Integrar a `Pruebas` únicamente cambios comprobados; conservar o cerrar PR obsoletos con explicación.
+- **Rama permanente de desarrollo:** `Pruebas`. Producción: `main`, protegida por autorización explícita. Desde 2026-10-12 Codex tiene permiso específico para ramas temporales de tarea con PR hacia `Pruebas`.
+- Solo Codex puede crear ramas temporales de tarea y PR abiertos con destino `Pruebas`; no se autoriza modificar `main`. Revisar cambios y CI antes de integrar, tener presente Railway Test automático, y eliminar la rama temporal cuando se descarte o integre sin trabajo pendiente.
 - **ChatGPT** recoge decisiones de producto y coordina; **Codex** se ocupa principalmente del código y auditoría; **Work** y **Claude** solo cuando exista una necesidad específica. El repositorio es el contexto compartido.
 - Cada transferencia debe nombrar responsable siguiente, rama/commit, cambios reales, CI, pruebas reales Discord, riesgos y acción concreta.
 - La sección siguiente conserva el informe recibido el **2026-10-10 como historial**: no es el estado actual de los PR ni de la rama `Pruebas`.
@@ -57,3 +57,9 @@ El repositorio contiene Markdown compatible con Obsidian. En el equipo local, cl
 - Se vuelve a leer el origen para detectar ediciones y comprobar privacidad antes del borrado. Discord no ofrece transacción atómica entre edición, permisos y delete: queda una ventana remota mínima y requiere validación humana. Una copia borrada/corrupta o ledger pendiente exige revisión; no se reintenta un envío incierto automáticamente.
 - Pruebas base tras integración: 129 tests y 39 raíz/Logs correctos; añadidas luego tres comprobaciones de roles, excepciones individuales y formatos no soportados. El primer ensayo detectó conexiones SQLite sin cerrar; corregidas con cierre explícito.
 - Discord real: no realizado. Pendiente validar CI/Railway del nuevo SHA y copia/recuperación en laboratorio. H-03 y etapas posteriores continúan pendientes.
+
+## Actualización de flujo Codex — 2026-10-12
+- Autorización expresa del propietario: excepcionar la política anterior de dos ramas únicamente para ramas temporales de tareas Codex y PR a `Pruebas`; queda registrada en `DECISIONES.md` y `AGENTS.md`.
+- `.codex/setup.sh` corregido: admite `work` interno, reporta SHA y divergencias respecto a `Pruebas` sin alterar ramas, y prepara dependencias con compilación; no inicia el bot.
+- Los commits documentales en `Pruebas` pueden activar Railway Test. Prueba del script dentro de Codex y pruebas reales Discord: pendientes, no declaradas realizadas.
+- Próxima tarea Codex: confirmar base del PR, ejecutar preparación y regresiones relevantes; someter PR a `Pruebas`. ChatGPT revisa resultado antes de integrar.
