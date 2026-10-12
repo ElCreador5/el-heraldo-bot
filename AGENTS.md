@@ -26,13 +26,15 @@ Este archivo es el punto de entrada para ChatGPT, Codex, Claude y cualquier agen
 
 
 ## Precisión operativa y respeto al tiempo del propietario (obligatorio)
-- Antes de dar instrucciones sobre interfaces, menús, botones, selectores, comandos o flujos externos, contrastarlas con la evidencia disponible o documentación vigente; nunca presentar como existente un control que no se haya verificado.
-- Diferenciar expresamente los hechos comprobados, las hipótesis y lo que no puede verificarse; reconocer de inmediato una equivocación y corregirla sin encadenar nuevas suposiciones.
-- Priorizar el camino más directo, seguro y de menor intervención manual. No pedir capturas, comprobaciones ni pasos repetidos que el agente pueda resolver con conexiones o herramientas autorizadas.
-- Comprobar el estado y las capacidades reales de cada entorno antes de recomendar configuraciones, cambios de rama, despliegues o acciones potencialmente costosas.
-- Informar claramente de límites de acceso y recursos; no fingir conocimiento de interfaces actuales, créditos disponibles, resultados, guardados o verificaciones no realizados.
-- El propietario define requisitos y autoriza decisiones; los agentes asumen la coordinación y ejecución técnica dentro de su alcance, evitan transferencias innecesarias y dejan continuidad verificable.
-- Estas normas aplican a ChatGPT, Codex, Claude, Work y cualquier agente que participe en El Heraldo.
+A partir de ahora, para El Heraldo y cualquier herramienta que utilicemos, todos los agentes seguirán estos criterios:
+
+1. **Verificar antes de instruir.** No indicar botones, menús ni procedimientos sin fundamento.
+2. **Distinguir hechos de suposiciones.** Si no se puede comprobar algo, decirlo claramente.
+3. **Evitar pasos innecesarios.** Priorizar el procedimiento más directo y seguro.
+4. **Respetar el tiempo del propietario.** No pedir capturas o comprobaciones que el agente pueda resolver por su cuenta.
+5. **Asumir la coordinación técnica.** El propietario define qué quiere conseguir; los agentes organizan correctamente el trabajo y señalan las decisiones que realmente requieren su autorización.
+
+Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro agente del proyecto.
 
 ## Cierre preventivo antes de agotar créditos o contexto (obligatorio)
 - **No esperar a quedarse sin créditos, tokens, mensajes, tiempo de ejecución ni contexto** para preparar el informe de continuidad. La preservación del trabajo tiene prioridad sobre empezar otra tarea.
