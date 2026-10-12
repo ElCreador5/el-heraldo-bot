@@ -99,3 +99,8 @@ La autorización de H-02 se implementa reutilizando el canal privado y SQLite ex
 
 ## Aplicación H-03 — 2026-10-12
 La petición del propietario autoriza implementación y pruebas de respaldo/recuperación con SQLite sintético. Se usa la API online de SQLite, no una copia directa del archivo activo. La restauración exige servicio detenido, entorno y esquema explícitos, conserva la base anterior y no borra WAL/journals para forzar una instalación. Los respaldos incluyen datos privados y deben permanecer fuera de Git. La conservación configurable solo propone candidatos; no se autorizó eliminar copias ni evidencias. No se conectó almacenamiento externo ni se programaron tareas en Railway. Su destino, coste, claves, frecuencia y validación de laboratorio quedan sujetos a revisión antes de activarlos; producción sigue protegida.
+
+## Conservación de la funcionalidad estable de main — 2026-10-12
+- Decisión expresa del propietario: todo lo que funciona correctamente en `main` permanece como está, salvo que posteriormente observe una anomalía o autorice un cambio; también se pueden corregir defectos técnicos o de seguridad demostrados y justificados.
+- En `Pruebas` se preserva ese comportamiento. No repetir desarrollo ni rediseños por falta de una nueva prueba manual; antes de intervenir comparar la implementación vigente de ambas ramas e identificar una diferencia concreta o requisito nuevo.
+- Si una modificación rompe una función estable, tratarlo como regresión y restaurar el comportamiento de referencia salvo instrucción distinta del propietario.
