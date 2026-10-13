@@ -1,13 +1,13 @@
 # H-03 → Supabase Storage: respaldo externo cifrado
 
-**Estado:** PREPARADO EN `Pruebas`, NO ACTIVADO en Railway ni producción. El servicio Discord no ejecuta este módulo; su importación no inicia operaciones. **No hay respaldo real aún.**
+**Estado:** IMPLEMENTADO EN `Pruebas` Y **VERIFICADO CON DATOS SINTÉTICOS** en Railway Test/Supabase el 2026-10-13. El bot de Discord no ejecuta el módulo; no hay copias automáticas activadas y **no existe respaldo de producción verificado**.
 
 ## Infraestructura verificada (2026-10-13)
 
 - Proyecto existente de Supabase El Heraldo, organización Free.
-- Bucket `heraldo-sqlite-backups` creado con `public=false`; cero objetos y sin políticas de `storage.objects` observadas al preparar el código.
-- Sin usuarios técnicos, tokens, contraseñas ni claves de cifrado creadas o almacenadas por ChatGPT.
-- La conectividad pública del bucket no equivale a escritura autorizada. Por defecto RLS deniega INSERT/SELECT.
+- Bucket `heraldo-sqlite-backups` privado (`public=false`). Existe una generación cifrada de **laboratorio**, no de producción.
+- Cuenta técnica de Auth creada y confirmada por el propietario; RLS de `storage.objects` permite exclusivamente `INSERT` y `SELECT` del bucket a esa identidad. No se otorgaron permisos de modificación ni eliminación. No se revelaron credenciales.
+- En Railway Test se aplicaron seis variables y se verificó **su presencia, no sus valores**. El acceso cifrado funcionó en prueba real. Una identidad de servicio no debe reutilizarse indiscriminadamente con credenciales de producción.
 - Restricciones documentadas del plan Free: 50 MB máximos por objeto y 1 GB de Storage; proyectos gratuitos pueden pausarse por inactividad. Subidas periódicas a Storage **no garantizan** actividad de base de datos suficiente para evitar la pausa. No prometer durabilidad ni periodicidad hasta verificarlas.
 
 ## Qué hace y qué NO hace
@@ -20,7 +20,7 @@ No programa respaldos, no crea identidad de Supabase, no modifica `bot.py`, no l
 
 **Tamaño:** este formato admite un objeto cifrado de hasta 45 millones de bytes (margen bajo 50 MB), y base sin comprimir de máximo 150 millones de bytes. Superar límites BLOQUEA la subida; no divide un backup en múltiples partes. Si el tamaño de producción no cabe, revisar solución antes de cualquier publicación.
 
-## Preparación segura de identidad (requerida)
+## Preparación segura de identidad (ya aplicada en Test; referencia para nuevas instalaciones)
 
 1. Crear mediante Supabase Auth **una cuenta técnica exclusiva**, con correo controlado por el propietario, contraseña larga y correo confirmado. No reutilizar usuarios humanos ni claves `service_role`, `secret` o S3 globales.
 2. Obtener el UUID real de esa cuenta desde Auth → Users (no colocarlo en Git). En SQL Editor de Supabase, sustituir **solo localmente** `UUID_DE_CUENTA_TECNICA` por ese UUID y ejecutar las dos políticas siguientes; no modificar otras políticas:
@@ -83,6 +83,14 @@ Verificar *realmente* las siguientes propiedades: subida con cuenta dedicada, re
 - Registrar monitoreo de fallos, calendario/retención con decisión explícita y un segundo destino ante pausas o pérdida de cuenta/proyecto. El programa actual NO elimina generaciones anteriores.
 - No ejecutar actualización de `main` antes de estas comprobaciones y validación humana en Heraldo's Lab.
 - Recordar que recuperar SQLite no recupera automáticamente los archivos/evidencias almacenados en Discord ni revierte acciones ya ejecutadas.
+
+## Ensayo real de laboratorio — APROBADO (2026-10-13)
+
+Railway Test ejecutó una única vez `python -m tools.supabase_smoke_test` mediante **pre-deploy** con tiempo máximo 180 s. La base se creó en un contenedor temporal sin volumen `/data`, no se leyó `DB_PATH`, no se inició `bot.py` dentro de la prueba y no se tocó Discord. Se creó respaldo H-03, se cifró/subió a `lab/`, se descargó y validó contra SHA e integridad, y se restauró a nueva SQLite aislada verificando filas sintéticas exactas. Log: `H03_SMOKE status=PASS scope=synthetic_no_discord`; deploy `ef2cc191-accd-4b9c-8ab3-4d07acf9fc87` SUCCESS, worker Online. Supabase confirmó 1 objeto de 766 bytes en `lab/`.
+
+La configuración de pre-deploy se **retiró** tras la prueba; no se generarán nuevos objetos en futuros despliegues por este mecanismo. Test recuperó `python bot.py` como comando normal. Railway Railpack rechazó inicialmente un `-r requirements-backup.txt` anidado, porque faltaba ese archivo durante la instalación; se corrigió declarando `cryptography>=43,<47` directamente en `requirements.txt` de `Pruebas`. Los builds fallidos previos no completaron la prueba ni desplegaron producción.
+
+**Este éxito no confirma que la base real de producción quepa, esté íntegra o sea recuperable.** Ese paso exige confirmar `DB_PATH`, acceso privado autorizado al volumen, tamaño, cuotas y restauración aislada, además de políticas de recuperación tras una pérdida de la cuenta de Supabase.
 
 ## Verificación automatizada
 
