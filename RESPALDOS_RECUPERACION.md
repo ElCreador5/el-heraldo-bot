@@ -1,5 +1,23 @@
 # H-03 — Respaldo SQLite y recuperación offline
 
+## Continuación de verificación — 2026-10-12
+
+Estado Railway reconsultado: producción heraldo-data y Test worker-volume en
+`/data`, 500 MB. Las variables devuelven `valuesRedacted=true`: no se conoce el
+DB_PATH efectivo. No hay shell, archivos ni listado de backups accesibles por el
+conector; CLI/credenciales locales tampoco disponibles. No afirmar ausencia de
+copias: existencia, fecha, privacidad, integridad y recuperación siguen sin verificar.
+Railway documenta [backups de volumen](https://docs.railway.com/volumes/backups),
+incluido SQLite; ver detalles y permisos mínimos en INFORME_ISSUE15.md. No se
+crearon/restauraron backups ni se contrataron recursos. El snapshotId asociado al
+despliegue no prueba respaldo del volumen. Restaurar Railway implica cambio de
+volumen y despliegue; no es una comprobación de lectura.
+
+El ensayo reforzado comprueba integridad/FK, tablas/índices/triggers/vistas,
+versiones, inicialización repetida de módulos y restauración sintética exacta.
+215 tests totales correctos. No sustituye una generación privada real descargable,
+recuperación aislada sin Gateway ni reconciliación de evidencias en Discord.
+
 ## Verificación vigente issue #15 — 2026-10-12
 
 H-03 ya está en Pruebas c01aa4d. Lectura Railway confirma volumen producción

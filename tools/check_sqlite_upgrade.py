@@ -15,6 +15,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlite_recovery import create_backup, restore_backup
+from sqlite_preflight import inspect
 
 
 def initialize(source, path):
@@ -49,6 +50,30 @@ def schemas(path):
                 for (name,) in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
 
+def snapshot(path):
+    """Estado sintético completo; falla también ante restricciones inválidas."""
+    try:
+        health = inspect(path)
+    except sqlite3.Error as exc:
+        raise RuntimeError('compatibility_failed') from exc
+    if not health['integrity_ok'] or not health['foreign_keys_ok'] or health['empty_schema']:
+        raise RuntimeError('compatibility_failed')
+    with closing(sqlite3.connect(path)) as c:
+        objects = {(kind, name): (table, sql) for kind, name, table, sql in c.execute(
+            'SELECT type,name,tbl_name,sql FROM sqlite_master')}
+    return {'rows': rows(path), 'columns': schemas(path), 'objects': objects,
+            'versions': (health['user_version'], health['application_id'])}
+
+
+def initialize_candidate(source, path):
+    initialize(source, path)
+    # Mismo autocommit que db_connect: los UPDATE de recuperación deben persistir.
+    from message_automation import ScheduledMessages
+    ScheduledMessages({'db_connect': lambda: sqlite3.connect(path, isolation_level=None)}).initialize()
+    import evidence_archive
+    evidence_archive.ledger(path, 'synthetic:101:1', 'claim')
+
+
 def rehearse(main_source, candidate_source):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -63,34 +88,35 @@ def rehearse(main_source, candidate_source):
                       "VALUES (102,1,'[800]','Sintético','2026-01-01','manual')")
             c.execute("INSERT INTO guild_members (guild_id,user_id,verify_pending_at) VALUES (101,1,'2026-01-01')")
             c.commit()
-        before, old_schema = rows(db), schemas(db)
+        before = snapshot(db)
         package = create_backup(db, root / 'backups', environment='synthetic', revision='reviewed-main')
-        initialize(candidate_source, db)
-        # Inicializadores del módulo nuevo también se ejecutan realmente.
-        from message_automation import ScheduledMessages
-        ScheduledMessages({'db_connect': lambda: sqlite3.connect(db)}).initialize()
-        import evidence_archive
-        evidence_archive.ledger(db, 'synthetic:101:1', 'claim')
-        after, new_schema = rows(db), schemas(db)
-        preserved = all(after.get(name) == value for name, value in before.items())
-        unchanged = all(new_schema.get(name) == value for name, value in old_schema.items())
-        initialize(candidate_source, db)
-        idempotent = rows(db) == after
+        initialize_candidate(candidate_source, db)
+        after = snapshot(db)
+        preserved = all(after['rows'].get(name) == value for name, value in before['rows'].items())
+        unchanged = all(after['columns'].get(name) == value for name, value in before['columns'].items())
+        objects_preserved = all(after['objects'].get(key) == value for key, value in before['objects'].items())
+        versions_preserved = after['versions'] == before['versions']
+        initialize_candidate(candidate_source, db)
+        idempotent = snapshot(db) == after
         # El código anterior puede abrir el esquema ampliado, pero ignora tareas nuevas.
         initialize(main_source, db)
-        old_code_preserves = rows(db) == after
+        old_code_preserves = snapshot(db) == after
         # Restauración exacta del punto anterior en un destino detenido y aislado.
         schema = root / 'main-schema.db'
         initialize(main_source, schema)
         restored = root / 'restored.db'
         restore_backup(package, restored, schema_from=schema, environment='synthetic', service_stopped=True)
-        rollback = rows(restored) == before
+        rollback = snapshot(restored) == before
         result = {'existing_rows_preserved': preserved, 'existing_columns_unchanged': unchanged,
+                  'existing_schema_objects_preserved': objects_preserved,
+                  'schema_versions_unchanged': versions_preserved,
+                  'integrity_and_foreign_keys_ok': True,
                   'startup_idempotent': idempotent, 'old_initializers_preserve_upgraded_db': old_code_preserves,
                   'snapshot_rollback_exact': rollback,
-                  'added_tables': sorted(set(new_schema) - set(old_schema)),
+                  'added_tables': sorted(set(after['columns']) - set(before['columns'])),
                   'scope': 'startup_initializers_and_literal_optional_ddl_with_synthetic_cases'}
-        if not all((preserved, unchanged, idempotent, old_code_preserves, rollback)):
+        if not all((preserved, unchanged, objects_preserved, versions_preserved,
+                    idempotent, old_code_preserves, rollback)):
             raise RuntimeError('compatibility_failed')
         return result
 

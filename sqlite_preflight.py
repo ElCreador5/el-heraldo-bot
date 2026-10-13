@@ -39,8 +39,9 @@ def main(argv=None):
         valid = result['integrity_ok'] and result['foreign_keys_ok'] and not result['empty_schema']
         print(json.dumps({'status': 'ok' if valid else 'blocked', **result}, sort_keys=True))
         return 0 if valid else 1
-    except (OSError, sqlite3.Error, ValueError):
+    except (OSError, sqlite3.Error, ValueError, RuntimeError):
         # SQLite puede incluir contenido corrupto o nombres privados en sus errores.
+        # Path.resolve lanza RuntimeError para enlaces circulares en Python < 3.13.
         print('{"status": "blocked", "reason": "database_unavailable_or_invalid"}')
         return 1
 

@@ -1,5 +1,40 @@
 # Registro de pruebas — El Heraldo Test
 
+## Continuación del PR #16 — 2026-10-12
+
+- Python 3.12.14 / discord.py 2.7.1: 39 raíz/Logs + 176 descubiertas = **215 OK**.
+  Ocho nuevas: symlink circular sin traceback privado, FK exclusivamente en WAL
+  y aislamiento no confirmado, compatibilidad aditiva, pérdida de índice/trigger/
+  vista, versiones cambiadas, FK inválida, pérdida de filas y recuperación persistida
+  del envío incierto. Ensayo contra main 6f9f9ee y compilación/pip check/diff OK.
+- CI del HEAD recibido c80066d: 38331744777 success en 3.11–3.13; CI del nuevo
+  HEAD en descripción del PR. Las pruebas se ejecutan offline, no con cuentas Discord.
+- **OBSERVADO EN LOGS, sin interacción:** Test ceb9b727 / c01aa4d SUCCESS/Online,
+  Gateway conectado y autoprueba setup; ninguna prueba de botones o moderación
+  ejecutada en esta sesión. Sin conector Discord ni credencial oficial de Test
+  disponible; OAuth Railway no revela DISCORD_TOKEN. No se inició otro bot.
+- **Discord humano: NO REALIZADO. Respaldo/preflight producción: NO REALIZADO.**
+
+### Intervenciones humanas mínimas en Heraldo's Lab
+
+Registrar SHA desplegado, fecha, actor autorizado, esperado/observado y OK/FALLA;
+solo contenido sintético, roles ordinarios y participante voluntario de Test.
+Un administrador usa el bot oficial; no hacen falta self-bots. Detener al fallar.
+
+| Caso | Acción real pendiente | Resultado exigido |
+|---|---|---|
+| Setup | `/setup`: abrir las secciones modificadas, editar un valor, volver/cancelar y reabrir; después guardar explícitamente. Segundo administrador revoca permisos antes de confirmar otro borrador. | Cancelar conserva; guardar persiste; permiso perdido/caducidad rechazan. |
+| Condena/perdón y roles | `/condenar miembro:<voluntario> motivo:Prueba duracion:indefinida purga:0`; conservar snapshot privado de roles. Subir un rol ordinario retirado sobre el bot y usar `/liberar`. Reparar jerarquía; `/restaurar_roles_pendientes`: cancelar y luego confirmar. | Tarjeta/DM/log coherentes; rol imposible queda pendiente; cancelar no asigna; confirmar devuelve sin duplicar. `/liberar` es la acción directa de perdón, no inventar botón de cancelación para ella. |
+| Verificación | Participante con ambos temporizadores pendientes; esperar vencimiento. Repetir con solo registrar y plazo ampliado. | Una sanción y un registro por los dos temporizadores; sin expulsión en solo registrar ni acción anticipada. |
+| Evidencias | Texto y adjunto sintéticos en canal exclusivo; purga limitada a esos mensajes. Verificar copia/hash privados. Repetir con permiso de archivo retirado o copia ausente. | Solo borrar tras copia íntegra; fallos conservan origen. Nunca purga por defecto sobre conversación compartida. |
+| Mensajes/componentes | `/setup → Mensajes`: seleccionar embed/campo, editar, cancelar/guardar y publicar en canal de Test. Usar botón/selector de rol ordinario y comprobar rechazo del privilegiado. | Conserva borrador y confirmaciones; componentes respetan permisos actuales y guardados. |
+| Logs y programación | Comparar un aviso por evento de roles; programar mensaje de Test y revisar canal/estado tras reinicio coordinado. | Sin avisos duplicados del flujo probado; envío incierto queda pausado, no se fuerza reenvío. |
+
+El reinicio de Test y cualquier ensayo de fallo deliberado se coordinan cuando no
+haya sesiones activas. No reiniciar producción ni restaurar datos reales por este
+guion. La aceptación debe señalar casos no ejecutados; un arranque correcto no los
+convierte en OK. Recuperación privada y secuencia completa: INFORME_ISSUE15.md.
+
 ## Issue #15 — verificación actual 2026-10-12
 
 - Base Pruebas `c01aa4d487b27f42610f0d182243b650cb52eddf`: Actions Lab

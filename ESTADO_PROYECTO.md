@@ -1,5 +1,19 @@
 # Estado compartido — El Heraldo
 
+## Continuación verificada del PR #16 — 2026-10-12
+
+Rama `codex/issue15-preflight-20261012`, partiendo de `c80066d`; main `6f9f9ee`
+y Pruebas `c01aa4d` reconsultadas sin cambios. 215 pruebas offline correctas
+(39 + 176), ocho nuevas. Corregidos falsos positivos del ensayo SQLite (objetos
+de esquema, versiones, FK e idempotencia de módulos/autocommit) y exposición de
+ruta en preflight con symlink circular. Sin cambios en bot.py ni funciones estables.
+CI del HEAD recibido correcta en 3.11–3.13; resultado del nuevo HEAD en PR #16.
+Railway Test: ceb9b727 SUCCESS/Online sobre c01aa4d, Gateway y autoprueba setup
+observados; producción bbb21914 SUCCESS sobre main exacto. OAuth oculta DB_PATH
+y no expone archivos/inventario de backups; respaldo/preflight real no verificados.
+Discord interactivo no realizado. Producción NO lista. Procedimiento y acceso
+mínimo necesario en `INFORME_ISSUE15.md`; no integrar ni desplegar automáticamente.
+
 ## Estado verificado del issue #15 — 2026-10-12
 
 Esta sección sustituye el estado operativo histórico inferior para esta tarea.

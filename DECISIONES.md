@@ -1,5 +1,16 @@
 # Decisiones de producto y desarrollo — El Heraldo
 
+## Aplicación en la continuación del PR #16 — 2026-10-12
+
+Se conserva la rama del PR y su destino Pruebas. Los únicos cambios de código
+corrigen defectos demostrados de los verificadores; bot.py y los módulos estables
+no se modifican. CI/ensayo sintético no sustituyen preflight ni recuperación real.
+Se documenta la capacidad de backups Railway sin contratar, crear ni restaurar
+recursos. Una integración puede desplegar automáticamente (checkSuites=false);
+no se fusiona por el solo hecho de superar pruebas. Faltan acceso privado de
+lectura o ejecución del operador, aceptación humana y aprobación específica futura
+de main. Estos criterios aplican la autorización vigente, sin añadir funciones.
+
 ## Aplicación del issue #15 — 2026-10-12
 
 Se prepara PR exclusivamente a Pruebas, sin integración automática. Se conserva

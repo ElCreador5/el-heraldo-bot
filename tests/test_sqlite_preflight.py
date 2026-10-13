@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -53,3 +54,33 @@ class PreflightTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(p.main(['--db', str(path)]), 1)
             self.assertIn('"foreign_keys_ok": false', out.getvalue())
+
+    def test_circular_symlink_blocks_without_private_path_or_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'private-name'
+            path.symlink_to(path)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(p.main(['--db', str(path)]), 1)
+            self.assertEqual(json.loads(out.getvalue()), {
+                'status': 'blocked', 'reason': 'database_unavailable_or_invalid'})
+
+    def test_wal_only_violation_is_seen_but_uncommitted_write_is_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'db'
+            with contextlib.closing(sqlite3.connect(path)) as c:
+                c.execute('PRAGMA journal_mode=WAL')
+                c.executescript('CREATE TABLE parent(id PRIMARY KEY); '
+                                'CREATE TABLE child(id REFERENCES parent(id));')
+                c.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                original = path.read_bytes()
+                c.execute('INSERT INTO child VALUES (42)')
+                self.assertTrue(p.inspect(path)['foreign_keys_ok'])
+                c.commit()
+                before = {suffix: Path(str(path) + suffix).read_bytes()
+                          for suffix in ('', '-wal')}
+                self.assertEqual(original, before[''])  # Solo WAL contiene la infracción.
+                with contextlib.redirect_stdout(io.StringIO()) as out:
+                    self.assertEqual(p.main(['--db', str(path)]), 1)
+                self.assertFalse(json.loads(out.getvalue())['foreign_keys_ok'])
+                self.assertEqual(before, {suffix: Path(str(path) + suffix).read_bytes()
+                                          for suffix in ('', '-wal')})

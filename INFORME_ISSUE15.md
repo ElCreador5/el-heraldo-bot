@@ -4,6 +4,119 @@ Fecha: 2026-10-12 (America/Santo_Domingo). Responsable técnico: Codex.
 **Producción NO está lista para actualizar.** No se modificaron main, Railway,
 configuración, datos reales ni Discord. Esta propuesta va exclusivamente a Pruebas.
 
+## Continuación y revisión del PR #16 — 2026-10-12
+
+Rama conservada: `codex/issue15-preflight-20261012`, HEAD recibido
+`c80066d49d6b14c82a22d96e6ecfa8719275a9ee`. `git fetch` y `git ls-remote`
+confirmaron main `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667`, Pruebas
+`c01aa4d487b27f42610f0d182243b650cb52eddf` y refs/pull/16/head coincidente.
+Sin conflictos, revisiones ni comentarios pendientes al iniciar. Se mantiene el
+PR en borrador hacia Pruebas, sin fusión automática. El SHA que incorpora esta
+continuación se consulta en el historial del PR; no es el HEAD recibido.
+
+### Defectos demostrados y corregidos en las herramientas
+
+- **DETECTADO → IMPLEMENTADO → VERIFICADO AUTOMÁTICAMENTE:** el ensayo aceptaba
+  una revisión sintética que borraba un índice único, cambiaba `user_version` o
+  añadía una tabla con FK inválida, porque solo comparaba columnas/filas. Ahora
+  verifica integridad/FK en cada estado, conserva definiciones de tablas, índices,
+  triggers y vistas, y exige versiones/ID de aplicación sin cambios. Una migración
+  intencional distinta requiere revisión; no se autoriza relajando el verificador.
+- La comprobación de reinicio ahora repite también Mensajes/ledger y compara
+  esquema y datos completos. El adaptador de Mensajes usa autocommit como el bot;
+  antes podía revertir los UPDATE al cerrar. Una regresión comprueba que `sending`
+  persiste como `uncertain`, sin volver a enviar nada.
+- Preflight: una ruta con enlaces circulares lanzaba RuntimeError con la ruta
+  privada en Python 3.12. Ahora devuelve exclusivamente error saneado y exit 1.
+  Prueba adicional: una FK inválida presente solo en WAL bloquea; un cambio no
+  confirmado no se ve; bytes DB/WAL permanecen iguales durante el diagnóstico.
+  Esto no acredita inmutabilidad del SHM: se conserva el requisito de vista RO.
+- **No se encontró una pérdida de índices ni corrupción en la migración vigente.**
+  Los defectos eran falsos positivos del verificador, reproducidos con candidatos
+  alterados solo en memoria. `bot.py`, SQLite real y funciones estables no cambiaron.
+
+### Validación de esta continuación
+
+Python 3.12.14 / discord.py 2.7.1, entorno aislado preparado desde
+`requirements-ci.txt`. La base pasó 207 pruebas antes de editar. Después:
+`python -m unittest test_regressions.py test_member_logs.py`: 39 correctas;
+`python -m unittest discover -s tests -p 'test_*.py'`: 176 correctas;
+**215 en total, ocho nuevas**. Las 35 específicas de SQLite también pasaron.
+Ensayo contra main exacto: todos los indicadores true y las mismas cuatro tablas
+añadidas. Compilación, pip check y diff check correctos. Ninguna llamada Discord
+real ni importación ejecutable de bot.py en el ensayo de migración.
+
+CI del HEAD recibido: [38331744777](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/38331744777),
+completed/success, Python 3.11/3.12/3.13, incluido ensayo SQLite. CI de Pruebas
+reconsultada: 38291614080/38291614066 success. La CI del nuevo HEAD se comprueba
+después del push y se registra en la descripción del PR para no atribuirle CI vieja.
+
+### Railway, acceso real y respaldo
+
+Lecturas actuales por conector OAuth, sin mutaciones:
+
+- Test `ceb9b727-ab69-4798-9257-78104230ba19`: SUCCESS, SHA completo `c01aa4d…`,
+  Online, una réplica en ejecución, cero fallos recientes reportados y sin cambios
+  staged. Logs del arranque confirman Gateway y autoprueba setup; última reanudación
+  observada: 2026-10-12 20:33:31 America/Santo_Domingo. **No son clics humanos.**
+- Producción `bbb21914-a87c-44f3-b862-f4ba3ceecd09`: SUCCESS y SHA completo
+  `6f9f9ee…`, ahora contrastado también con metadatos del despliegue.
+- Ambos servicios montan `/data`, 500 MB, y siguen su rama respectiva con
+  `checkSuites=false`. Integrar Pruebas puede desplegar Test antes de finalizar CI.
+  Publicar main podría hacer lo mismo en producción; no se hizo ninguna integración.
+- `list_variables` devolvió `valuesRedacted=true`: `DB_PATH` existe pero su valor
+  efectivo **no es accesible por OAuth**. `/data/heraldo.db` sigue siendo una ruta
+  documentada, no comprobada en el proceso. No se leyó ni publicó DISCORD_TOKEN.
+- No hay herramienta de shell/archivos ni inventario de backups en este conector;
+  el entorno cloud no tiene credenciales Railway/Discord configuradas. No se
+  ejecutó preflight real, ni se obtuvo/copia una BD, ni se verificó una generación.
+  **Existencia, fecha, privacidad e integridad del respaldo: NO VERIFICADAS**;
+  eso no demuestra que no exista. Obsidian sin conexión disponible, no consultado.
+
+Capacidad del proveedor confirmada en documentación oficial:
+[Backups](https://docs.railway.com/volumes/backups) cubre SQLite y otros archivos
+del volumen, manuales o programados, con coste incremental. Restaurar prepara un
+nuevo volumen y su despliegue; solo se restaura en el mismo proyecto/entorno.
+Vaciar un volumen elimina sus backups. Un snapshot de despliegue no es evidencia
+de backup de datos ni un ensayo de recuperación. No se crearon backups ni recursos.
+[API de volúmenes](https://docs.railway.com/integrations/api/manage-volumes#list-backups)
+expone `volumeInstanceBackupList(volumeInstanceId: String!)` y
+`volumeInstanceBackupScheduleList`; el conector actual no las expone. El ID de
+volumen conocido no debe pasarse como si fuera un ID de instancia.
+
+**Intervención mínima para cerrar este bloqueo:** un operador con acceso privado
+al servicio de producción debe confirmar el DB_PATH efectivo y que cae en el
+volumen montado; consultar la pestaña Backups del servicio (solo listar, no pulsar
+Restore/Deploy) o las consultas oficiales anteriores con identidad ya autorizada;
+verificar una generación existente y su recuperación en un destino aislado y
+privado. Alternativa: habilitar acceso de lectura equivalente en el entorno, sin
+pegar tokens en el chat. Para correr preflight sin tocar sidecars se necesita una
+vista autorizada RO del conjunto DB/WAL/SHM. Registrar únicamente fecha, versión,
+resultado saneado y referencia privada; ni manifiestos ni archivos en GitHub.
+Si no existe generación o destino privado, el propietario decide su creación y
+coste antes de operar. Restaurar el volumen de producción sigue fuera del permiso.
+
+`sqlite_preflight status=ok` acredita integridad/FK y esquema no vacío, **no que sea
+la base correcta ni compatibilidad total con el bot**. Contrastar ruta, huella,
+versiones y esquema contra el código main y la generación real; investigar cualquier
+variación histórica antes de aplicar los resultados sintéticos a producción.
+
+### Revisión de todos los archivos originales del PR
+
+| Archivo | Resultado |
+|---|---|
+| `.github/workflows/heraldo-lab-checks.yml` | Fetch completo permite git show del main fijado; ensayo offline en tres versiones, sin secretos. |
+| `.gitignore` | `work/` excluye auxiliares; no es autorización para almacenar datos reales. |
+| `sqlite_preflight.py` | Lectura mode=ro/query_only; error de symlink corregido, límite SHM documentado. |
+| `tests/test_sqlite_preflight.py` | Cuatro tests originales y dos nuevos de privacidad/WAL. |
+| `tools/check_sqlite_upgrade.py` | Falsos positivos y autocommit corregidos; seis nuevas regresiones en `tests/test_sqlite_upgrade.py`. |
+| `INFORME_ISSUE15.md` | Evidencias, bloqueos de acceso y secuencia de lanzamiento actualizados. |
+| `RESPALDOS_RECUPERACION.md` | No confunde backup online, copia de archivo y snapshot Railway; alcance real actualizado. |
+| `ESTADO_PROYECTO.md` | Estado actual separado del historial. |
+| `PRUEBAS_DISCORD.md` | 215 automáticas, interacción humana pendiente y comandos reales precisados. |
+| `DECISIONES.md` | Mantiene protección de main, confirmaciones y conservación de funciones. |
+| `CONTINUIDAD_AGENTES.md` | Traspaso actualizado para continuar sin repetir H-03 ni #14. |
+
 ## Revisiones y evidencia actual
 
 - main: `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667`.
