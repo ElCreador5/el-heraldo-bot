@@ -1,3 +1,7 @@
+## Almacenamiento externo de respaldos — 2026-10-13
+
+Propietario autorizó preparar y probar un destino gratuito en Supabase sin trasladar aún datos de producción. Bucket privado específico, autenticación con cuenta técnica y RLS de bucket; se prohíbe introducir `service_role`, secret y claves S3 globales en el bot. Cifrado independiente AES-256-GCM, claves fuera de Git, sin auto-programación ni retención destructiva. Advertencia: Free no garantiza disponibilidad continua, tiene límite de 50 MB por objeto y puede pausarse. Activación real y cambio de main siguen sujetos a pruebas, respaldo y autorización separada. Procedimiento en `RESPALDOS_SUPABASE.md`.
+
 # Decisiones de producto y desarrollo — El Heraldo
 
 **Actualizado:** 2026-10-08. Este documento recoge acuerdos funcionales; para conocer el estado efectivo consultar `ESTADO_PROYECTO.md` y el código.
