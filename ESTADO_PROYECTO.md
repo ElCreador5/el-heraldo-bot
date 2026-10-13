@@ -1,5 +1,33 @@
 # Estado compartido — El Heraldo
 
+## Continuación verificada del PR #16 — 2026-10-12
+
+Rama `codex/issue15-preflight-20261012`, partiendo de `c80066d`; main `6f9f9ee`
+y Pruebas `c01aa4d` reconsultadas sin cambios. 215 pruebas offline correctas
+(39 + 176), ocho nuevas. Corregidos falsos positivos del ensayo SQLite (objetos
+de esquema, versiones, FK e idempotencia de módulos/autocommit) y exposición de
+ruta en preflight con symlink circular. Sin cambios en bot.py ni funciones estables.
+CI del HEAD recibido correcta en 3.11–3.13; resultado del nuevo HEAD en PR #16.
+Railway Test: ceb9b727 SUCCESS/Online sobre c01aa4d, Gateway y autoprueba setup
+observados; producción bbb21914 SUCCESS sobre main exacto. OAuth oculta DB_PATH
+y no expone archivos/inventario de backups; respaldo/preflight real no verificados.
+Discord interactivo no realizado. Producción NO lista. Procedimiento y acceso
+mínimo necesario en `INFORME_ISSUE15.md`; no integrar ni desplegar automáticamente.
+
+## Estado verificado del issue #15 — 2026-10-12
+
+Esta sección sustituye el estado operativo histórico inferior para esta tarea.
+main `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667` intacta; base Pruebas
+`c01aa4d487b27f42610f0d182243b650cb52eddf`, H-03 ya integrado por PR #14.
+CI Actions 38291614080/38291614066 success y Railway Test ceb9b727 SUCCESS del
+SHA exacto. Lectura actual de Railway confirma volúmenes Test/producción de 500 MB
+en /data, una réplica y sin staged/buckets; no prueba respaldo recuperable.
+Rama temporal `codex/issue15-preflight-20261012`: preflight SQLite sin datos privados,
+ensayo sintético main→Pruebas→copia main y CI correspondiente. Sin cambios bot.py.
+207 tests offline correctas (39+168); Discord no realizado. Producción NO lista:
+faltan respaldo real validado, preflight real, reconciliación/ensayo y aceptación
+del laboratorio. Informe, comandos, límites y lanzamiento: `INFORME_ISSUE15.md`.
+
 **Actualizado:** 2026-10-08
 **Repositorio:** `ElCreador5/el-heraldo-bot`
 **Producción:** rama `main` — no modificar sin revisión y autorización.

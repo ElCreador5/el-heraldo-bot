@@ -1,5 +1,27 @@
 # Decisiones de producto y desarrollo — El Heraldo
 
+## Aplicación en la continuación del PR #16 — 2026-10-12
+
+Se conserva la rama del PR y su destino Pruebas. Los únicos cambios de código
+corrigen defectos demostrados de los verificadores; bot.py y los módulos estables
+no se modifican. CI/ensayo sintético no sustituyen preflight ni recuperación real.
+Se documenta la capacidad de backups Railway sin contratar, crear ni restaurar
+recursos. Una integración puede desplegar automáticamente (checkSuites=false);
+no se fusiona por el solo hecho de superar pruebas. Faltan acceso privado de
+lectura o ejecución del operador, aceptación humana y aprobación específica futura
+de main. Estos criterios aplican la autorización vigente, sin añadir funciones.
+
+## Aplicación del issue #15 — 2026-10-12
+
+Se prepara PR exclusivamente a Pruebas, sin integración automática. Se conserva
+bot.py y las funciones estables: las pruebas y el inventario no justifican rediseño.
+La compatibilidad sintética no autoriza restaurar datos ni acredita todas las
+configuraciones reales. Lectura Railway no acredita validez de respaldos. Cero
+modificación de archivos SQLite requiere vista de solo lectura DB/WAL/SHM; no usar
+immutable sobre base activa. No crear infraestructura, credenciales ni programación
+de respaldos. Lanzamiento/reversión preparados en INFORME_ISSUE15; producción sigue
+bloqueada hasta respaldo y laboratorio, con aprobación específica independiente.
+
 **Actualizado:** 2026-10-08. Este documento recoge acuerdos funcionales; para conocer el estado efectivo consultar `ESTADO_PROYECTO.md` y el código.
 
 ## Acuerdos vigentes

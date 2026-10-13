@@ -1,5 +1,37 @@
 # H-03 — Respaldo SQLite y recuperación offline
 
+## Continuación de verificación — 2026-10-12
+
+Estado Railway reconsultado: producción heraldo-data y Test worker-volume en
+`/data`, 500 MB. Las variables devuelven `valuesRedacted=true`: no se conoce el
+DB_PATH efectivo. No hay shell, archivos ni listado de backups accesibles por el
+conector; CLI/credenciales locales tampoco disponibles. No afirmar ausencia de
+copias: existencia, fecha, privacidad, integridad y recuperación siguen sin verificar.
+Railway documenta [backups de volumen](https://docs.railway.com/volumes/backups),
+incluido SQLite; ver detalles y permisos mínimos en INFORME_ISSUE15.md. No se
+crearon/restauraron backups ni se contrataron recursos. El snapshotId asociado al
+despliegue no prueba respaldo del volumen. Restaurar Railway implica cambio de
+volumen y despliegue; no es una comprobación de lectura.
+
+El ensayo reforzado comprueba integridad/FK, tablas/índices/triggers/vistas,
+versiones, inicialización repetida de módulos y restauración sintética exacta.
+215 tests totales correctos. No sustituye una generación privada real descargable,
+recuperación aislada sin Gateway ni reconciliación de evidencias en Discord.
+
+## Verificación vigente issue #15 — 2026-10-12
+
+H-03 ya está en Pruebas c01aa4d. Lectura Railway confirma volumen producción
+heraldo-data /data 500 MB y Test worker-volume /data 500 MB; no acredita espacio
+libre, ruta DB_PATH, paquetes existentes ni respaldo externo recuperable. El
+preflight de lectura está en sqlite_preflight.py y su procedimiento/límites en
+INFORME_ISSUE15.md. Cero escrituras en archivos requiere vista read-only del
+conjunto DB/WAL/SHM; mode=ro impide escribir tablas pero puede usar metadatos SHM.
+Ensayo sintético main→Pruebas conserva esquema/datos previos, añade cuatro tablas
+y permite restaurar copia main en destino nuevo aislado. La igualdad estricta de
+schema-from impide reemplazar directamente una base ampliada con snapshot antiguo;
+no eludirla ni borrar sidecars. Restaurar snapshot requiere reconciliar Discord y
+conservar estado posterior. Una reversión de imagen no revierte el volumen.
+
 Implementación local para revisión; no configura Railway, almacenamiento externo
 ni tareas programadas. Las pruebas usan bases sintéticas. No restaurar producción.
 

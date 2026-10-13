@@ -1,5 +1,35 @@
 # Continuidad entre agentes — El Heraldo
 
+## Continuación del PR #16 — 2026-10-12
+
+Codex conserva `codex/issue15-preflight-20261012`, HEAD recibido `c80066d`.
+Main `6f9f9ee` y Pruebas `c01aa4d` intactas. Leer primero la nueva sección de
+`INFORME_ISSUE15.md`: revisión de los 11 archivos originales, defectos reproducidos
+en verificadores y límites de acceso. No repetir H-03/#14 ni desarrollar Mensajes.
+215 pruebas offline correctas, ocho nuevas, ensayo real de inicializadores con
+datos sintéticos y compilación/dependencias correctos. CI recibida 38331744777
+success; CI del commit de continuación debe constar en la descripción del PR.
+Railway Test online c01aa4d; producción SUCCESS main exacto. Ninguna mutación
+Railway/Discord/main. OAuth valuesRedacted=true, sin shell ni backups API; CLI y
+credenciales Railway ausentes. Obsidian no conectado. Respaldo/preflight real e
+interacciones humanas siguen pendientes, con pasos mínimos en el informe y
+PRUEBAS_DISCORD. Siguiente responsable técnico: revisar CI del HEAD remoto, cerrar
+acceso/ejecución privada de operador y laboratorio; solo después pedir aprobación
+de producción. No asumir que un snapshot de despliegue protege SQLite.
+
+## Transferencia issue #15 — 2026-10-12
+
+Codex, rama temporal `codex/issue15-preflight-20261012`, base Pruebas
+`c01aa4d487b27f42610f0d182243b650cb52eddf`, main `6f9f9ee` intacta.
+H-03 ya integrado; no repetir PR #14. Acceso GitHub por conector y Git nativo;
+gh API sigue Forbidden. Railway leído por conector, sin mutaciones.
+CI/Test de base exacta correctos. Nuevos preflight y ensayo de compatibilidad aislado,
+CI y documentación: `INFORME_ISSUE15.md`. 207 pruebas offline; Discord real y
+respaldo/preflight real no realizados. No modificar main ni datos reales.
+Siguiente: ChatGPT revisa PR y CI del nuevo HEAD; coordinar laboratorio y verificación
+privada de generación real. Si falta destino externo, decisión del propietario;
+no crear infraestructura automáticamente. Commit/PR consultables en historial remoto.
+
 [[INICIO_OBSIDIAN]] · [[AGENTS]] · [[ESTADO_PROYECTO]] · [[DECISIONES]] · [[PRUEBAS_DISCORD]]
 
 ## Procedimiento de inicio
