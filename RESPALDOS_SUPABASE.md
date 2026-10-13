@@ -1,5 +1,28 @@
 # H-03 → Supabase Storage: respaldo externo cifrado
 
+## Fase 1: ejecutor de respaldo periódico preparado (2026-10-13)
+
+**Implementado en `Pruebas`, pero NO ACTIVADO para producción.** El archivo `backup_job.py` ejecuta UNA operación H-03 por invocación desde un entorno autorizado. Toma una instantánea SQLite online con `sqlite_recovery.create_backup`, cifra y sube usando `supabase_backup.upload`, la descarga con `download_verify` y realiza una restauración SQLite en archivo nuevo y aislado para comparar integridad, esquema y recuentos. No importa Discord ni conecta al Gateway; no restaura sobre la base activa ni elimina generaciones remotas.
+
+**Barreras de seguridad:** verificación de `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`, `RAILWAY_SERVICE_ID` y `HERALDO_PRODUCTION_BACKUP_ENABLED=enabled-after-owner-approval` para el entorno `heraldo-production`; exige que base y diario de estado estén en `/data`. El modo `lab` está prohibido en el proyecto Railway de producción. Usa directorio privado POSIX, archivo `flock`, diario durable con un intento por fecha UTC y una marca `needs_manual_review` tras errores. Los errores ambiguos de subida NO provocan reintentos automáticos, evitando duplicados ciegos. Nunca imprimir identidades de objetos, SHA privados, rutas de SQLite o contenido; el recibo permanece en directorio privado. **No borrar el diario para forzar reintentos sin reconciliar Storage.**
+
+Parámetros de ejecución (solo cuando exista disparador autorizado y claves almacenadas correctamente):
+
+- `DB_PATH`: ubicación de SQLite del servicio.
+- `HERALDO_BACKUP_STATE_DIRECTORY`: carpeta persistente privada, distinta de la SQLite fuente.
+- `HERALDO_BACKUP_ENVIRONMENT`: `lab` o `heraldo-production`.
+- `HERALDO_BACKUP_REVISION`: SHA/revisión comprobada del binario.
+- Credenciales y clave ya definidas en `supabase_backup.py`; usar una clave de producción custodiada de forma independiente, nunca la de Test.
+- **Solo producción**, después de autorización específica, `HERALDO_PRODUCTION_BACKUP_ENABLED=enabled-after-owner-approval`.
+
+Ejecutar un intento con `python -m backup_job` únicamente en contenedor autorizado con configuración completa. El comando **no es un daemon ni un programador**: aún falta integrar un disparador diario compatible con el volumen montado, configurar los secretos de producción, respaldar la clave fuera de Railway y verificar un ciclo completo real con restauración aislada. No se programa nada en `main` ni se cambia su proceso de arranque.
+
+**Prueba automática ejecutada en Railway Test:** pre-deploy temporal en contenedor sin volumen `python -m unittest discover -s tests -p test_backup_job.py -v`, despliegue `8e87b5b2-64c4-443e-bc38-0a4a67e44dba`, **6/6 casos OK, servicio Online/SUCCESS**. Transporte Supabase simulado dentro de esa suite. Se retiró el pre-deploy y se restauró el inicio normal `python bot.py`. El archivo `tests/test_supabase_backup.py` y el anterior ensayo H-03 en Storage aportan comprobaciones distintas. No hubo ensayos Discord en este bloque.
+
+**Vigilancia ya programada por ChatGPT:** comprobación diaria de metadatos Supabase; notifica si último objeto de producción supera las 36 horas, desaparece, se pierde la privacidad o falla la consulta. **Alerta no equivale a realización de nuevos respaldos**. Por ahora existe solamente una generación verificada de producción; es normal que la vigilancia avise si no se activa la creación periódica.
+
+**Prioridades antes de habilitar producción:** copia adicional y probada de la clave de descifrado en destino independiente del PC; autorización explícita de configuración/despliegue de producción; estrategia de segundo destino ante pausa de Supabase Free y pruebas periódicas de recuperación. Evidencias externas de Discord no quedan incluidas en SQLite.
+
 **Estado (2026-10-13):** respaldo externo de producción CONFIRMADO EN STORAGE, con recuperación aislada APROBADA SEGÚN INFORME DE CODEX LOCAL. El bot de Discord no ejecuta el módulo automáticamente y aún no hay programación de nuevas copias. Mantener cifrado, clave externa y recuperación independientes.
 
 ## Infraestructura verificada (2026-10-13)
