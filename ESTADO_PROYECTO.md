@@ -1,3 +1,9 @@
+## Avance fase 1 H-03 — 2026-10-13
+
+**IMPLEMENTADO EN `Pruebas`**: `backup_job.py` (una ejecución consistente H-03 + subida, descarga, validación y restauración aislada; diario por día UTC con protección antiduplidos; guardas de identidad estrictas para producción), seis regresiones `tests/test_backup_job.py` y compilación de nuevo módulo incluida en workflow. **VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST**: suite `6/6 OK` en pre-deploy aislado, despliegue `8e87b5b2-64c4-443e-bc38-0a4a67e44dba` `SUCCESS` y servicio `Online`. Transporte Supabase de esta suite simulado; anterior prueba sintética de subida/descarga Supabase ya consta separadamente. Se retiró el pre-deploy temporal. Monitorización diaria por automatización ChatGPT de edad del último respaldo de producción (umbral 36 h) activada.
+
+**PENDIENTE CRÍTICO**: el ejecutor no se ha conectado a un programador, no hay nuevas copias automáticas de producción, ni segunda custodia comprobada de la clave del primer backup. Falta plan para evidencias externas y segundo destino. `main` intacta. Detalles en `RESPALDOS_SUPABASE.md`. Discord real: no probado en esta fase.
+
 ## Actualización H-03 — respaldo externo de producción (2026-10-13)
 
 **REALIZADO SEGÚN INFORME DE CODEX LOCAL:** generada copia consistente SQLite mediante `Connection.backup` sin detener ni modificar el bot de producción. Se cifró externamente con AES-256-GCM usando clave distinta de la empleada en Test, se transfirió a Supabase con la cuenta técnica y se descargó, autenticó y restauró en SQLite aislada. El informe documenta integridad SQLite y claves foráneas correctas, coincidencia de esquema y contenido, prueba de rechazo de manipulación GCM y ausencia de cambios en producción. **Estas verificaciones de contenido/descifrado proceden del informe aportado por el propietario, no han sido repetidas por ChatGPT.**
