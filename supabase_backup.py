@@ -117,9 +117,15 @@ def _config():
 
 
 def _http(url, *, method, headers, payload=None, limit=MAX_UPLOAD_BYTES):
+    # No seguir redirecciones: nunca reenviar JWT o contraseña a otro host.
+    class NoRedirect(request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
     try:
-        with request.urlopen(request.Request(url, data=payload, headers=headers, method=method),
-                             timeout=35) as response:
+        opener = request.build_opener(NoRedirect)
+        with opener.open(request.Request(url, data=payload, headers=headers, method=method),
+                         timeout=35) as response:
             if response.status not in (200, 201):
                 raise CloudBackupError("storage_request_failed")
             result = response.read(limit + 1)
@@ -186,9 +192,14 @@ def download_verify(object_name, environment, destination=None):
             if target_root.stat().st_mode & 0o077:
                 raise CloudBackupError("destination_not_private")
             target = target_root / ("h03-" + uuid.uuid4().hex)
-            shutil.copytree(package, target)
-            os.chmod(target, 0o700)
-            validate_backup(target, environment=environment)
+            try:
+                shutil.copytree(package, target)
+                os.chmod(target, 0o700)
+                validate_backup(target, environment=environment)
+            except BaseException:
+                if target.exists():
+                    shutil.rmtree(target)
+                raise
             result["local_package"] = str(target)
         return result
 
