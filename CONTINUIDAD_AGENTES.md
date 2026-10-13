@@ -1,3 +1,9 @@
+## Transferencia fase 1 H-03 — 2026-10-13
+
+`Pruebas` recibió `backup_job.py` (commit `5df0f39a2e4b0d71064d79aa811901ca52a56532`), `tests/test_backup_job.py` (`85fe90f5bcb9ada7dec496cd9979ca64ef40786b`) y workflow compilación (`3f70f1e7c63c63f8830c6d04f470a57fd5a1aa1c`). Los **6 casos H-03 pasaron en Railway Test con dependencias reales**, transporte de red simulado, pre-deploy temporal retirado, despliegue `8e87b5b2-64c4-443e-bc38-0a4a67e44dba` `SUCCESS`, sin interacciones Discord. Documento operacional: `RESPALDOS_SUPABASE.md`. ChatGPT creó vigilancia diaria del bucket para avisar si la última copia productiva supera 36 h, falta o el acceso falla; no genera nuevas copias.
+
+**NO HECHO**: ninguna activación de respaldos automáticos en el bot/producción, ninguna clave real de producción instalada en Railway, ningún backup adicional, ni cambio de `main`. Antes de producción: custodia independiente de clave, disparador confiable con acceso al volumen, política de alertas por fallo de job, capacidad ante pausa de Free, ensayos de restauración y autorización específica. Revisar PR #16 abierto y reconciliar HEAD `Pruebas` antes de integrar; no duplicar trabajos con Codex.
+
 ## Actualización H-03 — respaldo externo de producción (2026-10-13)
 
 **REALIZADO SEGÚN INFORME DE CODEX LOCAL:** generada copia consistente SQLite mediante `Connection.backup` sin detener ni modificar el bot de producción. Se cifró externamente con AES-256-GCM usando clave distinta de la empleada en Test, se transfirió a Supabase con la cuenta técnica y se descargó, autenticó y restauró en SQLite aislada. El informe documenta integridad SQLite y claves foráneas correctas, coincidencia de esquema y contenido, prueba de rechazo de manipulación GCM y ausencia de cambios en producción. **Estas verificaciones de contenido/descifrado proceden del informe aportado por el propietario, no han sido repetidas por ChatGPT.**
