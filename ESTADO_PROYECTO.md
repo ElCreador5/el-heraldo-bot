@@ -1,3 +1,9 @@
+## Estado H-03 Supabase actualizado — 2026-10-13
+
+**VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST:** cuenta técnica Supabase y RLS limitadas al bucket privado, 6 variables presentes en Railway Test (sin leer valores), subida cifrada, descarga y restauración completa de una **base sintética** en contenedor de pre-deploy. Logs `H03_SMOKE status=PASS` del despliegue Test `ef2cc191-accd-4b9c-8ab3-4d07acf9fc87`, servicio Online 1/1, un objeto `lab/` en Storage. Se retiró pre-deploy y no se dejó programación activa. Código: `supabase_backup.py`, `tools/supabase_smoke_test.py`, `requirements.txt` (cryptography solo en Pruebas), tests y `RESPALDOS_SUPABASE.md`.
+
+**NO REALIZADO:** primer respaldo de SQLite de producción, restauración de datos reales en aislamiento, verificación del tamaño de esa base, respaldo de evidencias externas Discord, programación y monitorización; `main` permanece intacta y Online. No confundir el éxito del ensayo ficticio con recuperabilidad real. Supabase Free: 50 MB/objeto, 1 GB almacenamiento, posible pausa. Referencia: `PRUEBAS_DISCORD.md`.
+
 ## Preparación Supabase H-03 — 2026-10-13
 
 Bucket privado `heraldo-sqlite-backups` en proyecto Supabase Free (0 objetos, sin políticas de acceso en la inspección inicial). Herramienta `supabase_backup.py` y regresiones offline agregadas en Pruebas; no se modifica `bot.py`, `main` ni producción. Dependencia optativa `requirements-backup.txt`. Railway Test redeploy automático por commits de Pruebas, sin cambio de runtime funcional. **Respaldo real NO EXISTE todavía.** Falta identidad técnica de Auth con RLS restringida, instalación de secretos en Test, ensayo subida/descarga/restauración y pruebas reales. Límites Free: 50 MB/objeto, 1 GB total, posible pausa del proyecto. Pasos: `RESPALDOS_SUPABASE.md`.
