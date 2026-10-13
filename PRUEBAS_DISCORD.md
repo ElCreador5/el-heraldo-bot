@@ -1,3 +1,9 @@
+## Prueba real Supabase H-03 — 2026-10-13 (verificada automáticamente, no en Discord)
+
+Railway **Test** ejecutó `python -m tools.supabase_smoke_test` como pre-deploy en contenedor efímero, aislado del volumen y sin importar `bot.py`. Logs del despliegue `ef2cc191-accd-4b9c-8ab3-4d07acf9fc87`: `H03_SMOKE step=local_backup status=verified`, `encrypted_upload`, `remote_download`, `isolated_restore`, `status=PASS scope=synthetic_no_discord`. Se confirmó en Supabase 1 objeto bajo `lab/`, 766 bytes cifrados. Servicio Test `SUCCESS`, 1/1 réplica Online. El comando pre-deploy se retiró después y el arranque habitual sigue `python bot.py`.
+
+Durante implementación hubo dos builds Test fallidos por resolución de `-r requirements-backup.txt` en Railpack; se corrigió incluyendo `cryptography>=43,<47` directamente en `requirements.txt` de `Pruebas`. La prueba real completa se ejecutó **después** de la corrección. Ni datos reales ni Discord se utilizaron. **No prueba ni protege la base SQLite de producción**. Pruebas de Discord reales: no realizadas en esta fase. Fecha/objetos y logs no deben confundirse con backup real.
+
 ## Transporte Supabase (preparación, 2026-10-13)
 
 Añadidas regresiones offline de empaquetado H-03/cifrado AES-GCM/manipulación/identidad/aislamiento por entorno y transferencia simulada. **No ejecutado contra Supabase real; no hay cuenta técnica, clave de cifrado, ni operaciones Discord reales.** Verificar CI del SHA publicado. Railway Test Online tras auto-despliegue, esto no equivale a validación de comandos. Laboratorio para descarga/restauración aún pendiente. `RESPALDOS_SUPABASE.md`.
