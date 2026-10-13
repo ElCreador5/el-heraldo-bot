@@ -1,3 +1,7 @@
+## Preparación Supabase H-03 — 2026-10-13
+
+Bucket privado `heraldo-sqlite-backups` en proyecto Supabase Free (0 objetos, sin políticas de acceso en la inspección inicial). Herramienta `supabase_backup.py` y regresiones offline agregadas en Pruebas; no se modifica `bot.py`, `main` ni producción. Dependencia optativa `requirements-backup.txt`. Railway Test redeploy automático por commits de Pruebas, sin cambio de runtime funcional. **Respaldo real NO EXISTE todavía.** Falta identidad técnica de Auth con RLS restringida, instalación de secretos en Test, ensayo subida/descarga/restauración y pruebas reales. Límites Free: 50 MB/objeto, 1 GB total, posible pausa del proyecto. Pasos: `RESPALDOS_SUPABASE.md`.
+
 # Estado compartido — El Heraldo
 
 **Actualizado:** 2026-10-08
