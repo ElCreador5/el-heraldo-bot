@@ -1,3 +1,9 @@
+## Punto de control: H-03 Supabase real en Test — 2026-10-13
+
+**HECHO:** ChatGPT agregó en `Pruebas` `tools/supabase_smoke_test.py` y corrigió `requirements.txt` tras dos builds fallidos por dependencia anidada de Railpack. Pre-deploy temporal de Railway Test creó base sintética, ejecutó H-03 backup, subió objeto cifrado, descargó y restauró, y contrastó el contenido. Resultado en logs `H03_SMOKE status=PASS scope=synthetic_no_discord`; despliegue `ef2cc191-accd-4b9c-8ab3-4d07acf9fc87` SUCCESS, 1/1 Online, un objeto en `lab/`. Pre-deploy temporal retirado (comando `python bot.py` intacto). Producción Online, sin modificación. No mostrar credenciales.
+
+**PENDIENTE:** respaldo real de producción externo al volumen con verificación de descarga y recuperación aislada, espacio/cuota, monitoreo, retención no destructiva y Discord real; autorización específica antes de tocar main. PR #16 de Codex puede requerir reconciliación de nueva base de Pruebas; no sobrescribir cambios recientes. Plan Free puede pausar proyecto. Ver `ESTADO_PROYECTO.md`, `PRUEBAS_DISCORD.md` y `RESPALDOS_SUPABASE.md`.
+
 ## Transferencia Supabase H-03 — 2026-10-13
 
 ChatGPT creó bucket privado en Supabase, escribió en Pruebas `supabase_backup.py`, `tests/test_supabase_backup.py`, `requirements-backup.txt` y `RESPALDOS_SUPABASE.md`, y amplió CI. Código aislado sin autoejecución ni acceso a producción. Codex continúa PR #16 sobre su rama temporal en paralelo: reconciliar cambios antes de integración; no sobrescribir Pruebas ni duplicar H-03. Faltan RLS de identidad técnica, credenciales privadas, subida/descarga real en Lab, respaldo recuperable de producción y autorización de main. **No declarar trabajo terminado ni verificado en Discord.**
