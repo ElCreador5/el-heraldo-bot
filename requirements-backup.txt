@@ -1,0 +1,2 @@
+# Dependencia aislada para transporte cifrado; el proceso Discord no la necesita.
+cryptography>=43,<47
