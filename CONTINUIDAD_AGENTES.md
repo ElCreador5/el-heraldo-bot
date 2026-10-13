@@ -1,5 +1,18 @@
 # Continuidad entre agentes — El Heraldo
 
+## Transferencia issue #15 — 2026-10-12
+
+Codex, rama temporal `codex/issue15-preflight-20261012`, base Pruebas
+`c01aa4d487b27f42610f0d182243b650cb52eddf`, main `6f9f9ee` intacta.
+H-03 ya integrado; no repetir PR #14. Acceso GitHub por conector y Git nativo;
+gh API sigue Forbidden. Railway leído por conector, sin mutaciones.
+CI/Test de base exacta correctos. Nuevos preflight y ensayo de compatibilidad aislado,
+CI y documentación: `INFORME_ISSUE15.md`. 207 pruebas offline; Discord real y
+respaldo/preflight real no realizados. No modificar main ni datos reales.
+Siguiente: ChatGPT revisa PR y CI del nuevo HEAD; coordinar laboratorio y verificación
+privada de generación real. Si falta destino externo, decisión del propietario;
+no crear infraestructura automáticamente. Commit/PR consultables en historial remoto.
+
 [[INICIO_OBSIDIAN]] · [[AGENTS]] · [[ESTADO_PROYECTO]] · [[DECISIONES]] · [[PRUEBAS_DISCORD]]
 
 ## Procedimiento de inicio

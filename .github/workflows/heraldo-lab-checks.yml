@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -36,7 +38,12 @@ jobs:
       - name: Comprobar dependencias
         run: python -m pip check
       - name: Compile Python sources
-        run: python -m py_compile bot.py sqlite_recovery.py evidence_archive.py message_payload.py message_automation.py message_components.py message_editor.py test_regressions.py test_member_logs.py
+        run: python -m py_compile bot.py sqlite_recovery.py sqlite_preflight.py tools/check_sqlite_upgrade.py evidence_archive.py message_payload.py message_automation.py message_components.py message_editor.py test_regressions.py test_member_logs.py
+      - name: Ensayo SQLite contra main revisado (sin datos reales)
+        run: |
+          mkdir -p work
+          git show 6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667:bot.py > work/main-bot.py
+          python tools/check_sqlite_upgrade.py --main-source work/main-bot.py
       - name: Existing offline regression suite
         run: python -m unittest -v test_regressions.py
       - name: Lab component validation regressions

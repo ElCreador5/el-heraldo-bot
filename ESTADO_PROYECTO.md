@@ -1,5 +1,19 @@
 # Estado compartido — El Heraldo
 
+## Estado verificado del issue #15 — 2026-10-12
+
+Esta sección sustituye el estado operativo histórico inferior para esta tarea.
+main `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667` intacta; base Pruebas
+`c01aa4d487b27f42610f0d182243b650cb52eddf`, H-03 ya integrado por PR #14.
+CI Actions 38291614080/38291614066 success y Railway Test ceb9b727 SUCCESS del
+SHA exacto. Lectura actual de Railway confirma volúmenes Test/producción de 500 MB
+en /data, una réplica y sin staged/buckets; no prueba respaldo recuperable.
+Rama temporal `codex/issue15-preflight-20261012`: preflight SQLite sin datos privados,
+ensayo sintético main→Pruebas→copia main y CI correspondiente. Sin cambios bot.py.
+207 tests offline correctas (39+168); Discord no realizado. Producción NO lista:
+faltan respaldo real validado, preflight real, reconciliación/ensayo y aceptación
+del laboratorio. Informe, comandos, límites y lanzamiento: `INFORME_ISSUE15.md`.
+
 **Actualizado:** 2026-10-08
 **Repositorio:** `ElCreador5/el-heraldo-bot`
 **Producción:** rama `main` — no modificar sin revisión y autorización.

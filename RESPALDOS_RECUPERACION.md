@@ -1,5 +1,19 @@
 # H-03 — Respaldo SQLite y recuperación offline
 
+## Verificación vigente issue #15 — 2026-10-12
+
+H-03 ya está en Pruebas c01aa4d. Lectura Railway confirma volumen producción
+heraldo-data /data 500 MB y Test worker-volume /data 500 MB; no acredita espacio
+libre, ruta DB_PATH, paquetes existentes ni respaldo externo recuperable. El
+preflight de lectura está en sqlite_preflight.py y su procedimiento/límites en
+INFORME_ISSUE15.md. Cero escrituras en archivos requiere vista read-only del
+conjunto DB/WAL/SHM; mode=ro impide escribir tablas pero puede usar metadatos SHM.
+Ensayo sintético main→Pruebas conserva esquema/datos previos, añade cuatro tablas
+y permite restaurar copia main en destino nuevo aislado. La igualdad estricta de
+schema-from impide reemplazar directamente una base ampliada con snapshot antiguo;
+no eludirla ni borrar sidecars. Restaurar snapshot requiere reconciliar Discord y
+conservar estado posterior. Una reversión de imagen no revierte el volumen.
+
 Implementación local para revisión; no configura Railway, almacenamiento externo
 ni tareas programadas. Las pruebas usan bases sintéticas. No restaurar producción.
 

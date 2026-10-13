@@ -1,5 +1,16 @@
 # Decisiones de producto y desarrollo — El Heraldo
 
+## Aplicación del issue #15 — 2026-10-12
+
+Se prepara PR exclusivamente a Pruebas, sin integración automática. Se conserva
+bot.py y las funciones estables: las pruebas y el inventario no justifican rediseño.
+La compatibilidad sintética no autoriza restaurar datos ni acredita todas las
+configuraciones reales. Lectura Railway no acredita validez de respaldos. Cero
+modificación de archivos SQLite requiere vista de solo lectura DB/WAL/SHM; no usar
+immutable sobre base activa. No crear infraestructura, credenciales ni programación
+de respaldos. Lanzamiento/reversión preparados en INFORME_ISSUE15; producción sigue
+bloqueada hasta respaldo y laboratorio, con aprobación específica independiente.
+
 **Actualizado:** 2026-10-08. Este documento recoge acuerdos funcionales; para conocer el estado efectivo consultar `ESTADO_PROYECTO.md` y el código.
 
 ## Acuerdos vigentes

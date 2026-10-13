@@ -1,5 +1,19 @@
 # Registro de pruebas — El Heraldo Test
 
+## Issue #15 — verificación actual 2026-10-12
+
+- Base Pruebas `c01aa4d487b27f42610f0d182243b650cb52eddf`: Actions Lab
+  38291614080 y Mensajes 38291614066 success; Railway Test ceb9b727 SUCCESS,
+  mismo SHA. No acredita clics ni moderación en Discord.
+- Codex Linux, Python 3.12: 207 pruebas offline (39 raíz/Logs + 168 tests),
+  compilación/pip check/diff check correctos. Cuatro tests nuevos del preflight:
+  WAL confirmado sin exposición de filas, ausencia sin creación de DB, corrupción/
+  esquema vacío y FK inválidas. Ensayo SQLite en CI y local conserva datos sintéticos
+  de dos servidores y restaura snapshot exacto de main; límites en INFORME_ISSUE15.
+- **Discord real: NO REALIZADO. Respaldo/preflight real: NO REALIZADO.**
+  Guion mínimo verificable por cambio en `INFORME_ISSUE15.md`. No hay un nuevo
+  defecto runtime comprobado que justifique alterar funciones estables.
+
 **Entorno autorizado:** servidor Heraldo's Lab, bot El Heraldo - Test, rama `Pruebas`.
 **Regla:** no probar moderación destructiva sobre usuarios reales ni usar cuentas personales automatizadas.
 **Convención:** PENDIENTE / OK / FALLA / BLOQUEADO. Incluir fecha, commit, actor, pasos, resultado y evidencia redactada (sin información privada).
