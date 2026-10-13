@@ -2,4 +2,4 @@ discord.py>=2.3.2
 tzdata>=2024.1
 
 # Supabase H-03 en laboratorio; main conserva sus dependencias originales.
--r requirements-backup.txt
+cryptography>=43,<47
