@@ -1,3 +1,7 @@
+## Transferencia Supabase H-03 — 2026-10-13
+
+ChatGPT creó bucket privado en Supabase, escribió en Pruebas `supabase_backup.py`, `tests/test_supabase_backup.py`, `requirements-backup.txt` y `RESPALDOS_SUPABASE.md`, y amplió CI. Código aislado sin autoejecución ni acceso a producción. Codex continúa PR #16 sobre su rama temporal en paralelo: reconciliar cambios antes de integración; no sobrescribir Pruebas ni duplicar H-03. Faltan RLS de identidad técnica, credenciales privadas, subida/descarga real en Lab, respaldo recuperable de producción y autorización de main. **No declarar trabajo terminado ni verificado en Discord.**
+
 # Continuidad entre agentes — El Heraldo
 
 [[INICIO_OBSIDIAN]] · [[AGENTS]] · [[ESTADO_PROYECTO]] · [[DECISIONES]] · [[PRUEBAS_DISCORD]]
