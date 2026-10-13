@@ -1,3 +1,11 @@
+## Transferencia preventiva — preparación cron H-03 (2026-10-13)
+
+**Estado de GitHub:** en `Pruebas` están `tools/scheduled_lab_backup.py` (commit `273b222bdda4a06c3e9a28bfd98dd438545a1a87`), `tests/test_scheduled_lab_backup.py` (`588469486030aaa5af1fbb54ea660840f67393ff`) y workflow de compilación (`7f8af99d06d53ea0ce940184e24dc3f580fb4bac`). No hay cron activo ni pruebas reales del nuevo servicio, solo tests escritos. Los tests originales de `backup_job.py` sí habían pasado antes (6/6).
+
+**Bloqueo operativo:** al preparar el nuevo cron separado en Railway Test, la llamada de configuración `update_service` fue rechazada por controles de seguridad. **No eludir el bloqueo.** Se eliminó el servicio vacío en vivo, pero quedó una modificación de entorno **STAGED NO APLICADA** (patch `a2e93a6f-0cd3-410a-a854-cfd02699bbc7`) con creación de servicio/volumen de laboratorio, referencias a credenciales Test; no debe aplicarse. Las llamadas para eliminar los recursos que aún no estaban provisionados devolvieron `Service not found` y `Volume ... not provisioned`. El conector no ofrece descarte de cambios en borrador. Hay que revisar/desactivar ese borrador por el panel de Railway, sin afectar `worker`; comprobar posteriormente `pendingWork=0`.
+
+**Continuar después del descarte:** validar CI y diseño del programador antes de habilitar cron. Los secretos de producción están fuera de Railway y de `main`, por lo que el trabajo de automatización de datos reales todavía requiere decisión y autorización separada. No afirmar que existen nuevas generaciones automáticas ni hacer cambios destructivos. Obsidian no conectado; se utilizó GitHub.
+
 ## Transferencia fase 1 H-03 — 2026-10-13
 
 `Pruebas` recibió `backup_job.py` (commit `5df0f39a2e4b0d71064d79aa811901ca52a56532`), `tests/test_backup_job.py` (`85fe90f5bcb9ada7dec496cd9979ca64ef40786b`) y workflow compilación (`3f70f1e7c63c63f8830c6d04f470a57fd5a1aa1c`). Los **6 casos H-03 pasaron en Railway Test con dependencias reales**, transporte de red simulado, pre-deploy temporal retirado, despliegue `8e87b5b2-64c4-443e-bc38-0a4a67e44dba` `SUCCESS`, sin interacciones Discord. Documento operacional: `RESPALDOS_SUPABASE.md`. ChatGPT creó vigilancia diaria del bucket para avisar si la última copia productiva supera 36 h, falta o el acceso falla; no genera nuevas copias.
