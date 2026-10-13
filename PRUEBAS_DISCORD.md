@@ -1,3 +1,9 @@
+## Entrada cron H-03 para Railway Lab — 2026-10-13
+
+**IMPLEMENTADO, PENDIENTE DE PRUEBA AUTOMÁTICA ACTUAL:** `tools/scheduled_lab_backup.py` y `tests/test_scheduled_lab_backup.py` (identidad de servicio de Test, rechazo de credencial de Discord, comprobación de volumen, SQLite sintética, idempotencia y propagación de errores). Workflow de compilación actualizado. Los seis tests de `test_backup_job.py` fueron previamente verificados en Railway Test; los **seis nuevos** de la entrada cron NO deben confundirse con ellos. El entorno de Discord NO se probó.
+
+**Cron no ejecutado:** Railway bloqueó la escritura de la configuración del servicio nuevo; no existe cron activo. Se dejó un borrador STAGED de Test no desplegado, pendiente de descarte manual seguro. No se tocó la producción ni se transfirieron datos reales.
+
 ## Regresiones H-03 fase 1 — 2026-10-13
 
 **VERIFICADO AUTOMÁTICAMENTE, SIN DISCORD**: `python -m unittest discover -s tests -p test_backup_job.py -v` ejecutado en pre-deploy efímero de Railway Test: `Ran 6 tests`, `OK`. Casos: recuperación aislada y diario privado, bloqueo de duplicados del mismo día, fallo ambiguo de subida sin reintento, identificación/autorización de producción, rechazo de modo laboratorio en proyecto productivo y segundo intento permitido en día UTC distinto. Transporte remoto simulado; no se leyeron SQLite de Discord. Despliegue `8e87b5b2-64c4-443e-bc38-0a4a67e44dba` finalizó `SUCCESS`, réplica Online 1/1. Pre-deploy de pruebas retirado; `python bot.py` conservado. **CI GitHub Actions específico del HEAD aún por confirmar**, distinto del resultado real Railway. Programador de respaldos de producción: NO activado.
