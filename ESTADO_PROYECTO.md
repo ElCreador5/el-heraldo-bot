@@ -1,3 +1,11 @@
+## Fase 1 H-03 — preparación del cron aislado (2026-10-13, continuación)
+
+**IMPLEMENTADO EN `Pruebas`, NO ACTIVADO:** entrada `tools/scheduled_lab_backup.py`, ejecutable sin `bot.py`, que fabrica exclusivamente SQLite sintética, exige Railway Test y volumen persistente, impide el uso de `DISCORD_TOKEN`, llama a `backup_job.run_once` y termina. Añadidos seis casos en `tests/test_scheduled_lab_backup.py` y su compilación en CI. **Ejecución de esta nueva suite y cron reales: pendientes de confirmar**.
+
+**Railway Test:** `worker` existente preservado. Intento de configurar un servicio cron dedicado bloqueado por controles de seguridad de la herramienta; NO se desplegó ni programó. Se eliminó el servicio vacío en vivo, pero el conector dejó un **borrador STAGED NO APLICADO** en Railway Test: un servicio temporal de cron y un volumen de estado de 100 MB con referencias de variables. **No aceptar ni desplegar este borrador**; descartarlo desde Railway antes de continuar la fase. El conector no dispone de operación de descarte, y la eliminación de recursos todavía no aprovisionados devolvió error. Producción y `main` no se modificaron.
+
+Próximo paso: descartar el borrador con controles autorizados, ejecutar CI de la nueva suite y acordar una arquitectura de programación que no dependa de la clave de producción guardada exclusivamente en PC ni exija montar el volumen del bot en dos servicios. No activar producción sin revisión/permiso específico.
+
 ## Avance fase 1 H-03 — 2026-10-13
 
 **IMPLEMENTADO EN `Pruebas`**: `backup_job.py` (una ejecución consistente H-03 + subida, descarga, validación y restauración aislada; diario por día UTC con protección antiduplidos; guardas de identidad estrictas para producción), seis regresiones `tests/test_backup_job.py` y compilación de nuevo módulo incluida en workflow. **VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST**: suite `6/6 OK` en pre-deploy aislado, despliegue `8e87b5b2-64c4-443e-bc38-0a4a67e44dba` `SUCCESS` y servicio `Online`. Transporte Supabase de esta suite simulado; anterior prueba sintética de subida/descarga Supabase ya consta separadamente. Se retiró el pre-deploy temporal. Monitorización diaria por automatización ChatGPT de edad del último respaldo de producción (umbral 36 h) activada.
