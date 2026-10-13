@@ -1,14 +1,24 @@
 # H-03 → Supabase Storage: respaldo externo cifrado
 
-**Estado:** IMPLEMENTADO EN `Pruebas` Y **VERIFICADO CON DATOS SINTÉTICOS** en Railway Test/Supabase el 2026-10-13. El bot de Discord no ejecuta el módulo; no hay copias automáticas activadas y **no existe respaldo de producción verificado**.
+**Estado (2026-10-13):** respaldo externo de producción CONFIRMADO EN STORAGE, con recuperación aislada APROBADA SEGÚN INFORME DE CODEX LOCAL. El bot de Discord no ejecuta el módulo automáticamente y aún no hay programación de nuevas copias. Mantener cifrado, clave externa y recuperación independientes.
 
 ## Infraestructura verificada (2026-10-13)
 
 - Proyecto existente de Supabase El Heraldo, organización Free.
-- Bucket `heraldo-sqlite-backups` privado (`public=false`). Existe una generación cifrada de **laboratorio**, no de producción.
+- Bucket `heraldo-sqlite-backups` privado (`public=false`). Existen una generación cifrada de **laboratorio** y una de **producción**; la verificación de restauración de esta última se fundamenta en el informe de Codex local.
 - Cuenta técnica de Auth creada y confirmada por el propietario; RLS de `storage.objects` permite exclusivamente `INSERT` y `SELECT` del bucket a esa identidad. No se otorgaron permisos de modificación ni eliminación. No se revelaron credenciales.
 - En Railway Test se aplicaron seis variables y se verificó **su presencia, no sus valores**. El acceso cifrado funcionó en prueba real. Una identidad de servicio no debe reutilizarse indiscriminadamente con credenciales de producción.
 - Restricciones documentadas del plan Free: 50 MB máximos por objeto y 1 GB de Storage; proyectos gratuitos pueden pausarse por inactividad. Subidas periódicas a Storage **no garantizan** actividad de base de datos suficiente para evitar la pausa. No prometer durabilidad ni periodicidad hasta verificarlas.
+
+## Actualización H-03 — respaldo externo de producción (2026-10-13)
+
+**REALIZADO SEGÚN INFORME DE CODEX LOCAL:** generada copia consistente SQLite mediante `Connection.backup` sin detener ni modificar el bot de producción. Se cifró externamente con AES-256-GCM usando clave distinta de la empleada en Test, se transfirió a Supabase con la cuenta técnica y se descargó, autenticó y restauró en SQLite aislada. El informe documenta integridad SQLite y claves foráneas correctas, coincidencia de esquema y contenido, prueba de rechazo de manipulación GCM y ausencia de cambios en producción. **Estas verificaciones de contenido/descifrado proceden del informe aportado por el propietario, no han sido repetidas por ChatGPT.**
+
+**VERIFICADO INDEPENDIENTEMENTE POR CHATGPT (consulta 2026-10-13):** en Supabase Storage existe exactamente 1 objeto cifrado bajo la categoría de producción (100609 bytes) y 1 objeto de laboratorio; el bucket sigue privado y las políticas son solo INSERT/SELECT para usuarios authenticated restringidos por identidad. Railway producción sigue Online/SUCCESS con el despliegue anterior; Railway Test también Online/SUCCESS. No se leyó SQLite ni su clave, ni se modificó `main`.
+
+**RIESGO PRIORITARIO:** la clave de descifrado de esta generación se conserva en un único equipo local según el informe. El propietario debe conservar una **segunda copia de la clave** en un medio seguro independiente (p. ej., gestor de contraseñas con recuperación u offline cifrado) y verificar acceso a ella. No publicar clave, rutas privadas, identificadores de generaciones, manifiestos ni datos en repositorio/Discord/chat. No repetir copia ni proceso de subida sin control de idempotencia; no hay aún protección continua.
+
+**PENDIENTE:** periodicidad y supervisión de nuevos respaldos, política de conservación, segundo destino y disponibilidad ante pausas de Supabase Free, ensayos periódicos de restauración y cobertura independiente de adjuntos/evidencias externos de Discord. No implica autorización para desplegar `main`, restaurar producción ni ejecutar escrituras administrativas. Sin pruebas Discord en esta fase.
 
 ## Qué hace y qué NO hace
 
