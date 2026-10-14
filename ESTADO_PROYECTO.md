@@ -1,3 +1,11 @@
+## H-03 — cron interno preparado; producción condicionada (2026-10-14)
+
+**IMPLEMENTADO SOLO EN `Pruebas`:** `production_backup_scheduler.py` y hook protegido en `bot.py:on_ready`, más `tests/test_production_backup_scheduler.py` (10 pruebas), compilación añadida al workflow. Diariamente 06:15 UTC, pero **desactivado sin bandera productiva/identidad/secreto y no iniciado en Test**. Ejecuta SQLite y Supabase desde el mismo proceso dueño de `/data` mediante hilo auxiliar, sin segundo bot; recibos persistentes e idempotentes. Commits de código: `c7577ce`, `1861e1fb`, `af90f1b`, `e28af475`, workflow `bef4daca`.
+
+**VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST:** 10/10 pruebas nuevas del planificador, luego 216/216 suite `tests/` con patrón `-p 'test_*.py'`, y 39/39 pruebas raíz históricas. La primera invocación del patrón sin comillas falló por expansión de shell, se corrigió y se reejecutó con `OK`. Retirados comandos de pre-deploy; no hubo datos de producción ni interacciones Discord.
+
+**PRODUCCIÓN PENDIENTE DE PRERREQUISITOS:** propietario autorizó avanzar hasta despliegue cuando se validen condiciones. Verificado que servicio Railway producción aún carece de seis variables Supabase/clave H-03 y bandera; no hay segunda copia confirmada de la clave real custodiada en el PC. Tampoco consta alerta entregable (tareas ChatGPT: notificaciones y email desactivados). Es inseguro activar H-03 o desplegar main antes de segunda custodia, traslado seguro de secreto, respaldo reciente, prueba de compatibilidad main→candidato y plan de reversión. Instrucciones precisas en `AUTOMATIZACION_H03.md`. `main`/Railway producción no modificados; la generación externa previa sigue intacta.
+
 ## Fase H-03 — reserva de volumen verificada (2026-10-14)
 
 **IMPLEMENTADO EN `Pruebas`:** `backup_job.py` comprueba antes de crear recibo y subir datos que queda espacio para tres SQLite (copia, descarga y restauración) y mantiene un margen mínimo adicional de 64 MiB. Admite `HERALDO_BACKUP_VOLUME_CAP_MB` para aplicar la cuota real cuando el filesystem indica más espacio que el volumen asignado; recuenta ficheros del volumen sin seguir enlaces simbólicos, no borra generaciones. Código commit `24489e0`, regresiones commit `28a4063`.
