@@ -1,3 +1,11 @@
+## Refuerzo H-03, seguridad de avisos y comprobaciones — 2026-10-14
+
+**CORREGIDO EN `Pruebas`:** el verificador `tools/backup_health.py` podía dar por válida una generación `verified_and_restored` sin marca real de finalización, usando medianoche como alternativa, y no exigía identidad del recibo. Ahora rechaza recibos sin `version=1`, `environment=lab`, día UTC coherente, hora de inicio y finalización verificables, estados desconocidos, períodos futuros, permisos no privados y archivos `lab-*.json` mal formados. No se lee SQLite real ni se altera el almacenamiento. Commits de código y pruebas: `78f31a1`, `1d3581b`.
+
+**VERIFICADO AUTOMÁTICAMENTE:** Railway Test ejecutó `python -m unittest discover -s tests -p test_backup_health.py -v` mediante pre-deploy temporal: **14/14 OK**, despliegue `85eeacfb-63a7-4c56-ad9b-939882446fcd` SUCCESS. El comando temporal fue retirado y comprobado `preDeployCommand=[]`, `startCommand=python bot.py`. Cron Lab `cronReady/SUCCESS`, trabajador Discord Test Online 1/1, `staged=null`. Producción no modificada. Sin pruebas humanas Discord.
+
+**RIESGOS ABIERTOS:** vigilancia ChatGPT de producción configurada y ejecutada, pero `notifications_enabled=false` y `email_enabled=false` (comprobación de tareas 2026-10-14): **no se acredita entrega de alertas al propietario**. La tarea de vigilancia local Codex Lab depende del equipo y no se ha verificado una entrega. Sigue existiendo únicamente una generación externa de producción; no se producen copias periódicas reales. Se requiere segunda copia recuperable de la clave de producción fuera del PC, definición de ejecutor siempre disponible y autorización específica para cambios en producción. No se ha decidido retención destructiva; no eliminar ninguna generación. La capacidad finita de volúmenes requiere umbrales antes de activar una política periódica.
+
 ## Automatización H-03 verificada en laboratorio — 2026-10-14
 
 Código de ejecución publicado en Pruebas: cf9f2da77406dd79a6abf254fe445e3092a3bb4f, sobre e59bb4f. Main y producción conservan 6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667. Sin ramas nuevas ni PR; PR #16 no integrado. Checkout anterior divergente preservado.
