@@ -108,6 +108,49 @@ class BackupJobTests(unittest.TestCase):
             self._run(now=self.day + timedelta(days=1))
         self.assertEqual(len(list(self.state.glob("lab-*.json"))), 2)
 
+    def test_low_filesystem_space_blocks_before_receipt(self):
+        with patch.object(backup_job.shutil, "disk_usage",
+                          return_value=shutil._ntuple_diskusage(200, 195, 5)) as measured, patch.object(
+                          backup_job, "upload") as uploader:
+            with self.assertRaisesRegex(backup_job.BackupJobError, "insufficient_backup_headroom"):
+                self._run()
+        self.assertTrue(measured.called)
+        uploader.assert_not_called()
+        self.assertEqual(list(self.state.glob("lab-*.json")), [])
+
+    def test_bad_volume_budget_blocks(self):
+        with patch.dict(os.environ, {"HERALDO_BACKUP_VOLUME_CAP_MB": "unlimited"}), patch.object(
+                backup_job, "upload") as uploader:
+            with self.assertRaisesRegex(backup_job.BackupJobError, "invalid_volume_budget"):
+                self._run()
+        uploader.assert_not_called()
+
+    def test_volume_quota_includes_existing_generations(self):
+        self.state.mkdir(mode=0o700)
+        large = self.root / "retained-backup.bin"
+        with open(large, "wb") as file:
+            file.truncate(40_000_000)
+        variables = {"HERALDO_BACKUP_VOLUME_CAP_MB": "100",
+                     "RAILWAY_VOLUME_MOUNT_PATH": str(self.root)}
+        with patch.dict(os.environ, variables), patch.object(backup_job, "upload") as uploader:
+            with self.assertRaisesRegex(backup_job.BackupJobError, "insufficient_backup_headroom"):
+                self._run()
+        uploader.assert_not_called()
+        self.assertEqual(list(self.state.glob("lab-*.json")), [])
+        self.assertEqual(large.stat().st_size, 40_000_000)
+
+    def test_volume_budget_must_match_mount(self):
+        other_mount = self.root / "other-mount"
+        other_mount.mkdir()
+        with patch.dict(os.environ, {
+            "HERALDO_BACKUP_VOLUME_CAP_MB": "500",
+            "RAILWAY_VOLUME_MOUNT_PATH": str(other_mount),
+        }):
+            with self.assertRaisesRegex(backup_job.BackupJobError, "state_outside_volume_budget"):
+                self._run()
+        self.assertEqual(list(self.state.glob("lab-*.json")), [])
+
+
 
 if __name__ == "__main__":
     unittest.main()
