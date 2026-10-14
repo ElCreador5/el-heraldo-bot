@@ -1,3 +1,9 @@
+## Continuidad H-03 — capacidad finita protegida (2026-10-14)
+
+- `Pruebas`: `backup_job.py` commit `24489e02204a7004e59f074f9750e0ab69443680`; `tests/test_backup_job.py` commit `28a4063fa0f00ed0f6e32e0b1902cfa0c1db155f`. Preflight de espacio >= tres instantáneas +64 MiB, cuota opcional `HERALDO_BACKUP_VOLUME_CAP_MB`; sin borrado automático.
+- Test: 10/10 regresiones OK en Railway, despliegue `431d16b9-68a4-4b88-af47-9e0bc1fdd771` SUCCESS; el comando temporal pre-deploy retirado. Configurada cuota `HERALDO_BACKUP_VOLUME_CAP_MB=500` **solo en cron de Railway Test**; comprobar próxima ejecución programada tras el cambio, sin repetir hoy la copia. Worker Test conserva arranque `python bot.py`; producción/main intactos.
+- Próxima tarea: umbrales con alerta fiable, segunda custodia de clave productiva y arquitectura de ejecución sin compartir volumen ni depender de PC apagado. La activación real de producción sigue requiriendo autorización focalizada. Ni copias ni claves privadas se subieron a GitHub, y no hay pruebas Discord en esta fase.
+
 ## Punto de control H-03 — validación de recibos y limitaciones de alertas (2026-10-14)
 
 - **Rama:** `Pruebas`. Se corrigió verificador `tools/backup_health.py` y actualizó `tests/test_backup_health.py`; commits `78f31a1dab1c1c9f8da49e746f4b6421de4915b3` y `1d3581bfcea47a81139d6d2c9e8a30b32fec865e`.
