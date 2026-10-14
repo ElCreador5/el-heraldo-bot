@@ -1,3 +1,11 @@
+## Actualización de laboratorio H-03 — 2026-10-14
+
+**VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST:** el despliegue `7fd7ace1-2fa6-40ff-8548-5517cd199561` ejecutó `python -m unittest discover -s tests -p test_scheduled_lab_backup.py -v` como prueba temporal: **Ran 6 tests — OK**. Se probaron identidad de Railway Test, rechazo de token Discord, obligatoriedad de volumen persistente, generación de SQLite sintética, salida idempotente ante intento duplicado y fallo crítico propagado. No se usaron SQLite real ni servidor Discord ni red externa durante esas regresiones.
+
+**RESTAURADO/COMPROBADO:** el servicio `worker` de Railway Test vuelve a `startCommand=python bot.py`, `preDeployCommand=[]`, Online/SUCCESS 1/1; `get_staged_changes` devolvió `staged=null` y cero recursos. El borrador de cron y volumen temporal que estaba pendiente quedó completamente descartado por el propietario. `main`/Railway producción intactos.
+
+**PENDIENTE:** los seis casos son unitarios con simulación, NO un disparador cron real ni una transferencia real programada. La activación productiva exige arquitectura que lea la BD real sin duplicar el acceso al volumen, conservación independiente de clave y autorización específica para modificar `main`/producción. El monitoreo de metadatos de Supabase no genera respaldos.
+
 ## Fase 1 H-03 — preparación del cron aislado (2026-10-13, continuación)
 
 **IMPLEMENTADO EN `Pruebas`, NO ACTIVADO:** entrada `tools/scheduled_lab_backup.py`, ejecutable sin `bot.py`, que fabrica exclusivamente SQLite sintética, exige Railway Test y volumen persistente, impide el uso de `DISCORD_TOKEN`, llama a `backup_job.run_once` y termina. Añadidos seis casos en `tests/test_scheduled_lab_backup.py` y su compilación en CI. **Ejecución de esta nueva suite y cron reales: pendientes de confirmar**.
