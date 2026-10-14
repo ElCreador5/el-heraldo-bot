@@ -1,3 +1,9 @@
+## Capacidad y cuotas: protección añadida (2026-10-14)
+
+`backup_job.py` ahora exige capacidad libre equivalente a tres copias SQLite más 64 MiB antes de marcar un intento; si falla, detiene la operación sin subir ni borrar nada. Cuando se configure `HERALDO_BACKUP_VOLUME_CAP_MB`, también considera el tamaño de todos los ficheros del volumen y el límite conservador indicado, no solo el free que devuelve `statvfs`. `RAILWAY_VOLUME_MOUNT_PATH` define el montaje o se utiliza `/data` por defecto. El presupuesto inválido o montaje incompatible producen bloqueo seguro. Verificación: 10/10 pruebas en Railway Test, commit `28a4063`.
+
+El cron de laboratorio tiene valor de cuota `500` MB, coherente con su volumen. Esto NO realiza rotación ni libera espacio; requiere una política futura de conservación revisada, comparaciones contra disponibilidad remota y consentimiento específico para cualquier eliminación. En producción, presupuesto/secretos/horario deben definirse y verificarse antes de activar un ejecutor. Los respaldos anteriores se conservan.
+
 ## Refuerzo de salud y bloqueos operativos (2026-10-14)
 
 La regresión del verificador de laboratorio exigía información demasiado débil: un recibo `verified_and_restored` sin fecha de finalización podía figurar `OK`. Se cerró con 14 pruebas ejecutadas en Railway Test (`Ran 14 tests`, `OK`) y validación de identidad, período, tiempos y permisos. El servicio cron real de Lab ya había demostrado una ejecución programada y una segunda no-op sin repetición. No hay cron real de producción.
