@@ -1,3 +1,9 @@
+## H-03 — comprobación integral tras integración opt-in (2026-10-14)
+
+**VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST:** `python -m unittest discover -s tests -p test_production_backup_scheduler.py -v` → 10/10 OK; `python -m unittest discover -s tests -p 'test_*.py' -v` → 216/216 OK; `python -m unittest -v test_regressions.py test_member_logs.py` → 39/39 OK. Primer intento sin comillas del patrón descubrió erróneamente `test_regressions.py` como directorio, generó `ImportError` y **fue corregido** antes de proclamar éxito. Los registros de Railway acreditan los resultados. Comandos de prueba pre-deploy retirados; sin alteraciones de SQLite real ni Gateway desde H-03.
+
+**PENDIENTE:** no se ha ensayado una copia diaria productiva ni entrega de alertas, no hay pruebas interactivas humanas Discord en esta fase. El monitor de la producción sigue sin canal de notificación confirmado. No se actualizó `main` ni Railway producción.
+
 ## H-03: capacidad conservadora de recuperación (2026-10-14)
 
 **VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST, SIN DISCORD:** `python -m unittest discover -s tests -p test_backup_job.py -v` → `Ran 10 tests`, `OK`, despliegue `431d16b9-68a4-4b88-af47-9e0bc1fdd771` SUCCESS. Incluye pruebas nuevas de disco sin margen, presupuesto de volumen inválido, volumen con generaciones retenidas y ruta de montaje incompatible; en todos los bloqueos se impide subir y no se crea recibo ni se borra dato. Las seis regresiones originales siguen pasando. Railway Test utiliza cuota explícita de 500 MB en el servicio de cron de laboratorio, no en worker.
