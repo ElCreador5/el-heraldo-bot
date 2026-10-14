@@ -2033,6 +2033,13 @@ async def on_ready() -> None:
         join_roles_sync_loop.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
+    # H-03: disabled by default; import dependencies only after explicit opt-in.
+    if os.environ.get("HERALDO_PRODUCTION_BACKUP_ENABLED"):
+        try:
+            from production_backup_scheduler import start_if_authorized
+            start_if_authorized(DB_PATH)
+        except Exception:
+            print("H03_DAILY status=BLOCKED reason=startup_preflight_failed", flush=True)
     _startup_done = True
     print(f"El Heraldo conectado como {bot.user}")
 
