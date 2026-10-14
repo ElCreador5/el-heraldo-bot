@@ -1,3 +1,10 @@
+## Automatización H-03 en curso — 2026-10-14, Codex local
+
+Autorización actual: trabajar directamente en Pruebas, sin nuevas ramas/PR; configurar y comprobar cron sintético independiente en Railway Test. Base e59bb4f, main 6f9f9ee intacta. PR #16 continúa en borrador y tiene conflictos: no integrado. La copia local anterior divergente se preserva; checkout activo el-heraldo-h03.
+
+Corregido defecto: un intento fallido ya no se convierte en éxito/noop al repetirse; permanece bloqueado para revisión. Recibos conservan etapa del fallo. Generaciones y restauraciones quedan privadas en volumen; comparación completa de filas y límite de 180 s. Se rechazan incluso DISCORD_TOKEN vacío y DB_PATH. Nuevo diagnóstico de períodos omitidos, fallidos y antigüedad. Procedimiento y alertas en AUTOMATIZACION_H03.md.
+
+Preparados servicio heraldo-h03-lab-cron, volumen independiente y referencias a seis secretos Lab, sin fuente conectada todavía. Worker no reconfigurado. Primera suite en Linux Railway Test aislado: 39 + 190 pruebas aprobadas, compilación y pip check correctos, transporte simulado, sin Discord. Ampliación de frontera de activación pendiente de resultado; cron real/Supabase programado aún pendientes. No afirmar finalización hasta evidencia de dos disparos y restauración remota.
 # H-03 → Supabase Storage: respaldo externo cifrado
 
 ## Fase 1: ejecutor de respaldo periódico preparado (2026-10-13)

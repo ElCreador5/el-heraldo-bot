@@ -13,7 +13,7 @@ import re
 import sqlite3
 import stat
 import sys
-import tempfile
+import hashlib
 
 from sqlite_recovery import create_backup, inspect_database, readonly, validate_backup
 from supabase_backup import upload, download_verify
@@ -118,6 +118,34 @@ def _isolated_restore(package, target, manifest):
                 ("schema_sha256", "rows", "user_version", "application_id")}
     if inspect_database(target) != expected:
         raise BackupJobError("isolated_restore_mismatch")
+    if _content_digest(Path(package) / "database.sqlite") != _content_digest(target):
+        raise BackupJobError("isolated_restore_content_mismatch")
+
+
+def _content_digest(path):
+    """Compare every value without exposing it; preserve duplicate rows."""
+    result = {}
+    with closing(readonly(path)) as db:
+        for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+            quoted = '"' + name.replace('"', '""') + '"'
+            rows = sorted(hashlib.sha256(repr(tuple(row)).encode()).digest()
+                          for row in db.execute("SELECT * FROM " + quoted))
+            result[name] = hashlib.sha256(b"".join(rows)).hexdigest()
+    return result
+
+
+def receipt_status(path):
+    """Read only a private regular receipt; never print its private fields."""
+    if path.is_symlink() or not path.is_file():
+        raise BackupJobError("invalid_receipt")
+    info = path.stat()
+    if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        raise BackupJobError("receipt_not_private")
+    try:
+        data = json.loads(path.read_text())
+        return data["status"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise BackupJobError("invalid_receipt") from exc
 
 
 def run_once(source, state_root, *, environment, revision, now=None):
@@ -134,36 +162,39 @@ def run_once(source, state_root, *, environment, revision, now=None):
     receipt_path = root / (environment + "-" + stamp + ".json")
     with _exclusive_job_lock(root):
         if receipt_path.is_symlink() or receipt_path.exists():
-            raise BackupJobError("already_attempted_today")
+            if receipt_status(receipt_path) == "verified_and_restored":
+                raise BackupJobError("already_attempted_today")
+            raise BackupJobError("previous_attempt_needs_review")
         receipt = {"version": 1, "environment": environment, "utc_day": stamp,
                    "status": "started", "started_at": today.astimezone(timezone.utc).isoformat()}
         _write_receipt(receipt_path, receipt, initial=True)
         try:
-            with tempfile.TemporaryDirectory(prefix="heraldo-job-") as directory:
-                workspace = Path(directory)
-                generation = create_backup(source, workspace / "generations",
-                                           environment=environment, revision=revision, timeout=90)
-                manifest = validate_backup(generation, environment=environment)
-                receipt["sqlite_sha256"] = manifest["sha256"]
-                receipt["status"] = "upload_unconfirmed"
-                _write_receipt(receipt_path, receipt)
-                published = upload(generation, environment)
-                receipt["object"] = published["object"]
-                receipt["status"] = "uploaded_unverified"
-                _write_receipt(receipt_path, receipt)
-                remote = download_verify(published["object"], environment,
-                                         destination=workspace / "remote")
-                if remote["plaintext_sha256"] != manifest["sha256"]:
-                    raise BackupJobError("remote_digest_mismatch")
-                remote_manifest = validate_backup(remote["local_package"], environment=environment)
-                if remote_manifest["sha256"] != manifest["sha256"]:
-                    raise BackupJobError("download_manifest_mismatch")
-                _isolated_restore(remote["local_package"], workspace / "restored.sqlite", manifest)
-                receipt["status"] = "verified_and_restored"
-                receipt["finished_at"] = datetime.now(timezone.utc).isoformat()
-                _write_receipt(receipt_path, receipt)
-                return "verified_and_restored"
+            # Retain all generations and recovered files on the persistent volume.
+            workspace = _private_root(root / (environment + "-" + stamp))
+            generation = create_backup(source, workspace / "generations",
+                                       environment=environment, revision=revision, timeout=90)
+            manifest = validate_backup(generation, environment=environment)
+            receipt["sqlite_sha256"] = manifest["sha256"]
+            receipt["status"] = "upload_unconfirmed"
+            _write_receipt(receipt_path, receipt)
+            published = upload(generation, environment)
+            receipt["object"] = published["object"]
+            receipt["status"] = "uploaded_unverified"
+            _write_receipt(receipt_path, receipt)
+            remote = download_verify(published["object"], environment,
+                                     destination=workspace / "remote")
+            if remote["plaintext_sha256"] != manifest["sha256"]:
+                raise BackupJobError("remote_digest_mismatch")
+            remote_manifest = validate_backup(remote["local_package"], environment=environment)
+            if remote_manifest["sha256"] != manifest["sha256"]:
+                raise BackupJobError("download_manifest_mismatch")
+            _isolated_restore(remote["local_package"], workspace / "restored.sqlite", manifest)
+            receipt["status"] = "verified_and_restored"
+            receipt["finished_at"] = datetime.now(timezone.utc).isoformat()
+            _write_receipt(receipt_path, receipt)
+            return "verified_and_restored"
         except BaseException:
+            receipt["failed_stage"] = receipt["status"]
             receipt["status"] = "needs_manual_review"
             _write_receipt(receipt_path, receipt)
             raise

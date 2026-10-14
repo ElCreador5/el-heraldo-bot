@@ -80,7 +80,7 @@ class BackupJobTests(unittest.TestCase):
         with patch.object(backup_job, "upload", side_effect=TimeoutError("sensitive-url")) as uploader:
             with self.assertRaises(TimeoutError):
                 self._run()
-            with self.assertRaisesRegex(backup_job.BackupJobError, "already_attempted_today"):
+            with self.assertRaisesRegex(backup_job.BackupJobError, "previous_attempt_needs_review"):
                 self._run()
         self.assertEqual(uploader.call_count, 1)
         receipt = next(self.state.glob("lab-*.json")).read_text()

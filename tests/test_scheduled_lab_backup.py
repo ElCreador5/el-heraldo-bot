@@ -31,6 +31,32 @@ class LabCronTests(unittest.TestCase):
             with self.assertRaisesRegex(BackupJobError, "persistent_volume_not_mounted"):
                 cron.run()
 
+    def test_empty_discord_token_rejected(self):
+        with patch.dict(os.environ, {**self.env, "DISCORD_TOKEN": ""}, clear=True):
+            with self.assertRaisesRegex(BackupJobError, "discord_token_must_not_be_present"):
+                cron.run()
+
+    def test_activation_boundary_defers_first_upload(self):
+        with patch.dict(os.environ, {**self.env, "HERALDO_LAB_NOT_BEFORE_UTC":"2099-01-01T00:00:00+00:00"}, clear=True), patch.object(Path, "is_mount", return_value=True), patch.object(cron,"run_once") as runner:
+            self.assertEqual(cron.run(), 0)
+            runner.assert_not_called()
+
+    def test_naive_activation_boundary_rejected(self):
+        with patch.dict(os.environ, {**self.env, "HERALDO_LAB_NOT_BEFORE_UTC":"2099-01-01"}, clear=True), patch.object(Path, "is_mount", return_value=True):
+            with self.assertRaisesRegex(BackupJobError, "invalid_activation_boundary"):
+                cron.run()
+
+    def test_bot_database_variable_rejected(self):
+        with patch.dict(os.environ, {**self.env, "DB_PATH": "/unused"}, clear=True):
+            with self.assertRaisesRegex(BackupJobError, "bot_database_path_must_not_be_present"):
+                cron.run()
+
+    def test_uncertain_previous_attempt_still_fails(self):
+        with patch.dict(os.environ, self.env, clear=True), patch.object(Path, "is_mount", return_value=True), patch.object(
+                cron, "run_once", side_effect=BackupJobError("previous_attempt_needs_review")):
+            with self.assertRaisesRegex(BackupJobError, "previous_attempt_needs_review"):
+                cron.run()
+
     def test_runs_once_with_synthetic_table(self):
         def inspect(source, state, *, environment, revision):
             self.assertEqual(environment, "lab")
