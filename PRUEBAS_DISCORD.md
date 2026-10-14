@@ -1,3 +1,9 @@
+## H-03: regresión de validación estricta de recibos — 2026-10-14
+
+**VERIFICADO AUTOMÁTICAMENTE, NO EN DISCORD:** `python -m unittest discover -s tests -p test_backup_health.py -v` en Railway Test, `14 tests`, `OK`, despliegue `85eeacfb-63a7-4c56-ad9b-939882446fcd` SUCCESS. Se probó rechazo de recibo sin finalización, con período/entorno/versión ajenos, fechas futuras, orden temporal incorrecto, estado desconocido, nombre de archivo inválido y permisos públicos, además de salud normal, períodos omitidos y antigüedad. Regresiones sin red ni datos de usuarios.
+
+**Cierre técnico:** pre-deploy retirado; Test `worker` Online/SUCCESS y cron Lab `cronReady/SUCCESS`, sin cambios staged. No se realizaron interacciones Discord, pruebas reales de producción, restauraciones productivas ni cambios en `main`. Entrega efectiva de notificaciones de vigilancia: **pendiente**, notificaciones de ChatGPT desactivadas según estado disponible.
+
 ## Automatización H-03 verificada en laboratorio — 2026-10-14
 
 Código de ejecución publicado en Pruebas: cf9f2da77406dd79a6abf254fe445e3092a3bb4f, sobre e59bb4f. Main y producción conservan 6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667. Sin ramas nuevas ni PR; PR #16 no integrado. Checkout anterior divergente preservado.
