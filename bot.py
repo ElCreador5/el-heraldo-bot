@@ -2109,6 +2109,15 @@ async def on_ready() -> None:
     message_automation_engine.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
+    # H-03: diario externo desactivado salvo autorización y preflight productivos.
+    # Nunca crea un segundo bot ni accede al Gateway desde el proceso de backup.
+    try:
+        from production_backup_scheduler import start_if_authorized
+        start_if_authorized(DB_PATH)
+    except Exception as exc:
+        # No imprimir traceback ni texto de proveedores que pueda exponer secretos.
+        print(f"H03_DAILY status=BLOCKED reason={type(exc).__name__}", flush=True)
+
     _startup_done = True
     print(f"El Heraldo conectado como {bot.user}")
 
