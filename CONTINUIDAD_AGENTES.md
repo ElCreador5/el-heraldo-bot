@@ -1,3 +1,11 @@
+## Transferencia H-03 — 2026-10-14, autorización condicionada de producción
+
+**Rama `Pruebas`:** se incorporó `production_backup_scheduler.py` (cron interno opt-in al primer `on_ready`; horario 06:15 UTC, I/O en hilo, revalidación diaria), parche mínimo de `bot.py`, 10 tests y compilación en CI. En Railway Test: pruebas 10/10 del scheduler, 216/216 suite `tests/` y 39/39 regresiones históricas `OK` tras corregir un patrón shell de la prueba (fallo inicial documentado). Worker Test/cron Lab siguen como sistemas separados, sin habilitar respaldos reales. Comandos temporales retirados. Commits hasta `bef4daca1101edbbd7211cde16532b45abb712d7` más documentación.
+
+**Bloqueo verificable de producción:** `main` continúa en SHA `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667`; servicio productivo solo publica nombres de variables DB_PATH, DISCORD_TOKEN y MESSAGE_CONTENT_INTENT. No se han configurado Supabase técnicos, key AES, cuota, ni bandera; la única clave del objeto productivo anterior está custodiada localmente según informe de Codex, sin segunda copia externa verificable. **No se desplegó main** porque el permiso del propietario exige antes pruebas/reversión/custodia. Se necesitan Codex local o intervención autorizada en el equipo propietario para respaldar la clave y verificar recuperación, luego preparar revisión mínima main/candidato y nueva snapshot.
+
+**Próximo paso concreto:** seguir `AUTOMATIZACION_H03.md` sección de activación escalonada. No fusionar todo Pruebas a main ni subir secretos. Comprobar disponibilidad y alertas: monitor ChatGPT ejecutado con notifications_enabled=false y email_enabled=false, no garantiza recepción. No se consultó Obsidian por falta de conexión. Sin pruebas reales Discord en esta fase.
+
 ## Continuidad H-03 — capacidad finita protegida (2026-10-14)
 
 - `Pruebas`: `backup_job.py` commit `24489e02204a7004e59f074f9750e0ab69443680`; `tests/test_backup_job.py` commit `28a4063fa0f00ed0f6e32e0b1902cfa0c1db155f`. Preflight de espacio >= tres instantáneas +64 MiB, cuota opcional `HERALDO_BACKUP_VOLUME_CAP_MB`; sin borrado automático.
