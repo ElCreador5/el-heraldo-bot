@@ -14,6 +14,7 @@ import sqlite3
 import stat
 import sys
 import hashlib
+import shutil
 
 from sqlite_recovery import create_backup, inspect_database, readonly, validate_backup
 from supabase_backup import upload, download_verify
@@ -148,6 +149,46 @@ def receipt_status(path):
         raise BackupJobError("invalid_receipt") from exc
 
 
+def _remaining_backup_space(root):
+    """Conservative free bytes, including optional Railway volume quota.
+
+    Railway can expose a larger filesystem than the attached-volume quota.
+    When HERALDO_BACKUP_VOLUME_CAP_MB is supplied, account for all existing
+    files on that volume. Never remove files to make room.
+    """
+    available = shutil.disk_usage(root).free
+    configured = os.environ.get("HERALDO_BACKUP_VOLUME_CAP_MB")
+    if configured is None:
+        return available
+    if not configured.isdecimal() or not (100 <= int(configured) <= 100_000):
+        raise BackupJobError("invalid_volume_budget")
+    volume = Path(os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", "/data"))
+    if volume.is_symlink() or not volume.is_dir():
+        raise BackupJobError("invalid_volume_mount")
+    volume = volume.resolve()
+    if not root.resolve().is_relative_to(volume):
+        raise BackupJobError("state_outside_volume_budget")
+    occupied = 0
+    for path in volume.rglob("*"):
+        if path.is_symlink():
+            continue
+        if path.is_file():
+            occupied += path.stat().st_size
+    return min(available, max(0, int(configured) * 1_000_000 - occupied))
+
+
+def _require_backup_headroom(source, state_root):
+    """Leave room for snapshot, authenticated download, isolated restore, logs."""
+    with closing(readonly(source)) as db:
+        size = db.execute("PRAGMA page_count").fetchone()[0] * db.execute(
+            "PRAGMA page_size").fetchone()[0]
+    size = max(size, source.stat().st_size)
+    # The live source is never modified and at least 64 MiB remains unused.
+    reserve = 3 * size + 64 * 1024 * 1024
+    if _remaining_backup_space(state_root) < reserve:
+        raise BackupJobError("insufficient_backup_headroom")
+
+
 def run_once(source, state_root, *, environment, revision, now=None):
     """Una única ejecución por día UTC; un error nunca produce reintento ciego."""
     source, state_root = Path(source), Path(state_root)
@@ -155,6 +196,7 @@ def run_once(source, state_root, *, environment, revision, now=None):
     if not revision or len(revision) > 100 or not re.fullmatch(r"[A-Za-z0-9_.-]+", revision):
         raise BackupJobError("invalid_revision")
     root = _private_root(state_root)
+    _require_backup_headroom(source, root)
     today = now or datetime.now(timezone.utc)
     if today.tzinfo is None:
         raise BackupJobError("naive_time")
