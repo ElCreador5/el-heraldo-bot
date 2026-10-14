@@ -76,6 +76,27 @@ class BackupJobTests(unittest.TestCase):
                 self._run()
         self.assertEqual(uploader.call_count, 1)
 
+    def test_restored_database_private_without_changing_process_umask(self):
+        up, down = self._transport()
+        previous = os.umask(0o022)
+        try:
+            with patch.object(backup_job, "upload", side_effect=up), patch.object(
+                    backup_job, "download_verify", side_effect=down):
+                self._run()
+            restored = self.state / 'lab-20261013' / 'restored.sqlite'
+            self.assertEqual(restored.stat().st_mode & 0o777, 0o600)
+            observed = os.umask(0o022)
+            self.assertEqual(observed, 0o022)
+        finally:
+            os.umask(previous)
+
+    def test_restore_refuses_existing_target_without_overwriting(self):
+        target = self.root / 'existing.sqlite'
+        target.write_bytes(b'preserve-existing-content')
+        with self.assertRaisesRegex(backup_job.BackupJobError, 'restore_target_exists'):
+            backup_job._isolated_restore(self.root, target, {})
+        self.assertEqual(target.read_bytes(), b'preserve-existing-content')
+
     def test_ambiguous_failure_marks_review_not_retry(self):
         with patch.object(backup_job, "upload", side_effect=TimeoutError("sensitive-url")) as uploader:
             with self.assertRaises(TimeoutError):

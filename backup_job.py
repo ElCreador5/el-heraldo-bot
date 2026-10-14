@@ -113,6 +113,14 @@ def _isolated_restore(package, target, manifest):
     """Restaurar solamente sobre archivo nuevo; verificar esquema y recuentos."""
     if target.exists() or target.is_symlink():
         raise BackupJobError("restore_target_exists")
+    # Production runs in a thread: never change the bot's process-wide umask.
+    # Reserve the destination atomically and privately before SQLite opens it.
+    try:
+        fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY |
+                     getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError as exc:
+        raise BackupJobError("restore_target_exists") from exc
+    os.close(fd)
     with closing(readonly(Path(package) / "database.sqlite")) as src, closing(sqlite3.connect(target)) as dst:
         src.backup(dst, pages=128, sleep=0.01)
     expected = {key: manifest[key] for key in
