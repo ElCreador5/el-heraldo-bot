@@ -12,11 +12,18 @@ def inspect(root, now=None):
         raise BackupJobError("naive_time")
     now = now.astimezone(timezone.utc)
     days = {}
+    verified_at = []
     for path in Path(root).glob("lab-????????.json"):
         try:
             day = datetime.strptime(path.stem[4:], "%Y%m%d").replace(tzinfo=timezone.utc)
             days[day] = receipt_status(path)
-        except (ValueError, BackupJobError, OSError):
+            if days[day] == "verified_and_restored":
+                finished = json.loads(path.read_text()).get("finished_at")
+                timestamp = datetime.fromisoformat(finished) if finished else day
+                if timestamp.tzinfo is None or timestamp > now:
+                    raise ValueError("invalid_completion_time")
+                verified_at.append(timestamp)
+        except (ValueError, TypeError, BackupJobError, OSError):
             return {"status": "CRITICAL", "reason": "invalid_receipt", "incident_key": "lab:invalid_receipt"}
     if not days:
         return {"status": "CRITICAL", "reason": "no_attempt", "incident_key": "lab:no_attempt"}
@@ -26,7 +33,7 @@ def inspect(root, now=None):
     # Closed UTC days with no receipt are missed; current day has a 36 h grace.
     missing = sum(first + timedelta(days=i) not in days
                   for i in range((now.replace(hour=0, minute=0, second=0, microsecond=0)-first).days))
-    stale = now - latest > timedelta(hours=36)
+    stale = not verified_at or now - max(verified_at) > timedelta(hours=36)
     reason = "attempt_needs_review" if failed else "missing_period" if missing else "stale" if stale else "verified"
     return {"status": "OK" if reason == "verified" else "CRITICAL", "reason": reason,
             "failed_periods": failed, "missing_periods": missing,

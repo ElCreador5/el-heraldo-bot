@@ -11,7 +11,7 @@ No hay cambios funcionales en bot.py, main ni configuración del worker.
 
 La validación inicial usa cron cada cinco minutos y una frontera UTC de activación
 para que el primer respaldo completo lo ejecute el programador, no el despliegue.
-Tras verificar dos disparos se fija la frecuencia diaria a las 06:15 UTC
+Tras verificar un disparo programado completo y una segunda invocación manual se fija la frecuencia diaria a las 06:15 UTC
 (02:15 America/Santo_Domingo). El período de idempotencia siempre es el día UTC.
 
 ## Estados, conservación y fallos
@@ -49,6 +49,15 @@ exigir `VERIFIED_AND_RESTORED` y salida correcta. Si no corre el programador,
 un proceso dentro del mismo cron no puede detectarlo: la vigilancia debe ser
 externa, diaria, independiente del arranque del servicio. No notificar éxitos
 ordinarios. El bot Discord no enviará estas alertas.
+
+Se creó la automatización local de Codex `Vigilar H-03 de laboratorio`, diaria
+a las 08:00 America/Santo_Domingo, en este mismo chat. Consulta solo Test y
+metadatos Lab, conserva estado mínimo por incidencia y no duplica alertas
+productivas. Depende de que el equipo esté encendido y Codex disponible; no
+equivale a un monitor alojado continuamente. La vigilancia previa de ChatGPT
+no es editable desde esta conexión y no fue modificada. Su integración queda
+definida por la separación de ámbitos y el contrato anterior. No se ha probado
+todavía un disparo programado de esta nueva vigilancia ni su entrega de avisos.
 
 ## Producción: procedimiento propuesto, NO activado
 

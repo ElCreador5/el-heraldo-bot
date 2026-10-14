@@ -37,3 +37,27 @@ class HealthTests(unittest.TestCase):
             result = inspect(Path(folder))
             self.assertEqual(result['reason'], 'invalid_receipt')
             self.assertNotIn('private', str(result))
+
+    def test_age_uses_completion_time_not_midnight(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            _write_receipt(root/'lab-20261013.json', {
+                'status':'verified_and_restored',
+                'finished_at':'2026-10-13T06:15:00+00:00'}, initial=True)
+            self.assertEqual(inspect(root, datetime(2026,10,14,13,tzinfo=timezone.utc))['status'], 'OK')
+            self.assertEqual(inspect(root, datetime(2026,10,14,19,tzinfo=timezone.utc))['reason'], 'stale')
+
+    def test_future_completion_is_invalid(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            _write_receipt(root/'lab-20261013.json', {
+                'status':'verified_and_restored',
+                'finished_at':'2026-10-15T06:15:00+00:00'}, initial=True)
+            self.assertEqual(inspect(root, datetime(2026,10,14,tzinfo=timezone.utc))['reason'], 'invalid_receipt')
+
+    def test_invalid_completion_type_is_sanitized(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            _write_receipt(root/'lab-20261013.json', {
+                'status':'verified_and_restored', 'finished_at':123}, initial=True)
+            self.assertEqual(inspect(root)['reason'], 'invalid_receipt')
