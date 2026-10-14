@@ -1,3 +1,9 @@
+## Verificación de entrada cron H-03 — Railway Test, 2026-10-14
+
+**VERIFICADO AUTOMÁTICAMENTE:** `python -m unittest discover -s tests -p test_scheduled_lab_backup.py -v` en pre-deploy temporal del `worker` de Railway Test. Despliegue `7fd7ace1-2fa6-40ff-8548-5517cd199561`, registros: seis pruebas `ok`, `Ran 6 tests in 0.011s`, `OK`. Casos: identidad, token de Discord rechazado, volumen ausente rechazado, SQLite sintética, duplicado no reintentado y error crítico propagado. El archivo `tests/test_scheduled_lab_backup.py` pasó; las ejecuciones remotas de H-03 programadas con acceso Supabase NO se ensayaron en esta fase.
+
+**ESTADO FINAL:** `worker` Test Online/SUCCESS; inicio `python bot.py`, sin pre-deploy, sin recursos/configuraciones en `staged`. Sin pruebas de interacciones reales en Discord y sin escrituras de producción.
+
 ## Entrada cron H-03 para Railway Lab — 2026-10-13
 
 **IMPLEMENTADO, PENDIENTE DE PRUEBA AUTOMÁTICA ACTUAL:** `tools/scheduled_lab_backup.py` y `tests/test_scheduled_lab_backup.py` (identidad de servicio de Test, rechazo de credencial de Discord, comprobación de volumen, SQLite sintética, idempotencia y propagación de errores). Workflow de compilación actualizado. Los seis tests de `test_backup_job.py` fueron previamente verificados en Railway Test; los **seis nuevos** de la entrada cron NO deben confundirse con ellos. El entorno de Discord NO se probó.
