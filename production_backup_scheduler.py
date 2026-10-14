@@ -5,14 +5,14 @@ de Railway, clave/cuenta privada presentes y estado persistente bajo /data.
 Nunca arranca un segundo bot ni restaura sobre la base original.
 """
 import asyncio
-from datetime import datetime, time, timezone
+from datetime import time, timezone
 import os
 from pathlib import Path
 import re
 
 from discord.ext import tasks
 from backup_job import BackupJobError, PRODUCTION_IDS, _guard, run_once
-from supabase_backup import _key, _envir
+from supabase_backup import _key, _config, _environment
 
 UTC_RUN_TIME = time(6, 15, tzinfo=timezone.utc)
 STATE_DIR = Path("/data/.heraldo-h03-daily")
@@ -54,7 +54,8 @@ def preflight(db_path, environ=None):
     # fail-closed preflight before scheduling or writing any receipt.
     if environ is None:
         _key()
-        _envir("heraldo-production")
+        _environment("heraldo-production")
+        _config()
     # A production quota must be supplied; Railway's filesystem free size
     # alone is not necessarily the effective volume quota.
     if env.get("HERALDO_BACKUP_VOLUME_CAP_MB") != "500":
