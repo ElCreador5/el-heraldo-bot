@@ -1,3 +1,7 @@
+## Auditoría externa de integración — 2026-10-14
+
+Claude informó 257 pruebas automáticas satisfactorias en `Pruebas`, 29 históricas de `main`, y 51/52 H-03 aplicables en candidato mínimo; **no repetidas por ChatGPT** y **sin pruebas interactivas Discord**. Ver alcance, discrepancia del commit candidato y pendientes exactos en [`audit/AUDITORIA_INTEGRACION_2026-10-14.md`](audit/AUDITORIA_INTEGRACION_2026-10-14.md). La aceptación real de cambios sensibles sigue pendiente. `main` no modificado.
+
 ## Preparación sin despliegue y recuperación aplazada — 2026-10-14
 
 El propietario aplaza hasta noviembre de 2026 la verificación independiente de Bitwarden. Existe una nota privada importada con la clave original, pero NO se ha probado su recuperación/descifrado desde una sesión o dispositivo independiente ni la recuperación de acceso a la bóveda. No tocar la clave, no repetir la importación y no ejecutar operaciones productivas que dependan de ese requisito. Esto permite seguir preparando y verificando código con datos sintéticos.

@@ -1,3 +1,7 @@
+## Auditoría de integración recibida de Claude — 2026-10-14
+
+Informe guardado en [`audit/AUDITORIA_INTEGRACION_2026-10-14.md`](audit/AUDITORIA_INTEGRACION_2026-10-14.md). Claude verificó 257 pruebas offline según su informe; ChatGPT corroboró ramas, Railway y existencia del commit candidato no referenciado `203ea14a`. `main` sin actualizar; H-03 productivo desactivado. PR obligatorio con `python-checks` y autorización explícita de rama temporal. No equivale a aceptación de los 192 commits.
+
 ## Preparación sin despliegue y recuperación aplazada — 2026-10-14
 
 El propietario aplaza hasta noviembre de 2026 la verificación independiente de Bitwarden. Existe una nota privada importada con la clave original, pero NO se ha probado su recuperación/descifrado desde una sesión o dispositivo independiente ni la recuperación de acceso a la bóveda. No tocar la clave, no repetir la importación y no ejecutar operaciones productivas que dependan de ese requisito. Esto permite seguir preparando y verificando código con datos sintéticos.

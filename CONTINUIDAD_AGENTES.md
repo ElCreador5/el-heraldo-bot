@@ -1,3 +1,7 @@
+## Transferencia auditada — Claude/ChatGPT 2026-10-14
+
+Se conservó auditoría independiente en [`audit/AUDITORIA_INTEGRACION_2026-10-14.md`](audit/AUDITORIA_INTEGRACION_2026-10-14.md). Estado previo de `Pruebas`: `1eebcce77b346c8c40762b2c8bece4dfb220fb3e`; `main`: `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667`; 192 commits de diferencia. Commit `203ea14a` **existe** como objeto sin rama, pero es más amplio que candidato H-03 mínimo validado por Claude y necesita CI propio. **Sin PR nueva, sin merge y sin cambios en producción**. Siguiente decisión: autorización expresa para crear una única rama temporal y PR a `main` con commit de lanzamiento, sin arrastrar `Pruebas`.
+
 ## Preparación sin despliegue y recuperación aplazada — 2026-10-14
 
 El propietario aplaza hasta noviembre de 2026 la verificación independiente de Bitwarden. Existe una nota privada importada con la clave original, pero NO se ha probado su recuperación/descifrado desde una sesión o dispositivo independiente ni la recuperación de acceso a la bóveda. No tocar la clave, no repetir la importación y no ejecutar operaciones productivas que dependan de ese requisito. Esto permite seguir preparando y verificando código con datos sintéticos.
