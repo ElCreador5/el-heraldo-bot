@@ -1,3 +1,11 @@
+## Punto de control H-03 — Railway Test limpio y pruebas del cron, 2026-10-14
+
+**Rama:** `Pruebas`. **Resultado:** el propietario descartó íntegramente el patch de Railway Test que había quedado en borrador (confirmado `staged=null`). ChatGPT ejecutó temporalmente la nueva suite `tests/test_scheduled_lab_backup.py` en el `worker` mediante pre-deploy no destructivo: `Ran 6 tests`, `OK`; despliegue Test `7fd7ace1-2fa6-40ff-8548-5517cd199561` SUCCESS/Online. Configuración restaurada a `startCommand=python bot.py`, `preDeployCommand=[]`; no quedan cambios pendientes de Railway.
+
+**No realizado:** cron activo real, acceso automático a datos de producción, protección de clave duplicada, pruebas Discord, edición de `main` o cambios de despliegue productivo. Módulos existentes: `backup_job.py`, `tools/scheduled_lab_backup.py`, y suites `tests/test_backup_job.py`/`tests/test_scheduled_lab_backup.py`.
+
+**Siguiente paso:** diseñar/programar activación en laboratorio sin incorporar `DISCORD_TOKEN` al servicio cron. Nunca presuponer que Railway deja montar un mismo volumen SQLite simultáneamente en dos servicios. Si se elige integración en el proceso actual del bot, requiere revisión de errores/reinicio/secretos y nueva autorización antes de modificar `main`. Preservar copia/clave existentes. Obsidian no conectado.
+
 ## Transferencia preventiva — preparación cron H-03 (2026-10-13)
 
 **Estado de GitHub:** en `Pruebas` están `tools/scheduled_lab_backup.py` (commit `273b222bdda4a06c3e9a28bfd98dd438545a1a87`), `tests/test_scheduled_lab_backup.py` (`588469486030aaa5af1fbb54ea660840f67393ff`) y workflow de compilación (`7f8af99d06d53ea0ce940184e24dc3f580fb4bac`). No hay cron activo ni pruebas reales del nuevo servicio, solo tests escritos. Los tests originales de `backup_job.py` sí habían pasado antes (6/6).
