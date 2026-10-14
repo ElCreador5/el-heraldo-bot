@@ -1,3 +1,10 @@
+## Punto de control H-03 — validación de recibos y limitaciones de alertas (2026-10-14)
+
+- **Rama:** `Pruebas`. Se corrigió verificador `tools/backup_health.py` y actualizó `tests/test_backup_health.py`; commits `78f31a1dab1c1c9f8da49e746f4b6421de4915b3` y `1d3581bfcea47a81139d6d2c9e8a30b32fec865e`.
+- **Automático verificado:** `python -m unittest discover -s tests -p test_backup_health.py -v` (14/14 OK) en pre-deploy efímero de Railway Test; despliegue `85eeacfb-63a7-4c56-ad9b-939882446fcd` SUCCESS. Eliminado pre-deploy; `worker` Online y cron Lab `cronReady`, staged vacío. `main` y producción intactos. Discord real no ensayado.
+- **Detectado:** ChatGPT monitor diario de producción tiene `notifications_enabled=false` y `email_enabled=false`: configuración programada/ejecutada NO garantiza entrega de avisos. Codex Lab monitor local tampoco prueba entrega. No activar backups reales sin respaldo independiente de clave, capacidad, ejecutor fiable y autorización específica. Respaldo productivo externo existente no duplicado ni modificado.
+- **Próximo paso de implementación:** revisar arquitectura de ejecución en el servicio propietario de `/data` o lanzador externo siempre disponible sin duplicar bot; asegurar gestión de clave y recuperación independiente, controles de cuota y límite, alertas comprobadas; preparar plan de reversión y solicitar permiso focalizado antes de tocar `main` o Railway producción. Revisar PR #16 antes de integrar cambios. GitHub es fuente principal; Obsidian no conectado.
+
 ## Automatización H-03 verificada en laboratorio — 2026-10-14
 
 Código de ejecución publicado en Pruebas: cf9f2da77406dd79a6abf254fe445e3092a3bb4f, sobre e59bb4f. Main y producción conservan 6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667. Sin ramas nuevas ni PR; PR #16 no integrado. Checkout anterior divergente preservado.
