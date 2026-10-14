@@ -1,3 +1,9 @@
+## Fase H-03 — reserva de volumen verificada (2026-10-14)
+
+**IMPLEMENTADO EN `Pruebas`:** `backup_job.py` comprueba antes de crear recibo y subir datos que queda espacio para tres SQLite (copia, descarga y restauración) y mantiene un margen mínimo adicional de 64 MiB. Admite `HERALDO_BACKUP_VOLUME_CAP_MB` para aplicar la cuota real cuando el filesystem indica más espacio que el volumen asignado; recuenta ficheros del volumen sin seguir enlaces simbólicos, no borra generaciones. Código commit `24489e0`, regresiones commit `28a4063`.
+
+**VERIFICADO AUTOMÁTICAMENTE:** `python -m unittest discover -s tests -p test_backup_job.py -v` en Railway Test: **10/10 OK**, despliegue `431d16b9-68a4-4b88-af47-9e0bc1fdd771` SUCCESS. Se retiró pre-deploy temporal, inicio normal `python bot.py`. Variable `HERALDO_BACKUP_VOLUME_CAP_MB=500` añadida **solo al cron Lab** mediante Railway Test; sin cambios de `main`/producción. Una falta de capacidad impide intentar el respaldo; NO autoriza borrar ningún archivo.
+
 ## Refuerzo H-03, seguridad de avisos y comprobaciones — 2026-10-14
 
 **CORREGIDO EN `Pruebas`:** el verificador `tools/backup_health.py` podía dar por válida una generación `verified_and_restored` sin marca real de finalización, usando medianoche como alternativa, y no exigía identidad del recibo. Ahora rechaza recibos sin `version=1`, `environment=lab`, día UTC coherente, hora de inicio y finalización verificables, estados desconocidos, períodos futuros, permisos no privados y archivos `lab-*.json` mal formados. No se lee SQLite real ni se altera el almacenamiento. Commits de código y pruebas: `78f31a1`, `1d3581b`.
