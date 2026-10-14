@@ -1,3 +1,9 @@
+## H-03: capacidad conservadora de recuperación (2026-10-14)
+
+**VERIFICADO AUTOMÁTICAMENTE EN RAILWAY TEST, SIN DISCORD:** `python -m unittest discover -s tests -p test_backup_job.py -v` → `Ran 10 tests`, `OK`, despliegue `431d16b9-68a4-4b88-af47-9e0bc1fdd771` SUCCESS. Incluye pruebas nuevas de disco sin margen, presupuesto de volumen inválido, volumen con generaciones retenidas y ruta de montaje incompatible; en todos los bloqueos se impide subir y no se crea recibo ni se borra dato. Las seis regresiones originales siguen pasando. Railway Test utiliza cuota explícita de 500 MB en el servicio de cron de laboratorio, no en worker.
+
+**PENDIENTE:** observar un disparo periódico futuro con la nueva cuota. Nunca considerar la ausencia de borrado como política completa de retención. No se modificaron la base productiva ni `main`. Pruebas humanas de Discord: no realizadas.
+
 ## H-03: regresión de validación estricta de recibos — 2026-10-14
 
 **VERIFICADO AUTOMÁTICAMENTE, NO EN DISCORD:** `python -m unittest discover -s tests -p test_backup_health.py -v` en Railway Test, `14 tests`, `OK`, despliegue `85eeacfb-63a7-4c56-ad9b-939882446fcd` SUCCESS. Se probó rechazo de recibo sin finalización, con período/entorno/versión ajenos, fechas futuras, orden temporal incorrecto, estado desconocido, nombre de archivo inválido y permisos públicos, además de salud normal, períodos omitidos y antigüedad. Regresiones sin red ni datos de usuarios.
