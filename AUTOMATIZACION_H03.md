@@ -1,3 +1,11 @@
+## Refuerzo de salud y bloqueos operativos (2026-10-14)
+
+La regresión del verificador de laboratorio exigía información demasiado débil: un recibo `verified_and_restored` sin fecha de finalización podía figurar `OK`. Se cerró con 14 pruebas ejecutadas en Railway Test (`Ran 14 tests`, `OK`) y validación de identidad, período, tiempos y permisos. El servicio cron real de Lab ya había demostrado una ejecución programada y una segunda no-op sin repetición. No hay cron real de producción.
+
+**Alertas:** consulta de tareas ChatGPT muestra vigilancia productiva habilitada, pero notificaciones de la app y correo desactivadas; no se debe afirmar entrega fiable. La monitorización local Codex Lab depende de la disponibilidad del PC y aún no acredita entrega. Habilitar y probar un canal real antes de considerar la cadena de alertas completa, manteniendo una sola fuente por incidente.
+
+**Capacidad:** el servicio cron conserva generaciones, descargas y restauraciones en el volumen sin retención destructiva; validar capacidad y establecer límites de uso antes de introducir datos de producción. Los objetos cifrados en Supabase Free no sustituyen una estrategia de disponibilidad/clave. La clave real requiere segunda copia independiente y verificación de recuperación. Ninguna operación de producción ni borrado de copias queda autorizada por esta documentación.
+
 # Operación H-03 de laboratorio y propuesta de producción
 
 ## Alcance autorizado el 2026-10-14
