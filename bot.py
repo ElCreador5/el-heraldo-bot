@@ -7718,8 +7718,8 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Condiciones de reacci
         self.parent_view._rebuild_reaction_select()
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
-class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante reacción"):
-    emoji = discord.ui.TextInput(label="Condenar mediante reacción", required=True, max_length=100, placeholder="☠️")
+class ModerationCondemnEmojiModal(discord.ui.Modal, title="Emoji para condena directa"):
+    emoji = discord.ui.TextInput(label="Emoji de condena", required=True, max_length=100, placeholder="☠️")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView") -> None:
         super().__init__()
@@ -7981,6 +7981,18 @@ class HeraldoUserReportsSetupView(discord.ui.View):
     def _working_reactions(self) -> list[dict[str, object]]:
         return self.pending_reactions if self.pending_reactions is not None else moderation_report_reactions(self.guild_id)
 
+    def _has_pending_changes(self) -> bool:
+        return (
+            (self.pending_channel_id is not None and self.pending_channel_id != self.original_channel_id)
+            or (self.pending_reactions is not None and self.pending_reactions != self.original_reactions)
+            or (self.pending_condemn_emoji is not None and self.pending_condemn_emoji != self.original_condemn_emoji)
+        )
+
+    def _update_change_buttons(self) -> None:
+        pending = self._has_pending_changes()
+        self.save_changes.disabled = not pending
+        self.discard_changes.disabled = not pending
+
     def _rebuild_reaction_select(self) -> None:
         channel_id = self.pending_channel_id if self.pending_channel_id is not None else moderation_report_channel_id(self.guild_id)
         self.channel_select.default_values = [discord.SelectDefaultValue(id=channel_id, type=discord.SelectDefaultValueType.channel)] if channel_id else []
@@ -8101,11 +8113,16 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                 if action != "report" and not moderation_report_punishment_enabled(self.guild_id, action):
                     selected += "\n**Acción desactivada:** no se ejecutará al alcanzar el umbral."
         intro = (
-            "**Pasos:** 1. Seleccionar reacción · 2. Elegir acción · "
-            "3. Configurar condiciones · 4. Guardar cambios.\n"
-            "**Condiciones:** el umbral cuenta personas distintas; la duración es de la "
-            "sanción cuando corresponda; la purga borra mensajes recientes del miembro "
-            "solo después de conservar la evidencia.\n\n"
+            "**Configurar reportes por reacción**\n"
+            "1. Elija una reacción de la lista (o pulse Añadir).\n"
+            "2. Seleccione qué ocurrirá al recibir suficientes reportes.\n"
+            "3. En **Condiciones**, ajuste cantidad de personas, duración y eliminación "
+            "de mensajes cuando corresponda.\n\n"
+            "**Opciones independientes**\n"
+            "• **Emoji de condena directa:** permite a moderadores condenar con una reacción "
+            "especial, sin usar el umbral de reportes.\n"
+            "• **Advertencias y sanciones:** establece el límite de avisos y las acciones "
+            "habilitadas.\n\n"
         )
         summary = moderation_reports_summary(
             guild, channel_id=self.pending_channel_id,
@@ -8115,11 +8132,15 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             summary = summary[:1040] + "…"
         action = moderation_warn_escalation_action(self.guild_id)
         current_action = moderation_action_label(action) if action != "none" else "Solo avisar"
+        self._update_change_buttons()
+        status = ("**Cambios pendientes:** revise y pulse Guardar cambios para aplicarlos."
+                  if self._has_pending_changes() else
+                  "**Estado:** sin cambios pendientes. Guardar y Descartar están desactivados.")
         result = (
             intro + summary +
-            f"\n\n**Advertencias:** máximo {moderation_warning_limit(self.guild_id)}; "
-            f"al alcanzarlo: {current_action}. Ajustar en Sanciones y límite." +
-            selected + _pending_config_text(lines)
+            f"\n\n**Advertencias vigentes:** máximo {moderation_warning_limit(self.guild_id)}; "
+            f"al alcanzarlo: {current_action}." + selected +
+            _pending_config_text(lines) + "\n\n" + status
         )
         return result if len(result) <= 1900 else result[:1870] + "…"
 
@@ -8162,7 +8183,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             return
         await interaction.response.send_modal(ModerationReactionEditModal(self, self.selected_reaction_index))
 
-    @discord.ui.button(label="Configurar condiciones", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Condiciones", style=discord.ButtonStyle.secondary, row=3)
     async def edit_rule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_reaction_index is None:
             await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
@@ -8187,11 +8208,11 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Condenar mediante reacción", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Emoji de condena directa", style=discord.ButtonStyle.secondary, row=3)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
-    @discord.ui.button(label="Sanciones y límite", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Advertencias y sanciones", style=discord.ButtonStyle.secondary, row=4)
     async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         warn_view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
         await interaction.response.send_message(
@@ -8200,7 +8221,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_channel_id is None and self.pending_reactions is None and self.pending_condemn_emoji is None:
+        if not self._has_pending_changes():
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
         if ((self.pending_channel_id is not None
@@ -8283,6 +8304,9 @@ class HeraldoUserReportsSetupView(discord.ui.View):
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not self._has_pending_changes():
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
         self.original_channel_id = moderation_report_channel_id(self.guild_id)
         self.original_reactions = copy.deepcopy(moderation_report_reactions(self.guild_id))
         self.original_condemn_emoji = get_condemnation_emoji(self.guild_id)
