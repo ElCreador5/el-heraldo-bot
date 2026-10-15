@@ -38,6 +38,13 @@ class PublishedPanelSyncTests(unittest.TestCase):
             self.assertIn(key, code)
         self.assertIn("await update_verify_panel(interaction.guild)", code)
 
+    def test_legacy_defaults_gain_warn_without_overwriting_custom_rules(self):
+        source = ast.unparse(function("moderation_report_reactions"))
+        self.assertIn("old_defaults", source)
+        self.assertIn("if result == old_defaults", source)
+        self.assertIn("result.insert(0, warn_default)", source)
+        self.assertNotIn("guild_config_set", source)
+
     def test_report_summary_does_not_mention_obsolete_rule_button(self):
         code = ast.unparse(function("moderation_reports_summary"))
         self.assertNotIn("Pulsa **Regla**", code)
