@@ -1,3 +1,7 @@
+## Uniformidad adicional de editores — 2026-10-15
+
+En Pruebas, Miembro de la Semana → Horario y Moderation → Reportes sustituyen entradas textuales de opciones cerradas por selectores, manteniendo parámetros personalizados y la confirmación antes de guardar. Es una mejora transversal de /setup, distinta de la finalización del editor visual de Mensajes. Pendiente probar ambos editores en Discord y extender el mismo criterio a otros módulos con opciones conocidas, sin sustituir campos de texto libre.
+
 # Plan de integración: /setup → Mensajes (referencia Sapphire)
 
 ## Estado vigente para revisión — 2026-10-10
