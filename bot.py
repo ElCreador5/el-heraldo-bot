@@ -7635,7 +7635,7 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
 class ModerationReactionRuleModal(discord.ui.Modal, title="Condiciones de reacción"):
     duration = discord.ui.TextInput(label="Duración de la sanción (si aplica)", required=False, max_length=30, placeholder="Por ejemplo: 30m, 2h, 1d")
     threshold = discord.ui.TextInput(label="Personas distintas necesarias", required=True, max_length=2, placeholder="Por ejemplo: 2")
-    purge = discord.ui.TextInput(label="Borrar mensajes previos (opcional)", required=False, max_length=30, placeholder="Periodo, por ejemplo: 30m; vacío = no borrar")
+    purge = discord.ui.TextInput(label="Purga del miembro reportado (opcional)", required=False, max_length=30, placeholder="Ej. 30m: últimos 30 minutos; vacío = no borrar")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int) -> None:
         super().__init__()
@@ -8100,7 +8100,28 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     selected += "\nSolo moderadores: crea expediente WARN y conserva el mensaje sin purgar."
                 if action != "report" and not moderation_report_punishment_enabled(self.guild_id, action):
                     selected += "\n**Acción desactivada:** no se ejecutará al alcanzar el umbral."
-        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + f"\n\n**Advertencias:** máximo {moderation_warning_limit(self.guild_id)}; al alcanzarlo: {moderation_action_label(moderation_warn_escalation_action(self.guild_id)) if moderation_warn_escalation_action(self.guild_id) != 'none' else 'Solo avisar'}. Ajustar en Sanciones y límite." + selected + _pending_config_text(lines)
+        intro = (
+            "**Pasos:** 1. Seleccionar reacción · 2. Elegir acción · "
+            "3. Configurar condiciones · 4. Guardar cambios.\n"
+            "**Condiciones:** el umbral cuenta personas distintas; la duración es de la "
+            "sanción cuando corresponda; la purga borra mensajes recientes del miembro "
+            "solo después de conservar la evidencia.\n\n"
+        )
+        summary = moderation_reports_summary(
+            guild, channel_id=self.pending_channel_id,
+            mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji,
+        )
+        if len(summary) > 1050:
+            summary = summary[:1040] + "…"
+        action = moderation_warn_escalation_action(self.guild_id)
+        current_action = moderation_action_label(action) if action != "none" else "Solo avisar"
+        result = (
+            intro + summary +
+            f"\n\n**Advertencias:** máximo {moderation_warning_limit(self.guild_id)}; "
+            f"al alcanzarlo: {current_action}. Ajustar en Sanciones y límite." +
+            selected + _pending_config_text(lines)
+        )
+        return result if len(result) <= 1900 else result[:1870] + "…"
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -16006,6 +16027,9 @@ def configuration_review_value(guild, key, value):
                 return f"{len(parsed)} miembro(s) con asignaciones configuradas"
         except (ValueError, TypeError):
             return "Configuración de roles (formato no válido)"
+    if key == "moderation_warn_limit_action":
+        return {"none": "Solo avisar", "timeout": "Aislar", "kick": "Expulsar",
+                "ban": "Banear", "condemn": "Condenar"}.get(raw, "No disponible")
     if key in {"motw_weekday"} and raw in {"0", "1", "2", "3", "4", "5", "6"}:
         return ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")[int(raw)]
     if key.endswith("_color"):
