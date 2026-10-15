@@ -1,3 +1,7 @@
+## Preparación para ensayo Discord — protección de paneles (2026-10-15)
+
+`Pruebas@fe246717`: al recuperar Orientación, la sincronización del arranque exige tarjeta existente y que el canal registrado coincida con el actual. Evita publicar por primera vez o trasladar/borrar tarjetas de forma automática. Regresión añadida a `tests/test_published_panel_sync.py`. Railway Test reportó SUCCESS en `253642cd` y conexión Discord; registró una referencia obsoleta de verificación en un servidor, sin publicar reemplazo. Los últimos commits siguen pendientes de desplegar y probar. **No se ha realizado prueba interactiva real de estos cambios ni una suite pytest** (el contenedor local no puede resolver github.com). Necesario comprobar SHA final antes de pedir aceptación al propietario. Producción `main` intacta.
+
 ## Nuevo servidor: reconciliación de paneles existentes — 2026-10-15
 
 `Pruebas@f93b68c`: el evento `on_guild_join` invoca `synchronize_published_panels` para referencias existentes, sin crear publicaciones al carecer de referencias. La reconciliación del arranque ya cubre Verificación, Sugerencias y Orientación; la migración virtual de ❗ se limita a reglas antiguas sin personalizaciones. Tests estructurales añadidos; aún no ejecutados en ambiente externo. La sesión local no puede clonar GitHub desde el contenedor por fallo de resolución de DNS, por lo que no atribuir resultados de compilación o pytest. Revisar CI y Railway Test al SHA final. `main` intacta.
