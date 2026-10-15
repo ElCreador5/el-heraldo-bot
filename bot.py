@@ -8145,11 +8145,20 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             f"**Reacciones configuradas:** {len(mappings)}/{MODERATION_REPORT_MAX_REACTIONS}\n"
             f"**Condena directa:** {self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id)}"
         )
+        summary += "\n**Reacciones disponibles:**"
+        for rule in mappings:
+            rule_action = str(rule.get("action", "report"))
+            rule_threshold = int(rule.get("threshold", 1))
+            detail = (" · solo moderadores" if rule_action == "warn" else
+                      f" · {rule_threshold} persona(s)")
+            summary += (
+                f"\n• {rule['emoji']} {discord.utils.escape_markdown(str(rule['label'])[:65])}"
+                f" — {moderation_action_label(rule_action)}{detail}"
+            )
         if missing_warn:
             summary += (
-                "\n**Advertencia ❗ no configurada.** Pulse Añadir: "
-                "el formulario propondrá Incumplimiento de reglas. "
-                "Confirme con Guardar cambios."
+                "\n**Advertencia ❗ no configurada.** Pulse Añadir para prepararla "
+                "y confirme con Guardar cambios."
             )
         action = moderation_warn_escalation_action(self.guild_id)
         current_action = moderation_action_label(action) if action != "none" else "Solo avisar"
