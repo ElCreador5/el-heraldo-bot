@@ -7750,70 +7750,199 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante rea
 
 
 class HeraldoWarningLimitSelectView(discord.ui.View):
-    """Configura un máximo de WARN vigentes mediante selector, sin autosanciones."""
+    """Borrador de política de advertencias y sanciones por reacción."""
+
+    POLICY_ACTIONS = (
+        ("warn", "Advertir", "Crear expediente WARN sin borrar mensajes"),
+        ("timeout", "Aislar", "Timeout por reportes o límite de WARN"),
+        ("kick", "Expulsar", "Expulsión sin borrar mensajes"),
+        ("ban", "Banear", "Baneo sin borrar mensajes"),
+        ("condemn", "Condenar", "Motor de condenas y conservación de evidencias"),
+    )
 
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=300)
         self.guild_id = guild_id
         self.owner_id = owner_id
-        self.original = moderation_warning_limit(guild_id)
-        self.selected = self.original
-        select = discord.ui.Select(
-            placeholder="Máximo de advertencias vigentes por miembro",
+        self.original_raw = {
+            "moderation_warn_limit": guild_config_get(guild_id, "moderation_warn_limit"),
+            "moderation_warn_limit_action": guild_config_get(guild_id, "moderation_warn_limit_action"),
+            "moderation_warn_limit_mute_minutes": guild_config_get(guild_id, "moderation_warn_limit_mute_minutes"),
+        }
+        for key, _, _ in self.POLICY_ACTIONS:
+            name = f"moderation_reaction_{key}_enabled"
+            self.original_raw[name] = guild_config_get(guild_id, name)
+        self.max_warns = moderation_warning_limit(guild_id)
+        self.escalation = moderation_warn_escalation_action(guild_id)
+        self.mute_minutes = moderation_warn_escalation_duration(guild_id)
+        self.enabled_actions = {
+            action for action, _, _ in self.POLICY_ACTIONS
+            if moderation_report_punishment_enabled(guild_id, action)
+        }
+        self.max_select = discord.ui.Select(
+            placeholder="1. Máximo de advertencias vigentes",
             options=[
                 discord.SelectOption(
-                    label=f"{n} advertencia{'s' if n > 1 else ''}",
-                    value=str(n), default=n == self.original,
-                ) for n in range(1, MODERATION_WARN_MAX_ALLOWED + 1)
-            ],
-            row=0,
+                    label=f"{value} advertencia{'s' if value > 1 else ''}", value=str(value),
+                    default=value == self.max_warns,
+                ) for value in range(1, MODERATION_WARN_MAX_ALLOWED + 1)
+            ], row=0,
         )
-        select.callback = self.select_max
-        self.limit_select = select
-        self.add_item(select)
+        self.max_select.callback = self.select_max
+        self.add_item(self.max_select)
+        self.escalation_select = discord.ui.Select(
+            placeholder="2. Acción cuando se alcanza el máximo",
+            options=[
+                discord.SelectOption(label=label, value=action, description=hint,
+                                     default=action == self.escalation)
+                for action, label, hint in (
+                    ("none", "Solo avisar a moderación", "Predeterminado; no aplica sanciones"),
+                    ("timeout", "Aislar temporalmente", "Requiere duración de aislamiento"),
+                    ("kick", "Expulsar", "No elimina mensajes"),
+                    ("ban", "Banear", "No elimina mensajes"),
+                    ("condemn", "Condenar", "Utiliza el motor de condenas"),
+                )
+            ], row=1,
+        )
+        self.escalation_select.callback = self.select_escalation
+        self.add_item(self.escalation_select)
+        self.duration_select = discord.ui.Select(
+            placeholder="3. Duración si la acción es Aislar",
+            options=[
+                discord.SelectOption(label=format_duration(minutes), value=str(minutes),
+                                     default=minutes == self.mute_minutes)
+                for minutes in MODERATION_WARN_ESCALATION_DURATION_CHOICES
+            ],
+            disabled=self.escalation != "timeout", row=2,
+        )
+        self.duration_select.callback = self.select_duration
+        self.add_item(self.duration_select)
+        self.punishment_select = discord.ui.Select(
+            placeholder="4. Acciones permitidas por reportes (selección múltiple)",
+            options=[
+                discord.SelectOption(label=label, value=action, description=hint,
+                                     default=action in self.enabled_actions)
+                for action, label, hint in self.POLICY_ACTIONS
+            ],
+            min_values=0, max_values=len(self.POLICY_ACTIONS), row=3,
+        )
+        self.punishment_select.callback = self.select_punishments
+        self.add_item(self.punishment_select)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
     def _content(self) -> str:
+        names = {"none": "Solo avisar", "timeout": "Aislar", "kick": "Expulsar",
+                 "ban": "Banear", "condemn": "Condenar"}
+        toggles = ", ".join(label for action, label, _ in self.POLICY_ACTIONS
+                            if action in self.enabled_actions) or "Ninguna"
         return (
-            "**El Heraldo · Moderation · Límite de advertencias**\n\n"
-            f"Máximo actual: **{self.original}** de {MODERATION_WARN_MAX_ALLOWED} posibles.\n"
-            f"Máximo propuesto: **{self.selected}**.\n\n"
-            "Se cuentan los expedientes WARN vigentes; los cerrados permanecen en el historial. "
-            "Al alcanzar el límite no se aplican automáticamente expulsiones ni condenas. "
-            "Las advertencias existentes no se eliminan al reducirlo."
+            "**El Heraldo · Moderation · Política de reportes y advertencias**\n\n"
+            f"**Máximo de advertencias:** {self.max_warns}/{self.max_warns} (1 a 5).\n"
+            f"**Al alcanzar el máximo:** {names[self.escalation]}"
+            + (f" durante {format_duration(self.mute_minutes)}" if self.escalation == "timeout" else "")
+            + f".\n**Acciones habilitadas para reportes:** {toggles}.\n\n"
+            "El número de reportes por reacción se configura por separado mediante "
+            "**Configurar condiciones**. Las sanciones desactivadas no se ejecutan, "
+            "aunque una regla existente las tenga seleccionadas.\n"
+            "Solo reportar conserva siempre el mensaje. Advertir crea un expediente WARN "
+            "sin purga. Condenar utiliza el motor de condenas.\n"
+            "Cuando un miembro alcance el máximo de advertencias, se ejecutará la acción "
+            "seleccionada **solo si está habilitada**. "
+            "La opción predeterminada es Solo avisar. No se repite una sanción incierta.\n\n"
+            "Ninguna selección se guarda hasta confirmar la propuesta."
         )
 
     async def select_max(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values", []) if interaction.data else []
         if len(values) != 1 or values[0] not in {"1", "2", "3", "4", "5"}:
-            await interaction.response.send_message("Seleccione un máximo entre 1 y 5.", ephemeral=True)
+            await interaction.response.send_message("El máximo debe estar entre 1 y 5.", ephemeral=True)
             return
-        self.selected = int(values[0])
-        for option in self.limit_select.options:
+        self.max_warns = int(values[0])
+        for option in self.max_select.options:
             option.default = option.value == values[0]
         await interaction.response.edit_message(content=self._content(), view=self)
 
-    @discord.ui.button(label="Revisar cambios", style=discord.ButtonStyle.success, row=1)
+    async def select_escalation(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in MODERATION_WARN_ESCALATION_ACTIONS:
+            await interaction.response.send_message("Seleccione una acción válida.", ephemeral=True)
+            return
+        self.escalation = values[0]
+        self.duration_select.disabled = self.escalation != "timeout"
+        for option in self.escalation_select.options:
+            option.default = option.value == self.escalation
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    async def select_duration(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if (len(values) != 1 or not values[0].isdigit()
+                or int(values[0]) not in MODERATION_WARN_ESCALATION_DURATION_CHOICES):
+            await interaction.response.send_message("Duración no admitida.", ephemeral=True)
+            return
+        self.mute_minutes = int(values[0])
+        for option in self.duration_select.options:
+            option.default = option.value == values[0]
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    async def select_punishments(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        valid = {item[0] for item in self.POLICY_ACTIONS}
+        if len(values) != len(set(values)) or not set(values).issubset(valid):
+            await interaction.response.send_message("La selección de acciones no es válida.", ephemeral=True)
+            return
+        self.enabled_actions = set(values)
+        for option in self.punishment_select.options:
+            option.default = option.value in self.enabled_actions
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.success, row=4)
     async def review(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if moderation_warning_limit(self.guild_id) != self.original:
+        if any(guild_config_get(self.guild_id, key) != raw
+               for key, raw in self.original_raw.items()):
             await interaction.response.send_message(
-                "El límite cambió mientras editaba. Abra el panel nuevamente.", ephemeral=True,
+                "La política cambió mientras editaba. Abra un panel nuevo.", ephemeral=True
             )
             return
-        if self.selected == self.original:
+        action = self.escalation
+        if action != "none" and action in self.enabled_actions:
+            required = {"timeout": "moderate_members", "kick": "kick_members",
+                        "ban": "ban_members", "condemn": "manage_roles"}[action]
+            bot_member = interaction.guild.me
+            if bot_member is None or not getattr(bot_member.guild_permissions, required, False):
+                await interaction.response.send_message(
+                    "El Heraldo no tiene el permiso requerido para la acción de límite seleccionada.",
+                    ephemeral=True,
+                )
+                return
+        changes = {
+            "moderation_warn_limit": str(self.max_warns),
+            "moderation_warn_limit_action": self.escalation,
+            "moderation_warn_limit_mute_minutes": str(self.mute_minutes),
+        }
+        for name, _, _ in self.POLICY_ACTIONS:
+            changes[f"moderation_reaction_{name}_enabled"] = (
+                "1" if name in self.enabled_actions else "0"
+            )
+        # Omitir valores semánticamente iguales, incluidos los valores predeterminados.
+        changes = {
+            key: value for key, value in changes.items()
+            if (self.original_raw[key] if self.original_raw[key] is not None else
+                "3" if key == "moderation_warn_limit" else
+                "none" if key == "moderation_warn_limit_action" else
+                "60" if key == "moderation_warn_limit_mute_minutes" else "1") != value
+        }
+        if not changes:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        await confirm_configuration(interaction, self.guild_id, {
-            "moderation_warn_limit": str(self.selected),
-        })
+        await confirm_configuration(interaction, self.guild_id, changes)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=4)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(
-            content="Edición del límite cancelada. No se guardaron cambios.", view=None,
+            content="Edición cancelada. No se guardaron cambios.", view=None,
         )
 
 
@@ -7969,7 +8098,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     selected += "\nSolo reportar no aplica sanciones ni elimina mensajes."
                 if action == "warn":
                     selected += "\nSolo moderadores: crea expediente WARN y conserva el mensaje sin purgar."
-        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + f"\n\n**Máximo de advertencias vigentes:** {moderation_warning_limit(self.guild_id)} (configurable de 1 a 5)" + selected + _pending_config_text(lines)
+        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + f"\n\n**Advertencias:** máximo {moderation_warning_limit(self.guild_id)}; al alcanzarlo: {moderation_action_label(moderation_warn_escalation_action(self.guild_id)) if moderation_warn_escalation_action(self.guild_id) != 'none' else 'Solo avisar'}. Ajustar en Sanciones y límite." + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -8039,7 +8168,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
-    @discord.ui.button(label="Máx. advertencias", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Sanciones y límite", style=discord.ButtonStyle.secondary, row=4)
     async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         warn_view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
         await interaction.response.send_message(
@@ -15888,6 +16017,13 @@ def configuration_review_label(key):
         "join_specific_roles": "Roles de miembros específicos",
         "condemnation_default_duration": "Duración predeterminada de condena",
         "moderation_warn_limit": "Máximo de advertencias vigentes",
+        "moderation_warn_limit_action": "Acción al llegar al máximo de advertencias",
+        "moderation_warn_limit_mute_minutes": "Duración del aislamiento por advertencias",
+        "moderation_reaction_warn_enabled": "Advertir mediante reportes",
+        "moderation_reaction_timeout_enabled": "Aislar mediante reportes",
+        "moderation_reaction_kick_enabled": "Expulsar mediante reportes",
+        "moderation_reaction_ban_enabled": "Banear mediante reportes",
+        "moderation_reaction_condemn_enabled": "Condenar mediante reportes",
         "verify_enabled": "Verificación",
         "verify_role_id": "Rol de verificación",
         "verify_action": "Acción de verificación",
