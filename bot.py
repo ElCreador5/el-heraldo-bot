@@ -8161,6 +8161,12 @@ def reminder_next_due(settings, now):
                 tzinfo=timezone(timedelta(hours=-4)), hour=hour)
         except ValueError:
             pass
+    # Evitar millones de iteraciones si un intervalo corto parte de una fecha antigua.
+    # Se salta directamente al próximo vencimiento, sin recuperar avisos omitidos.
+    if frequency == "custom" and candidate <= local:
+        elapsed = (local - candidate).total_seconds()
+        steps = int(elapsed // seconds) + 1
+        candidate += timedelta(seconds=steps * seconds)
     while candidate <= local:
         if frequency == "monthly":
             import calendar
