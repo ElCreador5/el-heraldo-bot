@@ -17535,9 +17535,11 @@ async def moderation_warnings(interaction: discord.Interaction, usuario: discord
     rows = moderation_case_list(
         interaction.guild.id, user_id=usuario.id, case_type="WARN", limit=8,
     )
+    now = datetime.now(timezone.utc)
     lines = [
         f"**{moderation_case_code(int(row['case_number']), interaction.guild.id)}** · "
-        f"{'Vigente' if row['open'] else 'Cerrada'} · {str(row['reason'])[:130]}"
+        f"{'Vigente' if row['open'] and (not row['expires_at'] or datetime.fromisoformat(row['expires_at']) > now) else 'Cerrada o expirada'}"
+        f" · {str(row['reason'])[:130]}"
         for row in rows
     ]
     heading = (f"**El Heraldo · Advertencias de {discord.utils.escape_markdown(usuario.display_name)}**"
