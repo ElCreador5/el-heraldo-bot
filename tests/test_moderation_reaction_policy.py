@@ -156,6 +156,61 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("moderation_can_condemn(actor, target)", listener)
         self.assertIn("moderation_can_condemn(actor, target)", modal)
 
+    def test_report_condemn_dispatches_to_existing_condemnation_motor(self):
+        calls = []
+        async def condemn(member, **kwargs):
+            calls.append(kwargs)
+            return True, "condena aplicada"
+        def unexpected_case(*args, **kwargs):
+            self.fail("La condena debe crear su propio expediente en su motor")
+        fn = isolated_function("execute_moderation_report_action", {
+            "condemnation_protection_reason": lambda member: None,
+            "moderation_report_punishment_enabled": lambda guild_id, action: True,
+            "condemn_member": condemn,
+            "moderation_report_case_record": unexpected_case,
+            "discord": SimpleNamespace(HTTPException=Exception),
+        })
+        permissions = SimpleNamespace(manage_roles=True)
+        guild = SimpleNamespace(id=10, me=SimpleNamespace(
+            guild_permissions=permissions, top_role=100,
+        ))
+        member = SimpleNamespace(id=5, top_role=3)
+        message = SimpleNamespace(
+            id=77, jump_url="https://discord.com/channels/10/20/77",
+            channel=SimpleNamespace(id=20),
+        )
+        rule = {"emoji": "flag", "action": "condemn",
+                "label": "Infracción", "duration_minutes": 60,
+                "purge_minutes": None}
+        success, note = asyncio.run(fn(guild, member, message, rule, 3))
+        self.assertTrue(success)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["origin"], "reaction_report")
+        self.assertEqual(calls[0]["source_message_url"], message.jump_url)
+        self.assertEqual(calls[0]["duration_minutes"], 60)
+        self.assertIn("condena aplicada", note)
+
+    def test_report_condemn_failure_does_not_announce_success(self):
+        async def condemn(member, **kwargs):
+            return False, "Rol de condena inaccesible"
+        fn = isolated_function("execute_moderation_report_action", {
+            "condemnation_protection_reason": lambda member: None,
+            "moderation_report_punishment_enabled": lambda guild_id, action: True,
+            "condemn_member": condemn,
+            "discord": SimpleNamespace(HTTPException=Exception),
+        })
+        guild = SimpleNamespace(id=10, me=SimpleNamespace(
+            guild_permissions=SimpleNamespace(manage_roles=True), top_role=30
+        ))
+        target = SimpleNamespace(top_role=1)
+        message = SimpleNamespace(jump_url="https://discord.com/channels/10/20/30",
+                                  channel=SimpleNamespace(id=20))
+        success, note = asyncio.run(fn(
+            guild, target, message, {"emoji": "flag", "action": "condemn"}, 2
+        ))
+        self.assertFalse(success)
+        self.assertIn("inaccesible", note)
+
     def test_interface_actions_close_to_reaction_and_rows_are_valid(self):
         view = next(n for n in TREE.body
                     if isinstance(n, ast.ClassDef) and n.name == "HeraldoUserReportsSetupView")
