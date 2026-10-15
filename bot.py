@@ -2107,6 +2107,8 @@ async def on_ready() -> None:
         print(f"No se pudo limpiar comandos globales: {e}")
     if not report_reminders_loop.is_running():
         report_reminders_loop.start()
+    if not scheduled_embeds_loop.is_running():
+        scheduled_embeds_loop.start()
     if not moderation_case_expiry_loop.is_running():
         moderation_case_expiry_loop.start()
     if not condemnation_expiry_loop.is_running():
@@ -20349,6 +20351,242 @@ class EmbedChannelPicker(discord.ui.View):
 
 
 
+# ---------------------------------------------------------------------------
+# 13A. PROGRAMACIÓN DE EMBEDS (opt-in, por configuración independiente)
+# ---------------------------------------------------------------------------
+import embed_schedules as embed_schedule_engine
+
+
+def scheduled_embed_test_mode():
+    return os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+
+
+def scheduled_embed_db():
+    conn = db_connect()
+    embed_schedule_engine.initialize(conn)
+    return conn
+
+
+async def scheduled_embed_deliver(guild, name, channel_id):
+    channel = guild.get_channel(channel_id)
+    if not isinstance(channel, discord.TextChannel):
+        return
+    me = guild.me
+    if me is None:
+        return
+    permissions = channel.permissions_for(me)
+    if not (permissions.view_channel and permissions.send_messages and permissions.embed_links):
+        return
+    # No autogenerar menciones ni enviar si la plantilla ya no existe.
+    record = embed_get(guild.id, name)
+    if record is None:
+        return
+    data, _ = record
+    rendered, _content, _unresolved = build_custom_embed(data, VarContext(guild, None, channel))
+    if embed_is_empty(rendered) or len(rendered) > 6000:
+        return
+    await channel.send(embed=rendered, allowed_mentions=discord.AllowedMentions.none())
+
+
+@tasks.loop(seconds=10)
+async def scheduled_embeds_loop():
+    now = datetime.now(timezone.utc)
+    conn = scheduled_embed_db()
+    try:
+        jobs = embed_schedule_engine.claim_due(conn, now)
+    finally:
+        conn.close()
+    for _id, guild_id, name, channel_id in jobs:
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            continue
+        try:
+            await scheduled_embed_deliver(guild, name, channel_id)
+        except discord.HTTPException:
+            print(f"Advertencia: publicación programada { _id } sin entrega confirmada")
+
+
+@scheduled_embeds_loop.before_loop
+async def scheduled_embeds_before_loop():
+    await bot.wait_until_ready()
+
+
+@bot.listen("on_message")
+async def scheduled_embeds_message_counter(message):
+    if message.guild is None or message.author.bot or message.webhook_id is not None:
+        return
+    conn = scheduled_embed_db()
+    try:
+        jobs = embed_schedule_engine.advance_message(conn, message.guild.id, message.channel.id)
+    finally:
+        conn.close()
+    for _id, name in jobs:
+        try:
+            await scheduled_embed_deliver(message.guild, name, message.channel.id)
+        except discord.HTTPException:
+            print(f"Advertencia: contador de mensajes {_id} sin entrega confirmada")
+
+
+class EmbedScheduleOptionsModal(discord.ui.Modal, title="Programar un embed"):
+    option = discord.ui.TextInput(label="Parámetro según frecuencia", placeholder="18:00 | 1,3,5 | 1,15 | 6h | 100", max_length=100)
+    when = discord.ui.TextInput(label="Fecha única AAAA-MM-DD HH:MM (si aplica)", required=False, max_length=20)
+
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        mode = parent.mode
+        self.option.label = {
+            "once": "Hora HH:MM (fecha abajo)", "interval": "Intervalo: 2m, 6h o 14d",
+            "daily": "Hora HH:MM", "weekly": "Días 1-7 (L-D), separados por coma",
+            "monthly": "Días 1-31, separados por coma", "messages": "Cantidad de mensajes (mínimo 10)"
+        }[mode]
+        self.option.placeholder = {
+            "once": "18:00", "interval": "6h", "daily": "18:00", "weekly": "1,3,5",
+            "monthly": "1,15", "messages": "100"
+        }[mode]
+        self.when.label = "Fecha AAAA-MM-DD o hora HH:MM"
+        self.when.placeholder = "Para fecha única: 2026-11-01; días: 18:00"
+        self.when.required = mode in {"once", "weekly", "monthly"}
+
+    async def on_submit(self, interaction):
+        if not await self.parent.interaction_check(interaction):
+            return
+        mode = self.parent.mode
+        value = str(self.option).strip()
+        extra = str(self.when).strip()
+        try:
+            if mode == "once":
+                date_value = datetime.strptime(extra + " " + value, "%Y-%m-%d %H:%M")
+                if date_value.replace(tzinfo=embed_schedule_engine.RD) <= datetime.now(timezone.utc):
+                    raise ValueError("La fecha debe estar en el futuro.")
+                cfg = {"when": date_value.replace(tzinfo=embed_schedule_engine.RD).isoformat()}
+            elif mode == "interval":
+                cfg = {"interval": value, "anchor": datetime.now(timezone.utc).isoformat()}
+            elif mode == "daily":
+                cfg = {"time": value}
+            elif mode in {"weekly", "monthly"}:
+                days = sorted(set(int(x.strip()) for x in value.split(",")))
+                cfg = {"days": [x-1 for x in days] if mode == "weekly" else days, "time": extra}
+            else:
+                cfg = {"count": int(value)}
+            embed_schedule_engine.validate(mode, cfg, scheduled_embed_test_mode())
+            if mode != "messages":
+                embed_schedule_engine.next_due(mode, cfg, datetime.now(timezone.utc), scheduled_embed_test_mode())
+        except (ValueError, KeyError, TypeError) as exc:
+            await interaction.response.send_message(f"Configuración inválida: {exc}. Revise la ayuda del formulario.", ephemeral=True)
+            return
+        self.parent.config = cfg
+        await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
+
+
+class EmbedScheduleView(discord.ui.View):
+    MODES = [("once", "Fecha específica"), ("interval", "Intervalo"), ("daily", "Diario"),
+             ("weekly", "Semanal"), ("monthly", "Mensual"), ("messages", "Por mensajes")]
+
+    def __init__(self, owner_id, guild_id, name):
+        super().__init__(timeout=900)
+        self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
+        self.mode = "weekly"
+        self.config = None
+        self.channel_id = None
+        self.active = False
+        self.channel_menu = discord.ui.ChannelSelect(placeholder="1. Seleccione canal de destino",
+                                                     channel_types=[discord.ChannelType.text], row=0)
+        self.channel_menu.callback = self.select_channel
+        self.add_item(self.channel_menu)
+        self.mode_menu = discord.ui.Select(placeholder="2. Tipo de programación",
+            options=[discord.SelectOption(label=label, value=key, default=key == self.mode) for key,label in self.MODES],
+            row=1)
+        self.mode_menu.callback = self.select_mode
+        self.add_item(self.mode_menu)
+
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.owner_id or interaction.guild is None or interaction.guild.id != self.guild_id:
+            await interaction.response.send_message("Solo quien abrió este editor puede modificarlo.", ephemeral=True)
+            return False
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Se requiere Administrar servidor.", ephemeral=True)
+            return False
+        return True
+
+    def summary(self):
+        mode_label = dict(self.MODES)[self.mode]
+        return (f"**Programar embed:** `{self.name}`\n"
+                f"**Canal:** <#{self.channel_id}>\n**Frecuencia:** {mode_label}\n"
+                f"**Parámetros:** `{json.dumps(self.config, ensure_ascii=False) if self.config else 'Sin definir'}`\n"
+                f"**Estado solicitado:** {'Activado' if self.active else 'Desactivado'}\n\n"
+                "Estos valores son un borrador. Solo **Guardar programación** crea la programación. "
+                "El valor inicial será desactivado salvo que elija Activar.")
+
+    async def select_channel(self, interaction):
+        values = self.channel_menu.values
+        if not values:
+            await interaction.response.send_message("Seleccione un canal.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(values[0].id)
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Se requiere un canal de texto.", ephemeral=True)
+            return
+        permissions = channel.permissions_for(interaction.guild.me)
+        if not (permissions.view_channel and permissions.send_messages and permissions.embed_links):
+            await interaction.response.send_message("Faltan permisos para publicar embeds en ese canal.", ephemeral=True)
+            return
+        self.channel_id = channel.id
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    async def select_mode(self, interaction):
+        value = self.mode_menu.values[0]
+        self.mode = value
+        self.config = None
+        for opt in self.mode_menu.options:
+            opt.default = opt.value == value
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="3. Configurar frecuencia", style=discord.ButtonStyle.primary, row=2)
+    async def configure(self, interaction, button):
+        await interaction.response.send_modal(EmbedScheduleOptionsModal(self))
+
+    @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.secondary, row=2)
+    async def toggle(self, interaction, button):
+        self.active = not self.active
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Guardar programación", style=discord.ButtonStyle.success, row=3)
+    async def save(self, interaction, button):
+        if self.channel_id is None or self.config is None:
+            await interaction.response.send_message("Seleccione canal y configure la frecuencia.", ephemeral=True)
+            return
+        if embed_get(self.guild_id, self.name) is None:
+            await interaction.response.send_message("El embed ya no existe.", ephemeral=True)
+            return
+        now = datetime.now(timezone.utc)
+        try:
+            due = embed_schedule_engine.next_due(self.mode, self.config, now, scheduled_embed_test_mode())
+            if self.mode == "once" and due is None:
+                raise ValueError("Fecha vencida.")
+        except (ValueError, KeyError, TypeError) as exc:
+            await interaction.response.send_message(f"No se pudo guardar: {exc}", ephemeral=True)
+            return
+        conn = scheduled_embed_db()
+        try:
+            cursor = conn.execute(
+                "INSERT INTO scheduled_embeds (guild_id,embed_name,channel_id,mode,config,enabled,next_due,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (self.guild_id, self.name, self.channel_id, self.mode, json.dumps(self.config),
+                 int(self.active), due.isoformat() if due else None, now.isoformat(),now.isoformat()))
+            conn.commit()
+            ident = cursor.lastrowid
+        finally:
+            conn.close()
+        self.stop()
+        await interaction.response.edit_message(content=f"Programación #{ident} guardada ({'activa' if self.active else 'desactivada'}).",view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=3)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Cancelado: no se creó ninguna programación.",view=None)
+
+
+
 class EmbedEditorView(discord.ui.View):
     def __init__(self, owner_id: int, guild_id: int, name: str, data: dict) -> None:
         super().__init__(timeout=900)
@@ -20448,6 +20686,15 @@ class EmbedEditorView(discord.ui.View):
         self.pending_timestamp = None
         self.pending_remove_index = None
         await embed_refresh(interaction, self.name)
+
+    @discord.ui.button(label="Programar", style=discord.ButtonStyle.primary, row=3)
+    async def schedule_embed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_timestamp is not None or self.pending_remove_index is not None:
+            await interaction.response.send_message("Guarde o descarte sus cambios antes de programar.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            content="**Nueva programación (sin guardar)**\\nSeleccione canal, frecuencia y opciones.",
+            view=EmbedScheduleView(interaction.user.id, self.guild_id, self.name), ephemeral=True)
 
     @discord.ui.button(label="Enviar", style=discord.ButtonStyle.success, row=3)
     async def send_embed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
