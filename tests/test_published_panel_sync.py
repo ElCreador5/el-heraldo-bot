@@ -29,6 +29,8 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertIn("suggestion_get_panel_message_id(guild.id)", code)
         self.assertIn("await suggestion_ensure_panel(guild)", code)
         self.assertIn("await ensure_orientation_system(guild)", code)
+        self.assertIn("get_orientation_message_id(guild.id)", code)
+        self.assertIn("get_orientation_message_channel_id(guild.id)", code)
         self.assertNotIn("condemnation", code)
         self.assertNotIn("message.delete", code)
 
