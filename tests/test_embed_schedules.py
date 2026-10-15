@@ -44,6 +44,18 @@ class ScheduledEmbedTests(unittest.TestCase):
         self.assertEqual(schedules.advance_message(conn, 1, 2), [(1, "sample")])
         self.assertEqual(schedules.advance_message(conn, 1, 2), [])
 
+    def test_editor_and_deletion_are_confirmed_and_version_checked(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+        editor = source[source.index("class EmbedScheduleEditView"):source.index("@embed_group.command(name=\"programaciones\"")]
+        self.assertIn("if not self.reviewed:", editor)
+        self.assertIn("UPDATE scheduled_embeds SET", editor)
+        self.assertIn("DELETE FROM scheduled_embeds WHERE", editor)
+        self.assertIn("AND updated_at=?", editor)
+        self.assertIn("Confirmar eliminación", editor)
+        self.assertIn("Cancelar edición", editor)
+        self.assertIn("Cancelar", editor)
+
     def test_claim_once_no_duplicate(self):
         import json
         conn = sqlite3.connect(":memory:")
