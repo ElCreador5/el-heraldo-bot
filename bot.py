@@ -9947,6 +9947,97 @@ class HeraldoPendingSetupModuleView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
+DATE_FORMAT_CHOICES = {
+    "discord": "Fecha y hora local de cada usuario (Discord)",
+    "dmy24": "Día/mes/año, reloj de 24 horas",
+    "mdy12": "Mes/día/año, reloj de 12 horas",
+    "iso": "Año-mes-día, reloj de 24 horas",
+}
+
+
+def date_format_setup_summary(guild_id: int) -> str:
+    choice = guild_config_get(guild_id, "display_date_format") or "discord"
+    if choice not in DATE_FORMAT_CHOICES:
+        choice = "discord"
+    examples = {
+        "discord": "<t:1792080000:F> (adaptado a cada miembro)",
+        "dmy24": "15/10/2026 16:00",
+        "mdy12": "10/15/2026 4:00 PM",
+        "iso": "2026-10-15 16:00",
+    }
+    return (
+        "**El Heraldo · Formato de fecha**\n\n"
+        f"**Actual:** {DATE_FORMAT_CHOICES[choice]}\n"
+        f"**Ejemplo:** {examples[choice]}\n\n"
+        "Los formatos personalizados se usan en mensajes nuevos y paneles dinámicos "
+        "compatibles. Los expedientes históricos no se alteran. "
+        "Discord utiliza la hora local de cada usuario cuando se selecciona su formato nativo."
+    )
+
+
+def format_configured_datetime(guild_id: int, dt: datetime) -> str:
+    """Representar una fecha sin alterar el instante original."""
+    mode = guild_config_get(guild_id, "display_date_format") or "discord"
+    moment = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    if mode == "discord" or mode not in DATE_FORMAT_CHOICES:
+        return discord.utils.format_dt(moment, "f")
+    from zoneinfo import ZoneInfo
+    local = moment.astimezone(ZoneInfo("America/Santo_Domingo"))
+    if mode == "dmy24":
+        return local.strftime("%d/%m/%Y %H:%M")
+    if mode == "mdy12":
+        return local.strftime("%m/%d/%Y %I:%M %p").replace(" 0", " ")
+    return local.strftime("%Y-%m-%d %H:%M")
+
+
+class HeraldoDateFormatSetupView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.original = guild_config_get(guild_id, "display_date_format") or "discord"
+        self.pending = self.original
+        selection = discord.ui.Select(
+            placeholder="Seleccionar formato de fecha",
+            options=[discord.SelectOption(label=label, value=value,
+                                          default=value == self.pending)
+                     for value, label in DATE_FORMAT_CHOICES.items()],
+            row=0,
+        )
+        selection.callback = self.select_format
+        self.add_item(selection)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    async def select_format(self, interaction: discord.Interaction) -> None:
+        value = (interaction.data or {}).get("values", [None])[0]
+        if value not in DATE_FORMAT_CHOICES:
+            await interaction.response.send_message("Formato de fecha no válido.", ephemeral=True)
+            return
+        self.pending = value
+        await interaction.response.edit_message(
+            content=date_format_setup_summary(self.guild_id)
+                    + f"\n\n**Propuesta:** {DATE_FORMAT_CHOICES[self.pending]}",
+            view=self,
+        )
+
+    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.success, row=1)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if (guild_config_get(self.guild_id, "display_date_format") or "discord") != self.original:
+            await interaction.response.send_message(
+                "La configuración cambió mientras editaba. Vuelva a abrir el panel.", ephemeral=True)
+            return
+        if self.pending == self.original:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id, {"display_date_format": self.pending})
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content="Edición cancelada. No se guardaron cambios.", view=None)
+
+
 class HeraldoSetupView(discord.ui.View):
     """Navegación directa: abrir un módulo al elegirlo, sin pasos redundantes."""
 
@@ -9960,6 +10051,7 @@ class HeraldoSetupView(discord.ui.View):
         ("messages", "Mensajes", "Plantillas y mensajes predeterminados"),
         ("verification", "Verification", "Verificación y orientación"),
         ("language", "Idioma", "Configuración del idioma (pendiente)"),
+        ("date_format", "Formato de fecha", "Fechas y horas en los mensajes del bot"),
     )
 
     def __init__(self, guild_id: int, owner_id: int) -> None:
@@ -10020,7 +10112,10 @@ class HeraldoSetupView(discord.ui.View):
             )
             return
 
-        if selected == "automod":
+        if selected == "date_format":
+            content = date_format_setup_summary(self.guild_id)
+            view = HeraldoDateFormatSetupView(self.guild_id, self.owner_id)
+        elif selected == "automod":
             content = "**El Heraldo · AutoMod**\n\nConfigura las protecciones automáticas del servidor."
             view = HeraldoAutomodSetupView(self.guild_id, self.owner_id)
         elif selected == "moderation":
@@ -16148,6 +16243,8 @@ def configuration_review_value(guild, key, value):
                 return f"{len(parsed)} miembro(s) con asignaciones configuradas"
         except (ValueError, TypeError):
             return "Configuración de roles (formato no válido)"
+    if key == "display_date_format":
+        return DATE_FORMAT_CHOICES.get(raw, "Formato no disponible")
     if key == "moderation_warn_limit_action":
         return {"none": "Solo avisar", "timeout": "Aislar", "kick": "Expulsar",
                 "ban": "Banear", "condemn": "Condenar"}.get(raw, "No disponible")
@@ -16173,6 +16270,7 @@ def configuration_review_label(key):
         "join_specific_roles": "Roles de miembros específicos",
         "condemnation_default_duration": "Duración predeterminada de condena",
         "moderation_warn_limit": "Máximo de advertencias vigentes",
+        "display_date_format": "Formato de fecha",
         "moderation_warn_limit_action": "Acción al llegar al máximo de advertencias",
         "moderation_warn_limit_mute_minutes": "Duración del aislamiento por advertencias",
         "moderation_reaction_warn_enabled": "Advertir mediante reportes",
