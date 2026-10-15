@@ -7742,7 +7742,7 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Emoji para condena di
                 f"Ese emoji pertenece al reporte **{conflict['label']}**: "
                 f"{moderation_action_label(str(conflict.get('action', 'report')))}, "
                 f"con un umbral de {conflict.get('threshold', 1)} personas distintas. "
-                "Revísalo en **/setup → Moderation → Reportes → Configurar condiciones**. "
+                "Revísalo en **/setup → Moderation → Reportes → Condiciones**. "
                 "Elige otro emoji para condenar mediante reacción.", ephemeral=True)
             return
         self.parent_view.pending_condemn_emoji = emoji
@@ -8137,10 +8137,10 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                   if self._has_pending_changes() else
                   "**Estado:** sin cambios pendientes. Guardar y Descartar están desactivados.")
         result = (
-            intro + summary +
+            intro + status + "\n\n" + summary +
             f"\n\n**Advertencias vigentes:** máximo {moderation_warning_limit(self.guild_id)}; "
             f"al alcanzarlo: {current_action}." + selected +
-            _pending_config_text(lines) + "\n\n" + status
+            _pending_config_text(lines)
         )
         return result if len(result) <= 1900 else result[:1870] + "…"
 
