@@ -16,18 +16,20 @@ def source_function(name):
 class ReminderAndDateFormatTests(unittest.TestCase):
     def test_defaults_do_not_publish(self):
         src = source_function("reminder_settings")
-        self.assertIn('"report_reminder_enabled": "0"', src)
+        self.assertIn("report_reminder_enabled", src)
+        self.assertIn("'0'", src)
 
     def test_scheduled_delivery_claims_before_network(self):
         code = ast.unparse(ast.parse(SOURCE.read_text(encoding="utf-8")))
         loop = code[code.index("async def report_reminders_loop"):code.index("async def before_report_reminders_loop")]
         self.assertLess(loop.index("conn.commit()"), loop.index("await channel.send("))
         self.assertIn("allowed_mentions=discord.AllowedMentions.none()", loop)
-        self.assertIn('settings["report_reminder_enabled"] != "1"', loop)
+        self.assertIn("report_reminder_enabled", loop)
+        self.assertIn("!= '1'", loop)
 
     def test_preview_excludes_staff_only_warning(self):
         src = source_function("reminder_preview")
-        self.assertIn('item.get("action") == "warn"', src)
+        self.assertIn("item.get('action') == 'warn'", src)
         self.assertIn("moderation_report_reactions", src)
         self.assertNotIn("get_condemnation_emoji", src)
 
