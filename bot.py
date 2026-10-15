@@ -8068,7 +8068,9 @@ class ReportReminderSetupView(discord.ui.View):
             f"**Hora:** {int(p['report_reminder_hour']):02d}:00 (Santo Domingo)\n"
             f"**Canal:** <#{p['report_reminder_channel']}>\n"
             "Personalizar permite escribir un intervalo de 1–365 días y una fecha inicial. "
-            "Solo una confirmación administrativa guarda estos cambios.")
+            "Solo una confirmación administrativa guarda estos cambios.\n"
+            f"**Próxima publicación estimada:** "
+            f"{format_configured_datetime(self.guild_id, reminder_next_due(p, datetime.now(timezone.utc)))}")
 
     async def channel_changed(self, interaction):
         values = (interaction.data or {}).get("values", [])
@@ -8132,7 +8134,7 @@ def reminder_next_due(settings, now):
     elif frequency == "fortnightly":
         days = 14
     elif frequency == "monthly":
-        days = 30
+        days = None  # Los meses no tienen siempre 30 días.
     else:
         days = max(1, min(365, int(settings["report_reminder_interval"])))
     start = settings["report_reminder_start"]
@@ -8143,7 +8145,14 @@ def reminder_next_due(settings, now):
         except ValueError:
             pass
     while candidate <= local:
-        candidate += timedelta(days=days)
+        if frequency == "monthly":
+            import calendar
+            next_year = candidate.year + (candidate.month == 12)
+            next_month = candidate.month % 12 + 1
+            day = min(candidate.day, calendar.monthrange(next_year, next_month)[1])
+            candidate = candidate.replace(year=next_year, month=next_month, day=day)
+        else:
+            candidate += timedelta(days=days)
     return candidate.astimezone(timezone.utc)
 
 
