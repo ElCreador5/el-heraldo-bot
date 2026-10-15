@@ -7827,6 +7827,9 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         if values[0] == "report":
             # La acción informativa nunca puede incluir eliminación de mensajes.
             reactions[index]["purge_minutes"] = None
+        if values[0] in {"report", "kick", "ban"}:
+            # Estas acciones no admiten duración; evita presentar valores inertes.
+            reactions[index]["duration_minutes"] = None
         self.pending_reactions = reactions
         self._rebuild_reaction_select()
         notice = ""
@@ -7854,6 +7857,8 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                 item = reactions[self.selected_reaction_index]
                 duration = item.get("duration_minutes")
                 purge = item.get("purge_minutes")
+                action = str(item.get("action", "report"))
+                count = int(item.get("threshold", 1))
                 selected = (
                     f"\n\n**Seleccionado:** {item['emoji']} **{item['label']}**"
                     f"\nAcción: {moderation_action_label(str(item.get('action', 'report')))}"
@@ -7861,6 +7866,11 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     f" · Duración: {format_duration(int(duration)) if duration else '—'}"
                     f" · Ventana de purga: {format_duration(int(purge)) if purge else '—'}"
                 )
+                if action in {"kick", "ban", "condemn", "timeout"} and count == 1:
+                    selected += ("\n**Advertencia:** esta sanción se activará con el "
+                                 "reporte de una sola persona.")
+                if action == "report":
+                    selected += "\nSolo reportar no aplica sanciones ni elimina mensajes."
         return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
@@ -7963,6 +7973,18 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                 if action == "report" and item.get("purge_minutes"):
                     await interaction.response.send_message(
                         "Solo reportar no permite purgar mensajes.", ephemeral=True
+                    )
+                    return
+                required = {"timeout": "moderate_members", "kick": "kick_members",
+                            "ban": "ban_members", "condemn": "manage_roles"}.get(action)
+                bot_member = interaction.guild.me
+                if required and (
+                    bot_member is None or
+                    not getattr(bot_member.guild_permissions, required, False)
+                ):
+                    await interaction.response.send_message(
+                        f"El Heraldo no tiene permisos para la acción {moderation_action_label(action)}. "
+                        "Revise sus permisos antes de guardar la regla.", ephemeral=True,
                     )
                     return
         if self.pending_channel_id is not None:
@@ -12900,7 +12922,9 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
         "Al alcanzar el umbral de personas distintas, se ejecuta la acción de esa regla. "
         "La acción Solo reportar nunca elimina mensajes. "
-        "Para revisar la acción y el umbral, selecciona la reacción y pulsa **Regla**.\n"
+        "Selecciona una reacción para elegir su acción en el menú desplegable. "
+        "Pulsa **Regla** para configurar el umbral, la duración cuando corresponda y la purga. "
+        "Guardar cambios es obligatorio; Descartar no modifica el servidor.\n"
         "Para condenar mediante reacción, un moderador reacciona al mensaje del miembro "
         "con el emoji de condena y proporciona la razón solicitada por mensaje directo antes de aplicar la condena."
     )
