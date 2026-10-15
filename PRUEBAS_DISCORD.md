@@ -1,3 +1,9 @@
+## Pruebas pendientes: nuevos editores de horario y reportes — 2026-10-15
+
+**IMPLEMENTADO EN Pruebas (código):** selector de 7 días y 24 horas para Miembro de la Semana, con confirmación; selector de 5 acciones en Moderation → Reportes, con umbral/duración/purga editables, borrador separado y revalidaciones. Nuevas pruebas de AST y ejecución aislada de callbacks en tests/test_setup_editor_selectors.py y tests/test_editor_drafts_behavior.py. **Las pruebas todavía no se han ejecutado ni acreditado en esta sesión; revisar CI y despliegue exactos.**
+
+**PRUEBA INTERACTIVA EN HERALDO'S LAB: PENDIENTE.** Comprobar elegir/descartar horario, guardar horario, horario sin cambios, confirmar en otro panel, permisos caducados y configuración modificada en otra sesión. En reportes: seleccionar reacción, cambiar acción, abrir Regla, cancelar, guardar, repetir tras reinicio; Solo reportar elimina solo la purga pendiente, nunca ejecuta purga; Timeout sin duración debe rechazar Guardar, y un canal borrado/sin permisos no debe guardarse. Probar el selector adicional dentro del máximo de cinco filas Discord. No usar miembros reales ni producción.
+
 ## Reaction Roles: selector de opciones — 2026-10-15
 
 **IMPLEMENTADO, pendiente de verificación real:** el editor de opciones ahora usa tres listas desplegables para modo de acceso (3 opciones), reacciones invertidas (2) y máximo de reacciones (21 valores). Se mantiene borrador separado y Descartar no persiste. Guardar explícitamente desde editor publica; sin escrituras al seleccionar. `tests/test_reaction_options_dropdown.py` añade comprobaciones estructurales, CI del SHA exacto pendiente. Probar real en Heraldo's Lab cambiando modos, cancelando, guardando, reiniciando y verificando la persistencia.
