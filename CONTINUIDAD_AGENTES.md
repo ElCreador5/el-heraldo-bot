@@ -1,3 +1,7 @@
+## Sincronización de verificación ampliada — 2026-10-15
+
+Commits `3bd7cb7` y `96a83d7` en `Pruebas`: la confirmación central de configuración llama ahora a `update_verify_panel` ante cambios de `verify_enabled`, `verify_role_id`, `verify_timeout`, `verify_action` además de los textos/etiqueta existentes. El nombre correcto de la clave es `verify_timeout` (no `_seconds`). El panel publicado se edita por referencia persistida; no se vuelve a publicar y no toca expedientes. Pendientes: pruebas automáticas y reales, inventario del resto de paneles dinámicos y hooks equivalentes. Sin cambios en `main`.
+
 ## Sincronización automática de paneles — primera etapa (2026-10-15)
 
 Autorización del propietario: actualizar paneles dinámicos al cambiar configuración, al desplegar cambios de texto y tras reinicio, conservando personalizaciones; NO reescribir expedientes/evidencias/registros históricos ni duplicar mensajes. `Pruebas@b064757`: se incorporó en el arranque la reconciliación del panel persistente de verificación por referencia guardada; el panel de sugerencias ya se restaura y edita mediante `suggestions_startup` / `suggestion_ensure_panel`. Los paneles efímeros de /setup se reconstruyen al abrir. **Cobertura global incompleta**: inventariar módulos y sus IDs persistidos, añadir hooks de guardado y regresiones. Sin pruebas automáticas o de Discord de esta etapa todavía; comprobar Railway Test. `main` no modificada.
