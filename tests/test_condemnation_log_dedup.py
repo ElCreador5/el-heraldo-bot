@@ -40,7 +40,8 @@ def load_functions(*names):
         raise AssertionError("Faltan funciones de condena/purga requeridas.")
     ns = {
         "discord": SimpleNamespace(
-            Guild=object, Member=object, Message=object, HTTPException=FakeDiscordError,
+            Guild=object, Member=object, Message=object, abc=SimpleNamespace(User=object),
+            HTTPException=FakeDiscordError,
             Color=FakeColor,
         ),
         "datetime": datetime,
