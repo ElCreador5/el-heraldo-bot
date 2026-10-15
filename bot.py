@@ -8058,6 +8058,14 @@ class ReportReminderSetupView(discord.ui.View):
                     await interaction.response.send_message("Selección inválida.", ephemeral=True)
                     return
                 self.pending[name] = value
+                for item in self.children:
+                    if isinstance(item, discord.ui.Select) and item.placeholder == {
+                        "report_reminder_frequency": "Frecuencia",
+                        "report_reminder_day": "Día (semanal)",
+                        "report_reminder_hour": "Hora (Santo Domingo)",
+                    }[name]:
+                        for option in item.options:
+                            option.default = option.value == value
                 await interaction.response.edit_message(content=self.summary(), view=self)
             select.callback = change
             self.add_item(select)
