@@ -7963,6 +7963,159 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         )
 
 
+REPORT_REMINDER_HELP = (
+    "Los recordatorios informan a los miembros de cómo colaborar con la moderación "
+    "utilizando las reacciones de reporte disponibles. Explican qué significa cada "
+    "reacción, sin presentar la condena exclusiva como opción de uso general. "
+    "Úselos con moderación para evitar mensajes excesivos y reportes innecesarios."
+)
+
+
+def reminder_settings(guild_id):
+    return {key: guild_config_get(guild_id, key) or fallback for key, fallback in {
+        "report_reminder_enabled": "0",
+        "report_reminder_channel": "0",
+        "report_reminder_frequency": "weekly",
+        "report_reminder_day": "0",
+        "report_reminder_hour": "12",
+        "report_reminder_interval": "7",
+        "report_reminder_start": "",
+    }.items()}
+
+
+def reminder_preview(guild_id):
+    lines = []
+    for item in moderation_report_reactions(guild_id):
+        if item.get("action") == "warn":
+            continue
+        lines.append(f"• {item['emoji']} {discord.utils.escape_markdown(str(item['label']))}: "
+                     f"{item.get('threshold', 1)} reportes de personas diferentes")
+    return ("**Cómo colaborar con la moderación**\n\n"
+            "Para comunicar posibles incumplimientos, reaccione con el emoji que "
+            "mejor describa el mensaje. Evite reportes innecesarios.\n\n"
+            + ("\n".join(lines) or "No hay reacciones disponibles.")
+            + "\n\nEl equipo de moderación revisará los reportes. Las acciones "
+              "reservadas a moderadores no forman parte de este sistema público.")[:1900]
+
+
+class ReportReminderOptionsModal(discord.ui.Modal, title="Recordatorios: intervalo personalizado"):
+    days = discord.ui.TextInput(label="Intervalo en días (mínimo 1)", placeholder="Ejemplo: 14", max_length=3)
+    date = discord.ui.TextInput(label="Inicio (AAAA-MM-DD, opcional)", placeholder="Ejemplo: 2026-11-01", required=False, max_length=10)
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.days.default = parent.pending["report_reminder_interval"]
+        self.date.default = parent.pending["report_reminder_start"]
+    async def on_submit(self, interaction):
+        if not await self.parent.interaction_check(interaction):
+            return
+        try:
+            amount = int(str(self.days))
+            if not 1 <= amount <= 365:
+                raise ValueError()
+            start = str(self.date).strip()
+            if start:
+                datetime.strptime(start, "%Y-%m-%d")
+        except ValueError:
+            await interaction.response.send_message("Use 1–365 días y fecha AAAA-MM-DD válida.", ephemeral=True)
+            return
+        self.parent.pending.update(report_reminder_interval=str(amount), report_reminder_start=start, report_reminder_frequency="custom")
+        await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
+
+
+class ReportReminderSetupView(discord.ui.View):
+    FREQUENCIES = {"daily": "Diario", "weekly": "Semanal", "fortnightly": "Cada 14 días",
+                   "monthly": "Mensual", "custom": "Personalizado"}
+    def __init__(self, guild_id, owner_id):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.original = reminder_settings(guild_id)
+        self.pending = dict(self.original)
+        menus = [
+            ("report_reminder_frequency", 0, [(key, value) for key, value in self.FREQUENCIES.items()]),
+            ("report_reminder_day", 1, [(str(i), name) for i, name in enumerate(("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"))]),
+            ("report_reminder_hour", 2, [(str(i), f"{i:02d}:00") for i in range(24)]),
+        ]
+        for field, row, options in menus:
+            select = discord.ui.Select(placeholder={"report_reminder_frequency": "Frecuencia",
+                "report_reminder_day": "Día (semanal)", "report_reminder_hour": "Hora (Santo Domingo)"}[field],
+                row=row, options=[discord.SelectOption(label=label, value=value, default=value == self.pending[field]) for value, label in options])
+            async def change(interaction, name=field):
+                value = (interaction.data or {}).get("values", [None])[0]
+                valid = set(dict(next(o for k, _r, o in menus if k == name)))
+                if value not in valid:
+                    await interaction.response.send_message("Selección inválida.", ephemeral=True)
+                    return
+                self.pending[name] = value
+                await interaction.response.edit_message(content=self.summary(), view=self)
+            select.callback = change
+            self.add_item(select)
+        channel = discord.ui.ChannelSelect(placeholder="Canal para el recordatorio", channel_types=[discord.ChannelType.text], row=3)
+        channel.callback = self.channel_changed
+        self.add_item(channel)
+
+    async def interaction_check(self, interaction):
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    def summary(self):
+        p = self.pending
+        state = "Activado" if p["report_reminder_enabled"] == "1" else "Desactivado"
+        return (f"**Recordatorios de reportes**\n\n{REPORT_REMINDER_HELP}\n\n"
+            f"**Estado propuesto:** {state}\n"
+            f"**Frecuencia:** {self.FREQUENCIES[p['report_reminder_frequency']]}\n"
+            f"**Hora:** {int(p['report_reminder_hour']):02d}:00 (Santo Domingo)\n"
+            f"**Canal:** <#{p['report_reminder_channel']}>\n"
+            "Personalizar permite escribir un intervalo de 1–365 días y una fecha inicial. "
+            "Solo una confirmación administrativa guarda estos cambios.")
+
+    async def channel_changed(self, interaction):
+        values = (interaction.data or {}).get("values", [])
+        channel = interaction.guild.get_channel(int(values[0])) if values else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Seleccione un canal de texto.", ephemeral=True)
+            return
+        perms = channel.permissions_for(interaction.guild.me)
+        if not (perms.view_channel and perms.send_messages and perms.embed_links):
+            await interaction.response.send_message("Faltan permisos del bot para publicar.", ephemeral=True)
+            return
+        self.pending["report_reminder_channel"] = str(channel.id)
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Personalizar", style=discord.ButtonStyle.secondary, row=4)
+    async def custom(self, interaction, button):
+        await interaction.response.send_modal(ReportReminderOptionsModal(self))
+
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
+    async def preview(self, interaction, button):
+        await interaction.response.send_message(content=reminder_preview(self.guild_id), ephemeral=True)
+
+    @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.primary, row=4)
+    async def toggle(self, interaction, button):
+        self.pending["report_reminder_enabled"] = "0" if self.pending["report_reminder_enabled"] == "1" else "1"
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success, row=4)
+    async def confirm(self, interaction, button):
+        if reminder_settings(self.guild_id) != self.original:
+            await interaction.response.send_message("Configuración obsoleta. Vuelva a abrirla.", ephemeral=True)
+            return
+        if self.pending["report_reminder_enabled"] == "1":
+            channel = interaction.guild.get_channel(int(self.pending["report_reminder_channel"]))
+            if not isinstance(channel, discord.TextChannel):
+                await interaction.response.send_message("Seleccione un canal antes de activar.", ephemeral=True)
+                return
+        changes = {k: v for k, v in self.pending.items() if v != self.original[k]}
+        if not changes:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id, changes)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=4)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Cancelado. No se guardaron cambios.", view=None)
+
+
 class HeraldoUserReportsSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -8248,6 +8401,11 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         await interaction.response.send_message(
             content=warn_view._content(), view=warn_view, ephemeral=True,
         )
+
+    @discord.ui.button(label="Recordatorios", style=discord.ButtonStyle.secondary, row=4)
+    async def reminders(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = ReportReminderSetupView(self.guild_id, self.owner_id)
+        await interaction.response.send_message(content=view.summary(), view=view, ephemeral=True)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
