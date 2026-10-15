@@ -1,3 +1,7 @@
+## Evitar ediciones duplicadas al arrancar — 2026-10-15
+
+`Pruebas@82cb5fa`: `suggestions_startup()` ya reconcilia sugerencias en el inicio; `synchronize_published_panels(..., suggestions_already_synced=True)` evita volver a editar ese mismo panel en el mismo arranque. Fuera del arranque (p. ej. incorporación a un servidor), la función conserva la comprobación del panel registrado. Regresión estructural actualizada en `tests/test_published_panel_sync.py`. No se reescriben expedientes. Validación funcional y Railway Test pendientes para SHA final. `main` intacta.
+
 ## Preparación para ensayo Discord — protección de paneles (2026-10-15)
 
 `Pruebas@fe246717`: al recuperar Orientación, la sincronización del arranque exige tarjeta existente y que el canal registrado coincida con el actual. Evita publicar por primera vez o trasladar/borrar tarjetas de forma automática. Regresión añadida a `tests/test_published_panel_sync.py`. Railway Test reportó SUCCESS en `253642cd` y conexión Discord; registró una referencia obsoleta de verificación en un servidor, sin publicar reemplazo. Los últimos commits siguen pendientes de desplegar y probar. **No se ha realizado prueba interactiva real de estos cambios ni una suite pytest** (el contenedor local no puede resolver github.com). Necesario comprobar SHA final antes de pedir aceptación al propietario. Producción `main` intacta.
