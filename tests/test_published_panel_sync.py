@@ -52,6 +52,19 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertIn("result.insert(0, warn_default)", source)
         self.assertNotIn("guild_config_set", source)
 
+    def test_report_editor_uses_compact_overview(self):
+        source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        cls = next(node for node in tree.body
+                   if isinstance(node, ast.ClassDef) and node.name == "HeraldoUserReportsSetupView")
+        content_method = next(node for node in cls.body
+                              if isinstance(node, ast.FunctionDef) and node.name == "_content")
+        code = ast.unparse(content_method)
+        self.assertIn("Reacciones configuradas:", code)
+        self.assertIn("Condena directa:", code)
+        self.assertNotIn("moderation_reports_summary(", code)
+        self.assertNotIn("Para reportar, reacciona al mensaje", code)
+
     def test_report_summary_does_not_mention_obsolete_rule_button(self):
         code = ast.unparse(function("moderation_reports_summary"))
         self.assertNotIn("Pulsa **Regla**", code)
