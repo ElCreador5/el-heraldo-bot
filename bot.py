@@ -8009,7 +8009,7 @@ class ReportReminderOptionsModal(discord.ui.Modal, title="Recordatorios: interva
         super().__init__()
         self.parent = parent
         current = parent.pending["report_reminder_interval"]
-        self.days.default = current if re.fullmatch(r"\\d+[smhd]", current) else f"{current}d"
+        self.days.default = current if re.fullmatch(r"(\d+)(s|m|h|d)", current) else f"{current}d"
         self.date.default = parent.pending["report_reminder_start"]
     async def on_submit(self, interaction):
         if not await self.parent.interaction_check(interaction):
