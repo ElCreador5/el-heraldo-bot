@@ -10765,7 +10765,11 @@ async def synchronize_published_panels(guild: discord.Guild) -> dict[str, str]:
             results["sugerencias"] = "Panel comprobado"
         except (discord.HTTPException, ValueError, TypeError) as exc:
             results["sugerencias"] = f"No se pudo sincronizar: {type(exc).__name__}"
-    if orientation_enabled(guild.id) and get_orientation_channel_id(guild.id):
+    # Nunca publicar una tarjeta nueva ni borrar una antigua por un arranque:
+    # la primera publicación y el traslado de canal requieren acción administrativa.
+    if (orientation_enabled(guild.id)
+            and get_orientation_message_id(guild.id)
+            and get_orientation_message_channel_id(guild.id) == get_orientation_channel_id(guild.id)):
         try:
             ok, note = await ensure_orientation_system(guild)
             results["orientacion"] = "Panel comprobado" if ok else note
