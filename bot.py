@@ -12568,8 +12568,9 @@ async def moderation_close_case_effect(guild: discord.Guild, row: sqlite3.Row, a
     return "Caso cerrado."
 
 MODERATION_REPORT_MAX_REACTIONS = 10
-MODERATION_REPORT_ACTIONS = {"report", "timeout", "kick", "ban", "condemn"}
+MODERATION_REPORT_ACTIONS = {"report", "warn", "timeout", "kick", "ban", "condemn"}
 MODERATION_REPORT_REACTION_DEFAULTS = (
+    {"emoji": "❗", "label": "Incumplimiento de reglas", "action": "warn", "duration_minutes": None, "threshold": 1, "purge_minutes": None},
     {"emoji": "📢", "label": "Spam", "action": "timeout", "duration_minutes": 30, "threshold": 2, "purge_minutes": 30},
     {"emoji": "🚩", "label": "Contenido inapropiado / no permitido", "action": "condemn", "duration_minutes": 1440, "threshold": 3, "purge_minutes": 30},
     {"emoji": "🤓", "label": "Sospechoso (posible cuenta falsa o estafa)", "action": "condemn", "duration_minutes": None, "threshold": 2, "purge_minutes": 30},
@@ -12617,8 +12618,11 @@ def _normalize_moderation_report_rule(item: dict) -> dict[str, object] | None:
         purge_minutes = None
     if purge_minutes is not None:
         purge_minutes = max(1, min(PURGE_MAX_MINUTES, purge_minutes))
-    if action == "report":
-        purge_minutes = None  # Solo reportar nunca destruye contenido, incluso en reglas heredadas.
+    if action in {"report", "warn"}:
+        purge_minutes = None  # Los avisos informativos y advertencias nunca eliminan mensajes.
+    if action == "warn":
+        threshold = 1  # El aviso lo aplica únicamente un moderador autorizado.
+        duration_minutes = None
     return {
         "emoji": emoji[:100],
         "label": label[:100],
@@ -12718,8 +12722,8 @@ def moderation_report_mark_executed(guild_id: int, message_id: int, target_id: i
 def moderation_report_case_record(
     guild_id: int, message_id: int, target_id: int, emoji_key: str,
     case_type: str, reason: str, *, duration_minutes: int | None,
-    proof: str,
-) -> int:
+    proof: str, author_id: int | None = None, return_created: bool = False,
+) -> int | tuple[int, bool]:
     """Vincula una sanción ejecutada con un caso, sin duplicarlo por reintentos.
 
     El guardado se hace atómicamente con la referencia a la reacción.
@@ -12735,7 +12739,7 @@ def moderation_report_case_record(
         ).fetchone()
         if existing is not None:
             conn.commit()
-            return int(existing[0])
+            return (int(existing[0]), False) if return_created else int(existing[0])
         next_number = int(conn.execute(
             "SELECT COALESCE(MAX(case_number), 0) + 1 FROM moderation_cases WHERE guild_id=?",
             (guild_id,),
@@ -12748,10 +12752,10 @@ def moderation_report_case_record(
             "(guild_id, case_number, type, user_id, reason, duration_minutes, "
             "created_at, expires_at, author_id, proof, verified_proof, "
             "moderator_notes, message_history, open) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, 1)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 1)",
             (guild_id, next_number, case_type, target_id, reason[:1000],
              duration_minutes, now.isoformat(), expires.isoformat() if expires else None,
-             proof[:2000], "Sanción por umbral de reportes por reacción.",
+             author_id, proof[:2000], "Sanción o advertencia por reacción de moderación.",
              moderation_case_message_history(guild_id, target_id)),
         )
         conn.execute(
@@ -12761,7 +12765,7 @@ def moderation_report_case_record(
             (guild_id, message_id, target_id, emoji_key, next_number),
         )
         conn.commit()
-        return next_number
+        return (next_number, True) if return_created else next_number
     except Exception:
         conn.rollback()
         raise
@@ -12772,6 +12776,7 @@ def moderation_report_case_record(
 def moderation_action_label(action: str) -> str:
     return {
         "report": "Solo reportar",
+        "warn": "Advertir",
         "timeout": "Timeout / mute",
         "kick": "Expulsar",
         "ban": "Banear",
@@ -12785,6 +12790,7 @@ async def execute_moderation_report_action(
     message: discord.Message,
     rule: dict[str, object],
     reporter_count: int,
+    actor: discord.Member | None = None,
 ) -> tuple[bool, str]:
     action = str(rule.get("action", "report"))
     purge_minutes = rule.get("purge_minutes")
@@ -12800,6 +12806,30 @@ async def execute_moderation_report_action(
     notes: list[str] = []
     if action == "report":
         return True, "Reporte registrado"
+    if action == "warn":
+        if actor is None or not moderation_is_staff(actor):
+            return False, "La advertencia por reacción requiere un moderador autorizado."
+        if target.id == guild.owner_id or (
+            actor.id != guild.owner_id and target.top_role >= actor.top_role
+        ):
+            return False, "La jerarquía impide advertir a este miembro."
+        try:
+            case_number, created = moderation_report_case_record(
+                guild.id, message.id, target.id,
+                _moderation_emoji_key(str(rule["emoji"])), "WARN",
+                "Incumplimiento de reglas", duration_minutes=None,
+                proof=message.jump_url, author_id=actor.id, return_created=True,
+            )
+        except Exception:
+            return False, "No fue posible registrar la advertencia. No se efectuaron cambios."
+        code = moderation_case_code(case_number, guild.id)
+        if created:
+            try:
+                sent = await moderation_send_case_dm(guild, target.id, case_number)
+            except Exception:
+                sent = False
+            return True, f"Advertencia registrada en expediente {code}; DM: {'enviado' if sent else 'no disponible'}"
+        return True, f"Advertencia existente en expediente {code}"
 
     me = guild.me
     if me is None:
