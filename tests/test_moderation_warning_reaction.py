@@ -100,6 +100,7 @@ class WarningReactionTests(unittest.TestCase):
         warning = isolated("execute_moderation_report_action", {
             "condemnation_protection_reason": lambda member: None,
             "moderation_can_warn": lambda member: True,
+            "moderation_report_punishment_enabled": lambda guild_id, action: True,
             "moderation_report_case_record": add_case,
             "moderation_case_code": lambda num, guild: "AB1C234",
             "moderation_send_case_dm": notify,
@@ -125,6 +126,7 @@ class WarningReactionTests(unittest.TestCase):
         warn = isolated("execute_moderation_report_action", {
             "condemnation_protection_reason": lambda member: None,
             "moderation_can_warn": lambda member: False,
+            "moderation_report_punishment_enabled": lambda guild_id, action: True,
         })
         success, message = asyncio.run(warn(
             SimpleNamespace(owner_id=1), SimpleNamespace(id=5),
