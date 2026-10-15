@@ -77,6 +77,8 @@ class WarningReactionTests(unittest.TestCase):
                 "db_connect": lambda: sqlite3.connect(path, isolation_level=None),
                 "datetime": datetime, "timezone": timezone, "timedelta": timedelta,
                 "moderation_case_message_history": lambda guild, user: "{}",
+                "moderation_warning_limit": lambda guild: 3,
+                "ModerationWarningLimitReached": ValueError,
             })
             args = (25, 400, 500, "❗", "WARN", "Incumplimiento de reglas")
             first = case_fn(*args, duration_minutes=None, proof="https://discord.com", author_id=600, return_created=True)
