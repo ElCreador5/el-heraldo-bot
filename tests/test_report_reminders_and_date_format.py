@@ -47,6 +47,27 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("No hay cambios pendientes.", cls)
         self.assertIn("reminder_preview(", cls)
 
+    def test_date_selector_only_updates_draft(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                   and node.name == "HeraldoDateFormatSetupView")
+        handler = next(node for node in cls.body if isinstance(node, ast.AsyncFunctionDef)
+                       and node.name == "select_format")
+        code = ast.unparse(handler)
+        self.assertIn("self.pending = value", code)
+        self.assertIn("Borrador SIN GUARDAR", code)
+        self.assertNotIn("guild_config_set", code)
+        self.assertNotIn("confirm_configuration(", code)
+
+    def test_short_intervals_are_test_only(self):
+        code = ast.unparse(ast.parse(SOURCE.read_text(encoding="utf-8")))
+        modal = code[code.index("class ReportReminderOptionsModal"):code.index("class ReportReminderSetupView")]
+        self.assertIn("RAILWAY_PROJECT_ID", modal)
+        self.assertIn("'s' and (not is_test)", modal.replace('unit == ', ''))
+        self.assertIn("report_reminder_interval", modal)
+        self.assertNotIn("guild_config_set", modal)
+
     def test_layout_includes_both_new_views(self):
         src = source_function("validate_setup_view_layouts")
         self.assertIn("ReportReminderSetupView", src)
