@@ -2054,10 +2054,7 @@ async def on_ready() -> None:
             for key, channel_id in legacy_channels.items():
                 if channel_id and guild.get_channel(channel_id) and guild_resource_get(guild.id, "channel", key) is None:
                     guild_resource_set(guild.id, "channel", key, channel_id)
-            if orientation_enabled(guild.id):
-                ok, note = await ensure_orientation_system(guild)
-                if not ok:
-                    print(f"Advertencia: Orientación · {guild.name}: {note}")
+            # La orientación se reconcilia una sola vez más abajo con los otros paneles.
         except Exception:
             traceback.print_exc()
 
