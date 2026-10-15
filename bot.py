@@ -4361,40 +4361,90 @@ async def orientation_message_deleted(payload: discord.RawMessageDeleteEvent) ->
     await ensure_orientation_system(guild)
 
 
-class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · Horario"):
-    weekday_input = discord.ui.TextInput(
-        label="Día (0=Lunes ... 6=Domingo)",
-        required=True,
-        max_length=1,
-    )
-    hour_input = discord.ui.TextInput(
-        label="Hora (0-23, hora RD)",
-        required=True,
-        max_length=2,
-    )
+class HeraldoMotwScheduleSelectView(discord.ui.View):
+    """Elegir día y hora mediante selectores, sin guardar antes de confirmar."""
 
-    def __init__(self, guild_id: int) -> None:
-        super().__init__()
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=300)
         self.guild_id = guild_id
-        self.weekday_input.default = str(get_motw_weekday(guild_id))
-        self.hour_input.default = str(get_motw_hour(guild_id))
+        self.owner_id = owner_id
+        self.original_weekday = get_motw_weekday(guild_id)
+        self.original_hour = get_motw_hour(guild_id)
+        self.weekday = self.original_weekday
+        self.hour = self.original_hour
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            weekday = int(str(self.weekday_input).strip())
-            hour = int(str(self.hour_input).strip())
-            if weekday not in range(7) or hour not in range(24):
-                raise ValueError
-        except ValueError:
+        days = discord.ui.Select(
+            placeholder="Día del anuncio",
+            options=[
+                discord.SelectOption(label=name, value=str(index), default=index == self.weekday)
+                for index, name in enumerate(MOTW_WEEKDAY_NAMES)
+            ], row=0,
+        )
+        days.callback = self.select_day
+        self.day_select = days
+        self.add_item(days)
+        hours = discord.ui.Select(
+            placeholder="Hora del anuncio (hora RD)",
+            options=[
+                discord.SelectOption(label=f"{hour:02d}:00", value=str(hour), default=hour == self.hour)
+                for hour in range(24)
+            ], row=1,
+        )
+        hours.callback = self.select_hour
+        self.hour_select = hours
+        self.add_item(hours)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    def _summary(self) -> str:
+        return (
+            "**El Heraldo · Miembro de la Semana · Horario**\n\n"
+            f"Horario actual: **{MOTW_WEEKDAY_NAMES[self.original_weekday]} "
+            f"a las {self.original_hour:02d}:00** (hora RD)\n"
+            f"Horario propuesto: **{MOTW_WEEKDAY_NAMES[self.weekday]} "
+            f"a las {self.hour:02d}:00** (hora RD)\n\n"
+            "Seleccionar opciones no guarda cambios. Revise y confirme el horario."
+        )
+
+    async def select_day(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {str(i) for i in range(7)}:
+            await interaction.response.send_message("Día de la semana no válido.", ephemeral=True)
+            return
+        self.weekday = int(values[0])
+        for option in self.day_select.options:
+            option.default = option.value == values[0]
+        await interaction.response.edit_message(content=self._summary(), view=self)
+
+    async def select_hour(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {str(i) for i in range(24)}:
+            await interaction.response.send_message("Hora no válida.", ephemeral=True)
+            return
+        self.hour = int(values[0])
+        for option in self.hour_select.options:
+            option.default = option.value == values[0]
+        await interaction.response.edit_message(content=self._summary(), view=self)
+
+    @discord.ui.button(label="Revisar cambios", style=discord.ButtonStyle.success, row=2)
+    async def review(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if (get_motw_weekday(self.guild_id) != self.original_weekday
+                or get_motw_hour(self.guild_id) != self.original_hour):
             await interaction.response.send_message(
-                "Error: Día debe estar entre 0 y 6, y hora entre 0 y 23.",
-                ephemeral=True,
+                "El horario cambió mientras editaba. Abra el editor de nuevo.", ephemeral=True
             )
             return
         await confirm_configuration(interaction, self.guild_id, {
-            "motw_weekday": str(weekday), "motw_hour": str(hour),
+            "motw_weekday": str(self.weekday), "motw_hour": str(self.hour),
         })
 
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=2)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content="Edición de horario cancelada. No se guardaron cambios.", view=None
+        )
 
 
 class HeraldoMotwSetupView(discord.ui.View):
@@ -4449,7 +4499,10 @@ class HeraldoMotwSetupView(discord.ui.View):
 
     @discord.ui.button(label="Horario", style=discord.ButtonStyle.primary, row=1)
     async def schedule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HeraldoMotwScheduleModal(self.guild_id))
+        schedule_view = HeraldoMotwScheduleSelectView(self.guild_id, self.owner_id)
+        await interaction.response.send_message(
+            content=schedule_view._summary(), view=schedule_view, ephemeral=True,
+        )
 
     @discord.ui.button(label="Probar", style=discord.ButtonStyle.secondary, row=1)
     async def test(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
