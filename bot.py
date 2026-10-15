@@ -15965,6 +15965,22 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
     if target.bot or target.id == actor.id:
         return
 
+    if report_rule and report_rule.get("action") == "warn":
+        # El relevo de reacción debe ser viable antes de abrir un expediente WARN.
+        me = guild.me
+        perms = channel.permissions_for(me) if me and hasattr(channel, "permissions_for") else None
+        if perms is None or not (
+            perms.view_channel and perms.read_message_history
+            and perms.add_reactions and perms.manage_messages
+        ):
+            await log_embed(
+                guild, "Advertencia por reacción no aplicada",
+                "El Heraldo necesita Ver canal, Leer historial, Añadir reacciones "
+                "y Gestionar mensajes para sustituir la reacción del moderador.",
+                discord.Color.orange(),
+            )
+            return
+
     if is_condemn:
         if not moderation_is_staff(actor) or target.id == actor.id:
             return
