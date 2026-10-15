@@ -45,6 +45,13 @@ class ReactionOptionSelectTests(unittest.TestCase):
         self.assertNotIn("guild_config_set", ast.unparse(cls))
         self.assertIn("configuration_access", ast.unparse(find_method(cls, "interaction_check")))
 
+    def test_multiple_changes_preserve_initial_cancel_snapshot(self):
+        cls = find_class("HeraldoReactionOptionsSelectView")
+        init = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "__init__")
+        self.assertIn("original_panel", ast.unparse(init))
+        self.assertIn("original_panel=self.original_panel", ast.unparse(find_method(cls, "_change")))
+
     def test_options_button_uses_selector_not_modal(self):
         cls = find_class("HeraldoReactionRolesEditorView")
         method = ast.unparse(find_method(cls, "options"))

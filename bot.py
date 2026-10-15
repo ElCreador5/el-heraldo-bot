@@ -8653,12 +8653,13 @@ class HeraldoReactionOptionsModal(discord.ui.Modal, title="Opciones de Reaction 
 
 class HeraldoReactionOptionsSelectView(discord.ui.View):
     """Editor de opciones cerradas sin solicitar valores que ya conoce El Heraldo."""
-    def __init__(self, editor: "HeraldoReactionRolesEditorView") -> None:
+    def __init__(self, editor: "HeraldoReactionRolesEditorView",
+                 original_panel: dict | None = None) -> None:
         super().__init__(timeout=900)
         self.guild_id = editor.guild_id
         self.owner_id = editor.owner_id
         self.selected = editor.selected
-        self.original_panel = copy.deepcopy(editor.panel)
+        self.original_panel = copy.deepcopy(original_panel if original_panel is not None else editor.panel)
         self.panel = copy.deepcopy(editor.panel)
 
         access_mode = discord.ui.Select(
@@ -8717,7 +8718,8 @@ class HeraldoReactionOptionsSelectView(discord.ui.View):
         updated = HeraldoReactionOptionsSelectView(
             HeraldoReactionRolesEditorView(
                 self.guild_id, self.owner_id, self.panel, selected=self.selected
-            )
+            ),
+            original_panel=self.original_panel,
         )
         await interaction.response.edit_message(content=updated.content(), view=updated)
 
