@@ -68,6 +68,13 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("report_reminder_interval", modal)
         self.assertNotIn("guild_config_set", modal)
 
+    def test_custom_schedule_skips_elapsed_intervals(self):
+        """Old starts with 10-second cadence must not cause long catch-up loops."""
+        src = source_function("reminder_next_due")
+        self.assertIn("steps = int(elapsed // seconds) + 1", src)
+        self.assertIn("candidate += timedelta(seconds=steps * seconds)", src)
+        self.assertLess(src.index("steps = int("), src.index("while candidate <= local:"))
+
     def test_layout_includes_both_new_views(self):
         src = source_function("validate_setup_view_layouts")
         self.assertIn("ReportReminderSetupView", src)
