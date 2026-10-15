@@ -20806,6 +20806,87 @@ async def embed_send_command(
     await interaction.followup.send(result, ephemeral=True)
 
 
+class EmbedSchedulesManageView(discord.ui.View):
+    def __init__(self, owner_id, guild_id):
+        super().__init__(timeout=900)
+        self.owner_id, self.guild_id = owner_id, guild_id
+        self.selected_id = None
+        conn = scheduled_embed_db()
+        try:
+            rows = conn.execute(
+                "SELECT id, embed_name, mode, enabled FROM scheduled_embeds WHERE guild_id=? ORDER BY id DESC LIMIT 25",
+                (guild_id,)).fetchall()
+        finally:
+            conn.close()
+        if rows:
+            select = discord.ui.Select(
+                placeholder="Seleccione la programación que desea gestionar",
+                options=[discord.SelectOption(label=f"#{ident} · {name}"[:100],
+                    description=f"{mode} · {'Activa' if enabled else 'Pausada'}",
+                    value=str(ident)) for ident, name, mode, enabled in rows], row=0)
+            select.callback = self.pick
+            self.add_item(select)
+
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.owner_id or not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("No tiene permiso para gestionar estas programaciones.", ephemeral=True)
+            return False
+        return interaction.guild is not None and interaction.guild.id == self.guild_id
+
+    async def pick(self, interaction):
+        self.selected_id = int(interaction.data["values"][0])
+        await interaction.response.edit_message(content=f"**Programación #{self.selected_id}** seleccionada. Puede pausar o reanudar la publicación.", view=self)
+
+    @discord.ui.button(label="Pausar / Reanudar", style=discord.ButtonStyle.primary, row=1)
+    async def toggle(self, interaction, button):
+        if self.selected_id is None:
+            await interaction.response.send_message("Seleccione una programación.", ephemeral=True)
+            return
+        conn = scheduled_embed_db()
+        try:
+            row = conn.execute(
+                "SELECT mode, config, enabled FROM scheduled_embeds WHERE guild_id=? AND id=?",
+                (self.guild_id, self.selected_id)).fetchone()
+            if row is None:
+                await interaction.response.send_message("Programación inexistente.", ephemeral=True)
+                return
+            mode, raw, active = row
+            activate = not bool(active)
+            try:
+                next_date = embed_schedule_engine.next_due(
+                    mode, json.loads(raw), datetime.now(timezone.utc), scheduled_embed_test_mode()
+                ) if activate else None
+                if activate and mode == "once" and next_date is None:
+                    raise ValueError("Fecha única vencida")
+            except (ValueError, KeyError, TypeError) as exc:
+                await interaction.response.send_message(f"Imposible reanudar: {exc}", ephemeral=True)
+                return
+            conn.execute("UPDATE scheduled_embeds SET enabled=?,next_due=?,updated_at=? WHERE guild_id=? AND id=?",
+                (int(activate), next_date.isoformat() if next_date else None,
+                 datetime.now(timezone.utc).isoformat(), self.guild_id, self.selected_id))
+            conn.commit()
+        finally:
+            conn.close()
+        await interaction.response.edit_message(
+            content=f"Programación #{self.selected_id}: {'activada' if activate else 'pausada'}.", view=self)
+
+
+@embed_group.command(name="programaciones", description="Consultar y pausar o reanudar embeds programados.")
+async def embed_schedules_command(interaction: discord.Interaction) -> None:
+    conn = scheduled_embed_db()
+    try:
+        rows = conn.execute("SELECT id,embed_name,channel_id,mode,enabled,next_due FROM scheduled_embeds WHERE guild_id=? ORDER BY id DESC LIMIT 20", (interaction.guild.id,)).fetchall()
+    finally:
+        conn.close()
+    lines = [f"#{ident} · `{name}` → <#{channel}> · {mode} · {'Activo' if enabled else 'Pausado'}"
+             + (f" · siguiente: {due}" if due and enabled else "")
+             for ident,name,channel,mode,enabled,due in rows]
+    await interaction.response.send_message(
+        "**Programaciones de embeds**\\n" + ("\\n".join(lines) if lines else "Sin programaciones."),
+        view=EmbedSchedulesManageView(interaction.user.id, interaction.guild.id) if rows else None,
+        ephemeral=True)
+
+
 @embed_group.command(name="borrar", description="Borrar un embed guardado (los mensajes ya enviados se quedan).")
 @discord.app_commands.describe(nombre="Embed a borrar")
 @discord.app_commands.autocomplete(nombre=embed_name_autocomplete)
