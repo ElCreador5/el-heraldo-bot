@@ -7598,6 +7598,11 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
             item = parent_view._working_reactions()[index]
             self.emoji.default = str(item["emoji"])
             self.label.default = str(item["label"])
+        elif not any(_moderation_emoji_key(str(item["emoji"])) == _moderation_emoji_key("❗")
+                     for item in parent_view._working_reactions()):
+            # Ofrecer la nueva advertencia por defecto sin alterar reglas guardadas.
+            self.emoji.default = "❗"
+            self.label.default = "Incumplimiento de reglas"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await self.parent_view.interaction_check(interaction):
@@ -7627,8 +7632,11 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
             if len(reactions) >= MODERATION_REPORT_MAX_REACTIONS:
                 await interaction.response.send_message(f"Ya alcanzaste el máximo de {MODERATION_REPORT_MAX_REACTIONS} reacciones.", ephemeral=True)
                 return
+            is_default_warning = (key == _moderation_emoji_key("❗")
+                                  and label == "Incumplimiento de reglas")
             reactions.append({
-                "emoji": emoji, "label": label, "action": "report",
+                "emoji": emoji, "label": label,
+                "action": "warn" if is_default_warning else "report",
                 "duration_minutes": None, "threshold": 1, "purge_minutes": None,
             })
             self.parent_view.selected_reaction_index = len(reactions) - 1
@@ -8127,12 +8135,22 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             "**Condena directa** y **Advertencias y sanciones** tienen ajustes propios.\n\n"
         )
         mappings = self._working_reactions()
+        missing_warn = not any(
+            _moderation_emoji_key(str(item["emoji"])) == _moderation_emoji_key("❗")
+            for item in mappings
+        )
         summary = (
             f"**Canal de reportes:** "
             f"{guild.get_channel(self.pending_channel_id or moderation_report_channel_id(self.guild_id)).mention if guild.get_channel(self.pending_channel_id or moderation_report_channel_id(self.guild_id)) else 'Sin canal específico'}\n"
             f"**Reacciones configuradas:** {len(mappings)}/{MODERATION_REPORT_MAX_REACTIONS}\n"
             f"**Condena directa:** {self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id)}"
         )
+        if missing_warn:
+            summary += (
+                "\n**Advertencia ❗ no configurada.** Pulse Añadir: "
+                "el formulario propondrá Incumplimiento de reglas. "
+                "Confirme con Guardar cambios."
+            )
         action = moderation_warn_escalation_action(self.guild_id)
         current_action = moderation_action_label(action) if action != "none" else "Solo avisar"
         self._update_change_buttons()
