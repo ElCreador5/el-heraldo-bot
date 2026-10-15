@@ -20558,6 +20558,8 @@ class EmbedScheduleView(discord.ui.View):
 
     @discord.ui.button(label="Guardar programación", style=discord.ButtonStyle.success, row=3)
     async def save(self, interaction, button):
+        if isinstance(self, EmbedScheduleEditView):
+            return await self.save_existing(interaction, button)
         if self.channel_id is None or self.config is None:
             await interaction.response.send_message("Seleccione canal y configure la frecuencia.", ephemeral=True)
             return
@@ -20827,7 +20829,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
         self.reviewed = False
         self.save.label = "Revisar cambios"
 
-    async def save(self, interaction, button):
+    async def save_existing(self, interaction, button):
         if self.channel_id is None or self.config is None:
             await interaction.response.send_message("Seleccione canal y configure la frecuencia.", ephemeral=True)
             return
@@ -20987,7 +20989,7 @@ class EmbedSchedulesManageView(discord.ui.View):
             return
         name, channel, mode, _ = view.snapshot
         await interaction.response.send_message(
-            content=f"**Eliminar programación #{self.selected_id}?**\\nEmbed: \`{name}\` · Canal: <#{channel}> · {mode}\\n"
+            content=f"**Eliminar programación #{self.selected_id}?**\\nEmbed: `{name}` · Canal: <#{channel}> · {mode}\\n"
                     "No se borrará el embed ni sus mensajes históricos.",
             view=view,ephemeral=True)
 
