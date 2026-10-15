@@ -1,3 +1,7 @@
+## Acciones automáticas por reportes — 2026-10-15
+
+En `Pruebas` se implementaron controles de permisos, duración y jerarquía, persistencia de expedientes para timeout/kick/ban, y deduplicación del aviso de purga exitosa en el reporte principal. `tests/test_moderation_report_actions.py` contiene regresiones aisladas de caso único, aislamiento por servidor, permisos, fallo de SQLite sin repetir sanción, Solo reportar y timeout sin duración. **Discord real: no probado**. Probar en Heraldo's Lab umbral 1 y 2, usuarios distintos, reacciones repetidas, sanción con y sin purga, archivo privado antes de borrar, permisos revocados, jerarquía, bot protegido, reinicio y fallo de registro; verificar que no se aplique una sanción dos veces ni haya doble aviso de éxito. La creación de expediente tras una sanción aún deja una ventana no atómica Discord/SQLite, que requiere evaluación. No usar producción.
+
 ## Pruebas pendientes: nuevos editores de horario y reportes — 2026-10-15
 
 **IMPLEMENTADO EN Pruebas (código):** selector de 7 días y 24 horas para Miembro de la Semana, con confirmación; selector de 5 acciones en Moderation → Reportes, con umbral/duración/purga editables, borrador separado y revalidaciones. Nuevas pruebas de AST y ejecución aislada de callbacks en tests/test_setup_editor_selectors.py y tests/test_editor_drafts_behavior.py. **Las pruebas todavía no se han ejecutado ni acreditado en esta sesión; revisar CI y despliegue exactos.**
