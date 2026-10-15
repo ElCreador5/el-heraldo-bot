@@ -20806,6 +20806,131 @@ async def embed_send_command(
     await interaction.followup.send(result, ephemeral=True)
 
 
+class EmbedScheduleEditView(EmbedScheduleView):
+    """Edits an existing schedule with optimistic concurrency and a two-step save."""
+    def __init__(self, owner_id, guild_id, schedule_id):
+        conn = scheduled_embed_db()
+        try:
+            row = conn.execute(
+                "SELECT embed_name,channel_id,mode,config,enabled,updated_at FROM scheduled_embeds "
+                "WHERE id=? AND guild_id=?", (schedule_id, guild_id)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise ValueError("La programación ya no existe.")
+        name, channel_id, mode, config_json, enabled, version = row
+        super().__init__(owner_id, guild_id, name)
+        self.schedule_id, self.version = schedule_id, version
+        self.channel_id, self.mode, self.config, self.active = channel_id, mode, json.loads(config_json), bool(enabled)
+        for option in self.mode_menu.options:
+            option.default = option.value == mode
+        self.reviewed = False
+        self.save.label = "Revisar cambios"
+
+    async def save(self, interaction, button):
+        if self.channel_id is None or self.config is None:
+            await interaction.response.send_message("Seleccione canal y configure la frecuencia.", ephemeral=True)
+            return
+        guild = interaction.guild
+        channel = guild.get_channel(self.channel_id) if guild else None
+        if not isinstance(channel, discord.TextChannel) or guild.me is None:
+            await interaction.response.send_message("El canal seleccionado ya no está disponible.", ephemeral=True)
+            return
+        perms = channel.permissions_for(guild.me)
+        if not (perms.view_channel and perms.send_messages and perms.embed_links):
+            await interaction.response.send_message("El bot ya no tiene permisos en ese canal.", ephemeral=True)
+            return
+        if embed_get(self.guild_id, self.name) is None:
+            await interaction.response.send_message("El embed seleccionado ya no existe.", ephemeral=True)
+            return
+        try:
+            now = datetime.now(timezone.utc)
+            due = embed_schedule_engine.next_due(self.mode, self.config, now, scheduled_embed_test_mode())
+            if self.active and self.mode == "once" and due is None:
+                raise ValueError("La fecha única ya venció.")
+        except (ValueError, KeyError, TypeError) as exc:
+            await interaction.response.send_message(f"Datos inválidos: {exc}", ephemeral=True)
+            return
+        if not self.reviewed:
+            self.reviewed = True
+            button.label = "Confirmar actualización"
+            await interaction.response.edit_message(
+                content=self.summary() + "\\n\\n**Confirme la actualización; todavía no se ha guardado.**", view=self)
+            return
+        conn = scheduled_embed_db()
+        try:
+            cursor = conn.execute(
+                "UPDATE scheduled_embeds SET channel_id=?,mode=?,config=?,enabled=?,next_due=?,"
+                "message_count=0,updated_at=? WHERE id=? AND guild_id=? AND updated_at=?",
+                (self.channel_id,self.mode,json.dumps(self.config),int(self.active),
+                 due.isoformat() if due else None,now.isoformat(),self.schedule_id,self.guild_id,self.version))
+            if cursor.rowcount != 1:
+                conn.rollback()
+                await interaction.response.send_message(
+                    "La programación cambió mientras la editaba. Ábrala nuevamente.",ephemeral=True)
+                return
+            conn.commit()
+        finally:
+            conn.close()
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"Programación #{self.schedule_id} actualizada.",view=None)
+
+    @discord.ui.button(label="Cancelar edición", style=discord.ButtonStyle.secondary, row=4)
+    async def discard(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Edición descartada. No se guardaron cambios.",view=None)
+
+
+class EmbedScheduleDeleteView(discord.ui.View):
+    def __init__(self, owner_id, guild_id, schedule_id):
+        super().__init__(timeout=180)
+        self.owner_id, self.guild_id, self.schedule_id = owner_id, guild_id, schedule_id
+        conn = scheduled_embed_db()
+        try:
+            self.snapshot = conn.execute(
+                "SELECT embed_name,channel_id,mode,updated_at FROM scheduled_embeds "
+                "WHERE guild_id=? AND id=?", (guild_id,schedule_id)).fetchone()
+        finally:
+            conn.close()
+
+    async def interaction_check(self, interaction):
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.manage_guild):
+            await interaction.response.send_message("No está autorizado para esta operación.",ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar eliminación", style=discord.ButtonStyle.danger)
+    async def confirm_delete(self, interaction, button):
+        if self.snapshot is None:
+            await interaction.response.send_message("La programación ya no existe.",ephemeral=True)
+            return
+        conn = scheduled_embed_db()
+        try:
+            cursor = conn.execute(
+                "DELETE FROM scheduled_embeds WHERE guild_id=? AND id=? AND updated_at=?",
+                (self.guild_id,self.schedule_id,self.snapshot[3]))
+            if cursor.rowcount != 1:
+                conn.rollback()
+                await interaction.response.send_message(
+                    "La programación cambió o fue eliminada. Recargue el listado.",ephemeral=True)
+                return
+            conn.commit()
+        finally:
+            conn.close()
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"Programación #{self.schedule_id} eliminada. El embed y los mensajes enviados se conservaron.",
+            view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel_delete(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Eliminación cancelada; no se modificó nada.",view=None)
+
+
 class EmbedSchedulesManageView(discord.ui.View):
     def __init__(self, owner_id, guild_id):
         super().__init__(timeout=900)
@@ -20836,6 +20961,35 @@ class EmbedSchedulesManageView(discord.ui.View):
     async def pick(self, interaction):
         self.selected_id = int(interaction.data["values"][0])
         await interaction.response.edit_message(content=f"**Programación #{self.selected_id}** seleccionada. Puede pausar o reanudar la publicación.", view=self)
+
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_schedule(self, interaction, button):
+        if self.selected_id is None:
+            await interaction.response.send_message("Seleccione una programación.",ephemeral=True)
+            return
+        try:
+            view = EmbedScheduleEditView(self.owner_id, self.guild_id, self.selected_id)
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc),ephemeral=True)
+            return
+        await interaction.response.send_message(
+            content=view.summary()+"\\n\\nEdite el borrador y revise antes de guardar.",
+            view=view,ephemeral=True)
+
+    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
+    async def delete_schedule(self, interaction, button):
+        if self.selected_id is None:
+            await interaction.response.send_message("Seleccione una programación.",ephemeral=True)
+            return
+        view = EmbedScheduleDeleteView(self.owner_id,self.guild_id,self.selected_id)
+        if view.snapshot is None:
+            await interaction.response.send_message("La programación ya no existe.",ephemeral=True)
+            return
+        name, channel, mode, _ = view.snapshot
+        await interaction.response.send_message(
+            content=f"**Eliminar programación #{self.selected_id}?**\\nEmbed: \`{name}\` · Canal: <#{channel}> · {mode}\\n"
+                    "No se borrará el embed ni sus mensajes históricos.",
+            view=view,ephemeral=True)
 
     @discord.ui.button(label="Pausar / Reanudar", style=discord.ButtonStyle.primary, row=1)
     async def toggle(self, interaction, button):
@@ -20871,7 +21025,7 @@ class EmbedSchedulesManageView(discord.ui.View):
             content=f"Programación #{self.selected_id}: {'activada' if activate else 'pausada'}.", view=self)
 
 
-@embed_group.command(name="programaciones", description="Consultar y pausar o reanudar embeds programados.")
+@embed_group.command(name="programaciones", description="Consultar, editar, eliminar y pausar embeds programados.")
 async def embed_schedules_command(interaction: discord.Interaction) -> None:
     conn = scheduled_embed_db()
     try:
