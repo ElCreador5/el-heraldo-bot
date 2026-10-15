@@ -13521,14 +13521,9 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         f"**Registro de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'Canal general de logs'}\n"
         f"**Reacciones de reporte:**\n{mapping_text}\n"
         f"**Reacción para condenar:** {condemn_emoji or get_condemnation_emoji(guild.id)}\n\n"
-        "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
-        "Al alcanzar el umbral de personas distintas, se ejecuta la acción de esa regla. "
-        "Advertir requiere un moderador y no elimina mensajes. Solo reportar tampoco elimina mensajes. "
-        "Selecciona una reacción para elegir su acción en el menú desplegable. "
-        "Pulsa **Regla** para configurar el umbral, la duración cuando corresponda y la purga. "
-        "Guardar cambios es obligatorio; Descartar no modifica el servidor.\n"
-        "Para condenar mediante reacción, un moderador reacciona al mensaje del miembro "
-        "con el emoji de condena y proporciona la razón solicitada por mensaje directo antes de aplicar la condena."
+        "Las reglas anteriores muestran la configuración efectiva o el borrador actual. "
+        "Las advertencias requieren un moderador y no eliminan mensajes. "
+        "La reacción de condena directa funciona por separado de las reglas de reportes."
     )
 
 
