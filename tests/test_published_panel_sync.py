@@ -18,6 +18,10 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertIn("await synchronize_published_panels(guild)", code)
         self.assertIn("await suggestions_startup()", code)
 
+    def test_join_reconciles_existing_panels(self):
+        code = ast.unparse(function("on_guild_join"))
+        self.assertIn("await synchronize_published_panels(guild)", code)
+
     def test_reconciler_only_edits_registered_modules(self):
         code = ast.unparse(function("synchronize_published_panels"))
         self.assertIn("verify_panel_ref", code)
