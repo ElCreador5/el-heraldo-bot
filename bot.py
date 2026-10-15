@@ -2033,6 +2033,13 @@ async def on_ready() -> None:
         join_roles_sync_loop.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
+    # H-03: disabled by default; import dependencies only after explicit opt-in.
+    if os.environ.get("HERALDO_PRODUCTION_BACKUP_ENABLED"):
+        try:
+            from production_backup_scheduler import start_if_authorized
+            start_if_authorized(DB_PATH)
+        except Exception:
+            print("H03_DAILY status=BLOCKED reason=startup_preflight_failed", flush=True)
     _startup_done = True
     print(f"El Heraldo conectado como {bot.user}")
 
@@ -11130,6 +11137,9 @@ async def execute_moderation_report_action(
         return False, f"Acción bloqueada: {protection}."
 
     notes: list[str] = []
+    # A report must never purge messages, even for legacy rules with purge_minutes.
+    if action == "report":
+        return True, "Reporte registrado"
     if purge_minutes:
         after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
         result = await run_purge_job(
@@ -11144,9 +11154,6 @@ async def execute_moderation_report_action(
             notes.append("purga ya en curso")
         else:
             notes.append(f"purga reciente: {purge_result_text(result)}")
-
-    if action == "report":
-        return True, "; ".join(notes) if notes else "solo registrado"
 
     try:
         if action == "timeout":
@@ -11209,7 +11216,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         threshold = int(item.get("threshold", 1))
         duration = item.get("duration_minutes")
         duration_text = f" · {format_duration(int(duration))}" if duration else ""
-        purge = item.get("purge_minutes")
+        purge = item.get("purge_minutes") if str(item.get("action", "report")) != "report" else None
         purge_text = f" · purgar {format_duration(int(purge))}" if purge else ""
         return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){purge_text}"
     mapping_text = "\n".join(rule_line(item) for item in mappings) or "• Sin reacciones configuradas"
@@ -11219,7 +11226,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         f"**Reacción para condenar:** {condemn_emoji or get_condemnation_emoji(guild.id)}\n\n"
         "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
         "Al alcanzar el umbral de personas distintas, se ejecuta la acción de esa regla. "
-        "Si hay una ventana de purga, también se eliminan mensajes, incluso con Solo reportar. "
+        "Solo reportar nunca elimina mensajes. "
         "Para revisar la acción y el umbral, selecciona la reacción y pulsa **Regla**.\n"
         "Para condenar mediante reacción, un moderador reacciona al mensaje del miembro "
         "con el emoji de condena y proporciona la razón solicitada por mensaje directo antes de aplicar la condena."
