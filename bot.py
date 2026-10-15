@@ -7619,10 +7619,10 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
 
-class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacción de reporte"):
-    duration = discord.ui.TextInput(label="Duración (opcional)", required=False, max_length=30, placeholder="30m, 1d o vacío")
-    threshold = discord.ui.TextInput(label="Reportes necesarios", required=True, max_length=2, placeholder="2")
-    purge = discord.ui.TextInput(label="Borrar mensajes recientes", required=False, max_length=30, placeholder="30m o vacío")
+class ModerationReactionRuleModal(discord.ui.Modal, title="Condiciones de reacción"):
+    duration = discord.ui.TextInput(label="Duración de la sanción (si aplica)", required=False, max_length=30, placeholder="Por ejemplo: 30m, 2h, 1d")
+    threshold = discord.ui.TextInput(label="Personas distintas necesarias", required=True, max_length=2, placeholder="Por ejemplo: 2")
+    purge = discord.ui.TextInput(label="Borrar mensajes previos (opcional)", required=False, max_length=30, placeholder="Periodo, por ejemplo: 30m; vacío = no borrar")
 
     def __init__(self, parent_view: "HeraldoUserReportsSetupView", index: int) -> None:
         super().__init__()
@@ -7635,6 +7635,11 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
         self.threshold.default = str(item.get("threshold", 1))
         purge = item.get("purge_minutes")
         self.purge.default = format_duration(int(purge)) if purge else "-"
+        action = str(item.get("action", "report"))
+        if action in {"report", "warn", "kick", "ban"}:
+            self.remove_item(self.duration)
+        if action in {"report", "warn"}:
+            self.remove_item(self.purge)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         # La acción pertenece al selector desplegable del editor.
@@ -7682,6 +7687,10 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
                 return
         if action == "warn":
             duration_minutes, purge_minutes, threshold = None, None, 1
+        elif action in {"report", "kick", "ban"}:
+            duration_minutes = None
+        if action == "report":
+            purge_minutes = None
         if action == "report" and purge_minutes:
             await interaction.response.send_message(
                 "Solo reportar no permite borrar mensajes. Elimina la ventana de purga para continuar.", ephemeral=True
@@ -7720,7 +7729,7 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante rea
                 f"Ese emoji pertenece al reporte **{conflict['label']}**: "
                 f"{moderation_action_label(str(conflict.get('action', 'report')))}, "
                 f"con un umbral de {conflict.get('threshold', 1)} personas distintas. "
-                "Revísalo en **/setup → Moderation → Reportes → selecciona la reacción → Regla**. "
+                "Revísalo en **/setup → Moderation → Reportes → Configurar condiciones**. "
                 "Elige otro emoji para condenar mediante reacción.", ephemeral=True)
             return
         self.parent_view.pending_condemn_emoji = emoji
@@ -7867,7 +7876,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         selected = reactions[index] if index is not None and 0 <= index < len(reactions) else None
         current_action = str(selected.get("action", "report")) if selected else "report"
         selector = discord.ui.Select(
-            placeholder="Acción de la reacción seleccionada",
+            placeholder="2. Acción al alcanzar los reportes necesarios",
             options=[
                 discord.SelectOption(
                     label=moderation_action_label(action),
@@ -7877,7 +7886,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                 for action in ("report", "warn", "timeout", "condemn", "kick", "ban")
             ],
             disabled=selected is None,
-            row=4,
+            row=2,
         )
         selector.callback = self.select_action
         self.action_select = selector
@@ -7910,7 +7919,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         elif values[0] == "warn":
             notice = "\n\nAdvertir: solo moderadores, una advertencia por mensaje, sin purga. El Heraldo asumirá la reacción si tiene permisos."
         elif values[0] == "timeout" and not reactions[index].get("duration_minutes"):
-            notice = "\n\nPara aislar, configure una duración en Regla antes de guardar."
+            notice = "\n\nPara aislar, pulse Configurar condiciones y establezca la duración antes de guardar."
         await interaction.response.edit_message(
             content=self._content(interaction.guild) + notice, view=self
         )
@@ -7974,28 +7983,34 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Añadir", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Añadir", style=discord.ButtonStyle.primary, row=3)
     async def add_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if len(self._working_reactions()) >= MODERATION_REPORT_MAX_REACTIONS:
             await interaction.response.send_message("Ya alcanzaste el máximo de reacciones.", ephemeral=True)
             return
         await interaction.response.send_modal(ModerationReactionEditModal(self))
 
-    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=3)
     async def edit_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_reaction_index is None:
             await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
             return
         await interaction.response.send_modal(ModerationReactionEditModal(self, self.selected_reaction_index))
 
-    @discord.ui.button(label="Regla", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Configurar condiciones", style=discord.ButtonStyle.secondary, row=3)
     async def edit_rule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_reaction_index is None:
             await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
             return
+        if self._working_reactions()[self.selected_reaction_index].get("action") == "warn":
+            await interaction.response.send_message(
+                "Advertir siempre se ejecuta con una sola reacción de un moderador, "
+                "no tiene duración y nunca elimina mensajes.", ephemeral=True,
+            )
+            return
         await interaction.response.send_modal(ModerationReactionRuleModal(self, self.selected_reaction_index))
 
-    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=3)
     async def delete_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_reaction_index is None:
             await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
@@ -8007,18 +8022,18 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Condenar mediante reacción", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Condenar mediante reacción", style=discord.ButtonStyle.secondary, row=3)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
-    @discord.ui.button(label="Máx. advertencias", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Máx. advertencias", style=discord.ButtonStyle.secondary, row=4)
     async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         warn_view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
         await interaction.response.send_message(
             content=warn_view._content(), view=warn_view, ephemeral=True,
         )
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.pending_channel_id is None and self.pending_reactions is None and self.pending_condemn_emoji is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
@@ -8101,7 +8116,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.original_channel_id = moderation_report_channel_id(self.guild_id)
         self.original_reactions = copy.deepcopy(moderation_report_reactions(self.guild_id))
@@ -8113,7 +8128,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
