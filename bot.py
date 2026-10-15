@@ -8098,6 +8098,8 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     selected += "\nSolo reportar no aplica sanciones ni elimina mensajes."
                 if action == "warn":
                     selected += "\nSolo moderadores: crea expediente WARN y conserva el mensaje sin purgar."
+                if action != "report" and not moderation_report_punishment_enabled(self.guild_id, action):
+                    selected += "\n**Acción desactivada:** no se ejecutará al alcanzar el umbral."
         return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + f"\n\n**Advertencias:** máximo {moderation_warning_limit(self.guild_id)}; al alcanzarlo: {moderation_action_label(moderation_warn_escalation_action(self.guild_id)) if moderation_warn_escalation_action(self.guild_id) != 'none' else 'Solo avisar'}. Ajustar en Sanciones y límite." + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
@@ -12653,16 +12655,19 @@ async def moderation_warning_escalation(
 
     # La reclamación se persiste ANTES de comunicarse con Discord; si el bot
     # se detiene después, no se ejecuta a ciegas una segunda sanción.
-    conn = db_connect()
     try:
-        changed = conn.execute(
-            "INSERT OR IGNORE INTO moderation_warn_escalations "
-            "(guild_id,user_id,warn_case_number,action,status,created_at) "
-            "VALUES (?,?,?,?,'pending',?)",
-            (guild.id, member.id, case_number, action, datetime.now(timezone.utc).isoformat()),
-        ).rowcount
-    finally:
-        conn.close()
+        conn = db_connect()
+        try:
+            changed = conn.execute(
+                "INSERT OR IGNORE INTO moderation_warn_escalations "
+                "(guild_id,user_id,warn_case_number,action,status,created_at) "
+                "VALUES (?,?,?,?,'pending',?)",
+                (guild.id, member.id, case_number, action, datetime.now(timezone.utc).isoformat()),
+            ).rowcount
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return "No se pudo reservar la acción automática; revisión administrativa necesaria."
     if not changed:
         return "La acción por límite ya estaba registrada; no se repetirá."
 
@@ -12702,15 +12707,18 @@ async def moderation_warning_escalation(
         # No repetir automáticamente una sanción que pudo haber tenido efecto.
         message = "Acción por límite no confirmada; requiere revisión, sin reintento automático."
     finally:
-        conn = db_connect()
         try:
-            conn.execute(
-                "UPDATE moderation_warn_escalations SET status=? "
-                "WHERE guild_id=? AND user_id=? AND warn_case_number=?",
-                (outcome, guild.id, member.id, case_number),
-            )
-        finally:
-            conn.close()
+            conn = db_connect()
+            try:
+                conn.execute(
+                    "UPDATE moderation_warn_escalations SET status=? "
+                    "WHERE guild_id=? AND user_id=? AND warn_case_number=?",
+                    (outcome, guild.id, member.id, case_number),
+                )
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            message += " Registro de estado pendiente; revisar sin repetir la sanción."
     if action != "condemn":
         try:
             await log_embed(
@@ -12976,12 +12984,13 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             guild.id, case_type, member.id, reason, duration_minutes=duration_minutes,
             author_id=interaction.user.id, proof=proof, verified_proof=verified,
         )
+    # La advertencia se envía ANTES de cualquier expulsión o baneo por acumulación.
+    dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
     escalation_note = ""
     if case_type == "WARN" and active == warn_limit:
         escalation_note = await moderation_warning_escalation(
             guild, member, case_number, active, warn_limit,
         )
-    dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
     await log_embed(
         guild, f"Moderation · {case_type}",
         f"Expediente {moderation_case_code(case_number, guild.id)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}"
@@ -13303,14 +13312,16 @@ async def execute_moderation_report_action(
         limit = moderation_warning_limit(guild.id)
         status = f"{active}/{limit}"
         reached = "; máximo alcanzado, revisión administrativa necesaria" if active >= limit else ""
-        if created and active == limit:
-            reached = "; " + await moderation_warning_escalation(guild, target, case_number, active, limit)
         code = moderation_case_code(case_number, guild.id)
         if created:
             try:
                 sent = await moderation_send_case_dm(guild, target.id, case_number)
             except Exception:
                 sent = False
+            if active == limit:
+                reached = "; " + await moderation_warning_escalation(
+                    guild, target, case_number, active, limit,
+                )
             return True, f"Advertencia {status} en expediente {code}; DM: {'enviado' if sent else 'no disponible'}{reached}"
         return True, f"Advertencia existente en expediente {code}; vigentes: {status}{reached}"
 
