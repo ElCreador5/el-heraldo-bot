@@ -7555,6 +7555,8 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoJoinRolesSyncView", lambda: HeraldoJoinRolesSyncView(guild_id, 0)),
         ("HeraldoModerationSetupView", lambda: HeraldoModerationSetupView(guild_id, 0)),
         ("HeraldoUserReportsSetupView", lambda: HeraldoUserReportsSetupView(guild_id, 0)),
+        ("ReportReminderSetupView", lambda: ReportReminderSetupView(guild_id, 0)),
+        ("HeraldoDateFormatSetupView", lambda: HeraldoDateFormatSetupView(guild_id, 0)),
         ("HeraldoCasesSetupView", lambda: HeraldoCasesSetupView(guild_id, 0)),
         ("HeraldoCondemnationSetupView", lambda: HeraldoCondemnationSetupView(guild_id, 0)),
         ("HeraldoAutomodSetupView", lambda: HeraldoAutomodSetupView(guild_id, 0)),
