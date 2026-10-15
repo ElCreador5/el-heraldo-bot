@@ -2086,20 +2086,10 @@ async def on_ready() -> None:
         await suggestions_startup()
     except Exception:
         traceback.print_exc()
-    # Sincronizar solamente paneles vivos con referencia persistida; nunca expedientes.
-    # Los mensajes efímeros de /setup se reconstruyen al volver a abrirse.
+    # Los mensajes publicados con referencias guardadas se reconstruyen sin
+    # publicar copias ni modificar los expedientes históricos.
     for guild in bot.guilds:
-        try:
-            ref = guild_config_get(guild.id, "verify_panel_ref")
-            if ref is None and legacy_fallback_allowed(guild.id):
-                ref = db_meta_get("verify_panel_ref")
-            if ref:
-                note = await update_verify_panel(guild)
-                if note.startswith("Advertencia:"):
-                    print(f"Sincronización de panel de verificación pendiente en {guild.id}: {note}")
-        except Exception:
-            print(f"Error al sincronizar el panel de verificación en {guild.id}:")
-            traceback.print_exc()
+        await synchronize_published_panels(guild)
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
@@ -10749,6 +10739,37 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
         f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
         discord.Color.red(),
     )
+
+
+async def synchronize_published_panels(guild: discord.Guild) -> dict[str, str]:
+    """Reconciliación no destructiva de paneles publicados y registrados."""
+    results: dict[str, str] = {}
+    ref = guild_config_get(guild.id, "verify_panel_ref")
+    if ref is None and legacy_fallback_allowed(guild.id):
+        ref = db_meta_get("verify_panel_ref")
+    if ref:
+        try:
+            results["verificacion"] = await update_verify_panel(guild)
+        except (discord.HTTPException, ValueError, TypeError) as exc:
+            results["verificacion"] = f"No se pudo sincronizar: {type(exc).__name__}"
+    # No crear un panel de sugerencias si no existe una referencia publicada:
+    # la primera publicación requiere intervención administrativa.
+    if suggestion_get_panel_message_id(guild.id) and suggestion_get_channel_id(guild.id):
+        try:
+            await suggestion_ensure_panel(guild)
+            results["sugerencias"] = "Panel comprobado"
+        except (discord.HTTPException, ValueError, TypeError) as exc:
+            results["sugerencias"] = f"No se pudo sincronizar: {type(exc).__name__}"
+    if orientation_enabled(guild.id) and get_orientation_channel_id(guild.id):
+        try:
+            ok, note = await ensure_orientation_system(guild)
+            results["orientacion"] = "Panel comprobado" if ok else note
+        except (discord.HTTPException, ValueError, TypeError) as exc:
+            results["orientacion"] = f"No se pudo sincronizar: {type(exc).__name__}"
+    for name, status in results.items():
+        if status.startswith(("No se pudo", "Advertencia:")):
+            print(f"Sincronización pendiente: {guild.id} / {name}: {status}")
+    return results
 
 
 async def update_verify_panel(guild: discord.Guild) -> str:
