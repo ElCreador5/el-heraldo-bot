@@ -12820,8 +12820,8 @@ async def execute_moderation_report_action(
     if action == "report":
         return True, "Reporte registrado"
     if action == "warn":
-        if actor is None or not moderation_is_staff(actor):
-            return False, "La advertencia por reacción requiere un moderador autorizado."
+        if actor is None or not moderation_can_warn(actor):
+            return False, "La advertencia por reacción requiere permiso para moderar miembros."
         if target.id == guild.owner_id or (
             actor.id != guild.owner_id and target.top_role >= actor.top_role
         ):
@@ -12932,6 +12932,11 @@ def moderation_report_channel_id(guild_id: int) -> int:
 
 def set_moderation_report_channel_id(guild_id: int, channel_id: int) -> None:
     guild_config_set(guild_id, "moderation_report_channel_id", str(channel_id))
+
+
+def moderation_can_warn(member: discord.Member) -> bool:
+    perms = member.guild_permissions
+    return bool(perms.administrator or perms.moderate_members)
 
 
 def moderation_is_staff(member: discord.Member) -> bool:
@@ -15929,11 +15934,15 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
     condemn_emoji = get_condemnation_emoji(guild.id)
     is_condemn = _moderation_emoji_key(emoji) == _moderation_emoji_key(condemn_emoji)
     report_rule = moderation_report_rule_for_emoji(guild.id, emoji)
+    # Dos acciones configuradas con el mismo emoji no deben ejecutarse juntas.
+    # En caso de conflicto se falla cerrado, sin aplicar condena ni advertencia.
+    if is_condemn and report_rule is not None:
+        return
     report_type = str(report_rule["label"]) if report_rule else None
     if not is_condemn and report_rule is None:
         return
     # Advertir no es una encuesta pública: solo puede iniciarlo el personal autorizado.
-    if report_rule and report_rule.get("action") == "warn" and not moderation_is_staff(actor):
+    if report_rule and report_rule.get("action") == "warn" and not moderation_can_warn(actor):
         return
 
     channel = guild.get_channel_or_thread(payload.channel_id)
