@@ -7558,12 +7558,25 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
         super().__init__()
         self.parent_view = parent_view
         self.index = index
+        self.original_item = (copy.deepcopy(parent_view._working_reactions()[index])
+                              if index is not None else None)
         if index is not None:
             item = parent_view._working_reactions()[index]
             self.emoji.default = str(item["emoji"])
             self.label.default = str(item["label"])
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.parent_view.interaction_check(interaction):
+            return
+        current = self.parent_view._working_reactions()
+        if self.index is not None and (
+            self.index >= len(current) or current[self.index] != self.original_item
+        ):
+            await interaction.response.send_message(
+                "La reacción cambió mientras editaba. Abra el formulario nuevamente.",
+                ephemeral=True,
+            )
+            return
         emoji = str(self.emoji).strip()
         label = str(self.label).strip()
         key = _moderation_emoji_key(emoji)
@@ -7604,6 +7617,7 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
         self.parent_view = parent_view
         self.index = index
         item = parent_view._working_reactions()[index]
+        self.original_item = copy.deepcopy(item)
         duration = item.get("duration_minutes")
         self.duration.default = format_duration(int(duration)) if duration else "-"
         self.threshold.default = str(item.get("threshold", 1))
@@ -7614,7 +7628,14 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
         # La acción pertenece al selector desplegable del editor.
         if not await self.parent_view.interaction_check(interaction):
             return
-        action = str(self.parent_view._working_reactions()[self.index].get("action", "report"))
+        current = self.parent_view._working_reactions()
+        if self.index >= len(current) or current[self.index] != self.original_item:
+            await interaction.response.send_message(
+                "La regla cambió mientras editaba. Abra el formulario nuevamente.",
+                ephemeral=True,
+            )
+            return
+        action = str(current[self.index].get("action", "report"))
         if action not in MODERATION_REPORT_ACTIONS:
             await interaction.response.send_message("La acción seleccionada no es válida.", ephemeral=True)
             return
@@ -7670,6 +7691,8 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante rea
         self.emoji.default = parent_view.pending_condemn_emoji or get_condemnation_emoji(parent_view.guild_id)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.parent_view.interaction_check(interaction):
+            return
         emoji = str(self.emoji).strip()
         if not emoji:
             await interaction.response.send_message("El emoji no puede estar vacío.", ephemeral=True)
