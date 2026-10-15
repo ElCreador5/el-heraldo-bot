@@ -101,6 +101,9 @@ class WarningReactionTests(unittest.TestCase):
             "moderation_report_case_record": add_case,
             "moderation_case_code": lambda num, guild: "AB1C234",
             "moderation_send_case_dm": notify,
+            "moderation_warning_counts": lambda guild, user: (1, 1),
+            "moderation_warning_limit": lambda guild: 3,
+            "ModerationWarningLimitReached": ValueError,
             "_moderation_emoji_key": lambda s: s,
         })
         guild = SimpleNamespace(id=25, owner_id=20)
