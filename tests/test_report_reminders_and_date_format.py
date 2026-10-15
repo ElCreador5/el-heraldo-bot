@@ -64,7 +64,7 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         code = ast.unparse(ast.parse(SOURCE.read_text(encoding="utf-8")))
         modal = code[code.index("class ReportReminderOptionsModal"):code.index("class ReportReminderSetupView")]
         self.assertIn("RAILWAY_PROJECT_ID", modal)
-        self.assertIn("'s' and (not is_test)", modal.replace('unit == ', ''))
+        self.assertIn("unit == 's' and (not is_test)", modal)
         self.assertIn("report_reminder_interval", modal)
         self.assertNotIn("guild_config_set", modal)
 
