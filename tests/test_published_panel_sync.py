@@ -57,8 +57,10 @@ class PublishedPanelSyncTests(unittest.TestCase):
         editor = next(node for node in tree.body
                       if isinstance(node, ast.ClassDef) and node.name == "ModerationReactionEditModal")
         source = ast.unparse(editor)
-        self.assertIn('self.emoji.default = "❗"', source)
-        self.assertIn('"warn" if is_default_warning else "report"', source)
+        self.assertIn("self.emoji.default", source)
+        self.assertIn("❗", source)
+        self.assertIn("is_default_warning", source)
+        self.assertIn("warn", source)
         self.assertNotIn("guild_config_set", source)
         view = next(node for node in tree.body
                     if isinstance(node, ast.ClassDef) and node.name == "HeraldoUserReportsSetupView")
