@@ -1,3 +1,7 @@
+## Sincronización automática de paneles — primera etapa (2026-10-15)
+
+Autorización del propietario: actualizar paneles dinámicos al cambiar configuración, al desplegar cambios de texto y tras reinicio, conservando personalizaciones; NO reescribir expedientes/evidencias/registros históricos ni duplicar mensajes. `Pruebas@b064757`: se incorporó en el arranque la reconciliación del panel persistente de verificación por referencia guardada; el panel de sugerencias ya se restaura y edita mediante `suggestions_startup` / `suggestion_ensure_panel`. Los paneles efímeros de /setup se reconstruyen al abrir. **Cobertura global incompleta**: inventariar módulos y sus IDs persistidos, añadir hooks de guardado y regresiones. Sin pruebas automáticas o de Discord de esta etapa todavía; comprobar Railway Test. `main` no modificada.
+
 ## Confirmación legible y aviso de laboratorio por DM — 2026-10-15
 
 Commits `c644354` y `4bce296` en `Pruebas`: se sustituyeron secuencias literales `\\n` por saltos de línea reales en la confirmación de `/setup` (problema visible en captura). Los DM de expedientes de moderación, tarjetas de condena y perdón reciben un campo formal de aviso de pruebas solo cuando `RAILWAY_PROJECT_ID` corresponde al proyecto Railway Test; el embed se copia para no contaminar el expediente publicado en canales. No se modificó `main`, ni las notificaciones en otros entornos. Pendientes: verificar presencia real de `RAILWAY_PROJECT_ID`, pruebas automatizadas y prueba interactiva de los tres flujos en Heraldo's Lab; ampliar revisión de otros DM según alcance.
