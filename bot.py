@@ -7578,7 +7578,6 @@ class ModerationReactionEditModal(discord.ui.Modal, title="Moderation · Editar 
 
 
 class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacción de reporte"):
-    action = discord.ui.TextInput(label="¿Qué debe hacer el bot?", required=True, max_length=30, placeholder="Reportar, condenar, aislar, expulsar o banear")
     duration = discord.ui.TextInput(label="Duración (opcional)", required=False, max_length=30, placeholder="30m, 1d o vacío")
     threshold = discord.ui.TextInput(label="Reportes necesarios", required=True, max_length=2, placeholder="2")
     purge = discord.ui.TextInput(label="Borrar mensajes recientes", required=False, max_length=30, placeholder="30m o vacío")
@@ -7588,7 +7587,6 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
         self.parent_view = parent_view
         self.index = index
         item = parent_view._working_reactions()[index]
-        self.action.default = moderation_action_label(str(item.get("action", "report")))
         duration = item.get("duration_minutes")
         self.duration.default = format_duration(int(duration)) if duration else "-"
         self.threshold.default = str(item.get("threshold", 1))
@@ -7596,25 +7594,12 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
         self.purge.default = format_duration(int(purge)) if purge else "-"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        # El formulario acepta acciones en español; los códigos internos se
-        # conservan únicamente en SQLite y nunca deben aprenderse de memoria.
+        # La acción pertenece al selector desplegable del editor.
         if not await self.parent_view.interaction_check(interaction):
             return
-        requested = str(self.action).strip().casefold()
-        aliases = {
-            "report": "report", "reportar": "report", "solo reportar": "report",
-            "solo registrar": "report", "registrar": "report",
-            "timeout": "timeout", "timeout / mute": "timeout", "aislar": "timeout",
-            "aislar temporalmente": "timeout", "silenciar": "timeout",
-            "kick": "kick", "expulsar": "kick",
-            "ban": "ban", "banear": "ban", "bloquear": "ban",
-            "condemn": "condemn", "condenar": "condemn",
-        }
-        action = aliases.get(requested)
+        action = str(self.parent_view._working_reactions()[self.index].get("action", "report"))
         if action not in MODERATION_REPORT_ACTIONS:
-            await interaction.response.send_message(
-                "Elige una acción: reportar, condenar, aislar, expulsar o banear.", ephemeral=True
-            )
+            await interaction.response.send_message("La acción seleccionada no es válida.", ephemeral=True)
             return
         try:
             threshold = int(str(self.threshold).strip())
@@ -7706,6 +7691,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self.channel_select = channel_select
         self.add_item(channel_select)
         self.reaction_select: discord.ui.Select | None = None
+        self.action_select: discord.ui.Select | None = None
         self._rebuild_reaction_select()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -7746,6 +7732,56 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             )
         self.reaction_select = select
         self.add_item(select)
+        self._rebuild_action_select()
+
+    def _rebuild_action_select(self) -> None:
+        if self.action_select is not None:
+            self.remove_item(self.action_select)
+        reactions = self._working_reactions()
+        index = self.selected_reaction_index
+        selected = reactions[index] if index is not None and 0 <= index < len(reactions) else None
+        current_action = str(selected.get("action", "report")) if selected else "report"
+        selector = discord.ui.Select(
+            placeholder="Acción de la reacción seleccionada",
+            options=[
+                discord.SelectOption(
+                    label=moderation_action_label(action),
+                    value=action,
+                    default=action == current_action,
+                )
+                for action in ("report", "timeout", "condemn", "kick", "ban")
+            ],
+            disabled=selected is None,
+            row=4,
+        )
+        selector.callback = self.select_action
+        self.action_select = selector
+        self.add_item(selector)
+
+    async def select_action(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        index = self.selected_reaction_index
+        if (index is None or not 0 <= index < len(self._working_reactions())
+                or len(values) != 1 or values[0] not in MODERATION_REPORT_ACTIONS):
+            await interaction.response.send_message(
+                "Seleccione una reacción y una acción válida.", ephemeral=True
+            )
+            return
+        reactions = [dict(item) for item in self._working_reactions()]
+        reactions[index]["action"] = values[0]
+        if values[0] == "report":
+            # La acción informativa nunca puede incluir eliminación de mensajes.
+            reactions[index]["purge_minutes"] = None
+        self.pending_reactions = reactions
+        self._rebuild_reaction_select()
+        notice = ""
+        if values[0] == "report":
+            notice = "\n\nSolo reportar no elimina mensajes; se descartó cualquier purga pendiente."
+        elif values[0] == "timeout" and not reactions[index].get("duration_minutes"):
+            notice = "\n\nPara aislar, configure una duración en Regla antes de guardar."
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild) + notice, view=self
+        )
 
     def _content(self, guild: discord.Guild) -> str:
         lines: list[str] = []
@@ -7844,7 +7880,37 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             if any(_moderation_emoji_key(str(item["emoji"])) == condemn_key for item in self.pending_reactions):
                 await interaction.response.send_message("El emoji de condena no puede coincidir con una reacción de reporte.", ephemeral=True)
                 return
+        if self.pending_reactions is not None:
+            for item in self.pending_reactions:
+                action = str(item.get("action", "report"))
+                if action not in MODERATION_REPORT_ACTIONS:
+                    await interaction.response.send_message(
+                        "La regla incluye una acción no válida.", ephemeral=True
+                    )
+                    return
+                if action == "timeout" and not item.get("duration_minutes"):
+                    await interaction.response.send_message(
+                        "Una regla de aislamiento requiere duración; edítela antes de guardar.",
+                        ephemeral=True,
+                    )
+                    return
+                if action == "report" and item.get("purge_minutes"):
+                    await interaction.response.send_message(
+                        "Solo reportar no permite purgar mensajes.", ephemeral=True
+                    )
+                    return
         if self.pending_channel_id is not None:
+            channel = interaction.guild.get_channel(self.pending_channel_id)
+            me = interaction.guild.me
+            perms = channel.permissions_for(me) if channel and me else None
+            if not isinstance(channel, discord.TextChannel) or perms is None or not (
+                perms.view_channel and perms.send_messages and perms.embed_links
+            ):
+                await interaction.response.send_message(
+                    "El canal de reportes dejó de estar disponible o faltan permisos.",
+                    ephemeral=True,
+                )
+                return
             set_moderation_report_channel_id(self.guild_id, self.pending_channel_id)
         if self.pending_reactions is not None:
             set_moderation_report_reactions(self.guild_id, self.pending_reactions)
@@ -7865,7 +7931,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
