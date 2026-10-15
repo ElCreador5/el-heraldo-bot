@@ -15142,23 +15142,90 @@ class ConfigurationConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="Propuesta cancelada. No se guardaron cambios.", view=None)
 
 
+def configuration_review_value(guild, key, value):
+    """Representación legible de cambios administrativos, sin JSON ni menciones activas."""
+    if value is None:
+        return "Valor predeterminado"
+    raw = str(value)
+    if raw in ("0", "1") and (key.endswith("_enabled") or key.endswith("_paused")
+                             or key in {"raid_purge", "honeypot_warning_enabled"}):
+        return "Activado" if raw == "1" else "Desactivado"
+    if key.endswith("_id") and raw.isdecimal() and guild is not None:
+        ident = int(raw)
+        entity = (guild.get_role(ident) if "role" in key else
+                  guild.get_member(ident) if "user" in key or "member" in key else
+                  guild.get_channel(ident))
+        if entity is not None:
+            return discord.utils.escape_markdown(getattr(entity, "name", str(entity)))
+        return "Recurso no disponible"
+    if key in {"join_role_ids", "join_specific_roles"}:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                names = [guild.get_role(int(rid)).name if guild and guild.get_role(int(rid))
+                         else "Rol no disponible" for rid in parsed]
+                return ", ".join(discord.utils.escape_markdown(name) for name in names) or "Ningún rol"
+            if isinstance(parsed, dict):
+                return f"{len(parsed)} miembro(s) con asignaciones configuradas"
+        except (ValueError, TypeError):
+            return "Configuración de roles (formato no válido)"
+    if key in {"motw_weekday"} and raw in {"0", "1", "2", "3", "4", "5", "6"}:
+        return ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")[int(raw)]
+    if key.endswith("_color"):
+        return raw.upper()[:12]
+    if key.endswith("_seconds") and raw.isdecimal():
+        return f"{raw} segundos"
+    if key.endswith("_minutes") and raw.isdecimal():
+        return f"{raw} minutos"
+    # No hacer ping ni permitir Markdown de valores personalizados en la revisión.
+    return discord.utils.escape_markdown(discord.utils.escape_mentions(raw)).replace("\\n", " ")[:180] or "(Vacío)"
+
+
+def configuration_review_label(key):
+    labels = {
+        "condemned_channel_id": "Canal de condenados",
+        "motw_channel_id": "Canal de Miembro de la Semana",
+        "motw_weekday": "Día del anuncio",
+        "motw_hour": "Hora del anuncio",
+        "join_role_ids": "Roles de ingreso",
+        "join_specific_roles": "Roles de miembros específicos",
+        "condemnation_default_duration": "Duración predeterminada de condena",
+        "verify_enabled": "Verificación",
+        "verify_role_id": "Rol de verificación",
+        "verify_action": "Acción de verificación",
+        "raid_enabled": "Protección contra raids",
+        "honeypot_enabled": "Honeypot",
+    }
+    return labels.get(key, key.replace("_", " ").capitalize())
+
+
 async def confirm_configuration(interaction, guild_id, changes):
     if not await configuration_access(interaction, guild_id):
         return
-    report = {key: {'actual': guild_config_get(guild_id, key), 'propuesto': value}
-              for key, value in changes.items()}
-    summary = '\n'.join(f"{key.replace('_', ' ')}: {str(value)[:140] if value is not None else 'Restaurar valor predeterminado'}"
-                        for key, value in changes.items())
-    report_file = discord.File(io.BytesIO(json.dumps(report, ensure_ascii=False, indent=2).encode('utf-8')),
-                               filename='propuesta.json')
-    try:
+    # Comparar los valores persistidos, no los valores efectivos por defecto.
+    # Así se evitan escrituras innecesarias sin modificar su semántica.
+    changed = {key: value for key, value in changes.items()
+               if guild_config_get(guild_id, key) != (None if value is None else str(value))}
+    if not changed:
         await interaction.response.send_message(
-            "Revise la propuesta y confirme el guardado. El archivo adjunto incluye los valores completos.\n\n"
-            + discord.utils.escape_markdown(summary)[:1600], file=report_file,
-            view=ConfigurationConfirmView(guild_id, interaction.user.id, changes), ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none())
-    finally:
-        report_file.close()
+            "La configuración seleccionada ya está guardada. No hay cambios pendientes.",
+            ephemeral=True)
+        return
+    guild = interaction.guild
+    lines = []
+    for key, value in changed.items():
+        before = configuration_review_value(guild, key, guild_config_get(guild_id, key))
+        after = configuration_review_value(guild, key, value)
+        lines.append(f"**{configuration_review_label(key)}**\\nActual: {before}\\nPropuesto: {after}")
+    summary = "\\n\\n".join(lines)
+    if len(summary) > 3200:
+        summary = summary[:3150] + "\\n… (más cambios pendientes)"
+    embed = discord.Embed(title="El Heraldo · Confirmación de configuración",
+                          description=summary, color=discord.Color.blurple())
+    embed.set_footer(text="Los cambios solo se aplicarán al seleccionar Guardar cambios.")
+    await interaction.response.send_message(
+        embed=embed, view=ConfigurationConfirmView(guild_id, interaction.user.id, changed),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
 async def confirm_condemnation_template(interaction, guild_id, values):
