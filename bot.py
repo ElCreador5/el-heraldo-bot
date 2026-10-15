@@ -16031,7 +16031,8 @@ class ConfigurationConfirmView(discord.ui.View):
                 await suggestion_ensure_panel(interaction.guild)
             if any(key.startswith('orientation_embed_') for key in self.changes) and orientation_enabled(self.guild_id):
                 await ensure_orientation_system(interaction.guild)
-            if {'verify_panel_text', 'verify_button_label', 'verify_success_text'}.intersection(self.changes):
+            if {'verify_panel_text', 'verify_button_label', 'verify_success_text',
+                'verify_enabled', 'verify_role_id', 'verify_timeout_seconds', 'verify_action'}.intersection(self.changes):
                 await update_verify_panel(interaction.guild)
                 await log_embed(interaction.guild, "Textos de verificación actualizados",
                     f"{interaction.user.mention} confirmó los textos del panel.", discord.Color.blurple())
