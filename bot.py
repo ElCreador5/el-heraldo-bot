@@ -4453,6 +4453,7 @@ class HeraldoMotwSetupView(discord.ui.View):
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.pending_channel_id: int | None = None
+        self.original_channel_id = get_motw_channel_id(guild_id)
         channel = discord.ui.ChannelSelect(
             placeholder="Seleccionar canal de Miembro de la Semana",
             channel_types=[discord.ChannelType.text],
@@ -4494,7 +4495,7 @@ class HeraldoMotwSetupView(discord.ui.View):
         if not (perms.view_channel and perms.send_messages and perms.embed_links):
             await interaction.response.send_message("El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces.", ephemeral=True)
             return
-        self.pending_channel_id = channel.id
+        self.pending_channel_id = channel.id if channel.id != get_motw_channel_id(self.guild_id) else None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Horario", style=discord.ButtonStyle.primary, row=1)
@@ -4518,7 +4519,23 @@ class HeraldoMotwSetupView(discord.ui.View):
         if self.pending_channel_id is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
+        if get_motw_channel_id(self.guild_id) != self.original_channel_id:
+            await interaction.response.send_message(
+                "El canal cambió mientras editaba. Abra el panel nuevamente.", ephemeral=True
+            )
+            return
+        channel = interaction.guild.get_channel(self.pending_channel_id)
+        me = interaction.guild.me
+        perms = channel.permissions_for(me) if channel and me else None
+        if not isinstance(channel, discord.TextChannel) or perms is None or not (
+            perms.view_channel and perms.send_messages and perms.embed_links
+        ):
+            await interaction.response.send_message(
+                "El canal ya no está disponible o faltan permisos para publicar.", ephemeral=True
+            )
+            return
         set_motw_channel_id(self.guild_id, self.pending_channel_id)
+        self.original_channel_id = self.pending_channel_id
         self.pending_channel_id = None
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
@@ -7678,6 +7695,9 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.original_channel_id = moderation_report_channel_id(guild_id)
+        self.original_reactions = copy.deepcopy(moderation_report_reactions(guild_id))
+        self.original_condemn_emoji = get_condemnation_emoji(guild_id)
         self.pending_channel_id: int | None = None
         self.pending_reactions: list[dict[str, object]] | None = None
         self.pending_condemn_emoji: str | None = None
@@ -7818,7 +7838,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         if not perms.view_channel or not perms.send_messages or not perms.embed_links:
             await interaction.response.send_message("El Heraldo necesita Ver canal, Enviar mensajes e Insertar enlaces en ese canal.", ephemeral=True)
             return
-        self.pending_channel_id = channel.id
+        self.pending_channel_id = channel.id if channel.id != moderation_report_channel_id(self.guild_id) else None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     async def select_reaction(self, interaction: discord.Interaction) -> None:
@@ -7875,6 +7895,17 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         if self.pending_channel_id is None and self.pending_reactions is None and self.pending_condemn_emoji is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
+        if ((self.pending_channel_id is not None
+             and moderation_report_channel_id(self.guild_id) != self.original_channel_id)
+            or (self.pending_reactions is not None
+                and moderation_report_reactions(self.guild_id) != self.original_reactions)
+            or (self.pending_condemn_emoji is not None
+                and get_condemnation_emoji(self.guild_id) != self.original_condemn_emoji)):
+            await interaction.response.send_message(
+                "La configuración de reportes cambió mientras editaba. Recargue el editor.",
+                ephemeral=True,
+            )
+            return
         if self.pending_reactions is not None:
             condemn_key = _moderation_emoji_key(self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id))
             if any(_moderation_emoji_key(str(item["emoji"])) == condemn_key for item in self.pending_reactions):
@@ -7916,6 +7947,9 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             set_moderation_report_reactions(self.guild_id, self.pending_reactions)
         if self.pending_condemn_emoji is not None:
             guild_config_set(self.guild_id, "condemnation_emoji", self.pending_condemn_emoji)
+        self.original_channel_id = moderation_report_channel_id(self.guild_id)
+        self.original_reactions = copy.deepcopy(moderation_report_reactions(self.guild_id))
+        self.original_condemn_emoji = get_condemnation_emoji(self.guild_id)
         self.pending_channel_id = None
         self.pending_reactions = None
         self.pending_condemn_emoji = None
@@ -7924,6 +7958,9 @@ class HeraldoUserReportsSetupView(discord.ui.View):
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.original_channel_id = moderation_report_channel_id(self.guild_id)
+        self.original_reactions = copy.deepcopy(moderation_report_reactions(self.guild_id))
+        self.original_condemn_emoji = get_condemnation_emoji(self.guild_id)
         self.pending_channel_id = None
         self.pending_reactions = None
         self.pending_condemn_emoji = None
