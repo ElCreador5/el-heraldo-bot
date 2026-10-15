@@ -7982,7 +7982,7 @@ def reminder_settings(guild_id):
         "report_reminder_frequency": "weekly",
         "report_reminder_day": "0",
         "report_reminder_hour": "12",
-        "report_reminder_interval": "7",
+        "report_reminder_interval": "7d",
         "report_reminder_start": "",
     }.items()}
 
@@ -8003,7 +8003,7 @@ def reminder_preview(guild_id):
 
 
 class ReportReminderOptionsModal(discord.ui.Modal, title="Recordatorios: intervalo personalizado"):
-    days = discord.ui.TextInput(label="Intervalo en días (mínimo 1)", placeholder="Ejemplo: 14", max_length=3)
+    days = discord.ui.TextInput(label="Intervalo (ej.: 30s, 2m, 1h, 14d)", placeholder="Ejemplo: 2m", max_length=10)
     date = discord.ui.TextInput(label="Inicio (AAAA-MM-DD, opcional)", placeholder="Ejemplo: 2026-11-01", required=False, max_length=10)
     def __init__(self, parent):
         super().__init__()
@@ -8014,16 +8014,22 @@ class ReportReminderOptionsModal(discord.ui.Modal, title="Recordatorios: interva
         if not await self.parent.interaction_check(interaction):
             return
         try:
-            amount = int(str(self.days))
-            if not 1 <= amount <= 365:
+            interval = str(self.days).strip().lower()
+            match = re.fullmatch(r"(\d+)(s|m|h|d)", interval)
+            if not match:
+                raise ValueError()
+            number, unit = int(match.group(1)), match.group(2)
+            seconds = number * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+            is_test = os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+            if seconds < (10 if is_test else 86400) or seconds > 365 * 86400 or (unit == "s" and not is_test):
                 raise ValueError()
             start = str(self.date).strip()
             if start:
                 datetime.strptime(start, "%Y-%m-%d")
         except ValueError:
-            await interaction.response.send_message("Use 1–365 días y fecha AAAA-MM-DD válida.", ephemeral=True)
+            await interaction.response.send_message("Use 1d–365d, 24h o equivalente. Solo en Test: desde 10s (ej.: 30s, 2m). Fecha AAAA-MM-DD.", ephemeral=True)
             return
-        self.parent.pending.update(report_reminder_interval=str(amount), report_reminder_start=start, report_reminder_frequency="custom")
+        self.parent.pending.update(report_reminder_interval=interval, report_reminder_start=start, report_reminder_frequency="custom")
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
 
 
@@ -8069,7 +8075,7 @@ class ReportReminderSetupView(discord.ui.View):
             f"**Frecuencia:** {self.FREQUENCIES[p['report_reminder_frequency']]}\n"
             f"**Hora:** {int(p['report_reminder_hour']):02d}:00 (Santo Domingo)\n"
             f"**Canal:** <#{p['report_reminder_channel']}>\n"
-            "Personalizar permite escribir un intervalo de 1–365 días y una fecha inicial. "
+            "Personalizar: 1d–365d o equivalente; en Test también 30s, 2m o 1h. "
             "Solo una confirmación administrativa guarda estos cambios.\n"
             f"**Próxima publicación estimada:** "
             f"{format_configured_datetime(self.guild_id, reminder_next_due(p, datetime.now(timezone.utc)))}")
@@ -8138,7 +8144,15 @@ def reminder_next_due(settings, now):
     elif frequency == "monthly":
         days = None  # Los meses no tienen siempre 30 días.
     else:
-        days = max(1, min(365, int(settings["report_reminder_interval"])))
+        interval = str(settings["report_reminder_interval"]).lower()
+        match = re.fullmatch(r"(\d+)(s|m|h|d)", interval)
+        if match:
+            seconds = int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match.group(2)]
+        else:
+            seconds = max(1, min(365, int(interval))) * 86400  # configuración heredada
+        is_test = os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+        seconds = max(10 if is_test else 86400, min(seconds, 365 * 86400))
+        days = None
     start = settings["report_reminder_start"]
     if frequency in {"custom", "fortnightly", "monthly"} and start:
         try:
@@ -8153,12 +8167,14 @@ def reminder_next_due(settings, now):
             next_month = candidate.month % 12 + 1
             day = min(candidate.day, calendar.monthrange(next_year, next_month)[1])
             candidate = candidate.replace(year=next_year, month=next_month, day=day)
+        elif frequency == "custom":
+            candidate += timedelta(seconds=seconds)
         else:
             candidate += timedelta(days=days)
     return candidate.astimezone(timezone.utc)
 
 
-@tasks.loop(minutes=1)
+@tasks.loop(seconds=10)
 async def report_reminders_loop():
     """No ejecuta publicaciones atrasadas ni repite envíos de resultado incierto."""
     now = datetime.now(timezone.utc)
@@ -10280,9 +10296,14 @@ class HeraldoDateFormatSetupView(discord.ui.View):
             await interaction.response.send_message("Formato de fecha no válido.", ephemeral=True)
             return
         self.pending = value
+        for item in self.children:
+            if isinstance(item, discord.ui.Select):
+                for option in item.options:
+                    option.default = option.value == value
         await interaction.response.edit_message(
             content=date_format_setup_summary(self.guild_id)
-                    + f"\n\n**Propuesta:** {DATE_FORMAT_CHOICES[self.pending]}",
+                    + f"\n\n**Borrador SIN GUARDAR:** {DATE_FORMAT_CHOICES[self.pending]}\n"
+                      "Pulse Revisar y confirmar para proponer el cambio, y Guardar cambios en la confirmación final.",
             view=self,
         )
 
