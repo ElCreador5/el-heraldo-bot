@@ -8082,7 +8082,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         elif values[0] == "warn":
             notice = "\n\nAdvertir: solo moderadores, una advertencia por mensaje, sin purga. El Heraldo asumirá la reacción si tiene permisos."
         elif values[0] == "timeout" and not reactions[index].get("duration_minutes"):
-            notice = "\n\nPara aislar, pulse Configurar condiciones y establezca la duración antes de guardar."
+            notice = "\n\nPara aislar, pulse Condiciones y establezca la duración antes de guardar."
         await interaction.response.edit_message(
             content=self._content(interaction.guild) + notice, view=self
         )
@@ -8122,23 +8122,17 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                 if action != "report" and not moderation_report_punishment_enabled(self.guild_id, action):
                     selected += "\n**Acción desactivada:** no se ejecutará al alcanzar el umbral."
         intro = (
-            "**Configurar reportes por reacción**\n"
-            "1. Elija una reacción de la lista (o pulse Añadir).\n"
-            "2. Seleccione qué ocurrirá al recibir suficientes reportes.\n"
-            "3. En **Condiciones**, ajuste cantidad de personas, duración y eliminación "
-            "de mensajes cuando corresponda.\n\n"
-            "**Opciones independientes**\n"
-            "• **Emoji de condena directa:** permite a moderadores condenar con una reacción "
-            "especial, sin usar el umbral de reportes.\n"
-            "• **Advertencias y sanciones:** establece el límite de avisos y las acciones "
-            "habilitadas.\n\n"
+            "**Reportes por reacción**\n"
+            "Elija una reacción, seleccione la acción y ajuste sus condiciones.\n"
+            "**Condena directa** y **Advertencias y sanciones** tienen ajustes propios.\n\n"
         )
-        summary = moderation_reports_summary(
-            guild, channel_id=self.pending_channel_id,
-            mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji,
+        mappings = self._working_reactions()
+        summary = (
+            f"**Canal de reportes:** "
+            f"{guild.get_channel(self.pending_channel_id or moderation_report_channel_id(self.guild_id)).mention if guild.get_channel(self.pending_channel_id or moderation_report_channel_id(self.guild_id)) else 'Sin canal específico'}\n"
+            f"**Reacciones configuradas:** {len(mappings)}/{MODERATION_REPORT_MAX_REACTIONS}\n"
+            f"**Condena directa:** {self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id)}"
         )
-        if len(summary) > 1050:
-            summary = summary[:1040] + "…"
         action = moderation_warn_escalation_action(self.guild_id)
         current_action = moderation_action_label(action) if action != "none" else "Solo avisar"
         self._update_change_buttons()
