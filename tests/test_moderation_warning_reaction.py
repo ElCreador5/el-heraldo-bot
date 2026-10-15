@@ -43,8 +43,8 @@ class WarningReactionTests(unittest.TestCase):
         self.assertIsNone(warning[0]["purge_minutes"])
         self.assertIsNone(warning[0]["duration_minutes"])
         self.assertIn("WARN", ast.unparse(TREE))
-        self.assertIn('name="warn"', ast.unparse(TREE))
-        self.assertIn('name="advertencias"', ast.unparse(TREE))
+        self.assertIn("name='warn'", ast.unparse(TREE))
+        self.assertIn("name='advertencias'", ast.unparse(TREE))
 
     def test_warn_rule_normalizes_as_nondestructive(self):
         normalize = isolated("_normalize_moderation_report_rule", {
