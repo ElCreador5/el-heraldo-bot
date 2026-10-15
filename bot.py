@@ -2086,6 +2086,20 @@ async def on_ready() -> None:
         await suggestions_startup()
     except Exception:
         traceback.print_exc()
+    # Sincronizar solamente paneles vivos con referencia persistida; nunca expedientes.
+    # Los mensajes efímeros de /setup se reconstruyen al volver a abrirse.
+    for guild in bot.guilds:
+        try:
+            ref = guild_config_get(guild.id, "verify_panel_ref")
+            if ref is None and legacy_fallback_allowed(guild.id):
+                ref = db_meta_get("verify_panel_ref")
+            if ref:
+                note = await update_verify_panel(guild)
+                if note.startswith("Advertencia:"):
+                    print(f"Sincronización de panel de verificación pendiente en {guild.id}: {note}")
+        except Exception:
+            print(f"Error al sincronizar el panel de verificación en {guild.id}:")
+            traceback.print_exc()
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
