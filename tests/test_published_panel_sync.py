@@ -52,6 +52,20 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertIn("result.insert(0, warn_default)", source)
         self.assertNotIn("guild_config_set", source)
 
+    def test_missing_warning_is_offered_without_saving(self):
+        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        editor = next(node for node in tree.body
+                      if isinstance(node, ast.ClassDef) and node.name == "ModerationReactionEditModal")
+        source = ast.unparse(editor)
+        self.assertIn('self.emoji.default = "❗"', source)
+        self.assertIn('"warn" if is_default_warning else "report"', source)
+        self.assertNotIn("guild_config_set", source)
+        view = next(node for node in tree.body
+                    if isinstance(node, ast.ClassDef) and node.name == "HeraldoUserReportsSetupView")
+        overview = next(node for node in view.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "_content")
+        self.assertIn("Advertencia ❗ no configurada", ast.unparse(overview))
+
     def test_report_editor_uses_compact_overview(self):
         source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
