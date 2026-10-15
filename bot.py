@@ -483,6 +483,19 @@ def db_init() -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS moderation_warn_escalations (
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            warn_case_number INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (guild_id, user_id, warn_case_number)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS moderation_cases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id INTEGER NOT NULL,
@@ -12464,6 +12477,123 @@ def moderation_case_message_history(guild_id: int, user_id: int) -> str:
 
 MODERATION_WARN_MAX_DEFAULT = 3
 MODERATION_WARN_MAX_ALLOWED = 5
+MODERATION_REPORT_TOGGLABLE_ACTIONS = ("warn", "timeout", "kick", "ban", "condemn")
+MODERATION_WARN_ESCALATION_ACTIONS = {"none", "timeout", "kick", "ban", "condemn"}
+MODERATION_WARN_ESCALATION_DURATION_CHOICES = (30, 60, 1440, 10080)
+
+
+def moderation_report_punishment_enabled(guild_id: int, action: str) -> bool:
+    """Controles específicos de reportes. No alteran los comandos manuales."""
+    return action not in MODERATION_REPORT_TOGGLABLE_ACTIONS or (
+        guild_config_get(guild_id, f"moderation_reaction_{action}_enabled") != "0"
+    )
+
+
+def moderation_warn_escalation_action(guild_id: int) -> str:
+    value = guild_config_get(guild_id, "moderation_warn_limit_action") or "none"
+    return value if value in MODERATION_WARN_ESCALATION_ACTIONS else "none"
+
+
+def moderation_warn_escalation_duration(guild_id: int) -> int:
+    minutes = guild_setting_int(guild_id, "moderation_warn_limit_mute_minutes", 60)
+    return minutes if minutes in MODERATION_WARN_ESCALATION_DURATION_CHOICES else 60
+
+
+async def moderation_warning_escalation(
+    guild: discord.Guild, member: discord.Member, case_number: int,
+    current: int, maximum: int,
+) -> str:
+    """Actúa una sola vez al cruzar el límite; no reintenta sanciones inciertas."""
+    if current != maximum:
+        return ""
+    action = moderation_warn_escalation_action(guild.id)
+    if action == "none":
+        return "Máximo alcanzado: pendiente de revisión administrativa."
+    if not moderation_report_punishment_enabled(guild.id, action):
+        return "Máximo alcanzado: la acción configurada está desactivada."
+    bot_member = guild.me
+    required = {"timeout": "moderate_members", "kick": "kick_members",
+                "ban": "ban_members", "condemn": "manage_roles"}[action]
+    if (bot_member is None
+            or not getattr(bot_member.guild_permissions, required, False)
+            or member.top_role >= bot_member.top_role):
+        return "Máximo alcanzado: faltan permisos o jerarquía para aplicar la acción."
+    protection = condemnation_protection_reason(member)
+    if member.bot or protection:
+        return "Máximo alcanzado: el miembro está protegido frente a acciones automáticas."
+
+    # La reclamación se persiste ANTES de comunicarse con Discord; si el bot
+    # se detiene después, no se ejecuta a ciegas una segunda sanción.
+    conn = db_connect()
+    try:
+        changed = conn.execute(
+            "INSERT OR IGNORE INTO moderation_warn_escalations "
+            "(guild_id,user_id,warn_case_number,action,status,created_at) "
+            "VALUES (?,?,?,?,'pending',?)",
+            (guild.id, member.id, case_number, action, datetime.now(timezone.utc).isoformat()),
+        ).rowcount
+    finally:
+        conn.close()
+    if not changed:
+        return "La acción por límite ya estaba registrada; no se repetirá."
+
+    reason = f"Máximo de advertencias alcanzado ({current}/{maximum}). Expediente {moderation_case_code(case_number, guild.id)}"
+    outcome = "failed"
+    message = "Acción no completada; revisión administrativa necesaria."
+    try:
+        if action == "timeout":
+            minutes = moderation_warn_escalation_duration(guild.id)
+            await member.timeout(datetime.now(timezone.utc) + timedelta(minutes=minutes), reason=reason)
+        elif action == "kick":
+            await member.kick(reason=reason)
+        elif action == "ban":
+            await member.ban(reason=reason, delete_message_seconds=0)
+        elif action == "condemn":
+            successful, detail = await condemn_member(
+                member, reason=reason, duration_minutes=condemnation_default_duration_minutes(guild.id),
+                purge_spec=None, origin="warning_limit", applied_by=None,
+            )
+            if not successful:
+                raise RuntimeError("Condena no confirmada")
+        if action in {"timeout", "kick", "ban"}:
+            case_type = {"timeout": "MUTE", "kick": "KICK", "ban": "BAN"}[action]
+            try:
+                moderation_case_create(
+                    guild.id, case_type, member.id, reason,
+                    duration_minutes=moderation_warn_escalation_duration(guild.id)
+                    if action == "timeout" else None, author_id=None,
+                )
+            except Exception:
+                outcome = "review"
+                message = "Acción ejecutada, pero no fue posible registrar su expediente; revisión necesaria."
+        if outcome != "review":
+            outcome = "complete"
+            message = f"Acción al alcanzar el máximo: {moderation_action_label(action)}."
+    except Exception:
+        # No repetir automáticamente una sanción que pudo haber tenido efecto.
+        message = "Acción por límite no confirmada; requiere revisión, sin reintento automático."
+    finally:
+        conn = db_connect()
+        try:
+            conn.execute(
+                "UPDATE moderation_warn_escalations SET status=? "
+                "WHERE guild_id=? AND user_id=? AND warn_case_number=?",
+                (outcome, guild.id, member.id, case_number),
+            )
+        finally:
+            conn.close()
+    if action != "condemn":
+        try:
+            await log_embed(
+                guild, "Límite de advertencias",
+                f"Miembro: {member.mention}\nAdvertencias: {current}/{maximum}\n"
+                f"Expediente: {moderation_case_code(case_number, guild.id)}\n{message}",
+                discord.Color.orange(),
+            )
+        except Exception:
+            pass
+    return message
+
 
 
 class ModerationWarningLimitReached(ValueError):
