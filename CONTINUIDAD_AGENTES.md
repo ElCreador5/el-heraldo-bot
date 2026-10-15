@@ -1,3 +1,7 @@
+## Sincronización continua — segunda etapa (2026-10-15)
+
+En `Pruebas` los commits `289481a`, `4a2be42`, `1b0b830`, `c7a13cd` y `9836491` amplían la reconciliación del arranque a paneles publicados de Verificación, Sugerencias y Orientación usando sus referencias y funciones existentes; se evita repetir la reconciliación de Orientación dos veces. `tests/test_published_panel_sync.py` incorpora regresiones estructurales. El resumen de Reportes ya elimina texto obsoleto; para configuraciones heredadas exactamente iguales a los cuatro valores predeterminados anteriores, `moderation_report_reactions` incorpora virtualmente ❗ en la lista efectiva. No toca listas personalizadas ni realiza escritura en SQLite durante la lectura. **Pendiente ejecutar regresiones y comprobar en Discord**; Railway Test puede desplegar automáticamente, no equivale a aceptación. Cobertura general de otros embeds aún incompleta. `main` no modificado.
+
 ## Sincronización de verificación ampliada — 2026-10-15
 
 Commits `3bd7cb7` y `96a83d7` en `Pruebas`: la confirmación central de configuración llama ahora a `update_verify_panel` ante cambios de `verify_enabled`, `verify_role_id`, `verify_timeout`, `verify_action` además de los textos/etiqueta existentes. El nombre correcto de la clave es `verify_timeout` (no `_seconds`). El panel publicado se edita por referencia persistida; no se vuelve a publicar y no toca expedientes. Pendientes: pruebas automáticas y reales, inventario del resto de paneles dinámicos y hooks equivalentes. Sin cambios en `main`.
