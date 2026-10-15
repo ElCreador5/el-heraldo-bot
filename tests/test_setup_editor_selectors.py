@@ -52,10 +52,10 @@ class ModerationRuleSelectorTests(unittest.TestCase):
     def test_action_is_whitelisted_selector_not_free_text(self):
         code = ast.unparse(method("HeraldoUserReportsSetupView", "_rebuild_action_select"))
         self.assertIn("discord.ui.Select(", code)
-        for action in ("report", "timeout", "condemn", "kick", "ban"):
+        for action in ("report", "warn", "timeout", "condemn", "kick", "ban"):
             self.assertIn(action, code)
         self.assertIn("disabled=selected is None", code)
-        self.assertIn("row=4", code)
+        self.assertIn("row=2", code)
         modal = ast.unparse(cls("ModerationReactionRuleModal"))
         self.assertNotIn("self.action.default", modal)
         self.assertNotIn("¿Qué debe hacer el bot?", modal)
@@ -77,7 +77,7 @@ class ModerationRuleSelectorTests(unittest.TestCase):
         self.assertIn("channel.permissions_for(me)", code)
         self.assertIn("isinstance(channel, discord.TextChannel)", code)
         view = ast.unparse(cls("HeraldoUserReportsSetupView"))
-        self.assertIn("style=discord.ButtonStyle.secondary, row=3", view)
+        self.assertIn("style=discord.ButtonStyle.secondary, row=4", view)
 
 
     def test_report_modals_recheck_permissions_and_reject_stale_drafts(self):
