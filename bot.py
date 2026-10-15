@@ -12995,7 +12995,7 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         guild, f"Moderation · {case_type}",
         f"Expediente {moderation_case_code(case_number, guild.id)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}"
         + (f"\nAdvertencias vigentes: {active}/{warn_limit}"
-           + ("\nMáximo alcanzado: requiere revisión administrativa." if active >= warn_limit else "")
+           + (f"\n{escalation_note}" if active == warn_limit else "")
            if case_type == "WARN" else ""),
         discord.Color.orange(),
     )
