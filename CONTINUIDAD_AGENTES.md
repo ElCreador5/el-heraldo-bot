@@ -1,3 +1,7 @@
+## Confirmación legible y aviso de laboratorio por DM — 2026-10-15
+
+Commits `c644354` y `4bce296` en `Pruebas`: se sustituyeron secuencias literales `\\n` por saltos de línea reales en la confirmación de `/setup` (problema visible en captura). Los DM de expedientes de moderación, tarjetas de condena y perdón reciben un campo formal de aviso de pruebas solo cuando `RAILWAY_PROJECT_ID` corresponde al proyecto Railway Test; el embed se copia para no contaminar el expediente publicado en canales. No se modificó `main`, ni las notificaciones en otros entornos. Pendientes: verificar presencia real de `RAILWAY_PROJECT_ID`, pruebas automatizadas y prueba interactiva de los tres flujos en Heraldo's Lab; ampliar revisión de otros DM según alcance.
+
 ## Ajustes visuales de Reportes — 2026-10-15
 
 `Pruebas@4492a536`: botones «Emoji de condena directa», «Condiciones» y «Advertencias y sanciones» aclaran la diferencia entre condena especial por reacción y reglas de reportes. El texto del editor separa los pasos de las opciones independientes y muestra estado de cambios sin guardar cerca del comienzo. Guardar/Descartar se deshabilitan si los valores del borrador equivalen a los originales; el guardado conserva sus validaciones existentes. Commits `9fa08ab` y `4492a536`, archivo `bot.py`. **Verificación automatizada y real en Discord pendiente**; Railway Test se autodespliega de Pruebas y requiere comprobar su estado. No se modificó `main`.
