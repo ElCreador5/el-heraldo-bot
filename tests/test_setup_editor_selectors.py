@@ -80,5 +80,16 @@ class ModerationRuleSelectorTests(unittest.TestCase):
         self.assertIn("style=discord.ButtonStyle.secondary, row=3", view)
 
 
+    def test_report_modals_recheck_permissions_and_reject_stale_drafts(self):
+        for name in ("ModerationReactionEditModal", "ModerationReactionRuleModal"):
+            code = ast.unparse(cls(name))
+            self.assertIn("original_item", code)
+            submit = ast.unparse(method(name, "on_submit"))
+            self.assertIn("self.parent_view.interaction_check(interaction)", submit)
+            self.assertIn("current[self.index] != self.original_item", submit)
+        emoji = ast.unparse(method("ModerationCondemnEmojiModal", "on_submit"))
+        self.assertIn("self.parent_view.interaction_check(interaction)", emoji)
+
+
 if __name__ == "__main__":
     unittest.main()
