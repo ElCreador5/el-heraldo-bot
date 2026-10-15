@@ -15932,6 +15932,9 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
     report_type = str(report_rule["label"]) if report_rule else None
     if not is_condemn and report_rule is None:
         return
+    # Advertir no es una encuesta pública: solo puede iniciarlo el personal autorizado.
+    if report_rule and report_rule.get("action") == "warn" and not moderation_is_staff(actor):
+        return
 
     channel = guild.get_channel_or_thread(payload.channel_id)
     if channel is None or not hasattr(channel, "fetch_message"):
@@ -16023,10 +16026,24 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
         _moderation_report_pending.add(action_key)
         try:
             action_result = await execute_moderation_report_action(
-                guild, target, message, report_rule, reporter_count
+                guild, target, message, report_rule, reporter_count,
+                actor=actor if report_rule.get("action") == "warn" else None,
             )
             if action_result[0]:
                 moderation_report_mark_executed(guild.id, message.id, target.id, emoji_key)
+                if report_rule.get("action") == "warn":
+                    # Solo tras registrar el WARN: el bot añade su reacción y
+                    # elimina la del moderador; el mensaje original no se toca.
+                    # Ante error de permisos, el expediente se conserva.
+                    try:
+                        await message.add_reaction(emoji)
+                    except discord.HTTPException:
+                        action_result = (True, action_result[1] + "; no pude marcar con mi reacción")
+                    else:
+                        try:
+                            await message.remove_reaction(emoji, actor)
+                        except discord.HTTPException:
+                            action_result = (True, action_result[1] + "; no pude retirar la reacción del moderador")
         except Exception:
             traceback.print_exc()
             action_result = (False, "Error al ejecutar la acción; revise permisos y configuración.")
