@@ -72,7 +72,7 @@ class ModerationRuleSelectorTests(unittest.TestCase):
     def test_save_revalidates_rules_and_channel(self):
         code = ast.unparse(method("HeraldoUserReportsSetupView", "save_changes"))
         self.assertIn('action == "timeout"', code.replace("'", '"'))
-        self.assertIn('action == "report"', code.replace("'", '"'))
+        self.assertIn('action in {"report", "warn"}', code.replace("'", '"'))
         self.assertIn("MODERATION_REPORT_ACTIONS", code)
         self.assertIn("channel.permissions_for(me)", code)
         self.assertIn("isinstance(channel, discord.TextChannel)", code)
