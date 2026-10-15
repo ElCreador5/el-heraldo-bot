@@ -2105,6 +2105,8 @@ async def on_ready() -> None:
             print(f"Comando global huérfano eliminado: /{cmd.name}")
     except discord.HTTPException as e:
         print(f"No se pudo limpiar comandos globales: {e}")
+    if not report_reminders_loop.is_running():
+        report_reminders_loop.start()
     if not moderation_case_expiry_loop.is_running():
         moderation_case_expiry_loop.start()
     if not condemnation_expiry_loop.is_running():
@@ -8114,6 +8116,100 @@ class ReportReminderSetupView(discord.ui.View):
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Cancelado. No se guardaron cambios.", view=None)
+
+
+def reminder_next_due(settings, now):
+    """Calcula una fecha futura en horario de Santo Domingo (UTC-4)."""
+    local = now.astimezone(timezone(timedelta(hours=-4)))
+    hour = max(0, min(23, int(settings["report_reminder_hour"])))
+    candidate = local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    frequency = settings["report_reminder_frequency"]
+    if frequency == "daily":
+        days = 1
+    elif frequency == "weekly":
+        days = 7
+        candidate += timedelta(days=(int(settings["report_reminder_day"]) - candidate.weekday()) % 7)
+    elif frequency == "fortnightly":
+        days = 14
+    elif frequency == "monthly":
+        days = 30
+    else:
+        days = max(1, min(365, int(settings["report_reminder_interval"])))
+    start = settings["report_reminder_start"]
+    if frequency in {"custom", "fortnightly", "monthly"} and start:
+        try:
+            candidate = datetime.strptime(start, "%Y-%m-%d").replace(
+                tzinfo=timezone(timedelta(hours=-4)), hour=hour)
+        except ValueError:
+            pass
+    while candidate <= local:
+        candidate += timedelta(days=days)
+    return candidate.astimezone(timezone.utc)
+
+
+@tasks.loop(minutes=1)
+async def report_reminders_loop():
+    """No ejecuta publicaciones atrasadas ni repite envíos de resultado incierto."""
+    now = datetime.now(timezone.utc)
+    for guild in bot.guilds:
+        settings = reminder_settings(guild.id)
+        if settings["report_reminder_enabled"] != "1":
+            continue
+        channel = guild.get_channel(int(settings["report_reminder_channel"]))
+        if not isinstance(channel, discord.TextChannel):
+            continue
+        me = guild.me
+        perms = channel.permissions_for(me) if me is not None else None
+        if perms is None or not (perms.view_channel and perms.send_messages and perms.embed_links):
+            continue
+        signature = json.dumps(settings, sort_keys=True)
+        next_due_key = "report_reminder_next_due"
+        signature_key = "report_reminder_signature"
+        try:
+            conn = db_connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                rows = conn.execute(
+                    "SELECT key, value FROM guild_settings WHERE guild_id = ? AND key IN (?, ?)",
+                    (guild.id, next_due_key, signature_key)).fetchall()
+                stored = {row[0]: row[1] for row in rows}
+                if stored.get(signature_key) != signature or not stored.get(next_due_key):
+                    next_due = reminder_next_due(settings, now)
+                    claim = False
+                else:
+                    try:
+                        next_due = datetime.fromisoformat(stored[next_due_key])
+                        if next_due.tzinfo is None:
+                            raise ValueError("naive datetime")
+                    except ValueError:
+                        next_due = reminder_next_due(settings, now)
+                    claim = next_due <= now
+                    if claim:
+                        next_due = reminder_next_due(settings, now)
+                for key, value in (
+                    (next_due_key, next_due.isoformat()), (signature_key, signature)
+                ):
+                    conn.execute(
+                        "INSERT INTO guild_settings(guild_id, key, value) VALUES (?, ?, ?) "
+                        "ON CONFLICT(guild_id, key) DO UPDATE SET value=excluded.value",
+                        (guild.id, key, value))
+                conn.commit()
+            finally:
+                conn.close()
+            if claim:
+                # La fecha siguiente se persiste antes de enviar, para no duplicar
+                # notificaciones tras fallos ambiguos o reinicios.
+                await channel.send(content=reminder_preview(guild.id),
+                                   allowed_mentions=discord.AllowedMentions.none())
+        except (discord.HTTPException, sqlite3.Error, ValueError, TypeError):
+            print(f"Advertencia: recordatorio pendiente en servidor {guild.id}")
+        except Exception:
+            traceback.print_exc()
+
+
+@report_reminders_loop.before_loop
+async def before_report_reminders_loop():
+    await bot.wait_until_ready()
 
 
 class HeraldoUserReportsSetupView(discord.ui.View):
