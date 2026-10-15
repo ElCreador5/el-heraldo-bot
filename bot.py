@@ -2086,7 +2086,7 @@ async def on_ready() -> None:
     # Los mensajes publicados con referencias guardadas se reconstruyen sin
     # publicar copias ni modificar los expedientes históricos.
     for guild in bot.guilds:
-        await synchronize_published_panels(guild)
+        await synchronize_published_panels(guild, suggestions_already_synced=True)
     for guild in bot.guilds:
         await refresh_invite_cache(guild)
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
@@ -10746,7 +10746,9 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
     )
 
 
-async def synchronize_published_panels(guild: discord.Guild) -> dict[str, str]:
+async def synchronize_published_panels(
+    guild: discord.Guild, *, suggestions_already_synced: bool = False
+) -> dict[str, str]:
     """Reconciliación no destructiva de paneles publicados y registrados."""
     results: dict[str, str] = {}
     ref = guild_config_get(guild.id, "verify_panel_ref")
@@ -10759,7 +10761,8 @@ async def synchronize_published_panels(guild: discord.Guild) -> dict[str, str]:
             results["verificacion"] = f"No se pudo sincronizar: {type(exc).__name__}"
     # No crear un panel de sugerencias si no existe una referencia publicada:
     # la primera publicación requiere intervención administrativa.
-    if suggestion_get_panel_message_id(guild.id) and suggestion_get_channel_id(guild.id):
+    if (not suggestions_already_synced and suggestion_get_panel_message_id(guild.id)
+            and suggestion_get_channel_id(guild.id)):
         try:
             await suggestion_ensure_panel(guild)
             results["sugerencias"] = "Panel comprobado"
