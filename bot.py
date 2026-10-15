@@ -7680,6 +7680,8 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Configurar una reacci
             except ValueError as exc:
                 await interaction.response.send_message(f"Purga inválida: {exc}", ephemeral=True)
                 return
+        if action == "warn":
+            duration_minutes, purge_minutes, threshold = None, None, 1
         if action == "report" and purge_minutes:
             await interaction.response.send_message(
                 "Solo reportar no permite borrar mensajes. Elimina la ventana de purga para continuar.", ephemeral=True
@@ -7804,7 +7806,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     value=action,
                     default=action == current_action,
                 )
-                for action in ("report", "timeout", "condemn", "kick", "ban")
+                for action in ("report", "warn", "timeout", "condemn", "kick", "ban")
             ],
             disabled=selected is None,
             row=4,
@@ -7824,10 +7826,12 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             return
         reactions = [dict(item) for item in self._working_reactions()]
         reactions[index]["action"] = values[0]
-        if values[0] == "report":
-            # La acción informativa nunca puede incluir eliminación de mensajes.
+        if values[0] in {"report", "warn"}:
+            # Los reportes y las advertencias no eliminan mensajes.
             reactions[index]["purge_minutes"] = None
-        if values[0] in {"report", "kick", "ban"}:
+        if values[0] == "warn":
+            reactions[index]["threshold"] = 1
+        if values[0] in {"report", "warn", "kick", "ban"}:
             # Estas acciones no admiten duración; evita presentar valores inertes.
             reactions[index]["duration_minutes"] = None
         self.pending_reactions = reactions
@@ -7835,6 +7839,8 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         notice = ""
         if values[0] == "report":
             notice = "\n\nSolo reportar no elimina mensajes; se descartó cualquier purga pendiente."
+        elif values[0] == "warn":
+            notice = "\n\nAdvertir: solo moderadores, una advertencia por mensaje, sin purga. El Heraldo asumirá la reacción si tiene permisos."
         elif values[0] == "timeout" and not reactions[index].get("duration_minutes"):
             notice = "\n\nPara aislar, configure una duración en Regla antes de guardar."
         await interaction.response.edit_message(
@@ -7871,6 +7877,8 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                                  "reporte de una sola persona.")
                 if action == "report":
                     selected += "\nSolo reportar no aplica sanciones ni elimina mensajes."
+                if action == "warn":
+                    selected += "\nSolo moderadores: crea expediente WARN y conserva el mensaje sin purgar."
         return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
@@ -7970,9 +7978,14 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                         ephemeral=True,
                     )
                     return
-                if action == "report" and item.get("purge_minutes"):
+                if action in {"report", "warn"} and item.get("purge_minutes"):
                     await interaction.response.send_message(
-                        "Solo reportar no permite purgar mensajes.", ephemeral=True
+                        "Solo reportar y Advertir no permiten purgar mensajes.", ephemeral=True
+                    )
+                    return
+                if action == "warn" and (item.get("duration_minutes") or int(item.get("threshold", 1)) != 1):
+                    await interaction.response.send_message(
+                        "Advertir requiere umbral 1 y no admite duración.", ephemeral=True
                     )
                     return
                 required = {"timeout": "moderate_members", "kick": "kick_members",
@@ -12951,7 +12964,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         f"**Reacción para condenar:** {condemn_emoji or get_condemnation_emoji(guild.id)}\n\n"
         "Para reportar, reacciona al mensaje con uno de los emojis configurados. "
         "Al alcanzar el umbral de personas distintas, se ejecuta la acción de esa regla. "
-        "La acción Solo reportar nunca elimina mensajes. "
+        "Advertir requiere un moderador y no elimina mensajes. Solo reportar tampoco elimina mensajes. "
         "Selecciona una reacción para elegir su acción en el menú desplegable. "
         "Pulsa **Regla** para configurar el umbral, la duración cuando corresponda y la purga. "
         "Guardar cambios es obligatorio; Descartar no modifica el servidor.\n"
