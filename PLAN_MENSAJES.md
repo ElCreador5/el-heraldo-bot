@@ -1,3 +1,7 @@
+## Patrón de claridad para editores de /setup — 2026-10-15
+
+En `Pruebas` se reorganizó el editor de Reportes: elección de reacción y acción contiguas; `Configurar condiciones` sustituye a `Regla`, con explicación de número de personas distintas, duración de sanción y purga de mensajes. Las opciones irrelevantes no aparecen en el modal. `Sanciones y límite` permite habilitar/deshabilitar tipos de sanción y elegir la acción al máximo WARN con confirmación. Este es el patrón aprobado para extender progresivamente a otros editores (etapas claras, etiquetas específicas, menús para opciones cerradas, vista previa y cancelación sin persistencia), no una afirmación de que todos los paneles ya estén modernizados. Pendiente auditoría y aceptación Discord de los demás editores.
+
 ## Uniformidad adicional de editores — 2026-10-15
 
 En Pruebas, Miembro de la Semana → Horario y Moderation → Reportes sustituyen entradas textuales de opciones cerradas por selectores, manteniendo parámetros personalizados y la confirmación antes de guardar. Es una mejora transversal de /setup, distinta de la finalización del editor visual de Mensajes. Pendiente probar ambos editores en Discord y extender el mismo criterio a otros módulos con opciones conocidas, sin sustituir campos de texto libre.
