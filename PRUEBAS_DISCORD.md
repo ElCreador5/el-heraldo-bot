@@ -1,3 +1,7 @@
+## Reaction Roles: selector de opciones — 2026-10-15
+
+**IMPLEMENTADO, pendiente de verificación real:** el editor de opciones ahora usa tres listas desplegables para modo de acceso (3 opciones), reacciones invertidas (2) y máximo de reacciones (21 valores). Se mantiene borrador separado y Descartar no persiste. Guardar explícitamente desde editor publica; sin escrituras al seleccionar. `tests/test_reaction_options_dropdown.py` añade comprobaciones estructurales, CI del SHA exacto pendiente. Probar real en Heraldo's Lab cambiando modos, cancelando, guardando, reiniciando y verificando la persistencia.
+
 ## Validación pendiente: hilo privado de expediente y duración elegible — 2026-10-15
 
 **IMPLEMENTADO en `Pruebas`** (sujeto a CI): tarjeta de condena intacta y ping en el canal, hilo privado sin asociación nativa al mensaje pero enlazado por botón «Conversación privada», miembro condenado invitado, personal con Gestionar hilos autorizado. Persistencia por servidor en guild_cases, sin hilos duplicados si ya hay thread_id; recuperación tras reinicios, cierre archivado sin borrar conversación, errores registrados sin revertir una condena válida. Preparación manual de permisos del rol requiere confirmar en /setup. Duraciones conocidas disponibles mediante desplegable con confirmación y opción personalizada. Migración de BD aditiva, no destructiva.

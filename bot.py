@@ -8651,6 +8651,116 @@ class HeraldoReactionOptionsModal(discord.ui.Modal, title="Opciones de Reaction 
                                                 selected=self.editor.selected))
 
 
+class HeraldoReactionOptionsSelectView(discord.ui.View):
+    """Editor de opciones cerradas sin solicitar valores que ya conoce El Heraldo."""
+    def __init__(self, editor: "HeraldoReactionRolesEditorView") -> None:
+        super().__init__(timeout=900)
+        self.guild_id = editor.guild_id
+        self.owner_id = editor.owner_id
+        self.selected = editor.selected
+        self.original_panel = copy.deepcopy(editor.panel)
+        self.panel = copy.deepcopy(editor.panel)
+
+        access_mode = discord.ui.Select(
+            placeholder="Acceso al panel de Reaction Roles",
+            options=[
+                discord.SelectOption(label=mode, value=mode,
+                    default=self.panel.get("list_mode", "Todos") == mode)
+                for mode in ("Todos", "Lista blanca", "Lista negra")
+            ], row=0,
+        )
+        access_mode.callback = self.select_access_mode
+        self.add_item(access_mode)
+
+        reversed_select = discord.ui.Select(
+            placeholder="Reacciones invertidas",
+            options=[
+                discord.SelectOption(label="Sí", value="true",
+                                     default=bool(self.panel.get("reversed"))),
+                discord.SelectOption(label="No", value="false",
+                                     default=not bool(self.panel.get("reversed"))),
+            ], row=1,
+        )
+        reversed_select.callback = self.select_reversed
+        self.add_item(reversed_select)
+
+        maximum = discord.ui.Select(
+            placeholder="Máximo de reacciones por miembro",
+            options=[
+                discord.SelectOption(
+                    label="Sin límite" if count == 0 else f"{count} reacción(es)",
+                    value=str(count),
+                    default=int(self.panel.get("max_reactions", 0)) == count,
+                )
+                for count in range(21)
+            ], row=2,
+        )
+        maximum.callback = self.select_maximum
+        self.add_item(maximum)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    def content(self) -> str:
+        return (
+            "**El Heraldo · Reaction Roles · Opciones**\n\n"
+            f"Acceso: **{self.panel.get('list_mode', 'Todos')}**\n"
+            f"Reacciones invertidas: **{'Sí' if self.panel.get('reversed') else 'No'}**\n"
+            f"Máximo de reacciones: **{self.panel.get('max_reactions', 0) or 'Sin límite'}**\n\n"
+            "Selecciona las opciones y pulsa **Aplicar al borrador** para volver al editor. "
+            "Después debes pulsar **Guardar** para publicar la configuración. "
+            "**Descartar** conserva los valores anteriores."
+        )
+
+    async def _change(self, interaction: discord.Interaction, key: str, value) -> None:
+        self.panel[key] = value
+        updated = HeraldoReactionOptionsSelectView(
+            HeraldoReactionRolesEditorView(
+                self.guild_id, self.owner_id, self.panel, selected=self.selected
+            )
+        )
+        await interaction.response.edit_message(content=updated.content(), view=updated)
+
+    async def select_access_mode(self, interaction: discord.Interaction) -> None:
+        value = str((interaction.data or {}).get("values", [""])[0])
+        if value not in {"Todos", "Lista blanca", "Lista negra"}:
+            await interaction.response.send_message("Modo de acceso no válido.", ephemeral=True)
+            return
+        await self._change(interaction, "list_mode", value)
+
+    async def select_reversed(self, interaction: discord.Interaction) -> None:
+        value = str((interaction.data or {}).get("values", [""])[0])
+        if value not in {"true", "false"}:
+            await interaction.response.send_message("Opción no válida.", ephemeral=True)
+            return
+        await self._change(interaction, "reversed", value == "true")
+
+    async def select_maximum(self, interaction: discord.Interaction) -> None:
+        value = str((interaction.data or {}).get("values", [""])[0])
+        if not value.isdecimal() or not 0 <= int(value) <= 20:
+            await interaction.response.send_message("Selecciona un máximo entre 0 y 20.", ephemeral=True)
+            return
+        await self._change(interaction, "max_reactions", int(value))
+
+    @discord.ui.button(label="Aplicar al borrador", style=discord.ButtonStyle.success, row=3)
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        editor = HeraldoReactionRolesEditorView(
+            self.guild_id, self.owner_id, self.panel, selected=self.selected
+        )
+        await interaction.response.edit_message(
+            content=editor.content(interaction.guild), view=editor
+        )
+
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        editor = HeraldoReactionRolesEditorView(
+            self.guild_id, self.owner_id, self.original_panel, selected=self.selected
+        )
+        await interaction.response.edit_message(
+            content=editor.content(interaction.guild), view=editor
+        )
+
+
 class HeraldoReactionMessageModal(discord.ui.Modal, title="Editar mensaje de Reaction Roles"):
     heading = discord.ui.TextInput(label="Título", max_length=256, required=False)
     description = discord.ui.TextInput(label="Descripción", style=discord.TextStyle.paragraph, max_length=3800)
@@ -8928,7 +9038,8 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
 
     @discord.ui.button(label="Opciones", style=discord.ButtonStyle.secondary, row=4)
     async def options(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HeraldoReactionOptionsModal(self))
+        selector = HeraldoReactionOptionsSelectView(self)
+        await interaction.response.edit_message(content=selector.content(), view=selector)
 
     @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.secondary, row=4)
     async def edit_message(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
