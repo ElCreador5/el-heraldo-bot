@@ -17307,6 +17307,41 @@ async def moderation_warn(interaction: discord.Interaction, usuario: discord.Mem
     await interaction.followup.send(("Listo. " if ok else "No pude hacerlo: ") + note, ephemeral=True)
 
 
+@bot.tree.command(name="advertencias", description="Consulta el historial de advertencias de un miembro.")
+@app_commands.describe(usuario="Miembro cuyo historial desea consultar")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.guild_only()
+async def moderation_warnings(interaction: discord.Interaction, usuario: discord.Member) -> None:
+    if usuario.bot:
+        await interaction.response.send_message(
+            "No hay advertencias administrativas para bots.", ephemeral=True,
+        )
+        return
+    conn = db_connect()
+    try:
+        total, abiertas = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN open = 1 THEN 1 ELSE 0 END), 0) "
+            "FROM moderation_cases WHERE guild_id=? AND user_id=? AND type='WARN'",
+            (interaction.guild.id, usuario.id),
+        ).fetchone()
+    finally:
+        conn.close()
+    rows = moderation_case_list(
+        interaction.guild.id, user_id=usuario.id, case_type="WARN", limit=8,
+    )
+    lines = [
+        f"**{moderation_case_code(int(row['case_number']), interaction.guild.id)}** · "
+        f"{'Vigente' if row['open'] else 'Cerrada'} · {str(row['reason'])[:130]}"
+        for row in rows
+    ]
+    heading = (f"**El Heraldo · Advertencias de {discord.utils.escape_markdown(usuario.display_name)}**"
+               f"\nTotal: **{total}** · Vigentes: **{abiertas}** · Cerradas: **{total - abiertas}**")
+    message = heading + ("\n\n" + "\n".join(lines) if lines else "\n\nNo hay advertencias registradas.")
+    await interaction.response.send_message(
+        message[:1900], ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
+    )
+
+
 @bot.tree.command(name="mute", description="Aplica timeout y crea un caso de Moderation.")
 @app_commands.describe(usuario="Miembro", duracion="Ej.: 30m, 2h, 7d", motivo="Motivo", prueba="Enlace o texto de prueba")
 @app_commands.checks.has_permissions(moderate_members=True)
