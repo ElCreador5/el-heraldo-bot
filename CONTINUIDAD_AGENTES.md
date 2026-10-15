@@ -1,3 +1,7 @@
+## Confirmaciones legibles de /setup — 2026-10-15
+
+Petición del propietario: eliminar el adjunto técnico `propuesta.json` de `/condenar_setup` y casos similares. Detectada función central `confirm_configuration` utilizada por aproximadamente 30 rutas. En `Pruebas`, se sustituyó el archivo JSON por embed efímero con etiquetas, valor actual y propuesto; valores de ID de canal/rol/miembro se resuelven cuando sea posible, y se excluyen cambios idénticos (sin ofrecer guardar). Se conserva `ConfigurationConfirmView`: permisos y revalidaciones, control transaccional SQLite, Guardar y Cancelar. Regresión estructural: `tests/test_configuration_preview.py`. Se preservan exportaciones de kits JSON cuando son una funcionalidad explícita de importación/exportación (no una confirmación). Se requiere comprobar CI del commit, ejecución real en Heraldo's Lab y posibles campos adicionales que precisen etiquetas específicas. `main` intacta.
+
 ## Segunda etapa de desplegables — Reaction Roles (2026-10-15)
 
 Se amplió la petición general de opciones elegibles: en `Pruebas`, Reaction Roles → Opciones usa selectores para acceso, invertidas y máximo; aplica al borrador y requiere Guardar posterior, con Descartar explícito. Regresiones en `tests/test_reaction_options_dropdown.py`. No tocar `main`. Pendientes otras configuraciones textuales con elecciones cerradas; priorizar opciones reales sin convertir títulos, URLs o motivos libres en desplegables.
