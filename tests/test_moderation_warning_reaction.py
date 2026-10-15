@@ -129,7 +129,7 @@ class WarningReactionTests(unittest.TestCase):
             "moderation_report_punishment_enabled": lambda guild_id, action: True,
         })
         success, message = asyncio.run(warn(
-            SimpleNamespace(owner_id=1), SimpleNamespace(id=5),
+            SimpleNamespace(id=10, owner_id=1), SimpleNamespace(id=5),
             SimpleNamespace(), {"action": "warn"}, 1, actor=SimpleNamespace(id=2)))
         self.assertFalse(success)
         self.assertIn("permiso", message)
