@@ -1,3 +1,9 @@
+## Expedientes privados — criterio autorizado 2026-10-15
+
+Conservar íntegramente diseño, campos, colores, plantilla, enlaces y botones de la tarjeta de condena actual. Orden: asignar rol Condenado → publicar embed original en el canal de condenados mencionando al miembro → crear hilo privado separado por expediente → invitar al condenado → enlazar conversación mediante botón en tarjeta, sin alterar embed. Personal administrativo con Gestionar hilos puede consultar todos; condenados solo sus hilos privados y cualquier tarjeta visible en el canal compartido. Discord no puede ocultar individualmente tarjetas del canal principal a miembros con permiso de historial. Preservar DM y archivo privado de evidencias; bloquear y archivar hilo al terminar una condena sin borrar historial. No crear hilos públicos como alternativa. Si el servidor no permite privados, advertir y mantener función estable. Permisos de acceso al canal solo cambian con confirmación administrativa expresa. No cambiar `main` sin autorización.
+
+En /setup, utilizar menús desplegables para opciones disponibles o valores predefinidos; dejar campos libres cuando realmente se requieran. Guardar solo después de confirmación explícita y verificar permisos en cada interacción.
+
 ## Almacenamiento externo de respaldos — 2026-10-13
 
 Propietario autorizó preparar y probar un destino gratuito en Supabase sin trasladar aún datos de producción. Bucket privado específico, autenticación con cuenta técnica y RLS de bucket; se prohíbe introducir `service_role`, secret y claves S3 globales en el bot. Cifrado independiente AES-256-GCM, claves fuera de Git, sin auto-programación ni retención destructiva. Advertencia: Free no garantiza disponibilidad continua, tiene límite de 50 MB por objeto y puede pausarse. Activación real y cambio de main siguen sujetos a pruebas, respaldo y autorización separada. Procedimiento en `RESPALDOS_SUPABASE.md`.

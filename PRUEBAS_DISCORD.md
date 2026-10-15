@@ -1,3 +1,11 @@
+## Validación pendiente: hilo privado de expediente y duración elegible — 2026-10-15
+
+**IMPLEMENTADO en `Pruebas`** (sujeto a CI): tarjeta de condena intacta y ping en el canal, hilo privado sin asociación nativa al mensaje pero enlazado por botón «Conversación privada», miembro condenado invitado, personal con Gestionar hilos autorizado. Persistencia por servidor en guild_cases, sin hilos duplicados si ya hay thread_id; recuperación tras reinicios, cierre archivado sin borrar conversación, errores registrados sin revertir una condena válida. Preparación manual de permisos del rol requiere confirmar en /setup. Duraciones conocidas disponibles mediante desplegable con confirmación y opción personalizada. Migración de BD aditiva, no destructiva.
+
+**VERIFICACIÓN AUTOMÁTICA:** `tests/test_condemnation_private_threads.py` cubre hilo privado exclusivamente, mención y orden de pasos, permisos, reinicios, guardado condicional, archivo y selectores. Ejecutar GitHub Actions y consultar SHA exacto.
+
+**VERIFICACIÓN EN DISCORD:** NO REALIZADA. Solo Heraldo's Lab / El Heraldo Test. Escenarios: bot con permisos Create Private Threads/Manage Threads y usuario rol Condenado con View Channel/Read Message History/Send Messages in Threads; verificar misma tarjeta/DM, mención única, acceso a hilo propio pero no otro, enlace, comunicación, permisos de personal, confirmación de acceso, duración del menú, caída de API, reinicio, perdón y expiración. Confirmar nivel 2 del servidor para privados. Si no está disponible, no improvisar público ni probar en producción. Verificar si una persona con permiso Manage Threads puede ver todos; no concederlo al rol Condenado. `main` intacta.
+
 ## Registro único de condena con purga — 2026-10-15
 
 **DETECTADO (captura oficial + código):** el mismo proceso de condena con purga publica «Condena aplicada» y «Purga de condena completada» como dos avisos separados. La copia privada «Evidencia archivada» y el perdón son eventos distintos y deben mantenerse.

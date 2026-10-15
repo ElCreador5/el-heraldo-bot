@@ -2090,6 +2090,7 @@ async def on_ready() -> None:
     for guild in bot.guilds:
         try:
             await condemnation_reconcile(guild)
+            await condemnation_recover_private_threads(guild)
         except Exception:
             traceback.print_exc()
 
@@ -7873,6 +7874,62 @@ class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Dura
         await confirm_configuration(interaction, self.guild_id, {"condemnation_default_duration": setting or "indefinida"})
 
 
+class CondemnationChannelAccessConfirmView(discord.ui.View):
+    """Acceso al canal preparado únicamente tras confirmación expresa."""
+    def __init__(self, guild_id: int, owner_id: int, channel_id: int, role_id: int) -> None:
+        super().__init__(timeout=180)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.channel_id = channel_id
+        self.role_id = role_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Confirmar acceso", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        channel = guild.get_channel(self.channel_id)
+        role = guild.get_role(self.role_id)
+        me = guild.me
+        if (not isinstance(channel, discord.TextChannel) or role is None or me is None
+                or role.id != get_condenado_role_id(guild.id)
+                or channel.id != condemnation_channel_id(guild.id)):
+            await interaction.response.edit_message(
+                content="La configuración cambió. Vuelve a abrir Condenas antes de confirmar.", view=None)
+            return
+        if not (interaction.user.guild_permissions.manage_channels
+                and me.guild_permissions.manage_channels
+                and channel.permissions_for(me).manage_channels):
+            await interaction.response.send_message(
+                "Se requiere Gestionar canales para el administrador y El Heraldo.", ephemeral=True)
+            return
+        try:
+            await channel.set_permissions(
+                role,
+                view_channel=True, read_message_history=True,
+                send_messages=False, send_messages_in_threads=True,
+                create_public_threads=False, create_private_threads=False,
+                manage_threads=False,
+                reason="El Heraldo: acceso de condenados a sus hilos privados",
+            )
+        except discord.HTTPException:
+            await interaction.response.send_message(
+                "Discord rechazó los permisos. No se aplicaron cambios adicionales.", ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content="Acceso del rol Condenado configurado. Los hilos privados solo se abren "
+                    "al miembro invitado y a moderadores con Gestionar hilos. "
+                    "Las tarjetas del canal principal siguen siendo visibles a quienes puedan ver el canal.",
+            view=None,
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="Operación cancelada. No se modificaron los permisos.", view=None)
+
+
 class HeraldoCondemnationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -7899,6 +7956,58 @@ class HeraldoCondemnationSetupView(discord.ui.View):
         )
         role_select.callback = self.select_role
         self.add_item(role_select)
+
+        # Las opciones conocidas no requieren memorizar ni escribir su sintaxis.
+        max_minutes = get_condemnation_max_minutes(guild_id)
+        choices = [
+            ("Indefinida", "0"), ("30 minutos", "30m"), ("1 hora", "1h"),
+            ("6 horas", "6h"), ("12 horas", "12h"), ("1 día", "1d"),
+            ("3 días", "3d"), ("7 días", "7d"), ("30 días", "30d"),
+        ]
+        allowed = [discord.SelectOption(label="Indefinida", value="0")]
+        for label, value in choices[1:]:
+            try:
+                parse_duration(value, 1, max_minutes)
+            except ValueError:
+                continue
+            allowed.append(discord.SelectOption(label=label, value=value))
+        allowed.append(discord.SelectOption(
+            label="Duración personalizada",
+            value="custom",
+            description="Introducir una duración distinta de las sugeridas",
+        ))
+        duration_select = discord.ui.Select(
+            placeholder="Elegir duración predeterminada",
+            min_values=1, max_values=1, options=allowed, row=4,
+        )
+        duration_select.callback = self.select_duration
+        self.add_item(duration_select)
+
+    async def select_duration(self, interaction: discord.Interaction) -> None:
+        values = (interaction.data or {}).get("values", [])
+        if not values:
+            await interaction.response.send_message("Selecciona una duración.", ephemeral=True)
+            return
+        value = str(values[0])
+        if value == "custom":
+            await interaction.response.send_modal(HeraldoCondemnationDurationModal(self.guild_id))
+            return
+        if value not in {"0", "30m", "1h", "6h", "12h", "1d", "3d", "7d", "30d"}:
+            await interaction.response.send_message("Duración no permitida.", ephemeral=True)
+            return
+        if value != "0":
+            try:
+                minutes = parse_duration(value, 1, get_condemnation_max_minutes(self.guild_id))
+            except ValueError:
+                await interaction.response.send_message("La duración supera el máximo configurado.", ephemeral=True)
+                return
+            selected = f"{minutes}m"
+        else:
+            selected = "indefinida"
+        # Seleccionar no guarda: siempre presenta confirmación o Cancelar.
+        await confirm_configuration(
+            interaction, self.guild_id, {"condemnation_default_duration": selected},
+        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
@@ -7960,6 +8069,25 @@ class HeraldoCondemnationSetupView(discord.ui.View):
     @discord.ui.button(label="Duración", style=discord.ButtonStyle.secondary, row=2)
     async def duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoCondemnationDurationModal(self.guild_id))
+
+    @discord.ui.button(label="Preparar acceso", style=discord.ButtonStyle.secondary, row=2)
+    async def prepare_access(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        channel = guild.get_channel(condemnation_channel_id(guild.id))
+        role = guild.get_role(get_condenado_role_id(guild.id))
+        if not isinstance(channel, discord.TextChannel) or role is None:
+            await interaction.response.send_message(
+                "Configura y guarda primero el canal y el rol Condenado.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "El Heraldo dará al rol Condenado acceso al canal y su historial, "
+            "permiso para responder en hilos, pero no para publicar directamente en el canal, "
+            "crear hilos o gestionar hilos. Esta acción modificará los permisos del canal. "
+            "Las tarjetas principales serán visibles a todos los miembros con acceso al canal. "
+            "¿Confirmas el cambio?",
+            view=CondemnationChannelAccessConfirmView(guild.id, interaction.user.id, channel.id, role.id),
+            ephemeral=True,
+        )
 
     @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=2)
     async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -11302,13 +11430,18 @@ def honeypot_db_init() -> None:
         "reason TEXT NOT NULL, duration_minutes INTEGER, condemned_at TEXT NOT NULL, "
         "expires_at TEXT, origin TEXT NOT NULL, applied_by INTEGER, active INTEGER NOT NULL DEFAULT 1, "
         "pardoned_by INTEGER, pardoned_at TEXT, resolution TEXT, announcement_message_id INTEGER, "
-        "moderation_case_number INTEGER, "
+        "moderation_case_number INTEGER, thread_id INTEGER, thread_requested INTEGER NOT NULL DEFAULT 0, "
         "PRIMARY KEY (guild_id, user_id))"
     )
-    try:
-        conn.execute("ALTER TABLE guild_cases ADD COLUMN moderation_case_number INTEGER")
-    except sqlite3.OperationalError:
-        pass
+    for column_sql in (
+        "ALTER TABLE guild_cases ADD COLUMN moderation_case_number INTEGER",
+        "ALTER TABLE guild_cases ADD COLUMN thread_id INTEGER",
+        "ALTER TABLE guild_cases ADD COLUMN thread_requested INTEGER NOT NULL DEFAULT 0",
+    ):
+        try:
+            conn.execute(column_sql)
+        except sqlite3.OperationalError:
+            pass
     try:
         conn.execute("ALTER TABLE condemnations ADD COLUMN role_id INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -11551,12 +11684,41 @@ def condemnation_save(
         "ON CONFLICT(guild_id, user_id) DO UPDATE SET role_id=excluded.role_id, role_ids=excluded.role_ids, "
         "reason=excluded.reason, duration_minutes=excluded.duration_minutes, condemned_at=excluded.condemned_at, "
         "expires_at=excluded.expires_at, origin=excluded.origin, applied_by=excluded.applied_by, active=1, "
-        "pardoned_by=NULL, pardoned_at=NULL, resolution=NULL, announcement_message_id=NULL",
+        "pardoned_by=NULL, pardoned_at=NULL, resolution=NULL, announcement_message_id=NULL, "
+        "thread_id=NULL, thread_requested=0",
         (guild_id, user_id, role_id, json.dumps(role_ids), reason, duration_minutes, when.isoformat(),
          expires.isoformat() if expires else None, origin, applied_by),
     )
     conn.commit()
     conn.close()
+
+
+def condemnation_thread_mark_requested(guild_id: int, user_id: int, message_id: int) -> None:
+    """Persistir intención después de publicar la tarjeta y antes de llamar a Discord."""
+    conn = db_connect()
+    try:
+        conn.execute(
+            "UPDATE guild_cases SET announcement_message_id = ?, thread_requested = 1 "
+            "WHERE guild_id = ? AND user_id = ? AND active = 1",
+            (message_id, guild_id, user_id),
+        )
+    finally:
+        conn.close()
+
+
+def condemnation_thread_save_id(guild_id: int, user_id: int, message_id: int, thread_id: int) -> bool:
+    """No enlazar un hilo antiguo a una condena reemplazada concurrentemente."""
+    conn = db_connect()
+    try:
+        cursor = conn.execute(
+            "UPDATE guild_cases SET thread_id = ? "
+            "WHERE guild_id = ? AND user_id = ? AND active = 1 "
+            "AND announcement_message_id = ? AND thread_requested = 1",
+            (thread_id, guild_id, user_id, message_id),
+        )
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
 
 
 def condemnation_pending_roles_get(guild_id: int, user_id: int) -> list[int]:
@@ -13310,7 +13472,8 @@ def _build_condemnation_embed(
 
 
 class CondemnationPardonView(discord.ui.View):
-    def __init__(self, *, link_label: str | None = None, link_url: str | None = None) -> None:
+    def __init__(self, *, link_label: str | None = None, link_url: str | None = None,
+                 thread_url: str | None = None) -> None:
         super().__init__(timeout=None)
         if link_url:
             self.add_item(
@@ -13320,6 +13483,12 @@ class CondemnationPardonView(discord.ui.View):
                     url=link_url,
                 )
             )
+        if thread_url:
+            self.add_item(discord.ui.Button(
+                label="Conversación privada",
+                style=discord.ButtonStyle.link,
+                url=thread_url,
+            ))
         pardon_button = discord.ui.Button(
             label="Perdonar",
             style=discord.ButtonStyle.success,
@@ -13515,6 +13684,146 @@ def _condemnation_render_template(text: str, *, member: discord.Member, guild: d
     for key, value in values.items():
         text = text.replace(key, value)
     return text
+
+
+def condemnation_thread_view(message: discord.Message, thread: discord.Thread) -> discord.ui.View:
+    """Conservar la tarjeta y enlaces anteriores; solo sumar el acceso al hilo."""
+    previous_link = None
+    for action_row in message.components:
+        for component in action_row.children:
+            if (getattr(component, "style", None) == discord.ButtonStyle.link
+                    and getattr(component, "url", None)
+                    and getattr(component, "label", None) != "Conversación privada"):
+                previous_link = component
+                break
+        if previous_link is not None:
+            break
+    return CondemnationPardonView(
+        link_label=getattr(previous_link, "label", None),
+        link_url=getattr(previous_link, "url", None),
+        thread_url=thread.jump_url,
+    )
+
+
+async def condemnation_fetch_private_thread(guild: discord.Guild, thread_id: int) -> discord.Thread | None:
+    channel = guild.get_thread(thread_id)
+    if channel is None:
+        try:
+            channel = await guild.fetch_channel(thread_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+    return channel if isinstance(channel, discord.Thread) and channel.type == discord.ChannelType.private_thread else None
+
+
+async def condemnation_ensure_private_thread(
+    guild: discord.Guild, member: discord.Member, message_id: int, case_id: str,
+) -> bool:
+    """Reintento idempotente del hilo; jamás crea uno público como alternativa."""
+    row = condemnation_get(guild.id, member.id)
+    if row is None or not row["thread_requested"] or int(row["announcement_message_id"] or 0) != message_id:
+        return False
+    channel = guild.get_channel(condemnation_channel_id(guild.id))
+    if not isinstance(channel, discord.TextChannel):
+        return False
+
+    me = guild.me
+    if me is None:
+        return False
+    bot_perms = channel.permissions_for(me)
+    if not (bot_perms.view_channel and bot_perms.read_message_history
+            and bot_perms.create_private_threads and bot_perms.send_messages_in_threads):
+        await log_embed(guild, "Advertencia: Conversación privada no disponible",
+                        "El Heraldo necesita Ver canal, Leer historial, Crear hilos privados "
+                        "y Enviar mensajes en hilos en el canal de condenados.", discord.Color.orange())
+        return False
+    try:
+        current_member = await guild.fetch_member(member.id)
+        member_perms = channel.permissions_for(current_member)
+        if not (member_perms.view_channel and member_perms.read_message_history
+                and member_perms.send_messages_in_threads) or member_perms.manage_threads:
+            await log_embed(guild, "Advertencia: Acceso a expediente no disponible",
+                            "El condenado debe poder Ver canal, Leer historial y Enviar mensajes en hilos, "
+                            "pero no Gestionar hilos. Comprueba la configuración del canal.",
+                            discord.Color.orange())
+            return False
+        message = await channel.fetch_message(message_id)
+        thread = None
+        if row["thread_id"]:
+            thread = await condemnation_fetch_private_thread(guild, int(row["thread_id"]))
+            if thread is None or thread.parent_id != channel.id:
+                await log_embed(guild, "Advertencia: Hilo privado del expediente inaccesible",
+                                "La conversación registrada no está disponible. "
+                                "No se creará automáticamente otra para evitar expedientes duplicados.",
+                                discord.Color.orange())
+                return False
+        else:
+            thread = await channel.create_thread(
+                name=f"Expediente {case_id}"[:100],
+                type=discord.ChannelType.private_thread,
+                invitable=False,
+                auto_archive_duration=10080,
+                reason="El Heraldo: conversación privada de expediente",
+            )
+            if not condemnation_thread_save_id(guild.id, member.id, message_id, thread.id):
+                await thread.edit(archived=True, locked=True,
+                                  reason="Expediente reemplazado antes de completar el hilo")
+                return False
+        # Un reinicio tras crear el hilo no debe dejarlo sin acceso.
+        if thread.archived and not thread.locked:
+            await thread.edit(archived=False, reason="Reapertura de conversación activa")
+        await thread.add_user(current_member)
+        # La conversación arranca con el vínculo al expediente, sin otra mención/ping.
+        if not row["thread_id"]:
+            await thread.send(
+                f"Conversación privada del expediente {case_id}. "
+                f"La resolución principal está disponible en {message.jump_url}. "
+                "El condenado puede comunicarse aquí con los administradores.",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        # No editar el embed ni el texto de mención: se mantienen sin cambios.
+        await message.edit(view=condemnation_thread_view(message, thread))
+        return True
+    except (discord.Forbidden, discord.HTTPException) as exc:
+        print(f"Expedientes: no se pudo preparar conversación privada ({type(exc).__name__}).")
+        await log_embed(guild, "Advertencia: Conversación privada pendiente",
+                        "No se completó la invitación o el enlace del expediente. "
+                        "Verifica permisos y disponibilidad de hilos privados.", discord.Color.orange())
+        return False
+
+
+async def condemnation_close_private_thread(guild: discord.Guild, thread_id: int | None) -> None:
+    if not thread_id:
+        return
+    thread = await condemnation_fetch_private_thread(guild, int(thread_id))
+    if thread is None:
+        return
+    try:
+        if not thread.archived:
+            await thread.send("La condena ha finalizado. Este hilo queda cerrado y archivado.",
+                              allowed_mentions=discord.AllowedMentions.none())
+        await thread.edit(archived=True, locked=True, reason="Resolución del expediente")
+    except (discord.Forbidden, discord.HTTPException):
+        await log_embed(guild, "Advertencia: Conversación privada sin cerrar",
+                        "No se pudo archivar el hilo privado de un expediente resuelto.",
+                        discord.Color.orange())
+
+
+async def condemnation_recover_private_threads(guild: discord.Guild) -> None:
+    """Reparar únicamente expedientes nuevos marcados, nunca migrar tarjetas históricas."""
+    for row in condemnation_list(guild.id):
+        if not row["thread_requested"] or not row["announcement_message_id"]:
+            continue
+        member = guild.get_member(int(row["user_id"]))
+        if member is None:
+            continue
+        case_id = condemnation_case_id(
+            member, datetime.fromisoformat(row["condemned_at"]),
+            int(row["moderation_case_number"]) if row["moderation_case_number"] else None,
+        )
+        await condemnation_ensure_private_thread(
+            guild, member, int(row["announcement_message_id"]), case_id,
+        )
+        await asyncio.sleep(0.25)
 
 
 async def condemnation_announce(
@@ -13776,6 +14085,8 @@ async def _condemn_member_inner(
         and not member.guild.get_role(rid).managed
     ]
 
+    if existing is not None and existing["thread_id"]:
+        await condemnation_close_private_thread(member.guild, int(existing["thread_id"]))
     if existing is None:
         condemnation_save(member.id, member.guild.id, active_role_id, saved_ids, reason[:1000], duration_minutes, origin,
                            applied_by.id if applied_by else None)
@@ -13837,12 +14148,10 @@ async def _condemn_member_inner(
             evidence_url=evidence_url, evidence_text=evidence_text,
         )
         if announcement_message_id:
-            conn = db_connect()
-            conn.execute(
-                "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
-                (announcement_message_id, member.guild.id, member.id),
+            condemnation_thread_mark_requested(member.guild.id, member.id, announcement_message_id)
+            await condemnation_ensure_private_thread(
+                member.guild, member, announcement_message_id, condemnation_case,
             )
-            conn.close()
     if purge_spec and purge_spec[0] != "none" and source_message_url and not evidence_url:
         role_note += "; purga cancelada: no se pudo conservar íntegramente la evidencia en un canal privado"
         purge_spec = None
@@ -13964,6 +14273,9 @@ async def _release_condemned_member_inner(
     db_clear_tentado(member.guild.id, member.id)
     db_clear_sin_verificado(member.guild.id, member.id)
     db_clear_verify_pending(member.guild.id, member.id)
+    # La condena ya se levantó. El hilo permanece como expediente archivado.
+    if row is not None and row["thread_id"]:
+        await condemnation_close_private_thread(member.guild, int(row["thread_id"]))
 
     # Si entre los roles originales estaban los de verificación, vuelven a su flujo normal
     # desde cero; mientras la condena estuvo activa nunca corrió ninguna evaluación.
@@ -14034,6 +14346,8 @@ async def check_expired_condemnations() -> None:
             await release_condemned_member(member, automatic=True)
         else:
             condemnation_deactivate(guild_id, user_id, resolution="expired")
+            if row["thread_id"]:
+                await condemnation_close_private_thread(guild, int(row["thread_id"]))
             linked_case = (
                 int(row["moderation_case_number"])
                 if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
