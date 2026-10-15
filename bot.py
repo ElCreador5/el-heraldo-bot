@@ -12980,13 +12980,31 @@ def moderation_cases_summary(guild: discord.Guild) -> str:
     return "**El Heraldo · Moderation · Cases**\n\n" + "\n\n".join(lines)
 
 
+def test_dm_notice_embed(embed: discord.Embed) -> discord.Embed:
+    """Añade un aviso únicamente en mensajes privados del proyecto Railway Test."""
+    if os.getenv("RAILWAY_PROJECT_ID") != "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61":
+        return embed
+    result = embed.copy()
+    result.add_field(
+        name="Aviso sobre el entorno de pruebas",
+        value=(
+            "Estamos realizando pruebas para mejorar la seguridad y el funcionamiento del servidor. "
+            "Es posible que reciba notificaciones de prueba. Le pedimos disculpas por las molestias. "
+            "Si este mensaje contiene una medida de moderación, consulte con el equipo del servidor "
+            "para confirmar su situación."
+        ),
+        inline=False,
+    )
+    return result
+
+
 async def moderation_send_case_dm(guild: discord.Guild, user_id: int, case_number: int) -> bool:
     row = moderation_case_get(guild.id, case_number)
     member = guild.get_member(user_id)
     if row is None or member is None:
         return False
     try:
-        await member.send(embed=moderation_case_embed(guild, row))
+        await member.send(embed=test_dm_notice_embed(moderation_case_embed(guild, row)))
         return True
     except discord.HTTPException:
         return False
@@ -14602,7 +14620,7 @@ async def condemnation_send_dm(
         include_pardon_button=False, evidence_url=evidence_url, evidence_text=evidence_text,
     )
     try:
-        await member.send(embed=embed, view=view)
+        await member.send(embed=test_dm_notice_embed(embed), view=view)
         return True
     except discord.HTTPException:
         return False
@@ -16109,10 +16127,10 @@ async def confirm_configuration(interaction, guild_id, changes):
     for key, value in changed.items():
         before = configuration_review_value(guild, key, guild_config_get(guild_id, key))
         after = configuration_review_value(guild, key, value)
-        lines.append(f"**{configuration_review_label(key)}**\\nActual: {before}\\nPropuesto: {after}")
-    summary = "\\n\\n".join(lines)
+        lines.append(f"**{configuration_review_label(key)}**\nActual: {before}\nPropuesto: {after}")
+    summary = "\n\n".join(lines)
     if len(summary) > 3200:
-        summary = summary[:3150] + "\\n… (más cambios pendientes)"
+        summary = summary[:3150] + "\n… (más cambios pendientes)"
     embed = discord.Embed(title="El Heraldo · Confirmación de configuración",
                           description=summary, color=discord.Color.blurple())
     embed.set_footer(text="Los cambios solo se aplicarán al seleccionar Guardar cambios.")
