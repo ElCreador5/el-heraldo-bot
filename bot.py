@@ -12847,6 +12847,11 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             guild.id, case_type, member.id, reason, duration_minutes=duration_minutes,
             author_id=interaction.user.id, proof=proof, verified_proof=verified,
         )
+    escalation_note = ""
+    if case_type == "WARN" and active == warn_limit:
+        escalation_note = await moderation_warning_escalation(
+            guild, member, case_number, active, warn_limit,
+        )
     dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
     await log_embed(
         guild, f"Moderation · {case_type}",
@@ -12868,7 +12873,7 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
     if case_type == "WARN":
         status = f" · Advertencias: {active}/{warn_limit}"
         if active >= warn_limit:
-            status += " · Máximo alcanzado; requiere revisión administrativa"
+            status += " · " + (escalation_note or "Máximo alcanzado: requiere revisión administrativa")
     return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado{status}.", case_number
 
 
@@ -13143,6 +13148,8 @@ async def execute_moderation_report_action(
         return False, f"Acción bloqueada: {protection}."
 
     notes: list[str] = []
+    if action != "report" and not moderation_report_punishment_enabled(guild.id, action):
+        return False, "Acción desactivada en Moderation → Reportes; no se aplicó una sanción."
     if action == "report":
         return True, "Reporte registrado"
     if action == "warn":
@@ -13167,6 +13174,8 @@ async def execute_moderation_report_action(
         limit = moderation_warning_limit(guild.id)
         status = f"{active}/{limit}"
         reached = "; máximo alcanzado, revisión administrativa necesaria" if active >= limit else ""
+        if created and active == limit:
+            reached = "; " + await moderation_warning_escalation(guild, target, case_number, active, limit)
         code = moderation_case_code(case_number, guild.id)
         if created:
             try:
@@ -13269,6 +13278,16 @@ def set_moderation_report_channel_id(guild_id: int, channel_id: int) -> None:
 def moderation_can_warn(member: discord.Member) -> bool:
     perms = member.guild_permissions
     return bool(perms.administrator or perms.moderate_members)
+
+
+def moderation_can_condemn(actor: discord.Member, target: discord.Member) -> bool:
+    """Mismos permisos que /condenar más jerarquía y protección del objetivo."""
+    perms = actor.guild_permissions
+    return bool(
+        (perms.administrator or perms.kick_members)
+        and (actor.id == actor.guild.owner_id or actor.top_role > target.top_role)
+        and condemnation_protection_reason(target) is None
+    )
 
 
 def moderation_is_staff(member: discord.Member) -> bool:
@@ -16266,6 +16285,8 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
     emoji = str(payload.emoji)
     condemn_emoji = get_condemnation_emoji(guild.id)
     is_condemn = _moderation_emoji_key(emoji) == _moderation_emoji_key(condemn_emoji)
+    if is_condemn and not moderation_report_punishment_enabled(guild.id, "condemn"):
+        return
     report_rule = moderation_report_rule_for_emoji(guild.id, emoji)
     # Dos acciones configuradas con el mismo emoji no deben ejecutarse juntas.
     # En caso de conflicto se falla cerrado, sin aplicar condena ni advertencia.
@@ -16315,7 +16336,7 @@ async def moderation_reaction_add(payload: discord.RawReactionActionEvent) -> No
             return
 
     if is_condemn:
-        if not moderation_is_staff(actor) or target.id == actor.id:
+        if not moderation_can_condemn(actor, target) or target.id == actor.id:
             return
         if condemnation_get(guild.id, target.id) is not None:
             return
@@ -16468,7 +16489,7 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
             _reaction_condemn_pending.discard(view.pending_key)
             return
         actor = guild.get_member(view.actor_id)
-        if actor is None or not moderation_is_staff(actor):
+        if actor is None or not (actor.guild_permissions.administrator or actor.guild_permissions.kick_members):
             await interaction.response.send_message("Ya no tienes permisos suficientes para aplicar esta condena.")
             _reaction_condemn_pending.discard(view.pending_key)
             return
@@ -16486,6 +16507,12 @@ class ReactionCondemnReasonModal(discord.ui.Modal, title="Condenar por reacción
         target = guild.get_member(view.target_id)
         if target is None or target.bot or target.id != message.author.id:
             await interaction.response.send_message("El miembro objetivo ya no está disponible.")
+            _reaction_condemn_pending.discard(view.pending_key)
+            return
+        if not moderation_report_punishment_enabled(guild.id, "condemn") or not moderation_can_condemn(actor, target):
+            await interaction.response.send_message(
+                "La condena por reacción fue desactivada o ya no tiene permisos suficientes."
+            )
             _reaction_condemn_pending.discard(view.pending_key)
             return
         reason = str(self.reason).strip()
