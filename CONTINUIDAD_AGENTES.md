@@ -1,3 +1,7 @@
+## Punto de continuidad — doble aviso de condena/purga (2026-10-15)
+
+Petición del propietario basada en captura del bot oficial. Se localizó que `_condemn_member_inner` publicaba «Condena aplicada» mientras `run_purge_job` publicaba, posteriormente, «Purga de condena completada». Implementación acotada en `Pruebas`: conservar un único embed principal, editarlo con cantidades reales tras la purga; cuando no haya log principal o falle editarlo, emitir aviso alternativo, sin silenciar auditoría ni errores. No se eliminan eventos distintos de evidencia privada ni perdón. Regresiones específicas añadidas. `main` y producción permanecen intactos. Siguiente paso: comprobar GitHub Actions de SHA exacto, Railway Test y aceptación real autorizada en Heraldo's Lab; solo con autorización específica preparar integración a `main`.
+
 ## Transferencia auditada — Claude/ChatGPT 2026-10-14
 
 Se conservó auditoría independiente en [`audit/AUDITORIA_INTEGRACION_2026-10-14.md`](audit/AUDITORIA_INTEGRACION_2026-10-14.md). Estado previo de `Pruebas`: `1eebcce77b346c8c40762b2c8bece4dfb220fb3e`; `main`: `6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667`; 192 commits de diferencia. Commit `203ea14a` **existe** como objeto sin rama, pero es más amplio que candidato H-03 mínimo validado por Claude y necesita CI propio. **Sin PR nueva, sin merge y sin cambios en producción**. Siguiente decisión: autorización expresa para crear una única rama temporal y PR a `main` con commit de lanzamiento, sin arrastrar `Pruebas`.

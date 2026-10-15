@@ -292,7 +292,7 @@ async def log_embed(
     color: discord.Color = discord.Color.blurple(),
     *,
     member: discord.Member | None = None,
-) -> None:
+) -> discord.Message | None:
     """Reporta actividad de El Heraldo en el canal de logs como embed configurable.
     La plantilla visual se edita desde el Centro de Mensajes y nunca debe tumbar
     el flujo principal si falta configuración o permisos."""
@@ -311,7 +311,7 @@ async def log_embed(
         embed = build_log_template_embed(guild, title, description, color)
         if member is not None and not embed.thumbnail.url:
             embed.set_thumbnail(url=member.display_avatar.url)
-        await channel.send(embed=embed)
+        return await channel.send(embed=embed)
     except discord.Forbidden:
         print("Sin permisos para escribir en el canal de logs")
     except Exception:
@@ -323,7 +323,7 @@ async def log_embed(
                 color=color,
                 timestamp=datetime.now(timezone.utc),
             )
-            await channel.send(embed=fallback)
+            return await channel.send(embed=fallback)
         except discord.HTTPException:
             pass
 
@@ -12991,8 +12991,9 @@ async def run_purge_job(
     progress=None,
     content_type: str = "all",
     title: str = "Purga completada",
+    log_success: bool = True,
 ) -> PurgeResult | None:
-    """Ejecuta una purga con control de duplicados y reporta el resultado en el log."""
+    """Ejecuta una purga con control de duplicados; el llamador puede integrar el aviso de éxito."""
     key = (guild.id, user.id)
     if key in _purge_running:
         return None
@@ -13012,13 +13013,71 @@ async def run_purge_job(
         raise
     finally:
         _purge_running.discard(key)
-    await log_embed(
-        guild, title,
-        f"{requested_by} · {user.mention} (`{user.id}`)\nAlcance: {scope_text}\n{purge_result_text(result)}",
-        discord.Color.green(),
-    )
+    if log_success:
+        await log_embed(
+            guild, title,
+            f"{requested_by} · {user.mention} (`{user.id}`)\nAlcance: {scope_text}\n{purge_result_text(result)}",
+            discord.Color.green(),
+        )
     return result
 
+
+async def _complete_condemnation_purge_log(
+    guild: discord.Guild,
+    user: discord.Member,
+    *,
+    scope_text: str,
+    requested_by: str,
+    after: datetime | None,
+    limit: int | None,
+    base_description: str,
+    log_message: discord.Message | None,
+) -> None:
+    """Actualiza el registro de condena al finalizar su purga, sin perder la auditoría."""
+    try:
+        result = await run_purge_job(
+            guild, user, scope_text=scope_text, requested_by=requested_by,
+            after=after, limit=limit, title="Purga de condena completada",
+            log_success=log_message is None,
+        )
+    except Exception:
+        # run_purge_job ya deja una advertencia independiente cuando falla.
+        if log_message is not None:
+            try:
+                await log_message.edit(
+                    embed=build_log_template_embed(
+                        guild, "Condena aplicada",
+                        base_description + "\nPurga: fallida; consulte la advertencia de purga.",
+                        discord.Color.dark_red(),
+                    )
+                )
+            except discord.HTTPException:
+                pass
+        return
+
+    if log_message is None:
+        # Sin registro inicial, se conserva el aviso original de purga.
+        return
+    if result is None:
+        status = "Purga: omitida porque ya había otra purga en curso."
+    else:
+        status = f"Purga: {scope_text}\n{purge_result_text(result)}"
+    try:
+        await log_message.edit(
+            embed=build_log_template_embed(
+                guild, "Condena aplicada", base_description + "\n" + status,
+                discord.Color.dark_red(),
+            )
+        )
+    except discord.HTTPException:
+        # La edición puede fallar si el mensaje o los permisos desaparecieron.
+        # En ese caso no se oculta la eliminación efectuada.
+        if result is not None:
+            await log_embed(
+                guild, "Purga de condena completada",
+                f"{requested_by} · {user.mention}\nAlcance: {scope_text}\n{purge_result_text(result)}",
+                discord.Color.green(),
+            )
 
 def hp_start_purge(member: discord.Member) -> str | None:
     """Lanza la purga del honeypot en segundo plano (sin tope: puede tardar). Devuelve un texto
@@ -13787,35 +13846,40 @@ async def _condemn_member_inner(
     if purge_spec and purge_spec[0] != "none" and source_message_url and not evidence_url:
         role_note += "; purga cancelada: no se pudo conservar íntegramente la evidencia en un canal privado"
         purge_spec = None
+    purge_scope: str | None = None
+    purge_after: datetime | None = None
+    purge_limit: int | None = None
     if purge_spec and purge_spec[0] != "none":
         kind, value = purge_spec
-        after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
-        limit = value if kind == "count" else None
-        asyncio.create_task(
-            run_purge_job(
-                member.guild,
-                member,
-                scope_text=format_purge_spec(kind, value),
-                requested_by=f"Condena ({condemnation_origin_label(origin)})",
-                after=after,
-                limit=limit,
-                title="Purga de condena completada",
-            )
-        )
+        purge_scope = format_purge_spec(kind, value)
+        purge_after = datetime.now(timezone.utc) - timedelta(minutes=value) if kind == "time" else None
+        purge_limit = value if kind == "count" else None
 
-    # La tarjeta del canal de condenas ya es el aviso principal. Si Logs apunta
-    # al mismo canal, no dupliques el mismo evento con un segundo embed.
-    if get_log_channel_id(member.guild.id) != condemnation_channel_id(member.guild.id):
-        await log_embed(
-            member.guild, "Condena aplicada",
+    log_description = (
         f"{member.mention} (`{member.id}`)\n"
         f"Motivo: {reason}\n"
         f"Duración: {format_duration(duration_minutes) if duration_minutes else 'Indefinida'}\n"
         f"Origen: {condemnation_origin_label(origin)}\n"
         f"Aplicó: {applied_by.mention if applied_by else 'El Heraldo'}\n"
         f"{role_note}\n"
-        f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado' if dm_ok is not None else '—'}",
+        f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado' if dm_ok is not None else '—'}"
+    )
+    log_message: discord.Message | None = None
+    # La tarjeta del canal de condenas es el aviso principal si Logs usa el mismo canal.
+    if get_log_channel_id(member.guild.id) != condemnation_channel_id(member.guild.id):
+        log_message = await log_embed(
+            member.guild, "Condena aplicada",
+            log_description + (f"\nPurga: {purge_scope} (en proceso)." if purge_scope else ""),
             discord.Color.dark_red(),
+        )
+    if purge_scope is not None:
+        asyncio.create_task(
+            _complete_condemnation_purge_log(
+                member.guild, member, scope_text=purge_scope,
+                requested_by=f"Condena ({condemnation_origin_label(origin)})",
+                after=purge_after, limit=purge_limit,
+                base_description=log_description, log_message=log_message,
+            )
         )
     return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
 

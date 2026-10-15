@@ -1,3 +1,7 @@
+## Registros consolidados de condena/purga — desarrollo 2026-10-15
+
+Cambio solicitado por el propietario al observar en producción dos embeds administrativos por una condena con purga. En `Pruebas` se conserva el evento principal «Condena aplicada» y se actualiza ese mismo mensaje con el resultado real de la purga asíncrona. `run_purge_job` sigue generando registros de éxito en todos los otros contextos; si falta el mensaje original, la edición falla o la purga falla, se conservan avisos separados para no perder trazabilidad. El archivo privado de evidencias y el evento posterior «Condena perdonada» se mantienen independientes. Cambios limitados a `bot.py` y nuevas regresiones `tests/test_condemnation_log_dedup.py`. Verificación automática GitHub Actions posterior al commit; interacción real en Discord pendiente. Producción `main` no se modifica.
+
 ## Auditoría de integración recibida de Claude — 2026-10-14
 
 Informe guardado en [`audit/AUDITORIA_INTEGRACION_2026-10-14.md`](audit/AUDITORIA_INTEGRACION_2026-10-14.md). Claude verificó 257 pruebas offline según su informe; ChatGPT corroboró ramas, Railway y existencia del commit candidato no referenciado `203ea14a`. `main` sin actualizar; H-03 productivo desactivado. PR obligatorio con `python-checks` y autorización explícita de rama temporal. No equivale a aceptación de los 192 commits.

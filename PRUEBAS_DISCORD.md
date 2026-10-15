@@ -1,3 +1,13 @@
+## Registro único de condena con purga — 2026-10-15
+
+**DETECTADO (captura oficial + código):** el mismo proceso de condena con purga publica «Condena aplicada» y «Purga de condena completada» como dos avisos separados. La copia privada «Evidencia archivada» y el perdón son eventos distintos y deben mantenerse.
+
+**IMPLEMENTADO EN `Pruebas` (pendiente de CI):** se registra inmediatamente la condena y, al concluir la purga, se edita el mismo embed con alcance y resultado. Se conserva el log alternativo si no existe el inicial o falla editarlo; los errores de purga siguen generando advertencia. La orden `/purge` y otras purgas conservan registro independiente.
+
+**VERIFICACIÓN AUTOMÁTICA:** regresiones añadidas en `tests/test_condemnation_log_dedup.py`; consultar ejecución y resultados de GitHub Actions, no presumir que están aprobadas antes de comprobarlos.
+
+**VERIFICACIÓN REAL DISCORD:** no realizada para esta modificación. Ensayar en Heraldo's Lab, sin purgar mensajes reales, una condena de prueba con purga, una sin purga y fallo simulado de edición, comprobando que no desaparecen evidencias ni notificaciones requeridas. `main` intacta.
+
 ## Auditoría externa de integración — 2026-10-14
 
 Claude informó 257 pruebas automáticas satisfactorias en `Pruebas`, 29 históricas de `main`, y 51/52 H-03 aplicables en candidato mínimo; **no repetidas por ChatGPT** y **sin pruebas interactivas Discord**. Ver alcance, discrepancia del commit candidato y pendientes exactos en [`audit/AUDITORIA_INTEGRACION_2026-10-14.md`](audit/AUDITORIA_INTEGRACION_2026-10-14.md). La aceptación real de cambios sensibles sigue pendiente. `main` no modificado.
