@@ -13223,6 +13223,21 @@ def moderation_report_reactions(guild_id: int) -> list[dict[str, object]]:
         result.append(normalized)
         if len(result) >= MODERATION_REPORT_MAX_REACTIONS:
             break
+    # Compatibilidad de los cuatro valores predeterminados anteriores:
+    # añadir el aviso nuevo solo si la lista antigua es exactamente el
+    # conjunto original sin personalizaciones. No escribir la base al leer.
+    old_defaults = [
+        _normalize_moderation_report_rule(dict(item))
+        for item in MODERATION_REPORT_REACTION_DEFAULTS
+        if _moderation_emoji_key(str(item["emoji"])) != _moderation_emoji_key("❗")
+    ]
+    if result == old_defaults and len(result) < MODERATION_REPORT_MAX_REACTIONS:
+        warn_default = _normalize_moderation_report_rule(
+            dict(next(item for item in MODERATION_REPORT_REACTION_DEFAULTS
+                      if _moderation_emoji_key(str(item["emoji"])) == _moderation_emoji_key("❗")))
+        )
+        if warn_default is not None:
+            result.insert(0, warn_default)
     return result
 
 
