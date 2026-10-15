@@ -20476,6 +20476,7 @@ class EmbedScheduleOptionsModal(discord.ui.Modal, title="Programar un embed"):
             await interaction.response.send_message(f"Configuración inválida: {exc}. Revise la ayuda del formulario.", ephemeral=True)
             return
         self.parent.config = cfg
+        self.parent.reviewed = False
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
 
 
@@ -20490,6 +20491,7 @@ class EmbedScheduleView(discord.ui.View):
         self.config = None
         self.channel_id = None
         self.active = False
+        self.reviewed = False
         self.channel_menu = discord.ui.ChannelSelect(placeholder="1. Seleccione canal de destino",
                                                      channel_types=[discord.ChannelType.text], row=0)
         self.channel_menu.callback = self.select_channel
@@ -20532,12 +20534,14 @@ class EmbedScheduleView(discord.ui.View):
             await interaction.response.send_message("Faltan permisos para publicar embeds en ese canal.", ephemeral=True)
             return
         self.channel_id = channel.id
+        self.reviewed = False
         await interaction.response.edit_message(content=self.summary(), view=self)
 
     async def select_mode(self, interaction):
         value = self.mode_menu.values[0]
         self.mode = value
         self.config = None
+        self.reviewed = False
         for opt in self.mode_menu.options:
             opt.default = opt.value == value
         await interaction.response.edit_message(content=self.summary(), view=self)
@@ -20549,6 +20553,7 @@ class EmbedScheduleView(discord.ui.View):
     @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.secondary, row=2)
     async def toggle(self, interaction, button):
         self.active = not self.active
+        self.reviewed = False
         await interaction.response.edit_message(content=self.summary(), view=self)
 
     @discord.ui.button(label="Guardar programación", style=discord.ButtonStyle.success, row=3)
@@ -20558,6 +20563,13 @@ class EmbedScheduleView(discord.ui.View):
             return
         if embed_get(self.guild_id, self.name) is None:
             await interaction.response.send_message("El embed ya no existe.", ephemeral=True)
+            return
+        if not self.reviewed:
+            self.reviewed = True
+            button.label = "Confirmar guardado"
+            await interaction.response.edit_message(
+                content=self.summary() + "\\n\\n**Revise canal, frecuencia y estado; pulse Confirmar guardado para persistir.**",
+                view=self)
             return
         now = datetime.now(timezone.utc)
         try:
