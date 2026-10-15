@@ -88,6 +88,7 @@ class ExecutionTests(unittest.TestCase):
             "condemnation_protection_reason": lambda t: None,
             "format_duration": lambda m: str(m),
             "moderation_report_case_record": case,
+            "moderation_report_punishment_enabled": lambda guild_id, action: True,
             "moderation_case_code": lambda number, guild_id: "A12B345",
             "_moderation_emoji_key": lambda s: s,
             "run_purge_job": purge, "purge_result_text": lambda x: "2 mensajes",
