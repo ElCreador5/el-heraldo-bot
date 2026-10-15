@@ -15,7 +15,7 @@ def function(name):
 class PublishedPanelSyncTests(unittest.TestCase):
     def test_startup_reconciles_registered_panels(self):
         code = ast.unparse(function("on_ready"))
-        self.assertIn("await synchronize_published_panels(guild)", code)
+        self.assertIn("await synchronize_published_panels(guild, suggestions_already_synced=True)", code)
         self.assertIn("await suggestions_startup()", code)
 
     def test_join_reconciles_existing_panels(self):
@@ -26,6 +26,7 @@ class PublishedPanelSyncTests(unittest.TestCase):
         code = ast.unparse(function("synchronize_published_panels"))
         self.assertIn("verify_panel_ref", code)
         self.assertIn("await update_verify_panel(guild)", code)
+        self.assertIn("suggestions_already_synced", code)
         self.assertIn("suggestion_get_panel_message_id(guild.id)", code)
         self.assertIn("await suggestion_ensure_panel(guild)", code)
         self.assertIn("await ensure_orientation_system(guild)", code)
