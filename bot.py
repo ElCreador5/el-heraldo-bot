@@ -2179,6 +2179,14 @@ async def on_guild_join(guild: discord.Guild) -> None:
         print(f"Advertencia: No se pudieron sincronizar los comandos en el nuevo servidor {guild.name}:")
         traceback.print_exc()
 
+    # Recuperar paneles que el servidor ya tenía registrados, si los hay.
+    # Un servidor nuevo sin referencias no recibe publicaciones automáticas.
+    try:
+        await synchronize_published_panels(guild)
+    except Exception:
+        print(f"Error: No pude reconciliar paneles en el nuevo servidor {guild.name}:")
+        traceback.print_exc()
+
     setup_view_errors = validate_setup_view_layouts(guild.id)
     if setup_view_errors:
         print(f"Error: Autoprueba /setup falló en el nuevo servidor {guild.name}:")
