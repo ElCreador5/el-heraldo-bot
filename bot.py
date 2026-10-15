@@ -14393,7 +14393,7 @@ async def condemnation_send_pardon_dm(
     embed.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
     embed.set_footer(text=f"{member.guild.name} · El Heraldo")
     try:
-        await member.send(embed=embed)
+        await member.send(embed=test_dm_notice_embed(embed))
         return True
     except discord.HTTPException:
         return False
