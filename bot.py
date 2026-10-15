@@ -471,6 +471,18 @@ def db_init() -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS moderation_report_cases (
+            guild_id INTEGER NOT NULL,
+            message_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            emoji_key TEXT NOT NULL,
+            case_number INTEGER NOT NULL,
+            PRIMARY KEY (guild_id, message_id, target_id, emoji_key)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS moderation_cases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id INTEGER NOT NULL,
@@ -12681,6 +12693,60 @@ def moderation_report_mark_executed(guild_id: int, message_id: int, target_id: i
     conn.close()
 
 
+def moderation_report_case_record(
+    guild_id: int, message_id: int, target_id: int, emoji_key: str,
+    case_type: str, reason: str, *, duration_minutes: int | None,
+    proof: str,
+) -> int:
+    """Vincula una sanción ejecutada con un caso, sin duplicarlo por reintentos.
+
+    El guardado se hace atómicamente con la referencia a la reacción.
+    No se llama antes de que Discord confirme una sanción.
+    """
+    conn = db_connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            "SELECT case_number FROM moderation_report_cases "
+            "WHERE guild_id=? AND message_id=? AND target_id=? AND emoji_key=?",
+            (guild_id, message_id, target_id, emoji_key),
+        ).fetchone()
+        if existing is not None:
+            conn.commit()
+            return int(existing[0])
+        next_number = int(conn.execute(
+            "SELECT COALESCE(MAX(case_number), 0) + 1 FROM moderation_cases WHERE guild_id=?",
+            (guild_id,),
+        ).fetchone()[0])
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(minutes=duration_minutes) if duration_minutes else None
+        # Los enlaces son referencias, no sustituyen a las pruebas archivadas.
+        conn.execute(
+            "INSERT INTO moderation_cases "
+            "(guild_id, case_number, type, user_id, reason, duration_minutes, "
+            "created_at, expires_at, author_id, proof, verified_proof, "
+            "moderator_notes, message_history, open) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, 1)",
+            (guild_id, next_number, case_type, target_id, reason[:1000],
+             duration_minutes, now.isoformat(), expires.isoformat() if expires else None,
+             proof[:2000], "Sanción por umbral de reportes por reacción.",
+             moderation_case_message_history(guild_id, target_id)),
+        )
+        conn.execute(
+            "INSERT INTO moderation_report_cases "
+            "(guild_id, message_id, target_id, emoji_key, case_number) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (guild_id, message_id, target_id, emoji_key, next_number),
+        )
+        conn.commit()
+        return next_number
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def moderation_action_label(action: str) -> str:
     return {
         "report": "Solo reportar",
@@ -12713,12 +12779,24 @@ async def execute_moderation_report_action(
     if action == "report":
         return True, "Reporte registrado"
 
+    me = guild.me
+    if me is None:
+        return False, "No se pudieron verificar los permisos de El Heraldo."
+    required = {"timeout": "moderate_members", "kick": "kick_members",
+                "ban": "ban_members", "condemn": "manage_roles"}.get(action)
+    if required is None:
+        return False, "Acción de reporte no admitida."
+    if not getattr(me.guild_permissions, required, False):
+        return False, "El Heraldo no tiene el permiso necesario para la acción configurada."
+    if target.top_role >= me.top_role:
+        return False, "El Heraldo no puede actuar sobre un miembro con un rol igual o superior."
+    if action == "timeout" and not duration_minutes:
+        return False, "La regla de aislamiento no tiene una duración válida."
+
     # No eliminar mensajes antes de comprobar la acción ni antes de archivar
     # la evidencia necesaria para una condena.
     try:
         if action == "timeout":
-            if duration_minutes is None:
-                duration_minutes = 30
             until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
             await target.timeout(until, reason=reason)
             notes.append(f"timeout {format_duration(duration_minutes)}")
@@ -12743,7 +12821,23 @@ async def execute_moderation_report_action(
                 return False, note
             notes.append("condena aplicada")
     except discord.HTTPException as exc:
-        return False, f"Discord rechazó la acción: {exc}"
+        return False, f"Discord rechazó la acción: {type(exc).__name__}."
+
+    # La sanción ya ocurrió: si falla registrar el expediente, JAMÁS reintentar
+    # la sanción como consecuencia del error de SQLite.
+    if action in {"timeout", "kick", "ban"}:
+        case_type = {"timeout": "MUTE", "kick": "KICK", "ban": "BAN"}[action]
+        try:
+            case_number = moderation_report_case_record(
+                guild.id, message.id, target.id, _moderation_emoji_key(str(rule["emoji"])),
+                case_type, reason,
+                duration_minutes=duration_minutes if action == "timeout" else None,
+                proof=message.jump_url,
+            )
+            notes.append(f"expediente {moderation_case_code(case_number, guild.id)}")
+        except Exception:
+            # El log del reporte es la constancia alternativa.
+            notes.append("advertencia: sanción aplicada pero expediente no registrado; revisión necesaria")
 
     if purge_minutes and action not in {"condemn", "report"}:
         after = datetime.now(timezone.utc) - timedelta(minutes=purge_minutes)
@@ -12755,9 +12849,10 @@ async def execute_moderation_report_action(
                 requested_by=f"Moderation · {rule.get('label', 'reporte')}",
                 after=after,
                 title="Moderation · Purga automática completada",
+                log_success=False,
             )
-        except discord.HTTPException as exc:
-            notes.append(f"purga no disponible: {exc}")
+        except Exception:
+            notes.append("purga fallida; revise el registro de advertencias")
         else:
             notes.append("purga ya en curso" if result is None else f"purga: {purge_result_text(result)}")
     if action == "condemn" and purge_minutes:
