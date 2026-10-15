@@ -1,3 +1,7 @@
+## Panel Reportes compacto — corrección tras prueba del propietario (2026-10-15)
+
+La captura del propietario confirma que el editor /setup seguía reproduciendo las instrucciones largas del resumen de Reportes pese a las mejoras previas. Commit `78337fe` reemplazó en `HeraldoUserReportsSetupView._content` el resumen extendido por canal, número efectivo de reacciones y emoji de condena directa. Las acciones y umbrales detallados quedan en selector y Condiciones, eliminando duplicidad y truncamientos. Commit `01bdb7e` agregó regresión estructural. Los cuatro reportes observados en el servidor pueden corresponder a configuración personalizada, que NO debe ser sobrescrita al agregar ❗ por defecto. Pendiente comprobar despliegue Test del SHA final y prueba real del panel recién abierto. main intacta.
+
 ## Evitar ediciones duplicadas al arrancar — 2026-10-15
 
 `Pruebas@82cb5fa`: `suggestions_startup()` ya reconcilia sugerencias en el inicio; `synchronize_published_panels(..., suggestions_already_synced=True)` evita volver a editar ese mismo panel en el mismo arranque. Fuera del arranque (p. ej. incorporación a un servidor), la función conserva la comprobación del panel registrado. Regresión estructural actualizada en `tests/test_published_panel_sync.py`. No se reescriben expedientes. Validación funcional y Railway Test pendientes para SHA final. `main` intacta.
