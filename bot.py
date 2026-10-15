@@ -12372,6 +12372,78 @@ def moderation_case_message_history(guild_id: int, user_id: int) -> str:
     return json.dumps(grouped, ensure_ascii=False)
 
 
+MODERATION_WARN_MAX_DEFAULT = 3
+MODERATION_WARN_MAX_ALLOWED = 5
+
+
+class ModerationWarningLimitReached(ValueError):
+    """El usuario ya alcanzó el límite de advertencias vigentes."""
+
+
+def moderation_warning_limit(guild_id: int) -> int:
+    value = guild_setting_int(guild_id, "moderation_warn_limit", MODERATION_WARN_MAX_DEFAULT)
+    return max(1, min(MODERATION_WARN_MAX_ALLOWED, value))
+
+
+def moderation_warning_counts(guild_id: int, user_id: int) -> tuple[int, int]:
+    """Cuenta vigentes y todas las WARN, conservando el historial cerrado."""
+    conn = db_connect()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN open = 1 AND "
+            "(expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END), 0) "
+            "FROM moderation_cases WHERE guild_id = ? AND user_id = ? AND type = 'WARN'",
+            (datetime.now(timezone.utc).isoformat(), guild_id, user_id),
+        ).fetchone()
+        return int(row[1]), int(row[0])
+    finally:
+        conn.close()
+
+
+def moderation_warning_create(
+    guild_id: int, user_id: int, reason: str, *,
+    duration_minutes: int | None = None, author_id: int | None = None,
+    proof: str | None = None, verified_proof: str | None = None,
+) -> tuple[int, int, int]:
+    """Inserta WARN respetando límite bajo BEGIN IMMEDIATE, sin borrar historial."""
+    history = moderation_case_message_history(guild_id, user_id)
+    limit = moderation_warning_limit(guild_id)
+    conn = db_connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        current = int(conn.execute(
+            "SELECT COUNT(*) FROM moderation_cases WHERE guild_id=? AND user_id=? "
+            "AND type='WARN' AND open=1 AND (expires_at IS NULL OR expires_at > ?)",
+            (guild_id, user_id, datetime.now(timezone.utc).isoformat()),
+        ).fetchone()[0])
+        if current >= limit:
+            raise ModerationWarningLimitReached(f"Máximo de advertencias alcanzado: {current}/{limit}.")
+        number = int(conn.execute(
+            "SELECT COALESCE(MAX(case_number), 0)+1 FROM moderation_cases WHERE guild_id=?",
+            (guild_id,),
+        ).fetchone()[0])
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(minutes=duration_minutes) if duration_minutes else None
+        conn.execute(
+            "INSERT INTO moderation_cases "
+            "(guild_id,case_number,type,user_id,reason,duration_minutes,created_at,"
+            "expires_at,author_id,proof,verified_proof,moderator_notes,message_history,open) "
+            "VALUES (?,?,'WARN',?,?,?,?,?,?,?,?,?,?,1)",
+            (guild_id, number, user_id, reason[:1000], duration_minutes,
+             now.isoformat(), expires.isoformat() if expires else None,
+             author_id, (proof or "")[:2000], (verified_proof or "")[:2000],
+             "Advertencia administrativa.", history),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    moderation_case_code(number, guild_id)
+    return number, current + 1, limit
+
+
 def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None) -> int:
     case_type = case_type.upper()
     if case_type not in MODERATION_CASE_TYPES:
@@ -12469,6 +12541,13 @@ def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Emb
         timestamp=datetime.fromisoformat(row["created_at"]),
     )
     embed.add_field(name="Estado", value="Abierto" if row["open"] else "Cerrado", inline=True)
+    if row["type"] == "WARN":
+        active, _ = moderation_warning_counts(guild.id, int(row["user_id"]))
+        embed.add_field(
+            name="Advertencias vigentes",
+            value=f"{active}/{moderation_warning_limit(guild.id)}",
+            inline=True,
+        )
     embed.add_field(name="Usuario", value=f"<@{row['user_id']}>\nID: {row['user_id']}", inline=True)
     embed.add_field(name="Autor", value=f"<@{row['author_id']}>" if row["author_id"] else "El Heraldo", inline=True)
     embed.add_field(name="Motivo", value=str(row["reason"])[:1024], inline=False)
@@ -12535,10 +12614,19 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             return False, "Tipo de castigo no compatible.", None
     except discord.HTTPException as exc:
         return False, f"Discord rechazó la acción: {exc}", None
-    case_number = moderation_case_create(
-        guild.id, case_type, member.id, reason, duration_minutes=duration_minutes,
-        author_id=interaction.user.id, proof=proof, verified_proof=verified,
-    )
+    if case_type == "WARN":
+        try:
+            case_number, active, warn_limit = moderation_warning_create(
+                guild.id, member.id, reason, duration_minutes=duration_minutes,
+                author_id=interaction.user.id, proof=proof, verified_proof=verified,
+            )
+        except ModerationWarningLimitReached as exc:
+            return False, str(exc) + " Revise las advertencias vigentes.", None
+    else:
+        case_number = moderation_case_create(
+            guild.id, case_type, member.id, reason, duration_minutes=duration_minutes,
+            author_id=interaction.user.id, proof=proof, verified_proof=verified,
+        )
     dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
     await log_embed(
         guild, f"Moderation · {case_type}",
@@ -12553,7 +12641,12 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             f"Expediente: {moderation_case_code(case_number, guild.id)}",
             discord.Color.orange(), member=member,
         )
-    return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado.", case_number
+    status = ""
+    if case_type == "WARN":
+        status = f" · Advertencias: {active}/{warn_limit}"
+        if active >= warn_limit:
+            status += " · Máximo alcanzado; requiere revisión administrativa"
+    return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado{status}.", case_number
 
 
 async def moderation_close_case_effect(guild: discord.Guild, row: sqlite3.Row, actor: discord.Member) -> str:
@@ -12753,9 +12846,19 @@ def moderation_report_case_record(
         if existing is not None:
             conn.commit()
             return (int(existing[0]), False) if return_created else int(existing[0])
+        if case_type == "WARN":
+            limit = moderation_warning_limit(guild_id)
+            count = int(conn.execute(
+                "SELECT COUNT(*) FROM moderation_cases WHERE guild_id=? AND user_id=? "
+                "AND type='WARN' AND open=1 AND (expires_at IS NULL OR expires_at > ?)",
+                (guild_id, target_id, datetime.now(timezone.utc).isoformat()),
+            ).fetchone()[0])
+            if count >= limit:
+                raise ModerationWarningLimitReached(
+                    f"Máximo de advertencias alcanzado: {count}/{limit}."
+                )
         next_number = int(conn.execute(
-            "SELECT COALESCE(MAX(case_number), 0) + 1 FROM moderation_cases WHERE guild_id=?",
-            (guild_id,),
+            "SELECT COALESCE(MAX(case_number), 0) + 1 FROM moderation_cases WHERE guild_id=?",            (guild_id,),
         ).fetchone()[0])
         now = datetime.now(timezone.utc)
         expires = now + timedelta(minutes=duration_minutes) if duration_minutes else None
@@ -12833,16 +12936,22 @@ async def execute_moderation_report_action(
                 "Incumplimiento de reglas", duration_minutes=None,
                 proof=message.jump_url, author_id=actor.id, return_created=True,
             )
+        except ModerationWarningLimitReached as exc:
+            return False, str(exc) + " Solicite una revisión administrativa."
         except Exception:
             return False, "No fue posible registrar la advertencia. No se efectuaron cambios."
+        active, _ = moderation_warning_counts(guild.id, target.id)
+        limit = moderation_warning_limit(guild.id)
+        status = f"{active}/{limit}"
+        reached = "; máximo alcanzado, revisión administrativa necesaria" if active >= limit else ""
         code = moderation_case_code(case_number, guild.id)
         if created:
             try:
                 sent = await moderation_send_case_dm(guild, target.id, case_number)
             except Exception:
                 sent = False
-            return True, f"Advertencia registrada en expediente {code}; DM: {'enviado' if sent else 'no disponible'}"
-        return True, f"Advertencia existente en expediente {code}"
+            return True, f"Advertencia {status} en expediente {code}; DM: {'enviado' if sent else 'no disponible'}{reached}"
+        return True, f"Advertencia existente en expediente {code}; vigentes: {status}{reached}"
 
     me = guild.me
     if me is None:
@@ -17342,15 +17451,8 @@ async def moderation_warnings(interaction: discord.Interaction, usuario: discord
             "No hay advertencias administrativas para bots.", ephemeral=True,
         )
         return
-    conn = db_connect()
-    try:
-        total, abiertas = conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN open = 1 THEN 1 ELSE 0 END), 0) "
-            "FROM moderation_cases WHERE guild_id=? AND user_id=? AND type='WARN'",
-            (interaction.guild.id, usuario.id),
-        ).fetchone()
-    finally:
-        conn.close()
+    abiertas, total = moderation_warning_counts(interaction.guild.id, usuario.id)
+    maximum = moderation_warning_limit(interaction.guild.id)
     rows = moderation_case_list(
         interaction.guild.id, user_id=usuario.id, case_type="WARN", limit=8,
     )
@@ -17360,7 +17462,7 @@ async def moderation_warnings(interaction: discord.Interaction, usuario: discord
         for row in rows
     ]
     heading = (f"**El Heraldo · Advertencias de {discord.utils.escape_markdown(usuario.display_name)}**"
-               f"\nTotal: **{total}** · Vigentes: **{abiertas}** · Cerradas: **{total - abiertas}**")
+               f"\nAdvertencias: **{abiertas}/{maximum}** · Historial total: **{total}** · No vigentes: **{total - abiertas}**")
     message = heading + ("\n\n" + "\n".join(lines) if lines else "\n\nNo hay advertencias registradas.")
     await interaction.response.send_message(
         message[:1900], ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
