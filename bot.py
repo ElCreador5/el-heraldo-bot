@@ -7727,6 +7727,74 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante rea
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
 
 
+class HeraldoWarningLimitSelectView(discord.ui.View):
+    """Configura un máximo de WARN vigentes mediante selector, sin autosanciones."""
+
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.original = moderation_warning_limit(guild_id)
+        self.selected = self.original
+        select = discord.ui.Select(
+            placeholder="Máximo de advertencias vigentes por miembro",
+            options=[
+                discord.SelectOption(
+                    label=f"{n} advertencia{'s' if n > 1 else ''}",
+                    value=str(n), default=n == self.original,
+                ) for n in range(1, MODERATION_WARN_MAX_ALLOWED + 1)
+            ],
+            row=0,
+        )
+        select.callback = self.select_max
+        self.limit_select = select
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    def _content(self) -> str:
+        return (
+            "**El Heraldo · Moderation · Límite de advertencias**\n\n"
+            f"Máximo actual: **{self.original}** de {MODERATION_WARN_MAX_ALLOWED} posibles.\n"
+            f"Máximo propuesto: **{self.selected}**.\n\n"
+            "Se cuentan los expedientes WARN vigentes; los cerrados permanecen en el historial. "
+            "Al alcanzar el límite no se aplican automáticamente expulsiones ni condenas. "
+            "Las advertencias existentes no se eliminan al reducirlo."
+        )
+
+    async def select_max(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {"1", "2", "3", "4", "5"}:
+            await interaction.response.send_message("Seleccione un máximo entre 1 y 5.", ephemeral=True)
+            return
+        self.selected = int(values[0])
+        for option in self.limit_select.options:
+            option.default = option.value == values[0]
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    @discord.ui.button(label="Revisar cambios", style=discord.ButtonStyle.success, row=1)
+    async def review(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if moderation_warning_limit(self.guild_id) != self.original:
+            await interaction.response.send_message(
+                "El límite cambió mientras editaba. Abra el panel nuevamente.", ephemeral=True,
+            )
+            return
+        if self.selected == self.original:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id, {
+            "moderation_warn_limit": str(self.selected),
+        })
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content="Edición del límite cancelada. No se guardaron cambios.", view=None,
+        )
+
+
 class HeraldoUserReportsSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -7879,7 +7947,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                     selected += "\nSolo reportar no aplica sanciones ni elimina mensajes."
                 if action == "warn":
                     selected += "\nSolo moderadores: crea expediente WARN y conserva el mensaje sin purgar."
-        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + selected + _pending_config_text(lines)
+        return "**El Heraldo · Moderation · Reportes**\n\n" + moderation_reports_summary(guild, channel_id=self.pending_channel_id, mappings=self._working_reactions(), condemn_emoji=self.pending_condemn_emoji) + f"\n\n**Máximo de advertencias vigentes:** {moderation_warning_limit(self.guild_id)} (configurable de 1 a 5)" + selected + _pending_config_text(lines)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -7942,6 +8010,13 @@ class HeraldoUserReportsSetupView(discord.ui.View):
     @discord.ui.button(label="Condenar mediante reacción", style=discord.ButtonStyle.secondary, row=2)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
+
+    @discord.ui.button(label="Máx. advertencias", style=discord.ButtonStyle.secondary, row=3)
+    async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        warn_view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
+        await interaction.response.send_message(
+            content=warn_view._content(), view=warn_view, ephemeral=True,
+        )
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -15645,6 +15720,7 @@ def configuration_review_label(key):
         "join_role_ids": "Roles de ingreso",
         "join_specific_roles": "Roles de miembros específicos",
         "condemnation_default_duration": "Duración predeterminada de condena",
+        "moderation_warn_limit": "Máximo de advertencias vigentes",
         "verify_enabled": "Verificación",
         "verify_role_id": "Rol de verificación",
         "verify_action": "Acción de verificación",
