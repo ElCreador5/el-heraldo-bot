@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
 TREE = ast.parse(SOURCE)
 def node(name):
-    matches = [n for n in TREE.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
-               and n.name == name]
+    matches = [n for n in TREE.body
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]
     assert len(matches) == 1, name
     return matches[0]
 def isolate(names, ns):
