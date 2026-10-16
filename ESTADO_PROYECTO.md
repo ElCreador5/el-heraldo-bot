@@ -1,3 +1,7 @@
+## Nombres legibles para /embed — 2026-10-15
+
+IMPLEMENTADO en Pruebas: /embed crear acepta nombres de hasta 64 caracteres con letras y tildes, números, espacios, emojis habituales y signos seguros. Normalización Unicode NFKC y casefold, espacios repetidos simplificados y rechazo de menciones y controles. Crear, editar, enviar, borrar y autocompletar usan la misma clave, conservando nombres históricos ASCII, publicaciones y programaciones. Nueva suite tests/test_embed_names.py, CI y Discord reales por verificar; main intacta.
+
 ## BAN temporal y avisos de laboratorio — 2026-10-15
 
 IMPLEMENTADO en Pruebas: motor central condena todos los orígenes con motivo estándar de Test; la resolución de una condena antigua en Test presenta también ese motivo. Rutas de kick/ban intentan DM antes de la medida con disculpa e invitación privada de 1 uso; el baneo impide entrar hasta desbaneo. Nuevo /setup → Moderation → Baneo temporal: duración configurable por servidor, 0 permanente, selección o modal personalizado con confirmación explícita; Test por defecto 5 minutos, main/producción permanente si no se configura. /ban explícito y BAN por reacción conservan prioridad; caso BAN temporal vence mediante tarea existente que reintenta unban fallido. Pendiente CI del SHA exacto y pruebas reales Discord, no tocar main.

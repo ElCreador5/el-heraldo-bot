@@ -1,3 +1,7 @@
+## Corrección de /embed crear: nombres restrictivos — 2026-10-15
+
+La captura del propietario mostraba el rechazo a nombres que no eran ASCII minúscula o superaban 32 caracteres. Se identificó EMBED_NAME_RE y normalización previa a ASCII de facto. Implementado en Pruebas: hasta 64 caracteres Unicode legibles, espacios, tildes y emojis habituales; normalización uniforme de todos los comandos de /embed; claves históricas conservadas. Test aislado tests/test_embed_names.py para validación/SQLite, pendiente confirmar Actions y Railway y probar en Discord Test. Documentación GitHub actualizada; conexión externa Obsidian no disponible para consultar. main sin cambios.
+
 ## Protección ante BAN más reciente — 2026-10-15
 
 Corregido en Pruebas: la expiración de un expediente BAN no realiza unban si existe otro BAN posterior abierto. En Railway Test también comprueba la razón del baneo actual antes de retirarlo; cuando hay discrepancia, cierra el vencido para revisión sin levantar un castigo diferente. Error de SQLite/Discord no provoca unban a ciegas. Test de estructura añadido, prueba interactiva pendiente. main sin cambios.

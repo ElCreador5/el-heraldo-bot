@@ -1,3 +1,7 @@
+## Nombres de embeds personalizados — 2026-10-15
+
+Los nombres de /embed crear permiten escritura natural en español hasta 64 caracteres, incluyendo tildes, espacios, números, emojis habituales y puntuación segura. Todo comando de embeds debe usar normalización Unicode y sin distinción de mayúsculas para evitar duplicados; mantener nombres antiguos y sus referencias sin migraciones. Rechazar menciones y caracteres de control. Sin modificaciones en main.
+
 ## Normas Test: razón única, disculpas y retorno — 2026-10-15
 
 Para una condena experimental en Railway Test el motivo público es «Prueba funcional autorizada de El Heraldo Test.» sin importar origen; conservar campo origin. Antes de cualquier expulsión o baneo originado por El Heraldo Test se intenta DM de disculpa con invitación max_uses=1, max_age=0 en canal visible para rol base, sin publicar URL en logs. No prometer enlace si no se pudo generar ni reingreso de usuarios aún baneados; después de expirar el baneo temporal se podrá usar. La duración predeterminada BAN es 5m exclusivamente en Test y permanente en producción hasta que un administrador confirme ajuste por servidor desde /setup → Moderation → Baneo temporal. /ban con 0 es permanente explícito; duración de regla BAN tiene prioridad. No modificar producción, main ni permisos.

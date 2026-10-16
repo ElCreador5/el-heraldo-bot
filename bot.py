@@ -20630,7 +20630,30 @@ for _param in ("titulo", "campo", "mensaje", "footer", "icono_footer"):
 # variables ({servidor}, {#reglas}, {servericon}…). Los embeds se guardan por nombre y recuerdan los
 # mensajes donde se enviaron: al editarlos, esos mensajes se actualizan solos.
 
-EMBED_NAME_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+
+EMBED_NAME_MAX_LENGTH = 64
+EMBED_NAME_PUNCTUATION = frozenset(" -_.(),!:;¿?¡+#&")
+
+
+def embed_normalize_name(value: str) -> str:
+    """Clave común para todos los comandos; nombres históricos permanecen intactos."""
+    name = unicodedata.normalize("NFKC", value.strip()).casefold()
+    return re.sub(r" {2,}", " ", name)
+
+
+def embed_name_is_valid(name: str) -> bool:
+    """Acepta texto legible sin caracteres de control o menciones de Discord."""
+    return (
+        1 <= len(name) <= EMBED_NAME_MAX_LENGTH
+        and not name.startswith(" ")
+        and not name.endswith(" ")
+        and all(
+            ch in EMBED_NAME_PUNCTUATION
+            or unicodedata.category(ch)[0] in {"L", "N", "M", "S"}
+            for ch in name
+        )
+    )
+
 EMBED_MAX_FIELDS = 25
 EMBED_ALLOWED_MENTIONS = discord.AllowedMentions(roles=True, users=True, everyone=False)
 EMBED_PERSON_NOTE = "las variables de persona como `{usuario}` solo se resuelven si eliges `miembro` al enviar"
@@ -21358,19 +21381,23 @@ embed_group = HoneypotGroup(
 async def embed_name_autocomplete(interaction: discord.Interaction, current: str) -> list[discord.app_commands.Choice[str]]:
     if interaction.guild is None:
         return []
-    q = current.strip().lower()
+    q = embed_normalize_name(current)
     return [
-        discord.app_commands.Choice(name=f"{name} ({n} enviado(s))" if n else name, value=name)
+        discord.app_commands.Choice(name=(f"{name} ({n} enviado(s))" if n else name)[:100], value=name)
         for name, n in embed_names(interaction.guild.id) if q in name
     ][:25]
 
 
 @embed_group.command(name="crear", description="Crear un embed nuevo con un formulario.")
-@discord.app_commands.describe(nombre="Nombre para guardarlo (letras, números, - y _; máx. 32)")
+@discord.app_commands.describe(nombre="Nombre de hasta 64 caracteres; admite espacios, tildes y emojis")
 async def embed_create(interaction: discord.Interaction, nombre: str) -> None:
-    name = nombre.strip().lower()
-    if not EMBED_NAME_RE.match(name):
-        await interaction.response.send_message("Error: El nombre solo puede tener letras minúsculas sin tildes, números, `-` y `_` (máx. 32).", ephemeral=True)
+    name = embed_normalize_name(nombre)
+    if not embed_name_is_valid(name):
+        await interaction.response.send_message(
+            "Error: El nombre debe tener entre 1 y 64 caracteres. Se permiten letras, tildes, números, "
+            "espacios, emojis y signos comunes como guiones y paréntesis. No se permiten menciones "
+            "ni caracteres de control.", ephemeral=True,
+        )
         return
     if embed_get(interaction.guild.id, name) is not None:
         await interaction.response.send_message(f"Error: Ya existe un embed llamado `{name}`. Edítalo con `/embed editar`.", ephemeral=True)
@@ -21382,7 +21409,7 @@ async def embed_create(interaction: discord.Interaction, nombre: str) -> None:
 @discord.app_commands.describe(nombre="Embed a editar")
 @discord.app_commands.autocomplete(nombre=embed_name_autocomplete)
 async def embed_edit(interaction: discord.Interaction, nombre: str) -> None:
-    name = nombre.strip().lower()
+    name = embed_normalize_name(nombre)
     if embed_get(interaction.guild.id, name) is None:
         await interaction.response.send_message(f"Error: No existe un embed llamado `{name}`. Mira `/list embeds`.", ephemeral=True)
         return
@@ -21400,7 +21427,7 @@ async def embed_send_command(
     canal: Optional[discord.TextChannel] = None, miembro: Optional[discord.Member] = None,
 ) -> None:
     await interaction.response.defer(ephemeral=True)
-    result = await embed_send(interaction.guild, nombre.strip().lower(), canal or interaction.channel, miembro)
+    result = await embed_send(interaction.guild, embed_normalize_name(nombre), canal or interaction.channel, miembro)
     await interaction.followup.send(result, ephemeral=True)
 
 
@@ -21643,7 +21670,7 @@ async def embed_schedules_command(interaction: discord.Interaction) -> None:
 @discord.app_commands.describe(nombre="Embed a borrar")
 @discord.app_commands.autocomplete(nombre=embed_name_autocomplete)
 async def embed_delete_command(interaction: discord.Interaction, nombre: str) -> None:
-    name = nombre.strip().lower()
+    name = embed_normalize_name(nombre)
     if embed_delete(interaction.guild.id, name):
         await interaction.response.send_message(f"Embed `{name}` borrado. Los mensajes ya enviados no se tocan, pero dejarán de actualizarse.", ephemeral=True)
     else:

@@ -1,3 +1,7 @@
+## Pruebas pendientes: /embed crear — 2026-10-15
+
+VERIFICACIÓN REAL EN DISCORD: NO REALIZADA. En Heraldo's Lab comprobar creación con «Información general», «Guía de inicio 🪽», nombres ASCII existentes y longitud 64; rechazo de 65 caracteres, menciones y controles; duplicados con mayúsculas y espacios; editar, enviar, programar, listar y borrar con autocompletado. Conservar embeds anteriores y aislar por servidor. Suite aislada tests/test_embed_names.py y CI del SHA final pendientes de evaluar.
+
 ## Comprobación pendiente: Test y Baneo temporal — 2026-10-15
 
 NO REALIZADA prueba real en Discord. Usar únicamente El Heraldo Test y Heraldo's Lab con cuentas autorizadas. Probar motivo único de condena originada por rol manual, comando, Honeypot y raid, y edición al perdonar; expulsar/banear por comando, botón y reacción, DM previo único con disculpa e invitación de 1 uso, DM cerrado/fallo de Create Instant Invite, acceso al canal al volver y no reutilización de invitación; Test BAN 5m predeterminado, sobreescritura temporal y 0 permanente; /setup → Moderation → Baneo temporal, selección, personalizado, confirmación, Cancelar, persistencia tras reinicio, concurrencia, jerarquía y unban fallido. Verificar casos persistidos y logs. Suite CI y Railway del commit final por comprobar.

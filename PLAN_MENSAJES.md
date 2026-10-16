@@ -1,3 +1,7 @@
+## Nombres naturales de embeds personalizados — 2026-10-15
+
+En Pruebas, /embed admite nombres Unicode legibles con espacios, tildes y emojis, máximo 64 caracteres. Identificador canónico en crear, editar, enviar, borrar y autocompletar; no cambia publicaciones previas. Pendiente validación interactiva de Discord y CI. Los demás editores no se consideran terminados por este ajuste.
+
 ## Patrón de claridad para editores de /setup — 2026-10-15
 
 En `Pruebas` se reorganizó el editor de Reportes: elección de reacción y acción contiguas; `Configurar condiciones` sustituye a `Regla`, con explicación de número de personas distintas, duración de sanción y purga de mensajes. Las opciones irrelevantes no aparecen en el modal. `Sanciones y límite` permite habilitar/deshabilitar tipos de sanción y elegir la acción al máximo WARN con confirmación. Este es el patrón aprobado para extender progresivamente a otros editores (etapas claras, etiquetas específicas, menús para opciones cerradas, vista previa y cancelación sin persistencia), no una afirmación de que todos los paneles ya estén modernizados. Pendiente auditoría y aceptación Discord de los demás editores.
