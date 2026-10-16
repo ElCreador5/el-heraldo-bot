@@ -133,7 +133,7 @@ class VisualEditor(discord.ui.View):
         self.update_selectors()
         for label, mode, row in [('Contenido', 'content', 1), ('Texto y color', 'text', 1), ('Imágenes', 'images', 1),
                                  ('Autor y pie', 'credits', 1), ('Campos', 'fields', 1)]:
-            button = discord.ui.Button(label=label, row=row)
+            button = discord.ui.Button(label=label, style=discord.ButtonStyle.primary, row=row)
             async def callback(interaction, mode=mode):
                 if mode != 'content' and not self.draft['embeds']:
                     await interaction.response.send_message('Añada primero un embed.', ephemeral=True)
@@ -202,7 +202,7 @@ class VisualEditor(discord.ui.View):
         self.update_selectors()
         await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
 
-    @discord.ui.button(label='Añadir embed', row=2)
+    @discord.ui.button(label='Añadir embed', style=discord.ButtonStyle.primary, row=2)
     async def add_embed(self, interaction, button):
         if len(self.draft['embeds']) >= 10:
             await interaction.response.send_message('Máximo de diez embeds.', ephemeral=True)
@@ -214,7 +214,7 @@ class VisualEditor(discord.ui.View):
         self.update_selectors()
         await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
 
-    @discord.ui.button(label='Retirar embed', row=2)
+    @discord.ui.button(label='Retirar embed', style=discord.ButtonStyle.danger, row=2)
     async def remove_embed(self, interaction, button):
         if self.draft['embeds']:
             self.draft['embeds'].pop(self.index)
@@ -224,7 +224,7 @@ class VisualEditor(discord.ui.View):
         self.update_selectors()
         await interaction.response.edit_message(content=self.summary(), embeds=[], view=self)
 
-    @discord.ui.button(label='Vista previa', row=3)
+    @discord.ui.button(label='Vista previa', style=discord.ButtonStyle.secondary, row=3)
     async def preview(self, interaction, button):
         try:
             payload = self.host['heraldo_template_payload'](self.draft, interaction.guild, interaction.user, interaction.channel)
@@ -252,7 +252,7 @@ class VisualEditor(discord.ui.View):
         await self.host['confirm_configuration'](interaction, self.guild_id,
             {'message_custom_templates': json.dumps(templates, ensure_ascii=False)})
 
-    @discord.ui.button(label='Cancelar', row=3)
+    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.secondary, row=3)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content='Borrador cerrado sin guardar.', embeds=[], view=None)

@@ -437,7 +437,7 @@ class WebhookTemplateConfirmView(discord.ui.View):
     async def interaction_check(self, interaction):
         return await self.host['configuration_access'](interaction, self.guild_id, self.owner_id)
 
-    @discord.ui.button(label='Publicar por webhook', style=discord.ButtonStyle.primary)
+    @discord.ui.button(label='Publicar por webhook', style=discord.ButtonStyle.success)
     async def publish(self, interaction, button):
         if not await self.interaction_check(interaction):
             return

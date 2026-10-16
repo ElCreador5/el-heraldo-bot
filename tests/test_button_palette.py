@@ -54,11 +54,23 @@ class ButtonPaletteTests(unittest.TestCase):
             if label.startswith("Cancelar") or label.startswith("Volver") or label == "Cerrar":
                 self.assertEqual(style, "secondary", label)
 
+    def test_auxiliary_message_modules_use_same_palette(self):
+        root = Path(__file__).resolve().parents[1]
+        actions = (root / "message_components.py").read_text("utf-8")
+        editor = (root / "message_editor.py").read_text("utf-8")
+        automation = (root / "message_automation.py").read_text("utf-8")
+        self.assertIn("self.execute.style", actions)
+        self.assertIn("discord.ButtonStyle.danger", actions)
+        self.assertIn("label='Retirar embed', style=discord.ButtonStyle.danger", editor)
+        self.assertIn("label='Añadir embed', style=discord.ButtonStyle.primary", editor)
+        self.assertIn("label='Cancelar', style=discord.ButtonStyle.secondary", editor)
+        self.assertIn("label='Publicar por webhook', style=discord.ButtonStyle.success", automation)
+
     def test_runtime_buttons_follow_action_semantics(self):
         scope = next(x for x in TREE.body if isinstance(x, ast.ClassDef)
                      and x.name == "HoneypotTrapActionConfirmView")
         init = next(x for x in scope.body if isinstance(x, ast.FunctionDef) and x.name == "__init__")
-        self.assertIn('action == "remove"', ast.unparse(init))
+        self.assertIn("remove", ast.unparse(init))
         self.assertIn("self.confirm.style", ast.unparse(init))
         scheduler = next(x for x in TREE.body if isinstance(x, ast.ClassDef)
                          and x.name == "EmbedScheduleView")

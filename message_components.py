@@ -76,7 +76,15 @@ def build_view(template, guild_id):
     for index, definition in enumerate(definitions):
         custom_id = f'ehx:{guild_id}:{revision}:{index}'
         if definition['tipo'] == 'boton':
-            view.add_item(discord.ui.Button(label=definition['etiqueta'], custom_id=custom_id, row=index))
+            button_style = (discord.ButtonStyle.danger
+                            if any(action.get('tipo') == 'eliminar'
+                                   for option in definition.get('opciones', [])
+                                   for action in option.get('acciones', []))
+                            else discord.ButtonStyle.secondary)
+            view.add_item(discord.ui.Button(
+                label=definition['etiqueta'], custom_id=custom_id,
+                style=button_style, row=index,
+            ))
         else:
             view.add_item(discord.ui.Select(custom_id=custom_id, placeholder=definition['etiqueta'],
                 min_values=1, max_values=definition.get('maximo', 1), row=index,
@@ -92,6 +100,12 @@ class ActionConfirm(discord.ui.View):
         self.host, self.guild_id, self.owner_id, self.message = host, guild_id, owner_id, message
         self.template, self.actions = copy.deepcopy(template), copy.deepcopy(actions)
         self.finished = False
+        # Al menos una eliminación convierte la confirmación en destructiva.
+        self.execute.style = (
+            discord.ButtonStyle.danger
+            if any(action.get('tipo') == 'eliminar' for action in self.actions)
+            else discord.ButtonStyle.success
+        )
 
     async def interaction_check(self, interaction):
         if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
@@ -99,7 +113,7 @@ class ActionConfirm(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label='Confirmar acciones', style=discord.ButtonStyle.primary)
+    @discord.ui.button(label='Confirmar acciones', style=discord.ButtonStyle.success)
     async def execute(self, interaction, button):
         if not await self.interaction_check(interaction):
             return
