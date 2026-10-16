@@ -1,3 +1,7 @@
+## Duplicación de registros por expulsión de orientación — 2026-10-15
+
+IMPLEMENTADO en Pruebas: cuando expel() publica con éxito el embed detallado «Kick — Falta de verificación», el listener on_member_remove no publica además «Miembro expulsado» por esa misma operación. Guardas transitorias por servidor, usuario y sesión de ingreso, actor bot y razón auditada, TTL 30s, espera de publicación 5s; las expulsiones manuales, baneos, demás salidas y ausencia/fallo de la tarjeta detallada siguen registrándose. No altera sanciones, DMs ni archivo de auditoría de Discord. Regression tests/test_orientation_kick_dedup.py. Verificar CI y Discord Test; producción intacta.
+
 ## Nombres legibles para /embed — 2026-10-15
 
 IMPLEMENTADO en Pruebas: /embed crear acepta nombres de hasta 64 caracteres con letras y tildes, números, espacios, emojis habituales y signos seguros. Normalización Unicode NFKC y casefold, espacios repetidos simplificados y rechazo de menciones y controles. Crear, editar, enviar, borrar y autocompletar usan la misma clave, conservando nombres históricos ASCII, publicaciones y programaciones. Nueva suite tests/test_embed_names.py, CI y Discord reales por verificar; main intacta.

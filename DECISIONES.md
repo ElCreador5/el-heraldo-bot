@@ -1,3 +1,7 @@
+## Un único registro por expulsión de verificación — 2026-10-15
+
+Preservar el embed detallado de verificación (primera o segunda falta, DM de recuperación, resultado) como registro principal; solo suprimir «Miembro expulsado» general cuando hay prueba de publicación correcta de ese mismo evento. No ocultar expulsiones realizadas por otros moderadores, salidas naturales, baneos o eventos sin registro detallado. Registrar la deduplicación con memoria efímera asociada a sesión de ingreso; no eliminar evidencias ni cambios de configuración. Solo Pruebas.
+
 ## Nombres de embeds personalizados — 2026-10-15
 
 Los nombres de /embed crear permiten escritura natural en español hasta 64 caracteres, incluyendo tildes, espacios, números, emojis habituales y puntuación segura. Todo comando de embeds debe usar normalización Unicode y sin distinción de mayúsculas para evitar duplicados; mantener nombres antiguos y sus referencias sin migraciones. Rechazar menciones y caracteres de control. Sin modificaciones en main.

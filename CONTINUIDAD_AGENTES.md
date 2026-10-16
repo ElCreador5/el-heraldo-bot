@@ -1,3 +1,7 @@
+## Duplicación de logs por falta de orientación — 2026-10-15
+
+Captura recibida: dos embeds para una expulsión por falta de orientación, «Kick — Falta de verificación» y «Miembro expulsado». Fuente bot.py: expel() publica tarjeta detallada y heraldo_member_departure() inspecciona la auditoría y emite de nuevo evento de expulsión. Modificado en Pruebas para saltar solo el log general cuando el detallado se envió, mediante marcador con actor/razón, TTL, sesión y sincronización breve; conservar resto de logs y errores. Pruebas tests/test_orientation_kick_dedup.py creadas; resultados CI/Discord y Railway Test deben comprobarse en SHA del último commit. No tocar main; sin Obsidian externo.
+
 ## Corrección de /embed crear: nombres restrictivos — 2026-10-15
 
 La captura del propietario mostraba el rechazo a nombres que no eran ASCII minúscula o superaban 32 caracteres. Se identificó EMBED_NAME_RE y normalización previa a ASCII de facto. Implementado en Pruebas: hasta 64 caracteres Unicode legibles, espacios, tildes y emojis habituales; normalización uniforme de todos los comandos de /embed; claves históricas conservadas. Test aislado tests/test_embed_names.py para validación/SQLite, pendiente confirmar Actions y Railway y probar en Discord Test. Documentación GitHub actualizada; conexión externa Obsidian no disponible para consultar. main sin cambios.

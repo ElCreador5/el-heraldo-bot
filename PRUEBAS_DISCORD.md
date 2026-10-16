@@ -1,3 +1,7 @@
+## Validación pendiente: duplicación de logs de orientación — 2026-10-15
+
+PRUEBA EN DISCORD NO REALIZADA. En Heraldo's Lab con un miembro autorizado, inducir vencimiento de verificación de preferencia; comprobar un único embed «Kick — Falta de verificación», con primera/segunda falta, estado del DM y resultado correctos, sin «Miembro expulsado» adicional. Repetir con report=False (debe quedar log general cuando esté activado), canal de logs inaccesible, fallo HTTP al enviar, salida voluntaria, expulsión manual por un moderador externo, nuevo ingreso del mismo usuario y ausencia de permisos de auditoría. Ejecutar tests/test_orientation_kick_dedup.py y CI. Verificar otros tipos de expulsión por separado, sin dar por completada una auditoría transversal.
+
 ## Pruebas pendientes: /embed crear — 2026-10-15
 
 VERIFICACIÓN REAL EN DISCORD: NO REALIZADA. En Heraldo's Lab comprobar creación con «Información general», «Guía de inicio 🪽», nombres ASCII existentes y longitud 64; rechazo de 65 caracteres, menciones y controles; duplicados con mayúsculas y espacios; editar, enviar, programar, listar y borrar con autocompletado. Conservar embeds anteriores y aislar por servidor. Suite aislada tests/test_embed_names.py y CI del SHA final pendientes de evaluar.

@@ -2296,12 +2296,59 @@ async def classify_member_departure(member):
     return "member_leave", None, None, "Salida observada; no se encontró una expulsión o baneo en la auditoría consultada."
 
 
+
+# Evitar dos tarjetas por la misma expulsión de verificación, sin ocultar
+# expulsiones externas ni perder el único registro cuando falle su publicación.
+_ORIENTATION_KICK_REASON = "No definió su orientación"
+_ORIENTATION_LOG_WINDOW = 30.0
+_orientation_kick_log_pending: dict[tuple, asyncio.Event] = {}
+_orientation_kick_log_sent: dict[tuple, float] = {}
+
+
+def orientation_kick_log_key(member: discord.Member) -> tuple:
+    # La fecha de entrada distingue dos sesiones del mismo usuario.
+    return (member.guild.id, member.id, getattr(member, "joined_at", None))
+
+
+def orientation_prune_kick_log_markers(now: float | None = None) -> None:
+    now = time.monotonic() if now is None else now
+    for key, observed in list(_orientation_kick_log_sent.items()):
+        if now - observed > _ORIENTATION_LOG_WINDOW:
+            _orientation_kick_log_sent.pop(key, None)
+
+
+async def orientation_departure_has_detailed_log(
+    member: discord.Member, kind: str, moderator: discord.abc.User | None, reason: str | None,
+) -> bool:
+    """Solo omitir el log genérico si la tarjeta detallada YA fue enviada."""
+    if kind not in {"member_kick", "member_leave"}:
+        return False
+    if kind == "member_kick":
+        bot_user = bot.user
+        if (bot_user is None or getattr(moderator, "id", None) != bot_user.id
+                or (reason or "").strip() != _ORIENTATION_KICK_REASON):
+            return False
+    key = orientation_kick_log_key(member)
+    pending = _orientation_kick_log_pending.get(key)
+    if pending is not None:
+        try:
+            await asyncio.wait_for(pending.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            pass  # Evitar bloquear la auditoría cuando Discord no responde.
+    now = time.monotonic()
+    orientation_prune_kick_log_markers(now)
+    logged_at = _orientation_kick_log_sent.pop(key, None)
+    return logged_at is not None and 0 <= now - logged_at <= _ORIENTATION_LOG_WINDOW
+
+
 @bot.listen("on_member_remove")
 async def heraldo_member_departure(member: discord.Member) -> None:
     guild = member.guild
     if not any(log_member_event_enabled(guild.id, key) for key in ("member_leave", "member_kick", "member_ban")):
         return
     kind, moderator, reason, uncertainty = await classify_member_departure(member)
+    if await orientation_departure_has_detailed_log(member, kind, moderator, reason):
+        return  # El informe específico de verificación ya explica esta expulsión.
     if not log_member_event_enabled(guild.id, kind):
         return
     labels = dict(LOG_EVENT_CATALOG["members"])
@@ -2653,6 +2700,13 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     if not report:
         return
 
+    # El listener de salidas espera esta publicación antes de emitir un segundo log.
+    log_key = orientation_kick_log_key(member)
+    pending = asyncio.Event()
+    if kicked:
+        orientation_prune_kick_log_markers()
+        _orientation_kick_log_pending[log_key] = pending
+
     embed = discord.Embed(
         title="Kick — Falta de verificación",
         color=discord.Color.red() if kicked else discord.Color.dark_red(),
@@ -2672,11 +2726,19 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
 
     channel = member.guild.get_channel(get_log_channel_id(member.guild.id))
-    if channel is not None:
-        try:
-            await channel.send(embed=embed)
-        except discord.Forbidden:
-            print("Sin permisos para escribir en el canal de logs")
+    try:
+        if channel is not None:
+            try:
+                await channel.send(embed=embed)
+            except discord.HTTPException:
+                print("No se pudo publicar la tarjeta de expulsión por verificación")
+            else:
+                if kicked:
+                    _orientation_kick_log_sent[log_key] = time.monotonic()
+    finally:
+        if kicked:
+            _orientation_kick_log_pending.pop(log_key, None)
+            pending.set()
 
 
 async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
