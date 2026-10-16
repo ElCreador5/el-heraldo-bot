@@ -1,3 +1,7 @@
+## Complemento: base SQLite histórica sin tabla de acciones — 2026-10-16
+
+Durante revisión del endurecimiento se detectó que `condemnation_case_actions` se creaba originalmente solo al reclamar una medida por botón; consultar desde Perdonar sobre un servidor antiguo podía dar `no such table`. Se agregó `CREATE TABLE IF NOT EXISTS` en la consulta de solo comprobación para mantener `False` legítimo sin acciones registradas, y se sigue propagando cualquier bloqueo/error de SQLite a la ruta de error sin permitir un perdón en estado incierto. Regresión test de base legacy en memoria añadida. Prueba real pendiente, no tocar main.
+
 ## Auditoría fiabilidad: punto de control 2026-10-16
 
 Fuente adicional: PDF comunitario resumido en DECISIONES.md, ver matriz PRUEBAS_DISCORD.md. Se comprobó `Pruebas@825ef2c10`: vistas persistentes Verify/Sugerencias y por-message_id para Condemnation; componentes de roles tienen listener custom_id. Se detectó y corrigió riesgo de abortar `on_ready` al fallar sync/invites en un servidor, SQLite bloqueo consultado como False por `condemnation_case_action_in_progress`, y revalidación insuficiente de rol/jerarquía tras `guild.fetch_member`. Prueba añadida tests/test_reliability_startup_roles.py; pendientes CI, reinicio/pruebas Discord Test y revisión del resto de rutas de fallos parciales. Ninguna sanción real ejecutada; main intacta. Sin conexión Obsidian externa comprobada.

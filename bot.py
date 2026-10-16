@@ -15451,6 +15451,14 @@ def condemnation_case_action_claim(guild_id: int, message_id: int, action: str) 
 def condemnation_case_action_in_progress(guild_id: int, message_id: int) -> bool:
     conn = db_connect()
     try:
+        # Los servidores antiguos no tienen esta tabla hasta que se utiliza
+        # un botón de medida. Crear el esquema sin modificar acciones previas.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS condemnation_case_actions ("
+            "guild_id INTEGER NOT NULL, message_id INTEGER NOT NULL, action TEXT NOT NULL, "
+            "state TEXT NOT NULL, resulting_case INTEGER, created_at TEXT NOT NULL, "
+            "PRIMARY KEY(guild_id, message_id, action))"
+        )
         return conn.execute(
             "SELECT 1 FROM condemnation_case_actions "
             "WHERE guild_id=? AND message_id=? AND state='pending' LIMIT 1",

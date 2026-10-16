@@ -38,6 +38,24 @@ class ReliabilityAuditTests(unittest.IsolatedAsyncioTestCase):
             fn(1,2)
         conn.close.assert_called_once()
 
+    def test_missing_case_action_table_is_initialized_for_legacy_guild(self):
+        conn = sqlite3.connect(":memory:")
+        class WrappedConnection:
+            def __init__(self, raw):
+                self.raw = raw
+                self.closed = False
+            def execute(self, *args):
+                return self.raw.execute(*args)
+            def close(self):
+                self.closed = True
+        wrapper = WrappedConnection(conn)
+        fn = isolate(["condemnation_case_action_in_progress"],
+                     {"db_connect":lambda:wrapper, "sqlite3":sqlite3})["condemnation_case_action_in_progress"]
+        self.assertFalse(fn(1,2))
+        self.assertTrue(wrapper.closed)
+        self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='condemnation_case_actions'").fetchone())
+        conn.close()
+
     def test_role_configuration_and_permissions_revocations_are_denied(self):
         config = [{"role_id":7, "action":"añadir"}]
         role = Role()
