@@ -19165,14 +19165,33 @@ async def execute_channel_merge(
             except discord.HTTPException:
                 pass
 
-    # Nunca borrar el origen si hubo errores de migración.
+    # Conservar el origen si cambió el historial durante la migración o no se puede
+    # volver a comprobar; una copia parcial nunca autoriza su eliminación.
     deleted_source = False
+    source_changed = False
     if failed == 0 and attachment_failures == 0 and eliminar_origen:
-        src_perms = origen.permissions_for(me)
-        if not src_perms.manage_channels:
+        try:
+            current_messages = await collect_fusion_messages(origen)
+            source_changed = (
+                [(m.id, getattr(m, "edited_at", None)) for m in current_messages]
+                != [(m.id, getattr(m, "edited_at", None)) for m in messages]
+            )
+        except discord.HTTPException:
+            source_changed = True
+        if source_changed:
             await interaction.followup.send(
-                f"Advertencia: Migración completada ({migrated:,}/{len(messages):,}), pero no pude eliminar {origen.mention}: "
-                "al Heraldo le falta Gestionar canales.",
+                "Advertencia: El canal origen cambió durante la migración o no se pudo "
+                "volver a comprobar su historial. Se conservó para evitar pérdidas.",
+                ephemeral=True,
+            )
+        elif not interaction.user.guild_permissions.manage_channels:
+            await interaction.followup.send(
+                "Advertencia: El administrador perdió Gestionar canales. Se conservó el origen.",
+                ephemeral=True,
+            )
+        elif not origen.permissions_for(guild.me).manage_channels if guild.me else True:
+            await interaction.followup.send(
+                "Advertencia: El Heraldo ya no tiene Gestionar canales. Se conservó el origen.",
                 ephemeral=True,
             )
         else:
@@ -19199,7 +19218,9 @@ async def execute_channel_merge(
     else:
         result = (
             f"Fusión completada: **{migrated:,}** mensajes migrados a {destino.mention}. "
-            + ("El canal origen fue eliminado." if deleted_source else "El canal origen se conservó.")
+            + ("El canal origen fue eliminado." if deleted_source
+               else "El canal origen se conservó por cambios detectados o falta de comprobación."
+               if source_changed else "El canal origen se conservó.")
         )
         color = discord.Color.green()
 
