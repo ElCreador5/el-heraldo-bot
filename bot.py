@@ -20487,7 +20487,7 @@ async def scheduled_embeds_loop():
     now = datetime.now(timezone.utc)
     conn = scheduled_embed_db()
     try:
-        jobs = embed_schedule_engine.claim_due(conn, now)
+        jobs = embed_schedule_engine.claim_due(conn, now, scheduled_embed_test_mode())
     finally:
         conn.close()
     for _id, guild_id, name, channel_id in jobs:
