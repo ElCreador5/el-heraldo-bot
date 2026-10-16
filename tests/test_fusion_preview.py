@@ -150,7 +150,7 @@ class FusionExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.me = SimpleNamespace(id=99)
         self.user = SimpleNamespace(
-            id=13, guild_permissions=SimpleNamespace(manage_channels=True),
+            id=13, mention="<@13>", guild_permissions=SimpleNamespace(manage_channels=True),
         )
         src_perms = SimpleNamespace(
             view_channel=True, read_message_history=True, manage_channels=True,
