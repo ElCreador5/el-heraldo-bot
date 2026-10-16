@@ -15464,6 +15464,37 @@ async def condemnation_ensure_private_thread(
         return False
 
 
+
+
+async def condemnation_mark_closed_card(
+    guild: discord.Guild, row: sqlite3.Row, status: str,
+) -> None:
+    """Remove the persistent staff actions from resolved cases without losing evidence."""
+    message_id = row["announcement_message_id"]
+    if not message_id:
+        return
+    channel = guild.get_channel(condemnation_channel_id(guild.id))
+    if not isinstance(channel, discord.TextChannel):
+        return
+    try:
+        message = await channel.fetch_message(int(message_id))
+        embed = message.embeds[0].copy() if message.embeds else None
+        if embed is not None:
+            index = next((i for i, field in enumerate(embed.fields)
+                          if field.name == "Estado del expediente"), None)
+            if index is None:
+                embed.add_field(name="Estado del expediente", value=status[:1024], inline=False)
+            else:
+                embed.set_field_at(index, name="Estado del expediente",
+                                   value=status[:1024], inline=False)
+        await message.edit(
+            embed=embed, view=None,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        print("Advertencia: no se pudo cerrar visualmente la tarjeta del expediente.")
+
+
 async def condemnation_close_private_thread(guild: discord.Guild, thread_id: int | None) -> None:
     if not thread_id:
         return
@@ -15923,6 +15954,10 @@ async def _release_condemned_member_inner(
     # La condena ya se levantó. El hilo permanece como expediente archivado.
     if row is not None and row["thread_id"]:
         await condemnation_close_private_thread(member.guild, int(row["thread_id"]))
+    if row is not None and not pardon:
+        await condemnation_mark_closed_card(
+            member.guild, row, "Condena expirada" if automatic else "Condena levantada",
+        )
 
     # Si entre los roles originales estaban los de verificación, vuelven a su flujo normal
     # desde cero; mientras la condena estuvo activa nunca corrió ninguna evaluación.
@@ -15995,6 +16030,7 @@ async def check_expired_condemnations() -> None:
             condemnation_deactivate(guild_id, user_id, resolution="expired")
             if row["thread_id"]:
                 await condemnation_close_private_thread(guild, int(row["thread_id"]))
+            await condemnation_mark_closed_card(guild, row, "Condena expirada")
             linked_case = (
                 int(row["moderation_case_number"])
                 if "moderation_case_number" in row.keys() and row["moderation_case_number"] is not None
@@ -18808,6 +18844,13 @@ async def moderation_caseclose(interaction: discord.Interaction, caso: str, moti
     await interaction.response.defer(ephemeral=True, thinking=True)
     effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
     moderation_case_close(interaction.guild.id, case_number, closed_by=interaction.user.id, resolution=motivo or "Cerrado manualmente")
+    if str(row["type"]) == "CONDEMN":
+        condemned = condemnation_get(interaction.guild.id, int(row["user_id"]), active_only=False)
+        if (condemned is not None and condemned["moderation_case_number"] is not None
+                and int(condemned["moderation_case_number"]) == case_number):
+            await condemnation_mark_closed_card(interaction.guild, condemned, "Expediente cerrado")
+            if condemned["thread_id"]:
+                await condemnation_close_private_thread(interaction.guild, int(condemned["thread_id"]))
     current_status = await moderation_case_live_status(interaction.guild, int(row["user_id"]))
     await interaction.followup.send(f"Expediente {moderation_case_code(case_number, interaction.guild.id)} cerrado. {effect}\n**Estado actual:** {current_status}", ephemeral=True)
 
