@@ -1,3 +1,7 @@
+## Calidad editorial y claridad de los controles — 2026-10-15
+
+Toda pantalla administrativa debe usar español correcto, explicar el efecto concreto de cada acción y evitar mensajes contradictorios. Preferir descripciones humanas a JSON, saltos de línea visibles y estados precisos. Separar «Revisar», «Confirmar» y «Cancelar»; los selectores y formularios no guardan por sí mismos. Se aplicó al programador de embeds en Pruebas, con verificación real pendiente; ampliar el estándar progresivamente a los demás editores.
+
 ## Nombres naturales de embeds personalizados — 2026-10-15
 
 En Pruebas, /embed admite nombres Unicode legibles con espacios, tildes y emojis, máximo 64 caracteres. Identificador canónico en crear, editar, enviar, borrar y autocompletar; no cambia publicaciones previas. Pendiente validación interactiva de Discord y CI. Los demás editores no se consideran terminados por este ajuste.

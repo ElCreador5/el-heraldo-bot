@@ -1,3 +1,7 @@
+## Comprobación pendiente: programar embeds y redacción — 2026-10-15
+
+VERIFICACIÓN REAL EN DISCORD: NO REALIZADA. En Heraldo's Lab comprobar Por mensajes (10), canal seleccionado, botón Activar, revisión y Confirmar; los saltos de línea reales, ninguna estructura JSON y ningún texto contradictorio. Tras revisar, modificar estado/canal/frecuencia y asegurar nueva revisión obligatoria. Cancelar antes y después de revisar no debe guardar. Probar modal en seis frecuencias, edición existente y programaciones inactivas. Verificar controles y textos en Discord sin modificar producción. Test test_embed_schedule_wording.py.
+
 ## Validación pendiente: duplicación de logs de orientación — 2026-10-15
 
 PRUEBA EN DISCORD NO REALIZADA. En Heraldo's Lab con un miembro autorizado, inducir vencimiento de verificación de preferencia; comprobar un único embed «Kick — Falta de verificación», con primera/segunda falta, estado del DM y resultado correctos, sin «Miembro expulsado» adicional. Repetir con report=False (debe quedar log general cuando esté activado), canal de logs inaccesible, fallo HTTP al enviar, salida voluntaria, expulsión manual por un moderador externo, nuevo ingreso del mismo usuario y ausencia de permisos de auditoría. Ejecutar tests/test_orientation_kick_dedup.py y CI. Verificar otros tipos de expulsión por separado, sin dar por completada una auditoría transversal.

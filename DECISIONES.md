@@ -1,3 +1,7 @@
+## Calidad del lenguaje en El Heraldo — 2026-10-15
+
+Priorizar ortografía, gramática y mensajes formales comprensibles. No mostrar estructuras JSON de configuración cuando se pueden explicar en español natural, ni secuencias \\n literales. Una etiqueta de botón debe describir la acción siguiente; borrador, revisión y confirmación se distinguen claramente. Los estados mostrados deben coincidir con lo que se guardará. Solo mostrar parámetros aplicables; Cancelar jamás persiste. Aplicar esta directriz a los demás mensajes al revisarlos. Sin cambios en producción.
+
 ## Un único registro por expulsión de verificación — 2026-10-15
 
 Preservar el embed detallado de verificación (primera o segunda falta, DM de recuperación, resultado) como registro principal; solo suprimir «Miembro expulsado» general cuando hay prueba de publicación correcta de ese mismo evento. No ocultar expulsiones realizadas por otros moderadores, salidas naturales, baneos o eventos sin registro detallado. Registrar la deduplicación con memoria efímera asociada a sesión de ingreso; no eliminar evidencias ni cambios de configuración. Solo Pruebas.

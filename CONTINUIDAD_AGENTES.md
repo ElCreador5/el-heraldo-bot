@@ -1,3 +1,7 @@
+## Corrección de textos del programador de embeds — 2026-10-15
+
+Captura: frecuencia Por mensajes, configuración interna count=10, estado Activado pero leyenda decía que se guardaría desactivada; tras pulsar revisión aparecía secuencia literal \\n\\n. Actualizado en Pruebas: explicaciones en lenguaje natural para todos los modos; estado y botones dinámicos, condición explícita, campos relevantes por modo, reseteo de confirmación tras cambiar borrador y corrección de salto literal. Tests en test_embed_schedule_wording.py y documentación actualizada. CI y Discord Test pendientes; no tocar main.
+
 ## Duplicación de logs por falta de orientación — 2026-10-15
 
 Captura recibida: dos embeds para una expulsión por falta de orientación, «Kick — Falta de verificación» y «Miembro expulsado». Fuente bot.py: expel() publica tarjeta detallada y heraldo_member_departure() inspecciona la auditoría y emite de nuevo evento de expulsión. Modificado en Pruebas para saltar solo el log general cuando el detallado se envió, mediante marcador con actor/razón, TTL, sesión y sincronización breve; conservar resto de logs y errores. Pruebas tests/test_orientation_kick_dedup.py creadas; resultados CI/Discord y Railway Test deben comprobarse en SHA del último commit. No tocar main; sin Obsidian externo.

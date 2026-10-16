@@ -1,3 +1,7 @@
+## Programación de embeds: claridad de la interfaz — 2026-10-15
+
+IMPLEMENTADO en Pruebas: corregido texto de confirmación que mostraba secuencias literales \\n. Ahora las condiciones de las seis frecuencias se explican en lenguaje natural, no como JSON. Estado activo/desactivado y botones Revisar/Confirmar reflejan la acción real; cada cambio reinicia la confirmación. Campos no aplicables se ocultan en el modal. Se mantiene el guardado explícito; Cancelar no guarda. Nueva regresión test_embed_schedule_wording.py; CI y Discord por verificar. Sin cambios en main.
+
 ## Duplicación de registros por expulsión de orientación — 2026-10-15
 
 IMPLEMENTADO en Pruebas: cuando expel() publica con éxito el embed detallado «Kick — Falta de verificación», el listener on_member_remove no publica además «Miembro expulsado» por esa misma operación. Guardas transitorias por servidor, usuario y sesión de ingreso, actor bot y razón auditada, TTL 30s, espera de publicación 5s; las expulsiones manuales, baneos, demás salidas y ausencia/fallo de la tarjeta detallada siguen registrándose. No altera sanciones, DMs ni archivo de auditoría de Discord. Regression tests/test_orientation_kick_dedup.py. Verificar CI y Discord Test; producción intacta.

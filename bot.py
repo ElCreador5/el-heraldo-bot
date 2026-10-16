@@ -21109,33 +21109,67 @@ async def scheduled_embeds_message_counter(message):
             print(f"Advertencia: contador de mensajes {_id} sin entrega confirmada")
 
 
+
+def embed_schedule_human_details(mode: str, config: dict | None) -> str:
+    """Resumir condiciones para moderadores sin exponer parámetros JSON."""
+    if config is None:
+        return "Pendiente de configurar."
+    if mode == "messages":
+        return (
+            f"El embed se publicará cada {int(config['count'])} mensajes nuevos escritos por "
+            "miembros en el canal seleccionado. No cuentan mensajes de bots ni webhooks."
+        )
+    if mode == "once":
+        when = datetime.fromisoformat(config["when"]).astimezone(embed_schedule_engine.RD)
+        return f"Una vez, el {when:%d/%m/%Y} a las {when:%H:%M} (hora de República Dominicana)."
+    if mode == "interval":
+        return f"Una publicación cada {config['interval']}, desde la fecha de configuración."
+    if mode == "daily":
+        return f"Cada día a las {config['time']} (hora de República Dominicana)."
+    if mode == "weekly":
+        days = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+        names = ", ".join(days[int(day)] for day in config["days"])
+        return f"Los {names} a las {config['time']} (hora de República Dominicana)."
+    if mode == "monthly":
+        names = ", ".join(str(day) for day in config["days"])
+        return f"Los días {names} de cada mes a las {config['time']} (hora de República Dominicana)."
+    return "Condición de programación no reconocida."
+
+
 class EmbedScheduleOptionsModal(discord.ui.Modal, title="Programar un embed"):
-    option = discord.ui.TextInput(label="Parámetro según frecuencia", placeholder="18:00 | 1,3,5 | 1,15 | 6h | 100", max_length=100)
-    when = discord.ui.TextInput(label="Fecha única AAAA-MM-DD HH:MM (si aplica)", required=False, max_length=20)
+    option = discord.ui.TextInput(label="Condición de publicación", placeholder="Según el tipo elegido", max_length=100)
+    when = discord.ui.TextInput(label="Fecha u hora adicional", required=False, max_length=20)
 
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
         mode = parent.mode
         self.option.label = {
-            "once": "Hora HH:MM (fecha abajo)", "interval": "Intervalo: 2m, 6h o 14d",
-            "daily": "Hora HH:MM", "weekly": "Días 1-7 (L-D), separados por coma",
-            "monthly": "Días 1-31, separados por coma", "messages": "Cantidad de mensajes (mínimo 10)"
+            "once": "Hora de publicación (HH:MM)", "interval": "Intervalo: 2m, 6h o 14d",
+            "daily": "Hora de publicación (HH:MM)", "weekly": "Días de semana (lunes = 1)",
+            "monthly": "Días del mes (1 a 31)", "messages": "Mensajes necesarios (10 a 100 000)"
         }[mode]
         self.option.placeholder = {
             "once": "18:00", "interval": "6h", "daily": "18:00", "weekly": "1,3,5",
             "monthly": "1,15", "messages": "100"
         }[mode]
-        self.when.label = "Fecha AAAA-MM-DD o hora HH:MM"
-        self.when.placeholder = "Para fecha única: 2026-11-01; días: 18:00"
-        self.when.required = mode in {"once", "weekly", "monthly"}
+        if mode == "once":
+            self.when.label = "Fecha (AAAA-MM-DD)"
+            self.when.placeholder = "Ejemplo: 2026-11-01"
+            self.when.required = True
+        elif mode in {"weekly", "monthly"}:
+            self.when.label = "Hora de publicación (HH:MM)"
+            self.when.placeholder = "Ejemplo: 18:00, hora dominicana"
+            self.when.required = True
+        else:
+            self.remove_item(self.when)
 
     async def on_submit(self, interaction):
         if not await self.parent.interaction_check(interaction):
             return
         mode = self.parent.mode
         value = str(self.option).strip()
-        extra = str(self.when).strip()
+        extra = str(self.when).strip() if mode in {"once", "weekly", "monthly"} else ""
         try:
             if mode == "once":
                 date_value = datetime.strptime(extra + " " + value, "%Y-%m-%d %H:%M")
@@ -21158,7 +21192,7 @@ class EmbedScheduleOptionsModal(discord.ui.Modal, title="Programar un embed"):
             await interaction.response.send_message(f"Configuración inválida: {exc}. Revise la ayuda del formulario.", ephemeral=True)
             return
         self.parent.config = cfg
-        self.parent.reviewed = False
+        self.parent.invalidate_review()
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
 
 
@@ -21183,6 +21217,11 @@ class EmbedScheduleView(discord.ui.View):
             row=1)
         self.mode_menu.callback = self.select_mode
         self.add_item(self.mode_menu)
+        self.toggle.label = "Activar programación"
+
+    def invalidate_review(self):
+        self.reviewed = False
+        self.save.label = "Revisar cambios" if isinstance(self, EmbedScheduleEditView) else "Revisar programación"
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.owner_id or interaction.guild is None or interaction.guild.id != self.guild_id:
@@ -21194,13 +21233,30 @@ class EmbedScheduleView(discord.ui.View):
         return True
 
     def summary(self):
-        mode_label = dict(self.MODES)[self.mode]
-        return (f"**Programar embed:** `{self.name}`\n"
-                f"**Canal:** <#{self.channel_id}>\n**Frecuencia:** {mode_label}\n"
-                f"**Parámetros:** `{json.dumps(self.config, ensure_ascii=False) if self.config else 'Sin definir'}`\n"
-                f"**Estado solicitado:** {'Activado' if self.active else 'Desactivado'}\n\n"
-                "Estos valores son un borrador. Solo **Guardar programación** crea la programación. "
-                "El valor inicial será desactivado salvo que elija Activar.")
+        is_edit = isinstance(self, EmbedScheduleEditView)
+        channel = f"<#{self.channel_id}>" if self.channel_id is not None else "Sin seleccionar"
+        confirm = "Confirmar actualización" if is_edit else "Confirmar guardado"
+        review = "Revisar cambios" if is_edit else "Revisar programación"
+        title = "Editar programación de embed" if is_edit else "Nueva programación de embed"
+        if self.reviewed:
+            instruction = (
+                f"**Confirmación pendiente.** Compruebe los datos y pulse **{confirm}** "
+                "para guardar. Puede cancelar sin guardar."
+            )
+        else:
+            instruction = (
+                f"**Borrador sin guardar.** Pulse **{review}** para revisar la "
+                "configuración antes de confirmarla. Cancelar descarta el borrador."
+            )
+        return (
+            f"**{title}**\n"
+            f"**Embed:** {self.name}\n"
+            f"**Canal de destino:** {channel}\n"
+            f"**Frecuencia:** {dict(self.MODES)[self.mode]}\n"
+            f"**Condición:** {embed_schedule_human_details(self.mode, self.config)}\n"
+            f"**Estado al guardar:** {'Activa' if self.active else 'Desactivada'}\n\n"
+            f"{instruction}"
+        )
 
     async def select_channel(self, interaction):
         values = self.channel_menu.values
@@ -21216,34 +21272,35 @@ class EmbedScheduleView(discord.ui.View):
             await interaction.response.send_message("Faltan permisos para publicar embeds en ese canal.", ephemeral=True)
             return
         self.channel_id = channel.id
-        self.reviewed = False
+        self.invalidate_review()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
     async def select_mode(self, interaction):
         value = self.mode_menu.values[0]
         self.mode = value
         self.config = None
-        self.reviewed = False
+        self.invalidate_review()
         for opt in self.mode_menu.options:
             opt.default = opt.value == value
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="3. Configurar frecuencia", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="3. Configurar condición", style=discord.ButtonStyle.primary, row=2)
     async def configure(self, interaction, button):
         await interaction.response.send_modal(EmbedScheduleOptionsModal(self))
 
-    @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Activar programación", style=discord.ButtonStyle.secondary, row=2)
     async def toggle(self, interaction, button):
         self.active = not self.active
-        self.reviewed = False
+        self.toggle.label = "Desactivar programación" if self.active else "Activar programación"
+        self.invalidate_review()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Guardar programación", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="Revisar programación", style=discord.ButtonStyle.success, row=3)
     async def save(self, interaction, button):
         if isinstance(self, EmbedScheduleEditView):
             return await self.save_existing(interaction, button)
         if self.channel_id is None or self.config is None:
-            await interaction.response.send_message("Seleccione canal y configure la frecuencia.", ephemeral=True)
+            await interaction.response.send_message("Seleccione un canal y configure la condición de publicación antes de continuar.", ephemeral=True)
             return
         if embed_get(self.guild_id, self.name) is None:
             await interaction.response.send_message("El embed ya no existe.", ephemeral=True)
@@ -21252,8 +21309,7 @@ class EmbedScheduleView(discord.ui.View):
             self.reviewed = True
             button.label = "Confirmar guardado"
             await interaction.response.edit_message(
-                content=self.summary() + "\\n\\n**Revise canal, frecuencia y estado; pulse Confirmar guardado para persistir.**",
-                view=self)
+                content=self.summary(), view=self)
             return
         now = datetime.now(timezone.utc)
         try:
@@ -21279,7 +21335,7 @@ class EmbedScheduleView(discord.ui.View):
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=3)
     async def cancel(self, interaction, button):
         self.stop()
-        await interaction.response.edit_message(content="Cancelado: no se creó ninguna programación.",view=None)
+        await interaction.response.edit_message(content="Operación cancelada. No se guardó ninguna programación.",view=None)
 
 
 
@@ -21510,6 +21566,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
         super().__init__(owner_id, guild_id, name)
         self.schedule_id, self.version = schedule_id, version
         self.channel_id, self.mode, self.config, self.active = channel_id, mode, json.loads(config_json), bool(enabled)
+        self.toggle.label = "Desactivar programación" if self.active else "Activar programación"
         for option in self.mode_menu.options:
             option.default = option.value == mode
         self.reviewed = False
@@ -21517,7 +21574,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
 
     async def save_existing(self, interaction, button):
         if self.channel_id is None or self.config is None:
-            await interaction.response.send_message("Seleccione canal y configure la frecuencia.", ephemeral=True)
+            await interaction.response.send_message("Seleccione un canal y configure la condición de publicación antes de continuar.", ephemeral=True)
             return
         guild = interaction.guild
         channel = guild.get_channel(self.channel_id) if guild else None
@@ -21543,7 +21600,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
             self.reviewed = True
             button.label = "Confirmar actualización"
             await interaction.response.edit_message(
-                content=self.summary() + "\\n\\n**Confirme la actualización; todavía no se ha guardado.**", view=self)
+                content=self.summary(), view=self)
             return
         conn = scheduled_embed_db()
         try:
@@ -21661,7 +21718,7 @@ class EmbedSchedulesManageView(discord.ui.View):
             await interaction.response.send_message(str(exc),ephemeral=True)
             return
         await interaction.response.send_message(
-            content=view.summary()+"\\n\\nEdite el borrador y revise antes de guardar.",
+            content=view.summary(),
             view=view,ephemeral=True)
 
     @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
