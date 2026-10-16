@@ -15349,7 +15349,7 @@ async def condemnation_update_pardoned_card(
     lost_count: int,
     message: discord.Message | None = None,
 ) -> bool:
-    """Crea la tarjeta nueva de perdón y elimina la tarjeta original del caso."""
+    """Actualiza la tarjeta original en el sitio; conserva el identificador del expediente."""
     message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
     channel = member.guild.get_channel(condemnation_channel_id(member.guild.id))
     if not isinstance(channel, discord.TextChannel):
@@ -15398,44 +15398,16 @@ async def condemnation_update_pardoned_card(
         resolution.add_field(name="Duración original", value=condemnation_duration_text(row), inline=True)
         resolution.set_footer(text=f"{member.guild.name} · El Heraldo · Resolución {case_id}")
 
-        new_message = await channel.send(
-            content=member.mention,
+        # Keep the original case message (and private thread reference).
+        await message.edit(
             embed=resolution,
-            allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False),
+            view=None,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
-
-        old_deleted = False
-        try:
-            await message.delete()
-            old_deleted = True
-        except discord.NotFound:
-            old_deleted = True
-        except discord.Forbidden:
-            print(f"Advertencia: No pude eliminar la tarjeta original del expediente {case_id}: faltan permisos.")
-        except discord.HTTPException as e:
-            print(f"Advertencia: No pude eliminar la tarjeta original del expediente {case_id}: {e}")
-
-        conn = db_connect()
-        conn.execute(
-            "UPDATE guild_cases SET announcement_message_id = ? WHERE guild_id = ? AND user_id = ?",
-            (new_message.id, member.guild.id, member.id),
-        )
-        conn.commit()
-        conn.close()
-
-        if not old_deleted:
-            await log_embed(
-                member.guild,
-                "Advertencia: Tarjeta de condena no eliminada",
-                f"Expediente: {case_id}\nNo pude eliminar la tarjeta original. "
-                f"La tarjeta de resolución sí fue creada: {new_message.jump_url}",
-                discord.Color.orange(),
-            )
         return True
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         traceback.print_exc()
         return False
-
 
 def condemnation_role_id(row: sqlite3.Row | None = None, guild_id: int | None = None) -> int:
     if row is not None and row["role_id"]:
