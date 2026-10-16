@@ -1,3 +1,9 @@
+## Aceptación pendiente tras recuperación de CI — 2026-10-16
+
+VERIFICADO AUTOMÁTICAMENTE: GitHub Actions run `38868053698` a `Pruebas@453488d9`, tres matrices 3.11/3.12/3.13 SUCCESS. Los 16 errores de fixtures y dos fallos de AST anteriores se corrigieron sin rebajar protecciones: la normalización real de reglas de `report` y `warn` descarta purgas aun con datos heredados; test del motor `report` exige ausencia de sanciones/purga; el editor de reacciones se comprueba mediante selección de acción, modal de condiciones y ausencia de persistencia hasta Guardar. Unicode 15 (🪽) validado aun simulando Python 3.11. CI verde no prueba el comportamiento en Discord.
+
+PRUEBA EN DISCORD **NO REALIZADA**. En Heraldo's Lab, exclusivamente El Heraldo Test, verificar selección/edición/guardar/cancelar por acción (report, warn, timeout, condemn, kick, ban) sin guardar prematuramente; «Solo reportar» no borra mensajes, conserva evidencias y no aplica sanción; permisos/jerarquía revocados entre interacciones; SQLite bloqueada al perdonar; vistas y paneles tras reinicio con invitaciones negadas; vencimiento MUTE con HTTP fallido y sanción posterior. Confirmar DM, expediente, respuesta efímera y ausencia de logs duplicados. El despliegue Railway Test SUCCESS para `453488d9` no reemplaza ninguna aceptación. No ejecutar purgas destructivas ni pruebas de producción. 
+
 ## Aceptación pendiente: vencimiento aislado de MUTE — 2026-10-16
 
 En Heraldo's Lab probar vencimiento normal de un timeout de 1m autorizado; fallo de Discord al retirar el timeout (el expediente debe quedar abierto y reintentarse); nuevo aislamiento activo antes de expirar el antiguo (no debe levantarse), y aislamiento manual posterior más largo no registrado (mantenerlo). Revalidar con reinicio y roles no manejables. Ninguna prueba real realizada por el asistente.
