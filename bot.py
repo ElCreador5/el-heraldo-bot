@@ -14985,6 +14985,33 @@ class CondemnationPardonView(discord.ui.View):
         )
         pardon_button.callback = self.pardon_callback
         self.add_item(pardon_button)
+        for action, label, style in (
+            ("WARN", "Advertir", discord.ButtonStyle.secondary),
+            ("BAN", "Banear", discord.ButtonStyle.danger),
+            ("KICK", "Expulsar", discord.ButtonStyle.danger),
+        ):
+            button = discord.ui.Button(
+                label=label, style=style,
+                custom_id=f"heraldo:condemnation:action:{action.lower()}",
+            )
+            button.callback = lambda interaction, selected=action: self.action_callback(interaction, selected)
+            self.add_item(button)
+
+    async def action_callback(self, interaction: discord.Interaction, action: str) -> None:
+        if interaction.guild is None or interaction.message is None:
+            await interaction.response.send_message("Este botón solo funciona en el servidor.", ephemeral=True)
+            return
+        permission = {"WARN": "moderate_members", "BAN": "ban_members", "KICK": "kick_members"}[action]
+        if not getattr(interaction.user.guild_permissions, permission, False):
+            await interaction.response.send_message("No tienes permisos para aplicar esta medida.", ephemeral=True)
+            return
+        row = condemnation_get_by_announcement_message(interaction.guild.id, interaction.message.id)
+        if row is None or not condemnation_linked_case_is_open(row):
+            await interaction.response.send_message("Este expediente ya no está abierto.", ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            CondemnationCaseActionModal(interaction.guild.id, interaction.message.id, action)
+        )
 
     async def pardon_callback(
         self,
@@ -15079,6 +15106,167 @@ class CondemnationPardonView(discord.ui.View):
                     )
             except Exception:
                 traceback.print_exc()
+
+
+def condemnation_linked_case_is_open(row: sqlite3.Row) -> bool:
+    number = row["moderation_case_number"] if "moderation_case_number" in row.keys() else None
+    if number is None:
+        return True
+    case = moderation_case_get(int(row["guild_id"]), int(number))
+    return case is not None and bool(case["open"])
+
+
+def condemnation_case_action_claim(guild_id: int, message_id: int, action: str) -> bool:
+    """Persistent at-most-once guard; a restart cannot repeat a sanction by button."""
+    conn = db_connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS condemnation_case_actions ("
+            "guild_id INTEGER NOT NULL, message_id INTEGER NOT NULL, action TEXT NOT NULL, "
+            "state TEXT NOT NULL, resulting_case INTEGER, created_at TEXT NOT NULL, "
+            "PRIMARY KEY(guild_id, message_id, action))"
+        )
+        result = conn.execute(
+            "INSERT OR IGNORE INTO condemnation_case_actions "
+            "(guild_id,message_id,action,state,created_at) VALUES(?,?,?,'pending',?)",
+            (guild_id, message_id, action, datetime.now(timezone.utc).isoformat()),
+        )
+        return result.rowcount == 1
+    finally:
+        conn.close()
+
+
+def condemnation_case_action_finish(
+    guild_id: int, message_id: int, action: str, successful: bool, case_number: int | None
+) -> None:
+    conn = db_connect()
+    try:
+        conn.execute(
+            "UPDATE condemnation_case_actions SET state=?, resulting_case=? "
+            "WHERE guild_id=? AND message_id=? AND action=?",
+            ("applied" if successful else "failed", case_number, guild_id, message_id, action),
+        )
+    finally:
+        conn.close()
+
+
+class CondemnationCaseActionModal(discord.ui.Modal):
+    reason_input = discord.ui.TextInput(
+        label="Motivo adicional", style=discord.TextStyle.paragraph,
+        required=False, max_length=500, placeholder="En Railway Test es opcional",
+    )
+
+    def __init__(self, guild_id: int, message_id: int, action: str):
+        label = {"WARN": "Advertir", "KICK": "Expulsar", "BAN": "Banear"}[action]
+        super().__init__(title=f"Expediente · {label}")
+        self.guild_id, self.message_id, self.action = guild_id, message_id, action
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None or interaction.guild.id != self.guild_id:
+            await interaction.response.send_message("Servidor incorrecto.", ephemeral=True)
+            return
+        row = condemnation_get_by_announcement_message(self.guild_id, self.message_id)
+        if row is None or not condemnation_linked_case_is_open(row):
+            await interaction.response.send_message("El expediente ya está cerrado.", ephemeral=True)
+            return
+        reason = str(self.reason_input).strip()
+        if not reason:
+            if os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61":
+                reason = "Prueba funcional autorizada de El Heraldo Test."
+            else:
+                await interaction.response.send_message(
+                    "El motivo es obligatorio fuera de El Heraldo Test.", ephemeral=True,
+                )
+                return
+        when = datetime.fromisoformat(row["condemned_at"])
+        code = condemnation_case_id(
+            interaction.guild.get_member(int(row["user_id"])) or
+            discord.Object(id=int(row["user_id"])), when,
+            int(row["moderation_case_number"]) if row["moderation_case_number"] else None,
+        ) if row["moderation_case_number"] else f"expediente {self.message_id}"
+        action_label = {"WARN": "Advertir", "KICK": "Expulsar", "BAN": "Banear"}[self.action]
+        await interaction.response.send_message(
+            f"Confirma **{action_label}** a <@{row['user_id']}> desde {code}.\n"
+            f"Motivo: {discord.utils.escape_markdown(reason)}\n"
+            + ("Una advertencia puede activar la sanción automática por acumulación.\n" if self.action == "WARN" else "")
+            + "**La medida puede afectar realmente al usuario.**",
+            view=CondemnationCaseConfirmView(
+                self.guild_id, self.message_id, self.action, reason, interaction.user.id),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+
+class CondemnationCaseConfirmView(discord.ui.View):
+    def __init__(self, guild_id: int, message_id: int, action: str, reason: str, owner_id: int):
+        super().__init__(timeout=180)
+        self.guild_id, self.message_id, self.action = guild_id, message_id, action
+        self.reason, self.owner_id = reason, owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild is None or interaction.guild.id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Esta confirmación corresponde a otro moderador.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar medida", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        permission = {"WARN": "moderate_members", "KICK": "kick_members", "BAN": "ban_members"}[self.action]
+        if not getattr(interaction.user.guild_permissions, permission, False):
+            await interaction.response.send_message("Ya no tienes permiso para esa acción.", ephemeral=True)
+            return
+        row = condemnation_get_by_announcement_message(self.guild_id, self.message_id)
+        if row is None or not condemnation_linked_case_is_open(row):
+            await interaction.response.send_message("El expediente se cerró o dejó de estar disponible.", ephemeral=True)
+            return
+        member = interaction.guild.get_member(int(row["user_id"]))
+        if member is None:
+            try:
+                member = await interaction.guild.fetch_member(int(row["user_id"]))
+            except discord.HTTPException:
+                member = None
+        if member is None:
+            await interaction.response.send_message(
+                "El usuario ya no está en el servidor; no se aplicó la medida.", ephemeral=True)
+            return
+        # This atomic claim also protects retries after a crashed worker.
+        if not condemnation_case_action_claim(self.guild_id, self.message_id, self.action):
+            await interaction.response.send_message(
+                "Esta medida ya fue procesada o está pendiente de revisión. "
+                "No se repetirá automáticamente.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        linked = row["moderation_case_number"]
+        origin = (moderation_case_code(int(linked), self.guild_id)
+                  if linked else f"mensaje {self.message_id}")
+        try:
+            ok, note, created = await moderation_apply_case_punishment(
+                interaction, member, self.action, self.reason, None,
+                f"Expediente de condena de origen: {origin}",
+            )
+        except Exception:
+            traceback.print_exc()
+            await interaction.followup.send(
+                "No se pudo verificar el resultado. Se bloqueó el reintento automático "
+                "para evitar sanciones duplicadas; revisa los registros.", ephemeral=True,
+            )
+            return
+        condemnation_case_action_finish(
+            self.guild_id, self.message_id, self.action, ok, created,
+        )
+        await interaction.followup.send(
+            (f"{note}\nEl expediente de condena original permanece abierto "
+             "hasta su resolución." if ok
+             else f"No se aplicó la medida: {note}. "
+             "No se repetirá desde este botón sin revisión administrativa."),
+            ephemeral=True,
+        )
+        self.stop()
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content="Medida cancelada. No se aplicó ninguna sanción.", view=None)
 
 
 async def condemnation_send_dm(
