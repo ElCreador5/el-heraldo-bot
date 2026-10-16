@@ -252,7 +252,7 @@ class VisualEditor(discord.ui.View):
         await self.host['confirm_configuration'](interaction, self.guild_id,
             {'message_custom_templates': json.dumps(templates, ensure_ascii=False)})
 
-    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.danger, row=3)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content='Borrador cerrado sin guardar.', embeds=[], view=None)

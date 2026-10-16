@@ -49,9 +49,17 @@ class ButtonPaletteTests(unittest.TestCase):
                          "Aplicar al borrador", "Baneo temporal"}:
                 self.assertEqual(style, "primary", label)
 
-    def test_navigation_is_grey(self):
+    def test_cancel_and_close_are_red_in_all_configuration_views(self):
+        seen = set()
         for _, label, style in decorators():
-            if label.startswith("Cancelar") or label.startswith("Volver") or label == "Cerrar":
+            if label.startswith("Cancelar") or label.startswith("Cerrar"):
+                self.assertEqual(style, "danger", label)
+                seen.add(label)
+        self.assertTrue({"Cancelar", "Cancelar edición", "Cerrar"}.issubset(seen))
+
+    def test_navigation_and_preview_remain_grey(self):
+        for _, label, style in decorators():
+            if label.startswith("Volver") or label == "Vista previa":
                 self.assertEqual(style, "secondary", label)
 
     def test_auxiliary_message_modules_use_same_palette(self):
@@ -64,7 +72,9 @@ class ButtonPaletteTests(unittest.TestCase):
         self.assertIn("discord.ButtonStyle.danger", actions)
         self.assertIn("label='Retirar embed', style=discord.ButtonStyle.danger", editor)
         self.assertIn("label='Añadir embed', style=discord.ButtonStyle.primary", editor)
-        self.assertIn("label='Cancelar', style=discord.ButtonStyle.secondary", editor)
+        self.assertIn("label='Cancelar', style=discord.ButtonStyle.danger", editor)
+        self.assertIn("label='Cancelar', style=discord.ButtonStyle.danger", actions)
+        self.assertIn("label='Cancelar', style=discord.ButtonStyle.danger", automation)
         self.assertIn("label='Publicar por webhook', style=discord.ButtonStyle.success", automation)
 
     def test_runtime_buttons_follow_action_semantics(self):

@@ -214,7 +214,7 @@ class ActionConfirm(discord.ui.View):
         await interaction.edit_original_response(content='\n'.join(results)[:1900], view=None,
                                                   allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.danger)
     async def cancel(self, interaction, button):
         if not await self.interaction_check(interaction):
             return

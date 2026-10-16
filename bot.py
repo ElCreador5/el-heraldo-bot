@@ -4552,7 +4552,7 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
             "motw_weekday": str(self.weekday), "motw_hour": str(self.hour),
         })
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=2)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(
@@ -6298,7 +6298,7 @@ class LogTemplateResetConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Plantilla restaurada a los valores predeterminados.", view=None)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Restauración cancelada. No se modificó la plantilla.", view=None)
@@ -6327,7 +6327,7 @@ class LogTemplateSaveConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Plantilla guardada.", view=None)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Edición cancelada. No se guardaron cambios.", view=None)
@@ -6886,7 +6886,7 @@ class HeraldoMessageConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Cambios guardados por confirmación del administrador. Los mensajes publicados no se modifican automáticamente.", view=None)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.finished = True
         self.stop()
@@ -8063,7 +8063,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             return
         await confirm_configuration(interaction, self.guild_id, changes)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=4)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(
@@ -8235,7 +8235,7 @@ class ReportReminderSetupView(discord.ui.View):
             return
         await confirm_configuration(interaction, self.guild_id, changes)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=4)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Cancelado. No se guardaron cambios.", view=None)
@@ -8859,7 +8859,7 @@ class CondemnationChannelAccessConfirmView(discord.ui.View):
             view=None,
         )
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="Operación cancelada. No se modificaron los permisos.", view=None)
@@ -10516,7 +10516,7 @@ class HeraldoDateFormatSetupView(discord.ui.View):
             return
         await confirm_configuration(interaction, self.guild_id, {"display_date_format": self.pending})
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=1)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Edición cancelada. No se guardaron cambios.", view=None)
@@ -10662,7 +10662,7 @@ class HeraldoSetupView(discord.ui.View):
         except discord.HTTPException:
             pass
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
@@ -10793,7 +10793,7 @@ class HeraldoEditTemplateConfirmView(discord.ui.View):
         await interaction.edit_original_response(content="Mensaje actualizado por confirmación del administrador.", view=None)
         await interaction.followup.send("Edición completada.", ephemeral=True)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
         await interaction.response.edit_message(content="Edición cancelada. El mensaje original permanece intacto.", view=None)
@@ -11049,7 +11049,7 @@ class HeraldoLogChannelConfirmView(discord.ui.View):
             discord.Color.blurple(),
         )
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
@@ -15603,7 +15603,7 @@ class CondemnationCaseConfirmView(discord.ui.View):
         )
         self.stop()
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Medida cancelada. No se aplicó ninguna sanción.", view=None)
@@ -16918,7 +16918,7 @@ class PendingRoleRestoreView(discord.ui.View):
             f"Restaurados: {len(assignable)}; pendientes: {len(remaining)}.",
         )
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
@@ -17166,7 +17166,7 @@ class ConfigurationConfirmView(discord.ui.View):
             traceback.print_exc()
             await interaction.followup.send("La configuración se guardó, pero no se pudo sincronizar el panel publicado. Puede reintentar su publicación desde el editor.", ephemeral=True)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction, button):
         if not await self.interaction_check(interaction):
             return
@@ -17932,7 +17932,7 @@ class ReactionCondemnReasonView(discord.ui.View):
     async def enter_reason(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ReactionCondemnReasonModal(self))
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         _reaction_condemn_pending.discard(self.pending_key)
         await interaction.response.edit_message(content="Condena por reacción cancelada.", view=None)
@@ -18191,7 +18191,7 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
             await log_embed(guild, "Canal trampa creado",
                             f"{interaction.user.mention} confirmó la creación de {channel.mention}.")
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
@@ -18371,7 +18371,7 @@ class HoneypotExemptionConfirmView(discord.ui.View):
             content="Exención guardada." if self.add else "Exención retirada.", view=None,
         )
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
@@ -18560,7 +18560,7 @@ class FusionChannelsView(discord.ui.View):
             )
         )
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         for child in self.children:
@@ -19026,7 +19026,7 @@ class PurgeConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="Iniciando purga…", view=None)
         self.stop()
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.value = False
         await interaction.response.edit_message(content="Purga cancelada.", view=None)
@@ -21440,7 +21440,7 @@ class EmbedScheduleView(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content=f"Programación #{ident} guardada ({'activa' if self.active else 'desactivada'}).",view=None)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=3)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Operación cancelada. No se guardó ninguna programación.",view=None)
@@ -21730,7 +21730,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
         await interaction.response.edit_message(
             content=f"Programación #{self.schedule_id} actualizada.",view=None)
 
-    @discord.ui.button(label="Cancelar edición", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Cancelar edición", style=discord.ButtonStyle.danger, row=4)
     async def discard(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Edición descartada. No se guardaron cambios.",view=None)
@@ -21779,7 +21779,7 @@ class EmbedScheduleDeleteView(discord.ui.View):
             content=f"Programación #{self.schedule_id} eliminada. El embed y los mensajes enviados se conservaron.",
             view=None)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel_delete(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Eliminación cancelada; no se modificó nada.",view=None)
@@ -22544,7 +22544,7 @@ class SuggestionPanelConfirmView(discord.ui.View):
             return
         await interaction.followup.send("Panel de sugerencias publicado en el canal confirmado.", ephemeral=True)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
@@ -22631,7 +22631,7 @@ class SuggestionSettingsConfirmView(discord.ui.View):
             suggestion_remove_reviewer(self.guild_id, self.target_id)
         await interaction.response.edit_message(content="Destinatarios de sugerencias actualizados.", view=None)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.interaction_check(interaction):
             return
@@ -22844,7 +22844,7 @@ class HeraldoMessagesView(discord.ui.View):
             text = "No hay embeds personalizados guardados. Crea el primero con `/embed crear`."
         await interaction.response.send_message(text, ephemeral=True)
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Centro de mensajes cerrado.", view=None)

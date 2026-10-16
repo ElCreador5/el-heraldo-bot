@@ -482,7 +482,7 @@ class WebhookTemplateConfirmView(discord.ui.View):
             result = 'No se pudo confirmar la publicación. Revise el canal antes de reintentar; el mensaje podría haberse enviado.'
         await interaction.edit_original_response(content=result, embeds=[], view=None)
 
-    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label='Cancelar', style=discord.ButtonStyle.danger)
     async def cancel(self, interaction, button):
         if not await self.interaction_check(interaction):
             return
