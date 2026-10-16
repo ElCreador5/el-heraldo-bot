@@ -90,7 +90,9 @@ def claim_due(conn, now, is_test=False):
         try:
             due = next_due(mode, config, now, is_test)
         except (ValueError, KeyError, TypeError):
-            due = None
+            # Invalid schedules are disabled without publishing anything.
+            conn.execute("UPDATE scheduled_embeds SET next_due=NULL,enabled=0 WHERE id=?", (ident,))
+            continue
         conn.execute("UPDATE scheduled_embeds SET next_due=?,enabled=? WHERE id=?", (due.isoformat() if due else None, 1 if due else 0, ident))
         claims.append((ident, gid, name, cid))
     conn.commit()
