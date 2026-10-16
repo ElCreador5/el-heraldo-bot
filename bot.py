@@ -9004,6 +9004,79 @@ class HeraldoCondemnationSetupView(discord.ui.View):
         )
 
 
+
+class HeraldoBanDurationModal(discord.ui.Modal, title="Duración personalizada de baneo"):
+    duration = discord.ui.TextInput(label="Duración del baneo", placeholder="Ejemplo: 10m, 2h o 7d",
+                                    required=True, max_length=30)
+
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__()
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return
+        try:
+            minutes = parse_duration(str(self.duration).strip(), 1, 365 * 24 * 60)
+        except ValueError as exc:
+            await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id,
+                                    {"moderation_default_ban_minutes": str(minutes)})
+
+
+class HeraldoBanDurationSetupView(discord.ui.View):
+    """Elegir una duración solo abre una revisión. Cancelar no guarda."""
+    CHOICES = (
+        ("0", "Permanente"), ("1", "1 minuto"), ("2", "2 minutos"),
+        ("5", "5 minutos"), ("10", "10 minutos"), ("30", "30 minutos"),
+        ("60", "1 hora"), ("1440", "1 día"), ("10080", "7 días"),
+    )
+
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        current = moderation_default_ban_minutes(guild_id)
+        selector = discord.ui.Select(
+            placeholder="Duración predeterminada de BAN",
+            options=[discord.SelectOption(label=label, value=value, default=int(value) == (current or 0))
+                     for value, label in self.CHOICES], row=0,
+        )
+        selector.callback = self.choose
+        self.add_item(selector)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    def content(self) -> str:
+        minutes = moderation_default_ban_minutes(self.guild_id)
+        return (
+            "**El Heraldo · Moderation · Baneo temporal**\n\n"
+            f"Duración predeterminada: **{format_duration(minutes) if minutes else 'Permanente'}**.\n"
+            "La duración explícita de /ban o de una reacción tiene prioridad.\n"
+            "Sin configurar: 5 minutos en El Heraldo Test; permanente en producción.\n\n"
+            "Seleccione o personalice una duración y confirme Guardar cambios. Cancelar nunca guarda."
+        )
+
+    async def choose(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {v for v, _ in self.CHOICES}:
+            await interaction.response.send_message("Duración no válida.", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id,
+                                    {"moderation_default_ban_minutes": values[0]})
+
+    @discord.ui.button(label="Personalizar", style=discord.ButtonStyle.secondary, row=1)
+    async def custom(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(HeraldoBanDurationModal(self.guild_id, self.owner_id))
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content="**El Heraldo · Moderation**\n\nConfigura las funciones de moderación disponibles.",
+            view=HeraldoModerationSetupView(self.guild_id, self.owner_id))
+
+
 class HeraldoModerationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -9037,6 +9110,12 @@ class HeraldoModerationSetupView(discord.ui.View):
         await interaction.response.defer()
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
+
+    @discord.ui.button(label="Baneo temporal", style=discord.ButtonStyle.secondary, row=1)
+    async def ban_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        view = HeraldoBanDurationSetupView(self.guild_id, self.owner_id)
+        await interaction.edit_original_response(content=view.content(), view=view)
 
     @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -13595,6 +13674,7 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         return False, "La jerarquía del servidor impide aplicar esta acción.", None
     if member.top_role >= guild.me.top_role:
         return False, "El rol del miembro está al mismo nivel o por encima de El Heraldo.", None
+    explicit_permanent = case_type == "BAN" and duration_minutes == 0
     if case_type == "BAN":
         duration_minutes = moderation_effective_ban_minutes(guild.id, duration_minutes)
     verified = await moderation_verified_proof(guild, proof)
@@ -13606,7 +13686,8 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             await heraldo_kick(member, reason=reason)
         elif case_type == "BAN":
             await heraldo_ban(member, reason=reason, delete_message_seconds=0,
-                              duration_minutes=duration_minutes, record_case=False)
+                              duration_minutes=0 if explicit_permanent else duration_minutes,
+                              record_case=False)
         elif case_type != "WARN":
             return False, "Tipo de castigo no compatible.", None
     except discord.HTTPException as exc:
@@ -16923,6 +17004,8 @@ def configuration_review_value(guild, key, value):
                 return f"{len(parsed)} miembro(s) con asignaciones configuradas"
         except (ValueError, TypeError):
             return "Configuración de roles (formato no válido)"
+    if key == "moderation_default_ban_minutes" and raw == "0":
+        return "Permanente"
     if key == "display_date_format":
         return DATE_FORMAT_CHOICES.get(raw, "Formato no disponible")
     if key == "moderation_warn_limit_action":
@@ -16950,6 +17033,7 @@ def configuration_review_label(key):
         "join_specific_roles": "Roles de miembros específicos",
         "condemnation_default_duration": "Duración predeterminada de condena",
         "moderation_warn_limit": "Máximo de advertencias vigentes",
+        "moderation_default_ban_minutes": "Duración predeterminada de baneo",
         "display_date_format": "Formato de fecha",
         "moderation_warn_limit_action": "Acción al llegar al máximo de advertencias",
         "moderation_warn_limit_mute_minutes": "Duración del aislamiento por advertencias",
