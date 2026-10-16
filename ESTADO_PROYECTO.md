@@ -1,3 +1,7 @@
+## Vencimiento seguro de MUTE — 2026-10-16
+
+DETECTADO: la tarea de caducidad de sanciones capturaba errores HTTP al retirar un aislamiento pero cerraba igualmente el expediente; tampoco distinguía un aislamiento posterior. IMPLEMENTADO en Pruebas: la caducidad MUTE consulta otro caso abierto posterior en SQLite y recupera el miembro antes de actuar; si falla SQLite/Discord, conserva caso pendiente para reintentar; si hay caso posterior o timeout externo más largo, no lo retira y clasifica el expediente vencido para revisión. Tests añadidos `test_reliability_startup_roles.py`; no probado en Discord ni main.
+
 ## Auditoría de fiabilidad: arranque, permisos y SQLite — 2026-10-16
 
 DETECTADO por inspección en Pruebas: fallos de sincronización de paneles/consulta de invitaciones podían abortar `on_ready`, y una consulta SQLite fallida se interpretaba como ausencia de acción de sanción pendiente al perdonar. El componente público de roles no revalidaba permisos/condiciones tras `guild.fetch_member`. IMPLEMENTADO en Pruebas: recuperación aislada por servidor y función al arrancar, consulta de acciones pendientes con error cerrado (no autoriza perdón si SQLite falla), y comprobación repetida de permisos/rol/estado en componentes públicos con mensaje específico. Pruebas aisladas `tests/test_reliability_startup_roles.py`. Faltan CI SHA y validación en Discord Test. No modificar main ni afirmar auditoría integral completa.

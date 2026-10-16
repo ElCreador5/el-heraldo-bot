@@ -99,6 +99,66 @@ class ReliabilityAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(after,src.index("await member.add_roles("))
         self.assertLess(after,src.index("await member.remove_roles("))
 
+    async def test_expired_mute_never_overrides_newer_case(self):
+        closed = []
+        class Connection:
+            def execute(self, *args):
+                return NS(fetchone=lambda: ("newer",))
+            def close(self):
+                closed.append(True)
+        class HTTPException(Exception): pass
+        class NotFound(HTTPException): pass
+        member = NS(id=7)
+        guild = NS(id=1, fetch_member=AsyncMock())
+        fn = isolate(["moderation_expire_mute_safely"], {
+            "db_connect":lambda:Connection(), "sqlite3":sqlite3,
+            "traceback":NS(print_exc=lambda:None),
+            "discord":NS(HTTPException=HTTPException,NotFound=NotFound),
+        })["moderation_expire_mute_safely"]
+        now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        result = await fn(guild,member,{"user_id":7,"case_number":1,"expires_at":now.isoformat()},now)
+        self.assertEqual(result,"superseded")
+        guild.fetch_member.assert_not_called()
+        self.assertTrue(closed)
+
+    async def test_expired_mute_requires_confirmed_discord_success(self):
+        from datetime import datetime, timedelta, timezone
+        class HTTPException(Exception): pass
+        class NotFound(HTTPException): pass
+        class Connection:
+            def execute(self, *args): return NS(fetchone=lambda:None)
+            def close(self): pass
+        now=datetime.now(timezone.utc)
+        row={"user_id":8,"case_number":2,"expires_at":now.isoformat()}
+        member=NS(id=8)
+        latest=NS(timed_out_until=now+timedelta(seconds=10),timeout=AsyncMock(side_effect=HTTPException("offline")))
+        guild=NS(id=1,fetch_member=AsyncMock(return_value=latest))
+        fn=isolate(["moderation_expire_mute_safely"],{
+            "db_connect":lambda:Connection(),"sqlite3":sqlite3,
+            "traceback":NS(print_exc=lambda:None),
+            "discord":NS(HTTPException=HTTPException,NotFound=NotFound),
+            "datetime":datetime,"timedelta":timedelta,
+            "moderation_case_code":lambda number,guild_id:str(number),
+        })["moderation_expire_mute_safely"]
+        self.assertEqual(await fn(guild,member,row,now),"pending")
+        latest.timed_out_until=now+timedelta(minutes=20)
+        latest.timeout.reset_mock()
+        self.assertEqual(await fn(guild,member,row,now),"different")
+        latest.timeout.assert_not_called()
+        latest.timed_out_until=now-timedelta(minutes=1)
+        self.assertEqual(await fn(guild,member,row,now),"expired")
+
+    def test_expiry_loop_tracks_pending_mutes(self):
+        code=ast.get_source_segment(SOURCE,node("moderation_expire_mute_safely"))
+        self.assertIn("type='MUTE' AND open=1 AND case_number>?",code)
+        self.assertIn('return "pending"',code)
+        self.assertIn('return "different"',code)
+        loop=next(n for n in TREE.body if isinstance(n,ast.AsyncFunctionDef) and n.name=="moderation_case_expiry_loop")
+        text=ast.get_source_segment(SOURCE,loop)
+        self.assertIn('if outcome == "pending":',text)
+        self.assertIn('continue',text)
+        self.assertIn("Sustituido por aislamiento posterior",text)
+
     def test_boot_does_not_abort_for_one_guild(self):
         fn=next(n for n in TREE.body if isinstance(n,ast.AsyncFunctionDef) and n.name=="on_ready")
         code=ast.get_source_segment(SOURCE,fn)

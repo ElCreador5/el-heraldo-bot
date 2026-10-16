@@ -1,3 +1,7 @@
+## Aceptación pendiente: vencimiento aislado de MUTE — 2026-10-16
+
+En Heraldo's Lab probar vencimiento normal de un timeout de 1m autorizado; fallo de Discord al retirar el timeout (el expediente debe quedar abierto y reintentarse); nuevo aislamiento activo antes de expirar el antiguo (no debe levantarse), y aislamiento manual posterior más largo no registrado (mantenerlo). Revalidar con reinicio y roles no manejables. Ninguna prueba real realizada por el asistente.
+
 ## Auditoría de fiabilidad: ensayos pendientes — 2026-10-16
 
 VERIFICACIÓN EN DISCORD NO REALIZADA. Laboratorio: retirar permiso Gestionar roles durante el fetch de un miembro que pulsa componente, y desplazar jerarquía del rol; no debe asignar/quitar nada y debe responder sin quedar colgado. Simular SQLite bloqueada al intentar perdonar con otra acción en curso: no ejecutar perdón, conservar expediente y registrar el error. Revocar Ver registro de auditoría/gestión de invitaciones o negar invitaciones en un servidor de prueba durante un reinicio: el bot debe continuar arrancando, registrar error y mantener paneles/vistas recuperables de otros servidores. Probar panel antiguo y nuevo tras reinicios, sin mezclar aplicaciones Test/Main. Ejecutar tests/test_reliability_startup_roles.py y verificar CI exacto.

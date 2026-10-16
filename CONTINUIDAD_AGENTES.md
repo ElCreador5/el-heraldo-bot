@@ -1,3 +1,7 @@
+## Punto de control: MUTE vencido y operaciones incompletas — 2026-10-16
+
+Adicional a la corrección `cfc8ab1e` de arranque/roles/SQLite: se identificó que `moderation_case_expiry_loop` cerraba el MUTE aunque Discord rechazase `timeout(None)`, y podía levantar otro aislamiento posterior. Se agregó `moderation_expire_mute_safely` con revisión de casos posteriores, consulta fresca de miembro y resultados expired/pending/superseded/different. No levantar restricciones en situación dudosa; registrar lo pendiente. Pruebas aisladas añadidas, CI y Discord Test por validar. main intacta.
+
 ## Complemento: base SQLite histórica sin tabla de acciones — 2026-10-16
 
 Durante revisión del endurecimiento se detectó que `condemnation_case_actions` se creaba originalmente solo al reclamar una medida por botón; consultar desde Perdonar sobre un servidor antiguo podía dar `no such table`. Se agregó `CREATE TABLE IF NOT EXISTS` en la consulta de solo comprobación para mantener `False` legítimo sin acciones registradas, y se sigue propagando cualquier bloqueo/error de SQLite a la ruta de error sin permitir un perdón en estado incierto. Regresión test de base legacy en memoria añadida. Prueba real pendiente, no tocar main.

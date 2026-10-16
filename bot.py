@@ -16445,6 +16445,53 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
         await asyncio.sleep(1)
 
 
+
+async def moderation_expire_mute_safely(
+    guild: discord.Guild, member: discord.Member | None, row: sqlite3.Row, now: datetime,
+) -> str:
+    """Decidir si el MUTE vencido puede cerrarse sin retirar otro aislamiento."""
+    conn = None
+    try:
+        conn = db_connect()
+        newer = conn.execute(
+            "SELECT 1 FROM moderation_cases WHERE guild_id=? AND user_id=? "
+            "AND type='MUTE' AND open=1 AND case_number>? LIMIT 1",
+            (guild.id, int(row["user_id"]), int(row["case_number"])),
+        ).fetchone()
+    except sqlite3.Error:
+        traceback.print_exc()
+        return "pending"  # No actuar si SQLite impide conocer sanciones posteriores.
+    finally:
+        if conn is not None:
+            conn.close()
+    if newer is not None:
+        return "superseded"
+    if member is None:
+        return "expired"  # Ya no forma parte del servidor.
+    try:
+        latest = await guild.fetch_member(member.id)
+    except discord.NotFound:
+        return "expired"
+    except discord.HTTPException:
+        traceback.print_exc()
+        return "pending"
+    until = latest.timed_out_until
+    expires = datetime.fromisoformat(row["expires_at"])
+    if until is None or until <= now:
+        return "expired"  # Discord ya levantó el aislamiento.
+    if until > expires + timedelta(seconds=30):
+        return "different"  # Timeout posterior, posiblemente manual: no levantarlo.
+    try:
+        await latest.timeout(
+            None,
+            reason=f"Expiró el expediente {moderation_case_code(row['case_number'], guild.id)}",
+        )
+    except discord.HTTPException:
+        traceback.print_exc()
+        return "pending"  # Sin confirmación de Discord, no cerrar el expediente.
+    return "expired"
+
+
 @tasks.loop(minutes=1)
 async def moderation_case_expiry_loop() -> None:
     now = datetime.now(timezone.utc)
@@ -16466,11 +16513,17 @@ async def moderation_case_expiry_loop() -> None:
                     await member.timeout(min(expires, now + timedelta(days=28)), reason=f"Extensión del expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
             if expires > now:
                 continue
-            if case_type == "MUTE" and member is not None:
-                try:
-                    await member.timeout(None, reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
-                except discord.HTTPException:
-                    pass
+            if case_type == "MUTE":
+                outcome = await moderation_expire_mute_safely(guild, member, row, now)
+                if outcome == "pending":
+                    continue
+                if outcome in {"superseded", "different"}:
+                    moderation_case_close(
+                        guild.id, int(row["case_number"]), closed_by=None,
+                        resolution=("Sustituido por aislamiento posterior" if outcome == "superseded"
+                                    else "Aislamiento modificado; requiere revisión administrativa"),
+                    )
+                    continue
             elif case_type == "BAN":
                 # Un expediente antiguo nunca debe levantar otro baneo posterior.
                 conn = db_connect()
