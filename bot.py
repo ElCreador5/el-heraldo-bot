@@ -15178,12 +15178,8 @@ class CondemnationCaseActionModal(discord.ui.Modal):
                     "El motivo es obligatorio fuera de El Heraldo Test.", ephemeral=True,
                 )
                 return
-        when = datetime.fromisoformat(row["condemned_at"])
-        code = condemnation_case_id(
-            interaction.guild.get_member(int(row["user_id"])) or
-            discord.Object(id=int(row["user_id"])), when,
-            int(row["moderation_case_number"]) if row["moderation_case_number"] else None,
-        ) if row["moderation_case_number"] else f"expediente {self.message_id}"
+        code = (moderation_case_code(int(row["moderation_case_number"]), self.guild_id)
+                if row["moderation_case_number"] else f"expediente {self.message_id}")
         action_label = {"WARN": "Advertir", "KICK": "Expulsar", "BAN": "Banear"}[self.action]
         await interaction.response.send_message(
             f"Confirma **{action_label}** a <@{row['user_id']}> desde {code}.\n"
@@ -15219,6 +15215,7 @@ class CondemnationCaseConfirmView(discord.ui.View):
         if row is None or not condemnation_linked_case_is_open(row):
             await interaction.response.send_message("El expediente se cerró o dejó de estar disponible.", ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True, thinking=True)
         member = interaction.guild.get_member(int(row["user_id"]))
         if member is None:
             try:
@@ -15226,16 +15223,15 @@ class CondemnationCaseConfirmView(discord.ui.View):
             except discord.HTTPException:
                 member = None
         if member is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "El usuario ya no está en el servidor; no se aplicó la medida.", ephemeral=True)
             return
         # This atomic claim also protects retries after a crashed worker.
         if not condemnation_case_action_claim(self.guild_id, self.message_id, self.action):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Esta medida ya fue procesada o está pendiente de revisión. "
                 "No se repetirá automáticamente.", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True, thinking=True)
         linked = row["moderation_case_number"]
         origin = (moderation_case_code(int(linked), self.guild_id)
                   if linked else f"mensaje {self.message_id}")
