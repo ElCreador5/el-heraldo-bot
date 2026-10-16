@@ -2519,7 +2519,7 @@ async def _evaluate_sin_verificado_inner(guild_id: int, user_id: int) -> None:
         return
 
     try:
-        await member.kick(reason="No completó la verificación dentro del plazo establecido.")
+        await heraldo_kick(member, reason="No completó la verificación dentro del plazo establecido.")
     except discord.HTTPException:
         await log_embed(
             guild, "Advertencia: Error al expulsar",
@@ -2639,12 +2639,13 @@ async def expel(member: discord.Member, report: bool = True) -> None:
 
     dm_ok = None  # None = no aplica (2da falta, no se intenta DM)
     if is_first_fault:
-        dm_ok = await send_recovery_dm(member, report=report)
+        dm_ok = (await send_test_removal_notice(member, "KICK") if heraldo_is_test()
+                 else await send_recovery_dm(member, report=report))
         db_mark_dm_sent(member.guild.id, member.id)
 
     db_clear_tentado(member.guild.id, member.id)
     try:
-        await member.kick(reason="No definió su orientación")
+        await heraldo_kick(member, reason="No definió su orientación", send_notice=not is_first_fault)
         kicked = True
     except discord.Forbidden:
         kicked = False
@@ -7672,7 +7673,7 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Condiciones de reacci
         purge = item.get("purge_minutes")
         self.purge.default = format_duration(int(purge)) if purge else "-"
         action = str(item.get("action", "report"))
-        if action in {"report", "warn", "kick", "ban"}:
+        if action in {"report", "warn", "kick"}:
             self.remove_item(self.duration)
         if action in {"report", "warn"}:
             self.remove_item(self.purge)
@@ -7703,7 +7704,7 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Condiciones de reacci
         duration_minutes = None
         if duration_raw not in {"", "-", "0", "none", "indefinida"}:
             try:
-                duration_minutes = parse_duration(duration_raw, 1, 28 * 24 * 60)
+                duration_minutes = parse_duration(duration_raw, 1, (365 if action == "ban" else 28) * 24 * 60)
             except ValueError as exc:
                 await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
                 return
@@ -7723,7 +7724,7 @@ class ModerationReactionRuleModal(discord.ui.Modal, title="Condiciones de reacci
                 return
         if action == "warn":
             duration_minutes, purge_minutes, threshold = None, None, 1
-        elif action in {"report", "kick", "ban"}:
+        elif action in {"report", "kick"}:
             duration_minutes = None
         if action == "report":
             purge_minutes = None
@@ -8372,7 +8373,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             reactions[index]["purge_minutes"] = None
         if values[0] == "warn":
             reactions[index]["threshold"] = 1
-        if values[0] in {"report", "warn", "kick", "ban"}:
+        if values[0] in {"report", "warn", "kick"}:
             # Estas acciones no admiten duración; evita presentar valores inertes.
             reactions[index]["duration_minutes"] = None
         self.pending_reactions = reactions
@@ -10759,7 +10760,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
         elif get_sin_verificado_role_id(guild.id) in role_ids:
             db_clear_sin_verificado(member.guild.id, member.id)
             try:
-                await member.kick(reason="No se verificó")
+                await heraldo_kick(member, reason="No se verificó")
                 expelled_sin_verificar.append(member)
             except discord.Forbidden:
                 await log_embed(
@@ -11146,9 +11147,9 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
         return
     try:
         if action == "ban":
-            await member.ban(reason="No se verificó dentro del tiempo límite", delete_message_seconds=0)
+            await heraldo_ban(member, reason="No se verificó dentro del tiempo límite", delete_message_seconds=0)
         else:
-            await member.kick(reason="No se verificó dentro del tiempo límite")
+            await heraldo_kick(member, reason="No se verificó dentro del tiempo límite")
     except discord.HTTPException as e:  # incluye Forbidden (jerarquía de roles)
         await log_embed(
             guild, "Advertencia: Error al aplicar el timeout de verificación",
@@ -13183,6 +13184,7 @@ async def moderation_warning_escalation(
         return "La acción por límite ya estaba registrada; no se repetirá."
 
     reason = f"Máximo de advertencias alcanzado ({current}/{maximum}). Expediente {moderation_case_code(case_number, guild.id)}"
+    ban_minutes = moderation_effective_ban_minutes(guild.id, None) if action == "ban" else None
     outcome = "failed"
     message = "Acción no completada; revisión administrativa necesaria."
     try:
@@ -13190,9 +13192,10 @@ async def moderation_warning_escalation(
             minutes = moderation_warn_escalation_duration(guild.id)
             await member.timeout(datetime.now(timezone.utc) + timedelta(minutes=minutes), reason=reason)
         elif action == "kick":
-            await member.kick(reason=reason)
+            await heraldo_kick(member, reason=reason)
         elif action == "ban":
-            await member.ban(reason=reason, delete_message_seconds=0)
+            await heraldo_ban(member, reason=reason, delete_message_seconds=0,
+                              duration_minutes=ban_minutes, record_case=False)
         elif action == "condemn":
             successful, detail = await condemn_member(
                 member, reason=reason, duration_minutes=condemnation_default_duration_minutes(guild.id),
@@ -13206,7 +13209,7 @@ async def moderation_warning_escalation(
                 moderation_case_create(
                     guild.id, case_type, member.id, reason,
                     duration_minutes=moderation_warn_escalation_duration(guild.id)
-                    if action == "timeout" else None, author_id=None,
+                    if action == "timeout" else ban_minutes if action == "ban" else None, author_id=None,
                 )
             except Exception:
                 outcome = "review"
@@ -13446,6 +13449,111 @@ def moderation_cases_summary(guild: discord.Guild) -> str:
     return "**El Heraldo · Moderation · Cases**\n\n" + "\n\n".join(lines)
 
 
+
+# Modo exclusivamente experimental de Railway. No sustituye las pruebas de Discord.
+HERALDO_TEST_PROJECT = "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+HERALDO_TEST_REASON = "Prueba funcional autorizada de El Heraldo Test."
+
+
+def heraldo_is_test() -> bool:
+    return os.getenv("RAILWAY_PROJECT_ID") == HERALDO_TEST_PROJECT
+
+
+def moderation_default_ban_minutes(guild_id: int) -> int | None:
+    """BAN por defecto: 5 minutos en Test, permanente en otros entornos."""
+    raw = guild_config_get(guild_id, "moderation_default_ban_minutes")
+    if raw is None:
+        return 5 if heraldo_is_test() else None
+    try:
+        value = int(raw)
+    except (ValueError, TypeError):
+        return 5 if heraldo_is_test() else None
+    return value if 1 <= value <= 365 * 24 * 60 else None
+
+
+def moderation_effective_ban_minutes(guild_id: int, minutes: int | None) -> int | None:
+    """Una duración de cero expresamente solicitada significa permanente."""
+    if minutes is not None:
+        return minutes if minutes > 0 else None
+    return moderation_default_ban_minutes(guild_id)
+
+
+async def send_test_removal_notice(member: discord.Member, action: str,
+                                   minutes: int | None = None) -> bool:
+    """Envía disculpas y un enlace de un uso antes de una medida experimental."""
+    if not heraldo_is_test():
+        return False
+    guild = member.guild
+    preferred = guild.get_channel(get_recovery_channel_id(guild.id))
+    channels = ([preferred] if isinstance(preferred, discord.TextChannel) else []) + list(guild.text_channels)
+    invite_url = None
+    seen = set()
+    for channel in channels:
+        if channel.id in seen:
+            continue
+        seen.add(channel.id)
+        if guild.me is None:
+            break
+        permissions = channel.permissions_for(guild.me)
+        public = channel.permissions_for(guild.default_role)
+        if not (permissions.view_channel and permissions.create_instant_invite and public.view_channel):
+            continue
+        try:
+            invite = await channel.create_invite(
+                max_uses=1, max_age=0, unique=True,
+                reason="Invitación de recuperación tras una prueba de El Heraldo",
+            )
+            invite_url = invite.url
+            break
+        except discord.HTTPException:
+            continue
+    if action == "BAN" and minutes:
+        availability = f"Podrás utilizar el enlace tras el desbaneo temporal, previsto en {format_duration(minutes)}."
+    elif action == "BAN":
+        availability = "Un administrador debe levantar el baneo antes de que el enlace pueda utilizarse."
+    else:
+        availability = "Podrás volver a ingresar después de la expulsión."
+    invite_text = (f"Invitación de un solo uso: {invite_url}" if invite_url
+                   else "No fue posible generar una invitación; solicita una al equipo del servidor.")
+    message = (
+        "Estamos realizando pruebas de moderación en El Heraldo Test. "
+        "La medida forma parte de nuestras comprobaciones. Te pedimos disculpas por las molestias.\n\n"
+        f"{availability}\n{invite_text}\n\n"
+        "Si tienes alguna dificultad, comunícate con los administradores del servidor."
+    )
+    try:
+        await member.send(message, allowed_mentions=discord.AllowedMentions.none())
+        return True
+    except discord.HTTPException:
+        return False
+
+
+async def heraldo_kick(member: discord.Member, *, reason: str,
+                       send_notice: bool = True) -> None:
+    if send_notice and heraldo_is_test():
+        await send_test_removal_notice(member, "KICK")
+    await getattr(member, "kick")(reason=reason)
+
+
+async def heraldo_ban(member: discord.Member, *, reason: str,
+                      delete_message_seconds: int = 0,
+                      duration_minutes: int | None = None,
+                      record_case: bool = True) -> int | None:
+    effective = moderation_effective_ban_minutes(member.guild.id, duration_minutes)
+    if heraldo_is_test():
+        await send_test_removal_notice(member, "BAN", effective)
+    await getattr(member, "ban")(reason=reason, delete_message_seconds=delete_message_seconds)
+    # Otras rutas crean su propio caso. No duplicar expedientes.
+    if record_case and effective is not None:
+        try:
+            moderation_case_create(member.guild.id, "BAN", member.id, reason,
+                                   duration_minutes=effective, author_id=None)
+        except Exception:
+            # Discord confirmó la medida: jamás reintentar el baneo por un error en SQLite.
+            traceback.print_exc()
+    return effective
+
+
 def test_dm_notice_embed(embed: discord.Embed) -> discord.Embed:
     """Añade un aviso únicamente en mensajes privados del proyecto Railway Test."""
     if os.getenv("RAILWAY_PROJECT_ID") != "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61":
@@ -13487,15 +13595,18 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         return False, "La jerarquía del servidor impide aplicar esta acción.", None
     if member.top_role >= guild.me.top_role:
         return False, "El rol del miembro está al mismo nivel o por encima de El Heraldo.", None
+    if case_type == "BAN":
+        duration_minutes = moderation_effective_ban_minutes(guild.id, duration_minutes)
     verified = await moderation_verified_proof(guild, proof)
     try:
         if case_type == "MUTE":
             minutes = duration_minutes or 30
             await member.timeout(datetime.now(timezone.utc) + timedelta(minutes=min(minutes, 28 * 24 * 60)), reason=reason)
         elif case_type == "KICK":
-            await member.kick(reason=reason)
+            await heraldo_kick(member, reason=reason)
         elif case_type == "BAN":
-            await member.ban(reason=reason, delete_message_seconds=0)
+            await heraldo_ban(member, reason=reason, delete_message_seconds=0,
+                              duration_minutes=duration_minutes, record_case=False)
         elif case_type != "WARN":
             return False, "Tipo de castigo no compatible.", None
     except discord.HTTPException as exc:
@@ -13823,6 +13934,8 @@ async def execute_moderation_report_action(
     purge_minutes = int(purge_minutes) if purge_minutes else None
     duration_minutes = rule.get("duration_minutes")
     duration_minutes = int(duration_minutes) if duration_minutes else None
+    if action == "ban":
+        duration_minutes = moderation_effective_ban_minutes(guild.id, duration_minutes)
     reason = f"Reporte automático: {rule.get('label', 'reporte')} · {reporter_count} reporte(s) distintos"
 
     protection = condemnation_protection_reason(target)
@@ -13891,10 +14004,11 @@ async def execute_moderation_report_action(
             await target.timeout(until, reason=reason)
             notes.append(f"timeout {format_duration(duration_minutes)}")
         elif action == "kick":
-            await target.kick(reason=reason)
+            await heraldo_kick(target, reason=reason)
             notes.append("miembro expulsado")
         elif action == "ban":
-            await target.ban(reason=reason, delete_message_seconds=0)
+            await heraldo_ban(target, reason=reason, delete_message_seconds=0,
+                              duration_minutes=duration_minutes, record_case=False)
             notes.append("miembro baneado")
         elif action == "condemn":
             ok, note = await condemn_member(
@@ -13921,7 +14035,7 @@ async def execute_moderation_report_action(
             case_number = moderation_report_case_record(
                 guild.id, message.id, target.id, _moderation_emoji_key(str(rule["emoji"])),
                 case_type, reason,
-                duration_minutes=duration_minutes if action == "timeout" else None,
+                duration_minutes=duration_minutes if action in {"timeout", "ban"} else None,
                 proof=message.jump_url,
             )
             notes.append(f"expediente {moderation_case_code(case_number, guild.id)}")
@@ -15650,7 +15764,7 @@ async def condemnation_update_pardoned_card(
         resolution.set_thumbnail(url=member.display_avatar.url)
         resolution.add_field(name="Expediente", value=f"`{case_id}`", inline=True)
         resolution.add_field(name="Condenado", value=f"{member.mention}\n`{member}`", inline=True)
-        resolution.add_field(name="Motivo original", value=str(row["reason"])[:1024], inline=False)
+        resolution.add_field(name="Motivo original", value=(HERALDO_TEST_REASON if heraldo_is_test() else str(row["reason"]))[:1024], inline=False)
         resolution.add_field(name="Condenado el", value=discord.utils.format_dt(condemned_at, "F"), inline=True)
         resolution.add_field(name="Perdonado por", value=pardoned_by.mention, inline=True)
         resolution.add_field(name="Perdonado el", value=discord.utils.format_dt(pardoned_at, "F"), inline=True)
@@ -15750,7 +15864,7 @@ async def condemn_member(
     """Motor único de condena. Lo usan honeypot, comando, reacción, rol manual y raid protection."""
     if member.bot:
         return False, "Los bots no se condenan."
-    reason = (reason or "").strip()
+    reason = HERALDO_TEST_REASON if heraldo_is_test() else (reason or "").strip()
     if not reason:
         automatic_reasons = {
             "raid": "Protección RAID: ingreso detectado durante un patrón de incursión masiva.",
@@ -16168,8 +16282,11 @@ async def moderation_case_expiry_loop() -> None:
             elif case_type == "BAN":
                 try:
                     await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
-                except (discord.NotFound, discord.HTTPException):
+                except discord.NotFound:
                     pass
+                except discord.HTTPException:
+                    traceback.print_exc()
+                    continue  # Reintentar desbaneo; no cerrar expediente antes de completarlo.
             moderation_case_close(guild.id, int(row["case_number"]), closed_by=None, resolution="Expirado automáticamente")
         except Exception:
             traceback.print_exc()
@@ -18708,7 +18825,7 @@ async def moderation_ban(interaction: discord.Interaction, usuario: discord.Memb
     minutes = None
     if duracion:
         try:
-            minutes = parse_duration(duracion, 1, 10 * 365 * 24 * 60)
+            minutes = parse_duration(duracion, 0, 10 * 365 * 24 * 60)
         except ValueError as exc:
             await interaction.response.send_message(f"Duración inválida: {exc}", ephemeral=True)
             return
@@ -19323,9 +19440,9 @@ async def raid_act_on_member(member: discord.Member) -> bool:
                 print(f"Raid Protection: no pude condenar a {member.id}: {note}")
                 return False
         elif action == "kick":
-            await member.kick(reason=reason)
+            await heraldo_kick(member, reason=reason)
         else:  # ban
-            await member.ban(reason=reason, delete_message_seconds=0)
+            await heraldo_ban(member, reason=reason, delete_message_seconds=0)
     except discord.HTTPException as e:
         stats["failed"] += 1
         print(f"Raid Protection: no pude aplicar «{action}» a {member.id}: {e}")
