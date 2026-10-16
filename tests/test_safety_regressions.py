@@ -20,7 +20,9 @@ b.suggestion_db_init()
 
 
 def interaction(allowed=True, guild_id=901):
-    return NS(guild=NS(id=guild_id), guild_id=guild_id,
+    return NS(guild=NS(id=guild_id, get_channel=lambda _id: None,
+                           get_role=lambda _id: None, get_member=lambda _id: None),
+              guild_id=guild_id,
               user=NS(id=10, mention='<@10>', guild_permissions=b.discord.Permissions(manage_guild=allowed)),
               response=NS(is_done=lambda: False, send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock()),
               edit_original_response=AsyncMock(),

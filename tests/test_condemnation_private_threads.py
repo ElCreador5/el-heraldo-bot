@@ -55,7 +55,7 @@ class ThreadTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.ns = {}
         self.channel = FakeChannel()
-        self.member = SimpleNamespace(id=40)
+        self.member = SimpleNamespace(id=40, display_name='Participante de prueba')
         self.me = SimpleNamespace(id=50)
         self.guild = SimpleNamespace(
             id=10, me=self.me, get_channel=lambda c: self.channel,

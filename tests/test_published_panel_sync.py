@@ -9,7 +9,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
 def function(name):
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
     return next(node for node in tree.body
-                if isinstance(node, ast.AsyncFunctionDef) and node.name == name)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name)
 
 
 class PublishedPanelSyncTests(unittest.TestCase):
@@ -44,6 +44,17 @@ class PublishedPanelSyncTests(unittest.TestCase):
                     "verify_panel_text", "verify_button_label"):
             self.assertIn(key, code)
         self.assertIn("await update_verify_panel(interaction.guild)", code)
+
+    def test_report_helpers_have_synchronous_callers(self):
+        self.assertIsInstance(function("moderation_report_reactions"), ast.FunctionDef)
+        self.assertIsInstance(function("moderation_reports_summary"), ast.FunctionDef)
+        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
+                called = node.value.func
+                self.assertFalse(isinstance(called, ast.Name) and called.id in {
+                    "moderation_report_reactions", "moderation_reports_summary",
+                }, "No debe esperarse una función síncrona")
 
     def test_legacy_defaults_gain_warn_without_overwriting_custom_rules(self):
         source = ast.unparse(function("moderation_report_reactions"))

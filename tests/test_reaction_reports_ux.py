@@ -33,26 +33,48 @@ class ReactionReportUxTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.moderation_report_record(987613, *args[1:], 11), (1, False))
 
     async def test_rule_default_labels_round_trip_for_every_action(self):
+        # El selector define la acción; el modal actual solo ajusta condiciones.
         for action in b.MODERATION_REPORT_ACTIONS:
             with self.subTest(action=action):
-                rule = {'action': action, 'duration_minutes': 30, 'threshold': 2, 'purge_minutes': None}
-                parent = NS(_working_reactions=lambda: [rule], _rebuild_reaction_select=MagicMock(),
-                            _content=lambda _: 'Borrador', pending_reactions=None,
+                original = {'emoji': '🚩', 'label': 'Infracción', 'action': 'report',
+                            'duration_minutes': 30, 'threshold': 2, 'purge_minutes': 30}
+                parent = NS(pending_reactions=None, selected_reaction_index=0,
+                            _rebuild_reaction_select=MagicMock(), _content=lambda _: 'Borrador',
                             interaction_check=AsyncMock(return_value=True))
-                modal = b.ModerationReactionRuleModal(parent, 0)
-                for field in (modal.action, modal.duration, modal.threshold, modal.purge):
-                    field._value = field.default or ''
-                i = NS(guild=NS(id=901), response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
-                await modal.on_submit(i)
-                self.assertIsNotNone(parent.pending_reactions)
+                parent._working_reactions = lambda: (
+                    parent.pending_reactions if parent.pending_reactions is not None else [original]
+                )
+                selection = NS(data={'values': [action]}, guild=NS(id=901),
+                               response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
+                with patch.object(b, 'set_moderation_report_reactions') as saved:
+                    await b.HeraldoUserReportsSetupView.select_action(parent, selection)
+                    saved.assert_not_called()
                 self.assertEqual(parent.pending_reactions[0]['action'], action)
+                modal = b.ModerationReactionRuleModal(parent, 0)
+                self.assertFalse(hasattr(modal, 'action'))
+                modal.duration._value = '30m'
+                modal.threshold._value = '2'
+                modal.purge._value = '30m'
+                submit = NS(guild=NS(id=901),
+                            response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
+                with patch.object(b, 'set_moderation_report_reactions') as saved:
+                    await modal.on_submit(submit)
+                    saved.assert_not_called()
+                submit.response.edit_message.assert_awaited_once()
+                rule = parent.pending_reactions[0]
+                self.assertEqual(rule['action'], action)
+                self.assertEqual(rule['threshold'], 1 if action == 'warn' else 2)
+                self.assertEqual(rule['duration_minutes'],
+                                 None if action in {'report', 'warn', 'kick'} else 30)
+                self.assertEqual(rule['purge_minutes'],
+                                 None if action in {'report', 'warn'} else 30)
 
     async def test_rule_modal_revoked_permission_cannot_mutate_draft(self):
         parent = NS(_working_reactions=lambda: [{'action': 'report', 'threshold': 1}],
                     interaction_check=AsyncMock(return_value=False), pending_reactions=None,
                     _rebuild_reaction_select=MagicMock(), _content=lambda _: 'Borrador')
         modal = b.ModerationReactionRuleModal(parent, 0)
-        for field in (modal.action, modal.duration, modal.threshold, modal.purge):
+        for field in (modal.duration, modal.threshold, modal.purge):
             field._value = field.default or ''
         await modal.on_submit(NS(guild=NS(id=901), response=NS(send_message=AsyncMock(), edit_message=AsyncMock())))
         self.assertIsNone(parent.pending_reactions)
@@ -66,8 +88,8 @@ class ReactionReportUxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(i.response.edit_message.call_args.kwargs['view'], b.HeraldoModerationSetupView)
 
     async def test_report_condemn_delegates_purge_to_evidence_safe_path(self):
-        guild = NS(id=901)
-        member = NS(id=20)
+        guild = NS(id=901, me=NS(guild_permissions=NS(manage_roles=True), top_role=100))
+        member = NS(id=20, top_role=1)
         message = NS(jump_url="https://discord.com/channels/901/42/100", channel=NS(id=42))
         rule = {"action": "condemn", "label": "Reporte", "duration_minutes": 60, "purge_minutes": 30}
         with (
@@ -83,8 +105,8 @@ class ReactionReportUxTests(unittest.IsolatedAsyncioTestCase):
         purge.assert_not_awaited()
 
     async def test_failed_report_condemn_never_purges(self):
-        guild = NS(id=901)
-        member = NS(id=20)
+        guild = NS(id=901, me=NS(guild_permissions=NS(manage_roles=True), top_role=100))
+        member = NS(id=20, top_role=1)
         message = NS(jump_url="https://discord.com/channels/901/42/100", channel=NS(id=42))
         rule = {"action": "condemn", "label": "Reporte", "purge_minutes": 30}
         with (
