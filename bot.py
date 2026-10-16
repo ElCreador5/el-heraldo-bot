@@ -15431,10 +15431,10 @@ async def condemnation_ensure_private_thread(
                 return False
         else:
             thread = await channel.create_thread(
-                name=f"Expediente {case_id}"[:100],
+                name=f"Expediente {case_id} · {member.display_name}"[:100],
                 type=discord.ChannelType.private_thread,
                 invitable=False,
-                auto_archive_duration=10080,
+                auto_archive_duration=1440,
                 reason="El Heraldo: conversación privada de expediente",
             )
             if not condemnation_thread_save_id(guild.id, member.id, message_id, thread.id):
@@ -15794,9 +15794,11 @@ async def _condemn_member_inner(
         )
         if announcement_message_id:
             condemnation_thread_mark_requested(member.guild.id, member.id, announcement_message_id)
-            await condemnation_ensure_private_thread(
+            thread_ready = await condemnation_ensure_private_thread(
                 member.guild, member, announcement_message_id, condemnation_case,
             )
+            if not thread_ready:
+                role_note += "; hilo privado pendiente: revisa los permisos del canal de condenados"
     if purge_spec and purge_spec[0] != "none" and source_message_url and not evidence_url:
         role_note += "; purga cancelada: no se pudo conservar íntegramente la evidencia en un canal privado"
         purge_spec = None
