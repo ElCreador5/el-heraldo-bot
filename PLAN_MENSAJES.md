@@ -1,3 +1,7 @@
+## Semántica uniforme de controles — 2026-10-16
+
+Para Mensajes y /setup se acuerda: rojo para eliminación, descarte y sanción; verde para guardar/publicar/activar; azul para editar o preparar opciones sin guardar; gris para cancelar, volver o vista previa. Es prioritario que el color represente la acción efectiva, no solo el texto: un botón que abre un modal es azul aunque permita preparar algo positivo; una confirmación de eliminación es roja aunque diga «Confirmar». Los botones externos Discord usan estilo link propio. Lote de colores implementado en Pruebas (`c32141eb`, CI 3.11–3.13 SUCCESS), Discord real pendiente. **Petición funcional pendiente, no ejecutada aquí:** sustituir «Revisar programación» por «Guardar cambios», introducir «Descartar cambios» con reversión y reemplazar «3. Configurar condición» por un nombre específico del modo; después extender guardado explícito sin revisión redundante a otros editores. La nota anterior sobre «Revisar» corresponde al comportamiento heredado, no a la nueva intención aprobada.
+
 ## Calidad editorial y claridad de los controles — 2026-10-15
 
 Toda pantalla administrativa debe usar español correcto, explicar el efecto concreto de cada acción y evitar mensajes contradictorios. Preferir descripciones humanas a JSON, saltos de línea visibles y estados precisos. Separar «Revisar», «Confirmar» y «Cancelar»; los selectores y formularios no guardan por sí mismos. Se aplicó al programador de embeds en Pruebas, con verificación real pendiente; ampliar el estándar progresivamente a los demás editores.

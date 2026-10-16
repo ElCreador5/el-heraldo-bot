@@ -1,3 +1,9 @@
+## Pruebas pendientes del estándar de colores — 2026-10-16
+
+VERIFICADO AUTOMÁTICAMENTE en `Pruebas@c32141eb`: `tests/test_button_palette.py` integrado en la matriz del CI, GitHub run `38976183423` SUCCESS (3.11/3.12/3.13), verificación Mensajes run `38976183535` SUCCESS. **VERIFICACIÓN REAL EN DISCORD: NO REALIZADA**. En El Heraldo Test / Heraldo's Lab comprobar: botones Guardar verdes, Descartar rojos, Cancelar y Volver grises, formularios Editar azules, y sanciones Banear/Expulsar/Advertir rojas. Verificar colores dinámicos en Activar/Desactivar programación, crear/agregar/retirar trampas Honeypot y componentes de Mensajes cuyo flujo puede eliminar un mensaje. Un botón de enlace usa estilo `link` y no tiene color de acción configurable. Confirmar que cambiar estilos no alteró `custom_id`, callbacks, botones tras reinicio, accesibilidad, permisos ni acciones reales; no ejecutar sanciones sin cuentas de ensayo autorizadas.
+
+La sustitución del doble paso «Revisar» por Guardar cambios directo y la reversión de borradores de programaciones son tareas funcionales **pendientes**, no se consideran validadas por esta prueba de color. Continuar con los demás módulos de forma controlada, sin cambios en producción.
+
 ## Aceptación pendiente tras recuperación de CI — 2026-10-16
 
 VERIFICADO AUTOMÁTICAMENTE: GitHub Actions run `38868053698` a `Pruebas@453488d9`, tres matrices 3.11/3.12/3.13 SUCCESS. Los 16 errores de fixtures y dos fallos de AST anteriores se corrigieron sin rebajar protecciones: la normalización real de reglas de `report` y `warn` descarta purgas aun con datos heredados; test del motor `report` exige ausencia de sanciones/purga; el editor de reacciones se comprueba mediante selección de acción, modal de condiciones y ausencia de persistencia hasta Guardar. Unicode 15 (🪽) validado aun simulando Python 3.11. CI verde no prueba el comportamiento en Discord.
