@@ -78,7 +78,7 @@ def next_due(mode, cfg, now, is_test=False):
             return day.astimezone(timezone.utc)
     raise ValueError("No se encontró próxima fecha.")
 
-def claim_due(conn, now):
+def claim_due(conn, now, is_test=False):
     """Claim before send. Skipped messages aren't replayed after restart."""
     initialize(conn)
     conn.execute("BEGIN IMMEDIATE")
@@ -88,7 +88,7 @@ def claim_due(conn, now):
         ident, gid, name, cid, mode, raw = row
         config = json.loads(raw)
         try:
-            due = next_due(mode, config, now, True)
+            due = next_due(mode, config, now, is_test)
         except (ValueError, KeyError, TypeError):
             due = None
         conn.execute("UPDATE scheduled_embeds SET next_due=?,enabled=? WHERE id=?", (due.isoformat() if due else None, 1 if due else 0, ident))
