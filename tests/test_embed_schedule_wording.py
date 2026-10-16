@@ -13,7 +13,7 @@ def get(name):
     assert len(matches) == 1, name
     return matches[0]
 def method(name, key):
-    return next(n for n in get(name).body if n.name == key)
+    return next(n for n in get(name).body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == key)
 def content(node):
     return ast.get_source_segment(SOURCE, node)
 
