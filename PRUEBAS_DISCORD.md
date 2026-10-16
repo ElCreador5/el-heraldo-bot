@@ -1,3 +1,7 @@
+## Auditoría de fiabilidad: ensayos pendientes — 2026-10-16
+
+VERIFICACIÓN EN DISCORD NO REALIZADA. Laboratorio: retirar permiso Gestionar roles durante el fetch de un miembro que pulsa componente, y desplazar jerarquía del rol; no debe asignar/quitar nada y debe responder sin quedar colgado. Simular SQLite bloqueada al intentar perdonar con otra acción en curso: no ejecutar perdón, conservar expediente y registrar el error. Revocar Ver registro de auditoría/gestión de invitaciones o negar invitaciones en un servidor de prueba durante un reinicio: el bot debe continuar arrancando, registrar error y mantener paneles/vistas recuperables de otros servidores. Probar panel antiguo y nuevo tras reinicios, sin mezclar aplicaciones Test/Main. Ejecutar tests/test_reliability_startup_roles.py y verificar CI exacto.
+
 ## Matriz complementaria propuesta por investigación de usuarios — 2026-10-16
 
 Fuente: «Voz de los usuarios: quejas, fallos y peticiones sobre bots de Discord», pp. 3–10. **TODAS LAS COMPROBACIONES A CONTINUACIÓN SON PROPUESTAS; NO EJECUTADAS.** Consolidarlas con las pruebas ya descritas en este archivo, sin reemplazar sus resultados. Solo El Heraldo Test y Heraldo's Lab con usuarios autorizados.

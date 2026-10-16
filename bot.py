@@ -2086,9 +2086,20 @@ async def on_ready() -> None:
     # Los mensajes publicados con referencias guardadas se reconstruyen sin
     # publicar copias ni modificar los expedientes históricos.
     for guild in bot.guilds:
-        await synchronize_published_panels(guild, suggestions_already_synced=True)
+        try:
+            await synchronize_published_panels(guild, suggestions_already_synced=True)
+        except Exception:
+            # Un panel defectuoso no debe detener el arranque de otros servidores.
+            print(f"Advertencia: no se pudieron sincronizar paneles del servidor {guild.id}:")
+            traceback.print_exc()
     for guild in bot.guilds:
-        await refresh_invite_cache(guild)
+        try:
+            await refresh_invite_cache(guild)
+        except Exception:
+            # Consultar invitaciones puede fallar por permisos, rate limits o desconexión.
+            # La verificación y los loops restantes deben seguir inicializándose.
+            print(f"Advertencia: caché de invitaciones pendiente en servidor {guild.id}:")
+            traceback.print_exc()
         # Un fallo al publicar comandos (p. ej. una descripción inválida) no debe impedir que
         # arranquen la verificación, el Miembro de la Semana ni la copia de la plantilla.
         try:
@@ -2118,11 +2129,12 @@ async def on_ready() -> None:
     if not check_pending_verifications.is_running():
         check_pending_verifications.start()
     for guild in bot.guilds:
-        try:
-            await condemnation_reconcile(guild)
-            await condemnation_recover_private_threads(guild)
-        except Exception:
-            traceback.print_exc()
+        for recovery in (condemnation_reconcile, condemnation_recover_private_threads):
+            try:
+                await recovery(guild)
+            except Exception:
+                print(f"Advertencia: recuperación {recovery.__name__} incompleta en servidor {guild.id}.")
+                traceback.print_exc()
 
         setup_view_errors = validate_setup_view_layouts(guild.id)
         if setup_view_errors:
@@ -7315,6 +7327,33 @@ def self_service_role_safe(role: discord.Role) -> bool:
     return not any(getattr(role.permissions, permission, False) for permission in forbidden)
 
 
+
+def heraldo_message_role_access(
+    guild: discord.Guild, member: discord.Member, role_id: int, action: str,
+) -> tuple[discord.Role | None, str | None]:
+    """Revalidación antes Y después de llamadas de red en componentes públicos."""
+    permitted = any(
+        int(item["role_id"]) == role_id and item.get("action", "alternar") == action
+        for item in heraldo_message_role_config(guild.id)
+    )
+    if not permitted:
+        return None, "Este componente ya no está configurado para esa acción."
+    role, me = guild.get_role(role_id), guild.me
+    if role is None:
+        return None, "El rol configurado ya no existe."
+    if me is None or not me.guild_permissions.manage_roles:
+        return None, "El Heraldo necesita el permiso Gestionar roles."
+    if role.is_default() or role.managed:
+        return None, "Este rol no puede asignarse mediante un componente público."
+    if role >= me.top_role:
+        return None, "El rol está al mismo nivel o por encima del rol más alto de El Heraldo."
+    if not self_service_role_safe(role):
+        return None, "El rol contiene permisos administrativos y no puede asignarse mediante un componente público."
+    if condemnation_get(guild.id, member.id):
+        return None, "No puede modificar sus roles mientras exista una condena activa."
+    return role, None
+
+
 _message_role_busy: set[tuple[int, int]] = set()
 _message_role_cooldown: dict[tuple[int, int], float] = {}
 
@@ -7324,10 +7363,9 @@ async def heraldo_message_role_action(interaction: discord.Interaction, guild_id
     if not guild or guild.id != guild_id or not isinstance(interaction.user, discord.Member):
         await interaction.response.send_message("Acción no disponible fuera del servidor.", ephemeral=True)
         return
-    allowed = any(int(x["role_id"]) == role_id and x.get("action") == action for x in heraldo_message_role_config(guild_id))
-    role, me = guild.get_role(role_id), guild.me
-    if not allowed or not role or not me or not me.guild_permissions.manage_roles or role.is_default() or role.managed or role >= me.top_role or not self_service_role_safe(role):
-        await interaction.response.send_message("Este componente ya no está disponible o faltan permisos.", ephemeral=True)
+    role, denial = heraldo_message_role_access(guild, interaction.user, role_id, action)
+    if denial:
+        await interaction.response.send_message(denial, ephemeral=True)
         return
     member = interaction.user
     key = (guild.id, member.id)
@@ -7338,14 +7376,15 @@ async def heraldo_message_role_action(interaction: discord.Interaction, guild_id
     if key in _message_role_busy or key in _message_role_cooldown:
         await interaction.response.send_message("Espere unos segundos antes de volver a modificar sus roles.", ephemeral=True)
         return
-    if condemnation_get(guild.id, member.id):
-        await interaction.response.send_message("No puede modificar sus roles mientras exista una condena activa.", ephemeral=True)
-        return
     _message_role_busy.add(key)
     try:
         await interaction.response.defer(ephemeral=True)
         member = await guild.fetch_member(member.id)
-        if action == "añadir" or (action == "alternar" and role not in member.roles):
+        # Los permisos, rol o estado de condena pueden cambiar durante el fetch.
+        role, denial = heraldo_message_role_access(guild, member, role_id, action)
+        if denial:
+            answer = denial + " No se modificaron los roles."
+        elif action == "añadir" or (action == "alternar" and role not in member.roles):
             await member.add_roles(role, reason="Componente de mensajes de El Heraldo")
             answer = "Rol asignado."
         elif action == "quitar" or (action == "alternar" and role in member.roles):
@@ -15418,7 +15457,9 @@ def condemnation_case_action_in_progress(guild_id: int, message_id: int) -> bool
             (guild_id, message_id),
         ).fetchone() is not None
     except sqlite3.OperationalError:
-        return False
+        # No permitir un perdón concurrente si SQLite no permite comprobar
+        # que otra sanción por botón está pendiente. El llamador informará del error.
+        raise
     finally:
         conn.close()
 

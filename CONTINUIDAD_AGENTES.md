@@ -1,3 +1,7 @@
+## Auditoría fiabilidad: punto de control 2026-10-16
+
+Fuente adicional: PDF comunitario resumido en DECISIONES.md, ver matriz PRUEBAS_DISCORD.md. Se comprobó `Pruebas@825ef2c10`: vistas persistentes Verify/Sugerencias y por-message_id para Condemnation; componentes de roles tienen listener custom_id. Se detectó y corrigió riesgo de abortar `on_ready` al fallar sync/invites en un servidor, SQLite bloqueo consultado como False por `condemnation_case_action_in_progress`, y revalidación insuficiente de rol/jerarquía tras `guild.fetch_member`. Prueba añadida tests/test_reliability_startup_roles.py; pendientes CI, reinicio/pruebas Discord Test y revisión del resto de rutas de fallos parciales. Ninguna sanción real ejecutada; main intacta. Sin conexión Obsidian externa comprobada.
+
 ## Nueva referencia externa incorporada a criterios del proyecto — 2026-10-16
 
 El propietario aportó un PDF de 13 páginas titulado «Voz de los usuarios: quejas, fallos y peticiones sobre bots de Discord» (investigación del 15/10/2026) y pidió usar su conocimiento. Se incorporaron criterios resumidos a `DECISIONES.md` y una matriz de aceptación propuesta a `PRUEBAS_DISCORD.md`; el PDF **no** se añadió a GitHub y sus testimonios no se tratan como verificación de El Heraldo ni como aprobación de funciones. No se cambió código, SQLite, configuración, `main` ni producción por esta petición.

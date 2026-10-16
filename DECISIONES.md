@@ -1,3 +1,7 @@
+## Política de fiabilidad ante fallos de comprobación — 2026-10-16
+
+Las comprobaciones de permisos y estado deben repetirse tras cualquier espera/red antes de cambiar roles. Si SQLite no permite determinar si hay una sanción pendiente, se bloquea el perdón en vez de asumir estado libre (fail closed); informar del error, conservar datos y evitar reintentos ciegos. Un error de red/API en un servidor no debe abortar el arranque de loops ni impedir la recuperación de otros servidores; aislar por servidor las reconciliaciones sin prometer recuperación total. Mantener confirmaciones y reportes, usar mensajes formales que identifiquen permisos específicos. Test y código se modifican solo en Pruebas.
+
 ## Referencia de experiencia real de usuarios de bots — 2026-10-16
 
 Fuente complementaria aportada por el propietario: PDF de 13 páginas «Voz de los usuarios: quejas, fallos y peticiones sobre bots de Discord» (investigación fechada 2026-10-15, compartida en conversación). Sirve para formular riesgos y criterios de aceptación, NO para afirmar que El Heraldo tiene un fallo o que un competidor necesariamente lo tiene. La recopilación combina documentación y prensa con testimonios de diferentes años, fuentes sesgadas y opiniones; no es un muestreo representativo. No reproducir ni publicar el PDF íntegro en el repositorio sin autorización.

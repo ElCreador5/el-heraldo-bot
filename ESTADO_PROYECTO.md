@@ -1,3 +1,7 @@
+## Auditoría de fiabilidad: arranque, permisos y SQLite — 2026-10-16
+
+DETECTADO por inspección en Pruebas: fallos de sincronización de paneles/consulta de invitaciones podían abortar `on_ready`, y una consulta SQLite fallida se interpretaba como ausencia de acción de sanción pendiente al perdonar. El componente público de roles no revalidaba permisos/condiciones tras `guild.fetch_member`. IMPLEMENTADO en Pruebas: recuperación aislada por servidor y función al arrancar, consulta de acciones pendientes con error cerrado (no autoriza perdón si SQLite falla), y comprobación repetida de permisos/rol/estado en componentes públicos con mensaje específico. Pruebas aisladas `tests/test_reliability_startup_roles.py`. Faltan CI SHA y validación en Discord Test. No modificar main ni afirmar auditoría integral completa.
+
 ## Programación de embeds: claridad de la interfaz — 2026-10-15
 
 IMPLEMENTADO en Pruebas: corregido texto de confirmación que mostraba secuencias literales \\n. Ahora las condiciones de las seis frecuencias se explican en lenguaje natural, no como JSON. Estado activo/desactivado y botones Revisar/Confirmar reflejan la acción real; cada cambio reinicia la confirmación. Campos no aplicables se ocultan en el modal. Se mantiene el guardado explícito; Cancelar no guarda. Nueva regresión test_embed_schedule_wording.py; CI y Discord por verificar. Sin cambios en main.
