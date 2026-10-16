@@ -52,7 +52,7 @@ class EmbedNamesTests(unittest.TestCase):
 
     def test_blocks_oversize_markdown_mentions_controls(self):
         invalid = ("", " "*5, "x"*65, "@everyone", "ver\nreglas", "ver\treglas",
-                   chr(96)+"recurso"+chr(96), "<@1234>", "reglas/ayuda", "a\u200db")
+                   chr(96)+"recurso"+chr(96), "<@1234>", "reglas/ayuda", "a\u200db", "^recurso", "~reglas")
         for raw in invalid:
             with self.subTest(raw=repr(raw)):
                 self.assertFalse(self.valid(self.normalize(raw)))

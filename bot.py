@@ -20649,7 +20649,8 @@ def embed_name_is_valid(name: str) -> bool:
         and not name.endswith(" ")
         and all(
             ch in EMBED_NAME_PUNCTUATION
-            or unicodedata.category(ch)[0] in {"L", "N", "M", "S"}
+            or unicodedata.category(ch)[0] in {"L", "N", "M"}
+            or (unicodedata.category(ch) in {"So", "Sk"} and ch not in "`^~\\")
             for ch in name
         )
     )
