@@ -54,6 +54,8 @@ class TestModeReasons(unittest.TestCase):
     def test_unban_failure_keeps_case_open(self):
         fragment = segment("moderation_case_expiry_loop")
         self.assertIn("Reintentar desbaneo", fragment)
+        self.assertIn("Sustituido por un baneo posterior", fragment)
+        self.assertIn("current.reason != row[", fragment)
         self.assertIn("continue", fragment)
 
 class BanPolicyTests(unittest.IsolatedAsyncioTestCase):

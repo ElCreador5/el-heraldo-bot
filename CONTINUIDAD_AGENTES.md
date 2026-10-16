@@ -1,3 +1,7 @@
+## Protección ante BAN más reciente — 2026-10-15
+
+Corregido en Pruebas: la expiración de un expediente BAN no realiza unban si existe otro BAN posterior abierto. En Railway Test también comprueba la razón del baneo actual antes de retirarlo; cuando hay discrepancia, cierra el vencido para revisión sin levantar un castigo diferente. Error de SQLite/Discord no provoca unban a ciegas. Test de estructura añadido, prueba interactiva pendiente. main sin cambios.
+
 ## Continuidad: Test motivos y BAN configurable — 2026-10-15
 
 En Pruebas quedó implementada normalización de motivos de condena en la entrada única, también mostrada al perdonar. Para salidas kick/ban, helpers intentan DM de disculpas con enlace de un único uso antes de actuar exclusivamente en Railway Test; si falta permiso o DM se informa sin URL. Baneo predeterminado Test 5 minutos; producción intacta (sin configuración sigue permanente). /setup → Moderation → Baneo temporal muestra duraciones y personalizado, pero solo confirmación explícita guarda. /ban con 0 solicita permanente incluso en Test; la duración BAN de reacciones queda activa y persistida como caso con expiración. No confundir GitHub push con pruebas Discord. Comprobar Actions/Railway y testear en laboratorio; main sin cambios.

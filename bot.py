@@ -16361,13 +16361,50 @@ async def moderation_case_expiry_loop() -> None:
                 except discord.HTTPException:
                     pass
             elif case_type == "BAN":
+                # Un expediente antiguo nunca debe levantar otro baneo posterior.
+                conn = db_connect()
                 try:
-                    await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
+                    newer = conn.execute(
+                        "SELECT 1 FROM moderation_cases WHERE guild_id=? AND user_id=? "
+                        "AND type='BAN' AND open=1 AND case_number>? LIMIT 1",
+                        (guild.id, int(row["user_id"]), int(row["case_number"])),
+                    ).fetchone()
+                except sqlite3.Error:
+                    traceback.print_exc()
+                    continue  # Ante duda, no levantar sanciones.
+                finally:
+                    conn.close()
+                if newer is not None:
+                    moderation_case_close(
+                        guild.id, int(row["case_number"]), closed_by=None,
+                        resolution="Sustituido por un baneo posterior",
+                    )
+                    continue
+                try:
+                    current = await guild.fetch_ban(discord.Object(id=int(row["user_id"])))
                 except discord.NotFound:
-                    pass
+                    current = None  # El baneo ya fue retirado por otra vía.
                 except discord.HTTPException:
                     traceback.print_exc()
-                    continue  # Reintentar desbaneo; no cerrar expediente antes de completarlo.
+                    continue  # Sin estado confirmado, mantener expediente abierto.
+                if (current is not None and heraldo_is_test()
+                        and current.reason and current.reason != row["reason"]):
+                    moderation_case_close(
+                        guild.id, int(row["case_number"]), closed_by=None,
+                        resolution="Baneo diferente al expediente vencido; revisión administrativa",
+                    )
+                    continue
+                if current is not None:
+                    try:
+                        await guild.unban(
+                            discord.Object(id=int(row["user_id"])),
+                            reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}",
+                        )
+                    except discord.NotFound:
+                        pass
+                    except discord.HTTPException:
+                        traceback.print_exc()
+                        continue  # Reintentar desbaneo; no cerrar expediente antes de completarlo.
             moderation_case_close(guild.id, int(row["case_number"]), closed_by=None, resolution="Expirado automáticamente")
         except Exception:
             traceback.print_exc()
