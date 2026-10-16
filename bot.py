@@ -18648,7 +18648,7 @@ async def moderation_caseclose(interaction: discord.Interaction, caso: str, moti
     effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
     moderation_case_close(interaction.guild.id, case_number, closed_by=interaction.user.id, resolution=motivo or "Cerrado manualmente")
     current_status = await moderation_case_live_status(interaction.guild, int(row["user_id"]))
-    await interaction.followup.send(f"Expediente {moderation_case_code(case_number, interaction.guild.id)} cerrado. {effect}\\n**Estado actual:** {current_status}", ephemeral=True)
+    await interaction.followup.send(f"Expediente {moderation_case_code(case_number, interaction.guild.id)} cerrado. {effect}\n**Estado actual:** {current_status}", ephemeral=True)
 
 
 @bot.tree.command(name="casedelete", description="Elimina definitivamente un caso de Moderation.")
