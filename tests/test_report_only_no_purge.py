@@ -18,8 +18,34 @@ class ReportOnlySafety(unittest.TestCase):
         self.assertLess(report_branch.lineno, purge_call.lineno)
 
     def test_legacy_normalization_discards_report_purge(self):
-        fn = function_named("_normalize_moderation_report_rule")
-        self.assertTrue(any(isinstance(node, ast.If) and ast.unparse(node.test) == "action == 'report'" and any(isinstance(stmt, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "purge_minutes" for t in stmt.targets) and isinstance(stmt.value, ast.Constant) and stmt.value.value is None for stmt in node.body) for node in ast.walk(fn)))
+        # Ejecutar la normalización real: la versión heredada también puede
+        # traer delete_message=True. Ninguna ruta informativa debe purgar.
+        node = function_named("_normalize_moderation_report_rule")
+        module = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
+        env = {"MODERATION_REPORT_ACTIONS": {
+            "report", "warn", "timeout", "condemn", "kick", "ban",
+        }, "PURGE_MAX_MINUTES": 1440}
+        exec(compile(module, "<normalized-report-safety>", "exec"), env)
+        normalize = env["_normalize_moderation_report_rule"]
+        for action, fields in (
+            ("report", {"purge_minutes": 30}),
+            ("report", {"delete_message": True}),
+            ("warn", {"purge_minutes": 30}),
+            ("unknown", {"delete_message": True}),
+        ):
+            with self.subTest(action=action, fields=fields):
+                normalized = normalize({
+                    "emoji": "🚩", "label": "Infracción", "action": action, **fields,
+                })
+                self.assertIsNotNone(normalized)
+                self.assertEqual(normalized["action"], "report" if action == "unknown" else action)
+                self.assertIsNone(normalized["purge_minutes"])
+        # Evita convertir esta protección en una desactivación global de purgas.
+        sanctioned = normalize({
+            "emoji": "🚩", "label": "Infracción", "action": "kick",
+            "purge_minutes": 30,
+        })
+        self.assertEqual(sanctioned["purge_minutes"], 30)
 
     def test_report_purge_not_allowed_in_modal(self):
         fn = next(node for node in ast.walk(TREE) if isinstance(node, ast.ClassDef) and node.name == "ModerationReactionRuleModal")

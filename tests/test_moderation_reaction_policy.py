@@ -216,8 +216,15 @@ class PolicyTests(unittest.TestCase):
                     if isinstance(n, ast.ClassDef) and n.name == "HeraldoUserReportsSetupView")
         code = ast.unparse(view)
         self.assertIn("row=2", code)
-        self.assertIn("label='Configurar condiciones'", code)
-        self.assertIn("label='Sanciones y límite'", code)
+        # La interfaz vigente usa etiquetas más breves; ambos controles
+        # deben seguir vinculados a sus respectivos flujos, sin perderlos.
+        self.assertIn("label='Condiciones'", code)
+        self.assertIn("label='Advertencias y sanciones'", code)
+        self.assertIn("async def edit_rule", code)
+        self.assertIn("ModerationReactionRuleModal", code)
+        self.assertIn("async def configure_warn_limit", code)
+        self.assertIn("HeraldoWarningLimitSelectView", code)
+        self.assertIn("self.pending_reactions = reactions", code)
         self.assertIn("row=4", code)
         policy = ast.unparse(next(n for n in TREE.body
                                   if isinstance(n, ast.ClassDef)
