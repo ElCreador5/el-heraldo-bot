@@ -3139,7 +3139,7 @@ class HeraldoChannelSetupView(discord.ui.View):
         self.channel_select = channel_select
         self.add_item(channel_select)
 
-        create_button = discord.ui.Button(label="Crear si no existe", style=discord.ButtonStyle.secondary, row=2)
+        create_button = discord.ui.Button(label="Crear si no existe", style=discord.ButtonStyle.success, row=2)
         create_button.callback = self.create_channel_if_missing
         self.add_item(create_button)
 
@@ -3147,7 +3147,7 @@ class HeraldoChannelSetupView(discord.ui.View):
         save_button.callback = self.save_changes
         self.add_item(save_button)
 
-        discard_button = discord.ui.Button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+        discard_button = discord.ui.Button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
         discard_button.callback = self.discard_changes
         self.add_item(discard_button)
 
@@ -3472,7 +3472,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_roles.clear()
         await interaction.response.edit_message(
@@ -3577,7 +3577,7 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
             view=HeraldoJoinRolesBasicView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Roles por usuario", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Roles por usuario", style=discord.ButtonStyle.primary, row=0)
     async def users(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         await interaction.edit_original_response(
@@ -3585,7 +3585,7 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
             view=HeraldoJoinRolesUsersView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Roles para bots", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Roles para bots", style=discord.ButtonStyle.primary, row=1)
     async def bots(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         await interaction.edit_original_response(
@@ -3593,7 +3593,7 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
             view=HeraldoJoinRolesBotsView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Sincronización", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Sincronización", style=discord.ButtonStyle.primary, row=1)
     async def synchronization(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         await interaction.edit_original_response(
@@ -3679,7 +3679,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         self.add_item(selector)
         join_role_selector_defaults(self, get_join_role_ids(self.guild_id))
 
-    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.success, row=1)
     async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesCreateRoleModal(self, "basic"))
 
@@ -3780,7 +3780,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_role_ids = None
         join_role_selector_defaults(self, get_join_role_ids(self.guild_id))
@@ -3849,7 +3849,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         role_select.callback = self.select_roles
         self.add_item(role_select)
 
-    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.success, row=0)
     async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesCreateRoleModal(self, "users"))
 
@@ -3922,7 +3922,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         self.pending_remove_after = None
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.selected_user_id = None
         self.selected_role_ids = []
@@ -3955,7 +3955,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         self.add_item(selector)
         join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
 
-    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Crear rol", style=discord.ButtonStyle.success, row=1)
     async def create_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(JoinRolesCreateRoleModal(self, "bots"))
 
@@ -4028,7 +4028,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
         await interaction.edit_original_response(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_role_ids = self.pending_enabled = self.pending_delay = self.pending_different = None
         join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
@@ -4095,7 +4095,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_excluded = None
         await interaction.response.edit_message(content="**El Heraldo · Join Roles · Sincronización**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
@@ -4278,7 +4278,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_enabled = False
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Editar tarjeta", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Editar tarjeta", style=discord.ButtonStyle.primary, row=2)
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
@@ -4338,7 +4338,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_enabled = None
         await interaction.edit_original_response(content=self._content(guild) + f"\n\nCambios guardados. {note}", embed=None, view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_channel_id = None
         self.pending_bindings = None
@@ -4540,7 +4540,7 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
             option.default = option.value == values[0]
         await interaction.response.edit_message(content=self._summary(), view=self)
 
-    @discord.ui.button(label="Revisar cambios", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Revisar cambios", style=discord.ButtonStyle.primary, row=2)
     async def review(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if (get_motw_weekday(self.guild_id) != self.original_weekday
                 or get_motw_hour(self.guild_id) != self.original_hour):
@@ -4652,7 +4652,7 @@ class HeraldoMotwSetupView(discord.ui.View):
         self.pending_channel_id = None
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_channel_id = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
@@ -4767,11 +4767,11 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_enabled = target
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Editar aviso", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Editar aviso", style=discord.ButtonStyle.primary, row=1)
     async def edit_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
 
-    @discord.ui.button(label="Texto aviso", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Texto aviso", style=discord.ButtonStyle.primary, row=1)
     async def edit_text(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningModal(self.guild_id))
 
@@ -4793,7 +4793,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_enabled = None
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_trap_id = None
         self.pending_enabled = None
@@ -5040,7 +5040,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
     async def texts(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
 
-    @discord.ui.button(label="Publicar / actualizar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Publicar / actualizar", style=discord.ButtonStyle.success, row=3)
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.pending_role_id is not None or self.pending_sin_role_id is not None or self.pending_channel_id is not None or self.pending_enabled is not None:
             await interaction.response.send_message("Guarda o descarta los cambios pendientes antes de publicar.", ephemeral=True)
@@ -5116,7 +5116,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
@@ -5318,7 +5318,7 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
@@ -7106,14 +7106,14 @@ class HeraldoTemplateSetupView(discord.ui.View):
     async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id))
 
-    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=2)
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self._current():
             await interaction.response.send_message("Primero crea una plantilla.", ephemeral=True)
             return
         await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id, self.selected))
 
-    @discord.ui.button(label="Vincular botón", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Vincular botón", style=discord.ButtonStyle.primary, row=2)
     async def attach(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self._current():
             await interaction.response.send_message("Primero crea una plantilla.", ephemeral=True)
@@ -7479,7 +7479,7 @@ class HeraldoMessageKitsView(discord.ui.View):
             "Kit exportado. No incluye las acciones de roles ni configuraciones de otros servidores.",
             file=discord.File(io.BytesIO(content), filename="heraldo-message-kit.json"), ephemeral=True)
 
-    @discord.ui.button(label="Importar kit", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Importar kit", style=discord.ButtonStyle.primary)
     async def import_kit(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(HeraldoMessageKitImportModal(self.guild_id, self.owner_id))
 
@@ -8022,7 +8022,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             option.default = option.value in self.enabled_actions
         await interaction.response.edit_message(content=self._content(), view=self)
 
-    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.primary, row=4)
     async def review(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if any(guild_config_get(self.guild_id, key) != raw
                for key, raw in self.original_raw.items()):
@@ -8206,7 +8206,7 @@ class ReportReminderSetupView(discord.ui.View):
         self.pending["report_reminder_channel"] = str(channel.id)
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Personalizar", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Personalizar", style=discord.ButtonStyle.primary, row=4)
     async def custom(self, interaction, button):
         await interaction.response.send_modal(ReportReminderOptionsModal(self))
 
@@ -8601,14 +8601,14 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             return
         await interaction.response.send_modal(ModerationReactionEditModal(self))
 
-    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=3)
     async def edit_reaction(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_reaction_index is None:
             await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
             return
         await interaction.response.send_modal(ModerationReactionEditModal(self, self.selected_reaction_index))
 
-    @discord.ui.button(label="Condiciones", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Condiciones", style=discord.ButtonStyle.primary, row=3)
     async def edit_rule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.selected_reaction_index is None:
             await interaction.response.send_message("Selecciona primero una reacción.", ephemeral=True)
@@ -8633,18 +8633,18 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Emoji de condena directa", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Emoji de condena directa", style=discord.ButtonStyle.primary, row=3)
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
-    @discord.ui.button(label="Advertencias y sanciones", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Advertencias y sanciones", style=discord.ButtonStyle.primary, row=4)
     async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         warn_view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
         await interaction.response.send_message(
             content=warn_view._content(), view=warn_view, ephemeral=True,
         )
 
-    @discord.ui.button(label="Recordatorios", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Recordatorios", style=discord.ButtonStyle.primary, row=4)
     async def reminders(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         view = ReportReminderSetupView(self.guild_id, self.owner_id)
         await interaction.response.send_message(content=view.summary(), view=view, ephemeral=True)
@@ -8732,7 +8732,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not self._has_pending_changes():
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
@@ -9001,11 +9001,11 @@ class HeraldoCondemnationSetupView(discord.ui.View):
         self.pending_role_id = role.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Duración", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Duración", style=discord.ButtonStyle.primary, row=2)
     async def duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoCondemnationDurationModal(self.guild_id))
 
-    @discord.ui.button(label="Preparar acceso", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Preparar acceso", style=discord.ButtonStyle.primary, row=2)
     async def prepare_access(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         guild = interaction.guild
         channel = guild.get_channel(condemnation_channel_id(guild.id))
@@ -9092,7 +9092,7 @@ class HeraldoCondemnationSetupView(discord.ui.View):
         self.pending_channel_id = self.pending_role_id = None
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger, row=3)
     async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_channel_id = self.pending_role_id = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
@@ -9167,7 +9167,7 @@ class HeraldoBanDurationSetupView(discord.ui.View):
         await confirm_configuration(interaction, self.guild_id,
                                     {"moderation_default_ban_minutes": values[0]})
 
-    @discord.ui.button(label="Personalizar", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Personalizar", style=discord.ButtonStyle.primary, row=1)
     async def custom(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoBanDurationModal(self.guild_id, self.owner_id))
 
@@ -9212,7 +9212,7 @@ class HeraldoModerationSetupView(discord.ui.View):
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
 
-    @discord.ui.button(label="Baneo temporal", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Baneo temporal", style=discord.ButtonStyle.primary, row=1)
     async def ban_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         view = HeraldoBanDurationSetupView(self.guild_id, self.owner_id)
@@ -9413,7 +9413,7 @@ class HeraldoLoggingSetupView(discord.ui.View):
         self.pending_channel_id = None
         await interaction.edit_original_response(content=self._content(interaction.guild) + f"\n\nCambios guardados. {note}", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_channel_id = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
@@ -9524,7 +9524,7 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         self.pending_enabled, self.pending_channel_id = None, None
         await interaction.response.edit_message(content=self.content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger, row=3)
     async def discard(self, interaction, button):
         self.pending_enabled, self.pending_channel_id = None, None
         await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
@@ -9758,7 +9758,7 @@ class HeraldoReactionOptionsSelectView(discord.ui.View):
             return
         await self._change(interaction, "max_reactions", int(value))
 
-    @discord.ui.button(label="Aplicar al borrador", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="Aplicar al borrador", style=discord.ButtonStyle.primary, row=3)
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         editor = HeraldoReactionRolesEditorView(
             self.guild_id, self.owner_id, self.panel, selected=self.selected
@@ -9767,7 +9767,7 @@ class HeraldoReactionOptionsSelectView(discord.ui.View):
             content=editor.content(interaction.guild), view=editor
         )
 
-    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger, row=3)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         editor = HeraldoReactionRolesEditorView(
             self.guild_id, self.owner_id, self.original_panel, selected=self.selected
@@ -10052,12 +10052,12 @@ class HeraldoReactionRolesEditorView(discord.ui.View):
     async def add_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoReactionEmojiModal(self))
 
-    @discord.ui.button(label="Opciones", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Opciones", style=discord.ButtonStyle.primary, row=4)
     async def options(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selector = HeraldoReactionOptionsSelectView(self)
         await interaction.response.edit_message(content=selector.content(), view=selector)
 
-    @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.primary, row=4)
     async def edit_message(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.panel.get("existing"):
             await interaction.response.send_message("Los mensajes existentes no pueden editarse desde este editor.", ephemeral=True)
@@ -10505,7 +10505,7 @@ class HeraldoDateFormatSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.primary, row=1)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if (guild_config_get(self.guild_id, "display_date_format") or "discord") != self.original:
             await interaction.response.send_message(
@@ -10662,7 +10662,7 @@ class HeraldoSetupView(discord.ui.View):
         except discord.HTTPException:
             pass
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=1)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
@@ -10760,7 +10760,7 @@ class HeraldoEditTemplateConfirmView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Confirmar edición", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Confirmar edición", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not await self.interaction_check(interaction):
             return
@@ -15282,7 +15282,7 @@ class CondemnationPardonView(discord.ui.View):
         pardon_button.callback = self.pardon_callback
         self.add_item(pardon_button)
         for action, label, style in (
-            ("WARN", "Advertir", discord.ButtonStyle.secondary),
+            ("WARN", "Advertir", discord.ButtonStyle.danger),
             ("BAN", "Banear", discord.ButtonStyle.danger),
             ("KICK", "Expulsar", discord.ButtonStyle.danger),
         ):
@@ -17550,11 +17550,11 @@ class CondemnationTemplateEditorView(discord.ui.View):
     async def edit_more_details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationMoreDetailsModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="Enlace del botón", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Enlace del botón", style=discord.ButtonStyle.primary, row=1)
     async def edit_button_url(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationButtonUrlModal(interaction.guild.id, self.return_to))
 
-    @discord.ui.button(label="Duración", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Duración", style=discord.ButtonStyle.primary, row=1)
     async def edit_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(CondemnationDurationModal(interaction.guild.id, self.return_to))
 
@@ -17928,7 +17928,7 @@ class ReactionCondemnReasonView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Indicar razón", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Indicar razón", style=discord.ButtonStyle.primary)
     async def enter_reason(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ReactionCondemnReasonModal(self))
 
@@ -18091,6 +18091,9 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
         self.guild_id, self.owner_id = guild_id, owner_id
         self.action, self.channel_id = action, channel_id
         self.finished = False
+        # Al confirmar se distingue crear/registrar de retirar un canal trampa.
+        self.confirm.style = (discord.ButtonStyle.danger if action == "remove"
+                              else discord.ButtonStyle.success)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
@@ -19192,7 +19195,7 @@ class ModerationCaseActionsView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Advertir", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Advertir", style=discord.ButtonStyle.danger)
     async def warn(self, interaction, button):
         if not interaction.user.guild_permissions.moderate_members:
             await interaction.response.send_message("Se requiere permiso para moderar miembros.", ephemeral=True)
@@ -21321,6 +21324,7 @@ class EmbedScheduleView(discord.ui.View):
         self.mode_menu.callback = self.select_mode
         self.add_item(self.mode_menu)
         self.toggle.label = "Activar programación"
+        self.toggle.style = discord.ButtonStyle.success
 
     def invalidate_review(self):
         self.reviewed = False
@@ -21391,14 +21395,15 @@ class EmbedScheduleView(discord.ui.View):
     async def configure(self, interaction, button):
         await interaction.response.send_modal(EmbedScheduleOptionsModal(self))
 
-    @discord.ui.button(label="Activar programación", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Activar programación", style=discord.ButtonStyle.success, row=2)
     async def toggle(self, interaction, button):
         self.active = not self.active
         self.toggle.label = "Desactivar programación" if self.active else "Activar programación"
+        self.toggle.style = discord.ButtonStyle.danger if self.active else discord.ButtonStyle.success
         self.invalidate_review()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Revisar programación", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="Revisar programación", style=discord.ButtonStyle.primary, row=3)
     async def save(self, interaction, button):
         if isinstance(self, EmbedScheduleEditView):
             return await self.save_existing(interaction, button)
@@ -21487,7 +21492,7 @@ class EmbedEditorView(discord.ui.View):
             return await self._gone(interaction)
         await interaction.response.send_modal(EmbedAuthorFooterModal(self.guild_id, self.name, data))
 
-    @discord.ui.button(label="Campo", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Campo", style=discord.ButtonStyle.primary, row=0)
     async def add_field(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(EmbedFieldModal(self.guild_id, self.name))
 
@@ -21536,7 +21541,7 @@ class EmbedEditorView(discord.ui.View):
         self.pending_remove_index = None
         await embed_refresh(interaction, self.name)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_timestamp = None
         self.pending_remove_index = None
@@ -21670,6 +21675,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
         self.schedule_id, self.version = schedule_id, version
         self.channel_id, self.mode, self.config, self.active = channel_id, mode, json.loads(config_json), bool(enabled)
         self.toggle.label = "Desactivar programación" if self.active else "Activar programación"
+        self.toggle.style = discord.ButtonStyle.danger if self.active else discord.ButtonStyle.success
         for option in self.mode_menu.options:
             option.default = option.value == mode
         self.reviewed = False
@@ -21810,7 +21816,7 @@ class EmbedSchedulesManageView(discord.ui.View):
         self.selected_id = int(interaction.data["values"][0])
         await interaction.response.edit_message(content=f"**Programación #{self.selected_id}** seleccionada. Puede pausar o reanudar la publicación.", view=self)
 
-    @discord.ui.button(label="Editar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=2)
     async def edit_schedule(self, interaction, button):
         if self.selected_id is None:
             await interaction.response.send_message("Seleccione una programación.",ephemeral=True)
@@ -22838,7 +22844,7 @@ class HeraldoMessagesView(discord.ui.View):
             text = "No hay embeds personalizados guardados. Crea el primero con `/embed crear`."
         await interaction.response.send_message(text, ephemeral=True)
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Centro de mensajes cerrado.", view=None)
