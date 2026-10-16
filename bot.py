@@ -12637,8 +12637,8 @@ HONEYPOT_MISFIRE_MEMBER_AGE = timedelta(days=30)
 HONEYPOT_MISFIRE_WINDOW = timedelta(minutes=5)
 HONEYPOT_MISFIRE_THRESHOLD = 3
 
-_hp_busy: set[int] = set()  # usuarios en pleno castigo (evita doble castigo si postea en varias trampas)
-_hp_veteran_hits: list[tuple[datetime, int]] = []
+_hp_busy: set[tuple[int, int]] = set()  # usuarios en pleno castigo (evita doble castigo si postea en varias trampas)
+_hp_veteran_hits: list[tuple[datetime, int, int]] = []  # (hora, servidor, miembro)
 
 
 # --- Persistencia -----------------------------------------------------------
@@ -16667,11 +16667,17 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
     # Protección contra fallos: varios miembros veteranos atrapados en pocos minutos.
     now = datetime.now(timezone.utc)
     if member.joined_at and now - member.joined_at > HONEYPOT_MISFIRE_MEMBER_AGE:
-        _hp_veteran_hits.append((now, member.id))
-    _hp_veteran_hits[:] = [(t, u) for t, u in _hp_veteran_hits if now - t <= HONEYPOT_MISFIRE_WINDOW]
-    if len({u for _, u in _hp_veteran_hits}) >= HONEYPOT_MISFIRE_THRESHOLD:
+        _hp_veteran_hits.append((now, guild.id, member.id))
+    _hp_veteran_hits[:] = [
+        (t, guild_id, user_id)
+        for t, guild_id, user_id in _hp_veteran_hits
+        if now - t <= HONEYPOT_MISFIRE_WINDOW
+    ]
+    if len({user_id for _, guild_id, user_id in _hp_veteran_hits if guild_id == guild.id}) >= HONEYPOT_MISFIRE_THRESHOLD:
         hp_setting_set(guild.id, "honeypot_paused", "1")
-        _hp_veteran_hits.clear()
+        _hp_veteran_hits[:] = [
+            entry for entry in _hp_veteran_hits if entry[1] != guild.id
+        ]
         await log_embed(
             guild, "⏸️ Honeypot pausado (protección contra fallos)",
             f"{HONEYPOT_MISFIRE_THRESHOLD}+ miembros con más de 30 días en el servidor escribieron en la trampa en "
@@ -16705,19 +16711,20 @@ async def honeypot_listener(message: discord.Message) -> None:
         except discord.HTTPException:
             pass
         return
-    if member.id in _hp_busy:
+    busy_key = (message.guild.id, member.id)
+    if busy_key in _hp_busy:
         try:
             await delete_with_evidence(message.channel, message.id)
         except discord.HTTPException:
             pass
         return
-    _hp_busy.add(member.id)
+    _hp_busy.add(busy_key)
     try:
         await hp_handle_trigger(message, member)
     except Exception:
         traceback.print_exc()
     finally:
-        _hp_busy.discard(member.id)
+        _hp_busy.discard(busy_key)
 
 
 @bot.listen("on_guild_channel_delete")
@@ -18402,8 +18409,7 @@ async def honeypot_exempt_add(
     target = rol if rol is not None else miembro
     kind = "role" if rol is not None else "member"
     await interaction.response.send_message(
-        "Revise y confirme " + ("la creación" if True else "la retirada")
-        + f" de la exención para {target.mention}.",
+        f"Revise y confirme la creación de la exención para {target.mention}.",
         view=HoneypotExemptionConfirmView(
             interaction.guild.id, interaction.user.id, kind, target.id, True
         ),
@@ -18428,8 +18434,7 @@ async def honeypot_exempt_remove(
     target = rol if rol is not None else miembro
     kind = "role" if rol is not None else "member"
     await interaction.response.send_message(
-        "Revise y confirme " + ("la creación" if False else "la retirada")
-        + f" de la exención para {target.mention}.",
+        f"Revise y confirme la retirada de la exención para {target.mention}.",
         view=HoneypotExemptionConfirmView(
             interaction.guild.id, interaction.user.id, kind, target.id, False
         ),
@@ -18442,6 +18447,8 @@ async def honeypot_exempt_remove(
 async def honeypot_history(
     interaction: discord.Interaction, cantidad: discord.app_commands.Range[int, 1, 10] = 10
 ) -> None:
+    if not await configuration_access(interaction):
+        return
     rows = hp_recent_triggers(interaction.guild.id, cantidad)
     if not rows:
         await interaction.response.send_message("Aún no ha caído nadie en la trampa.", ephemeral=True)

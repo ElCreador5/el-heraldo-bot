@@ -1,3 +1,7 @@
+## Seguridad Honeypot: aislamiento multiservidor — 2026-10-16
+
+Nueva suite automatizada `tests/test_honeypot_isolation.py`: (1) veteranos mezclados entre servidores no pausan uno ajeno; (2) tercer veterano del mismo servidor pausa solo ese y conserva el historial temporal de otros; (3) eventos concurrentes del mismo miembro en servidores distintos se procesan, pero duplicados simultáneos intraguild siguen bloqueados; (4) caducan detecciones viejas y no persisten falsos umbrales; (5) `/honeypot history` rechaza lectura sin Gestionar servidor. **Automatizadas: ejecución CI pendiente al crear el commit.** **Discord real: NO REALIZADA.** Laboratorio: repetir con dos servidores autorizados, reacciones de usuarios de prueba, revocación de permisos, duplicados y reseteo por umbral. No ejecutar sanciones ni supresiones reales de miembros. Observar que el mensaje del último veterano pasa por `delete_with_evidence` antes de la pausa: comportamiento anterior conservado y pendiente de decisión.
+
 ## Pruebas de aceptación de /fusionar_canales renovado — 2026-10-16
 
 **VERIFICADO AUTOMÁTICAMENTE:** commit `4cc337d0`, CI Heraldo Lab `38978968508`, Python 3.11, 3.12 y 3.13 SUCCESS; Mensajes `38978968411` SUCCESS. Pruebas de `tests/test_fusion_preview.py`: descripción de ruta y orden, estado de origen, nombres y contadores, verde Confirmar / gris Volver / rojo Cancelar, editor de borrador no destructivo, verificación previa del contador y permisos, conservación del origen si llegan nuevos mensajes o falla su segunda lectura. **EN DISCORD: NO REALIZADAS.**
