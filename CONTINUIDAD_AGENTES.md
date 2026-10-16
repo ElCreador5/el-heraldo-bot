@@ -1,3 +1,11 @@
+## Cierre de comprobaciones puntuales — 2026-10-16
+
+Se confirmó GitHub CI del commit `cfc8ab1e0c3594eb2ccab2f4f77aed0eb3470bc4`: `python-checks` SUCCESS y pruebas específicas de `test_reliability_startup_roles.py` (6) aprobadas; suites generales 3.11, 3.12 y 3.13 FAILURE, con 2 fallos y 16 errores en Python 3.13 (353 pruebas). En el commit posterior `fa543af7` las 9 pruebas específicas de fiabilidad pasaron en 3.12/3.13; suites generales continúan en 2 fallos y 16 errores (356 pruebas). **No decir que CI general está verde.**
+
+Revisión del código vigente: solo un llamador de `condemnation_case_action_in_progress`, en `CondemnationPardonView.pardon_callback`; `response.defer` ocurre antes de consultar, y el `try/except Exception` envolvente impide perdonar y trata de notificar en privado cuando SQLite falla. No requiere modificación por este riesgo. Las dos sentencias `CREATE TABLE IF NOT EXISTS condemnation_case_actions` son textualmente idénticas. No unificar por estética durante estabilización.
+
+Quedan PENDIENTES de VERIFICACIÓN REAL EN DISCORD: (1) permiso/jerarquía revocados durante `fetch_member` y respuesta adecuada sin cambios; (2) SQLite bloqueada al perdonar, sin levantar la sanción; (3) reinicio con invitaciones denegadas sin abortar arranque ni perder vistas. Ejecutarlos solamente con autorización y entorno de laboratorio. Mantener la suite general pendiente separada de estos ensayos. No interpretar Railway SUCCESS como validación funcional. `main` intacta; sin modificaciones de código en esta revisión.
+
 ## CIERRE PREVENTIVO — 2026-10-16, auditoría de fiabilidad (estado verificado)
 
 **Rama y SHA:** `Pruebas@fa543af74cc62c73d86400b3cd220cfecfa280a2`. **`main` no modificada.** No se han ejecutado pruebas interactivas de Discord ni sanciones reales. No se ha actualizado Obsidian remoto. El archivo de continuidad se conserva en el repositorio en vez de duplicarse.
