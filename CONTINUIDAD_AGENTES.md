@@ -1,3 +1,9 @@
+## Nueva referencia externa incorporada a criterios del proyecto — 2026-10-16
+
+El propietario aportó un PDF de 13 páginas titulado «Voz de los usuarios: quejas, fallos y peticiones sobre bots de Discord» (investigación del 15/10/2026) y pidió usar su conocimiento. Se incorporaron criterios resumidos a `DECISIONES.md` y una matriz de aceptación propuesta a `PRUEBAS_DISCORD.md`; el PDF **no** se añadió a GitHub y sus testimonios no se tratan como verificación de El Heraldo ni como aprobación de funciones. No se cambió código, SQLite, configuración, `main` ni producción por esta petición.
+
+Orden recomendado para futuras auditorías: fiabilidad (permisos, reinicio, fallos parciales y duplicaciones) → seguridad/privacidad (secretos, datos, infraestructura) → mensajes y experiencia de sanción → considerar diagnóstico y apelaciones previa decisión. Antes de modificar código, consultar implementación y pruebas vigentes, pues la investigación es contexto complementario. Pendiente del propietario: alcance de apelaciones, comando de autodiagnóstico, política de retención e integración a `main`. Obsidian remoto no estaba disponible como conector en esta sesión; GitHub sigue siendo fuente principal.
+
 ## Corrección de textos del programador de embeds — 2026-10-15
 
 Captura: frecuencia Por mensajes, configuración interna count=10, estado Activado pero leyenda decía que se guardaría desactivada; tras pulsar revisión aparecía secuencia literal \\n\\n. Actualizado en Pruebas: explicaciones en lenguaje natural para todos los modos; estado y botones dinámicos, condición explícita, campos relevantes por modo, reseteo de confirmación tras cambiar borrador y corrección de salto literal. Tests en test_embed_schedule_wording.py y documentación actualizada. CI y Discord Test pendientes; no tocar main.

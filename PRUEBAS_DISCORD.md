@@ -1,3 +1,18 @@
+## Matriz complementaria propuesta por investigación de usuarios — 2026-10-16
+
+Fuente: «Voz de los usuarios: quejas, fallos y peticiones sobre bots de Discord», pp. 3–10. **TODAS LAS COMPROBACIONES A CONTINUACIÓN SON PROPUESTAS; NO EJECUTADAS.** Consolidarlas con las pruebas ya descritas en este archivo, sin reemplazar sus resultados. Solo El Heraldo Test y Heraldo's Lab con usuarios autorizados.
+
+- Permisos y jerarquía: retirar permisos del bot o situar el rol objetivo fuera de su alcance durante un ensayo controlado; comprobar explicación precisa y ausencia de cambios parciales en SQLite/Discord.
+- Paneles y reinicios: reiniciar Test con varias vistas antiguas y nuevas que compartan diseño; comprobar que cada botón conserva identidad y destino correctos; no reutilizar mensajes/paneles entre aplicaciones Test y producción.
+- Interacciones lentas: probar operaciones con latencia o respuestas API fallidas; deben responder/diferir antes del límite de Discord y no declarar éxito sin confirmación.
+- Fallos parciales: canal de logs borrado, DM rechazado, canal/permisos revocados, reinicio entre Discord y SQLite; el expediente persistente debe permitir recuperación sin duplicar sanción ni perder evidencia exigida.
+- Concurrencia y ráfagas: dos moderadores actuando sobre un mismo expediente y numerosos eventos/logs; verificar idempotencia, control de tasa y ausencia de notificaciones repetidas.
+- Reingreso y vencimiento: restauración segura de roles o sanción al volver, con jerarquía, duración y expiración visibles; no levantar un baneo posterior al vencer un caso anterior.
+- Datos y secretos: auditar inventario de datos persistidos, acceso, retención, secretos en logs/variables/repositorio, infraestructura innecesaria e intents privilegiados. No volcar secretos ni evidencias privadas a informes.
+- Verificación y accesibilidad: causas de rechazo, reintentos autorizados, DM inaccesible y falsa detección; comprobar que los mensajes al usuario son concretos y no prometen acciones que no se completaron.
+
+No implementar un comando de diagnóstico, apelaciones o nuevas medidas de raid basándose únicamente en esta matriz; requieren alcance, riesgos y autorización del propietario.
+
 ## Comprobación pendiente: programar embeds y redacción — 2026-10-15
 
 VERIFICACIÓN REAL EN DISCORD: NO REALIZADA. En Heraldo's Lab comprobar Por mensajes (10), canal seleccionado, botón Activar, revisión y Confirmar; los saltos de línea reales, ninguna estructura JSON y ningún texto contradictorio. Tras revisar, modificar estado/canal/frecuencia y asegurar nueva revisión obligatoria. Cancelar antes y después de revisar no debe guardar. Probar modal en seis frecuencias, edición existente y programaciones inactivas. Verificar controles y textos en Discord sin modificar producción. Test test_embed_schedule_wording.py.
