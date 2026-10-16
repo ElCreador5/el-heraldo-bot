@@ -56,6 +56,20 @@ class ScheduledEmbedTests(unittest.TestCase):
         self.assertIn("Cancelar edición", editor)
         self.assertIn("Cancelar", editor)
 
+    def test_invalid_test_only_interval_is_not_published_elsewhere(self):
+        import json
+        conn = sqlite3.connect(":memory:")
+        schedules.initialize(conn)
+        anchor = "2026-10-15T12:00:00+00:00"
+        conn.execute(
+            "INSERT INTO scheduled_embeds(guild_id,embed_name,channel_id,mode,config,enabled,next_due,created_at,updated_at) "
+            "VALUES (1,'sample',2,'interval',?,1,?,'now','now')",
+            (json.dumps({"interval": "30s", "anchor": anchor}), anchor))
+        conn.commit()
+        now = datetime(2026, 10, 15, 12, 1, tzinfo=timezone.utc)
+        self.assertEqual(schedules.claim_due(conn, now, is_test=False), [])
+        self.assertEqual(conn.execute("SELECT enabled FROM scheduled_embeds").fetchone()[0], 0)
+
     def test_claim_once_no_duplicate(self):
         import json
         conn = sqlite3.connect(":memory:")
