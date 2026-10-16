@@ -15061,6 +15061,12 @@ class CondemnationPardonView(discord.ui.View):
                     ephemeral=True,
                 )
                 return
+            if condemnation_case_action_in_progress(interaction.guild.id, interaction.message.id):
+                await interaction.followup.send(
+                    "Hay una medida moderadora pendiente de confirmar o revisar en este expediente.",
+                    ephemeral=True,
+                )
+                return
 
             is_admin = bool(
                 getattr(interaction.user.guild_permissions, "administrator", False)
@@ -15126,12 +15132,36 @@ def condemnation_case_action_claim(guild_id: int, message_id: int, action: str) 
             "state TEXT NOT NULL, resulting_case INTEGER, created_at TEXT NOT NULL, "
             "PRIMARY KEY(guild_id, message_id, action))"
         )
+        conn.execute("BEGIN IMMEDIATE")
+        ongoing = conn.execute(
+            "SELECT 1 FROM condemnation_case_actions "
+            "WHERE guild_id=? AND message_id=? AND state='pending' LIMIT 1",
+            (guild_id, message_id),
+        ).fetchone()
+        if ongoing:
+            conn.rollback()
+            return False
         result = conn.execute(
             "INSERT OR IGNORE INTO condemnation_case_actions "
             "(guild_id,message_id,action,state,created_at) VALUES(?,?,?,'pending',?)",
             (guild_id, message_id, action, datetime.now(timezone.utc).isoformat()),
         )
+        conn.commit()
         return result.rowcount == 1
+    finally:
+        conn.close()
+
+
+def condemnation_case_action_in_progress(guild_id: int, message_id: int) -> bool:
+    conn = db_connect()
+    try:
+        return conn.execute(
+            "SELECT 1 FROM condemnation_case_actions "
+            "WHERE guild_id=? AND message_id=? AND state='pending' LIMIT 1",
+            (guild_id, message_id),
+        ).fetchone() is not None
+    except sqlite3.OperationalError:
+        return False
     finally:
         conn.close()
 
@@ -15225,6 +15255,14 @@ class CondemnationCaseConfirmView(discord.ui.View):
         if member is None:
             await interaction.followup.send(
                 "El usuario ya no está en el servidor; no se aplicó la medida.", ephemeral=True)
+            return
+        if (self.guild_id, member.id) in _pardon_inflight:
+            await interaction.followup.send("Se está procesando un perdón para este miembro.", ephemeral=True)
+            return
+        # Recheck after the network fetch so a closed case is not acted on.
+        fresh = condemnation_get_by_announcement_message(self.guild_id, self.message_id)
+        if fresh is None or not condemnation_linked_case_is_open(fresh):
+            await interaction.followup.send("El expediente ya se cerró.", ephemeral=True)
             return
         # This atomic claim also protects retries after a crashed worker.
         if not condemnation_case_action_claim(self.guild_id, self.message_id, self.action):
@@ -15412,12 +15450,22 @@ async def condemnation_ensure_private_thread(
     try:
         current_member = await guild.fetch_member(member.id)
         member_perms = channel.permissions_for(current_member)
-        if not (member_perms.view_channel and member_perms.read_message_history
-                and member_perms.send_messages_in_threads) or member_perms.manage_threads:
-            await log_embed(guild, "Advertencia: Acceso a expediente no disponible",
-                            "El condenado debe poder Ver canal, Leer historial y Enviar mensajes en hilos, "
-                            "pero no Gestionar hilos. Comprueba la configuración del canal.",
-                            discord.Color.orange())
+        missing = []
+        if not member_perms.view_channel:
+            missing.append("Ver canal")
+        if not member_perms.read_message_history:
+            missing.append("Leer historial")
+        if not member_perms.send_messages_in_threads:
+            missing.append("Enviar mensajes en hilos")
+        if member_perms.manage_threads:
+            missing.append("tiene Gestionar hilos (no compatible con privacidad estricta)")
+        if missing:
+            await log_embed(
+                guild, "Advertencia: Acceso a expediente no disponible",
+                "Permisos del condenado en el canal de condenados: " + ", ".join(missing)
+                + ". Ajusta permisos de forma explícita; no se abrirá un hilo público.",
+                discord.Color.orange(),
+            )
             return False
         message = await channel.fetch_message(message_id)
         thread = None
