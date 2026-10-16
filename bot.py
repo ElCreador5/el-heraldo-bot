@@ -18558,7 +18558,9 @@ async def moderation_caseinfo(interaction: discord.Interaction, caso: str) -> No
     if row is None:
         await interaction.response.send_message("No existe ese caso en este servidor.", ephemeral=True)
         return
-    await interaction.response.send_message(embed=moderation_case_embed(interaction.guild, row), view=ModerationCaseActionsView(interaction.guild.id, case_number, interaction.user.id) if row["open"] else None, ephemeral=True)
+    case_embed = moderation_case_embed(interaction.guild, row)
+    case_embed.add_field(name="Situación actual del usuario", value=await moderation_case_live_status(interaction.guild, int(row["user_id"])), inline=False)
+    await interaction.response.send_message(embed=case_embed, view=ModerationCaseActionsView(interaction.guild.id, case_number, interaction.user.id) if row["open"] else None, ephemeral=True)
 
 
 @bot.tree.command(name="caselist", description="Lista los casos más recientes de Moderation.")
