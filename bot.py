@@ -19189,7 +19189,7 @@ async def execute_channel_merge(
                 "Advertencia: El administrador perdió Gestionar canales. Se conservó el origen.",
                 ephemeral=True,
             )
-        elif not origen.permissions_for(guild.me).manage_channels if guild.me else True:
+        elif guild.me is None or not origen.permissions_for(guild.me).manage_channels:
             await interaction.followup.send(
                 "Advertencia: El Heraldo ya no tiene Gestionar canales. Se conservó el origen.",
                 ephemeral=True,

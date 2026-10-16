@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import re
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
 TREE = ast.parse(SOURCE)
@@ -132,6 +134,131 @@ class FusionPreviewTests(unittest.TestCase):
         self.assertIn("getattr(m, 'edited_at', None)", fn)
         self.assertLess(fn.index("current_messages = await collect_fusion_messages(origen)"),
                         fn.index("await origen.delete("))
+
+def isolated_executor(environment):
+    node = TOP["execute_channel_merge"]
+    module = ast.fix_missing_locations(ast.Module(
+        body=[ast.ImportFrom(module="__future__",
+            names=[ast.alias(name="annotations")], level=0), node],
+        type_ignores=[],
+    ))
+    exec(compile(module, "<fusion-executor>", "exec"), environment)
+    return environment["execute_channel_merge"]
+
+
+class FusionExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.me = SimpleNamespace(id=99)
+        self.user = SimpleNamespace(
+            id=13, guild_permissions=SimpleNamespace(manage_channels=True),
+        )
+        src_perms = SimpleNamespace(
+            view_channel=True, read_message_history=True, manage_channels=True,
+        )
+        dst_perms = SimpleNamespace(
+            view_channel=True, send_messages=True, embed_links=True,
+            manage_channels=True,
+        )
+        self.origin = SimpleNamespace(
+            id=5, name="general", mention="#general",
+            permissions_for=lambda _: src_perms,
+            delete=AsyncMock(), edit=AsyncMock(),
+        )
+        self.destination = SimpleNamespace(
+            id=6, name="archivo", mention="#archivo",
+            permissions_for=lambda _: dst_perms,
+            edit=AsyncMock(), send=AsyncMock(),
+        )
+        self.guild = SimpleNamespace(
+            id=1, me=self.me, get_channel=lambda channel_id: {
+                5: self.origin, 6: self.destination,
+            }.get(channel_id),
+        )
+        self.origin.guild = self.guild
+        self.destination.guild = self.guild
+        self.progress = SimpleNamespace(edit=AsyncMock())
+        self.followup = SimpleNamespace(send=AsyncMock(return_value=self.progress))
+        self.interaction = SimpleNamespace(
+            guild=self.guild, user=self.user, followup=self.followup,
+        )
+        self.collect = AsyncMock()
+        self.migrate = AsyncMock(return_value=(0, 0))
+        self.audit = AsyncMock()
+        self.env = {
+            "discord": SimpleNamespace(
+                HTTPException=RuntimeError,
+                Color=SimpleNamespace(green=lambda: "verde", orange=lambda: "naranja"),
+            ),
+            "collect_fusion_messages": self.collect,
+            "send_migrated_message": self.migrate,
+            "fusion_clean_name": lambda value: value,
+            "fusion_preview_embed": lambda *args: "nueva-vista-previa",
+            "FusionChannelsView": lambda *args: "confirmación-renovada",
+            "FUSION_MAX_MESSAGES": 10000,
+            "log_embed": self.audit,
+            "asyncio": SimpleNamespace(sleep=AsyncMock()),
+        }
+        self.run_merge = isolated_executor(self.env)
+
+    async def test_count_change_does_not_edit_destination_or_delete_origin(self):
+        self.collect.return_value = [
+            SimpleNamespace(id=31, edited_at=None),
+            SimpleNamespace(id=32, edited_at=None),
+        ]
+        await self.run_merge(
+            self.interaction, self.origin, self.destination,
+            "nuevo-nombre", True, 1, "personalizado", "nuevo-nombre", self.user.id,
+        )
+        self.destination.edit.assert_not_awaited()
+        self.destination.send.assert_not_awaited()
+        self.origin.delete.assert_not_awaited()
+        self.migrate.assert_not_awaited()
+        self.audit.assert_not_awaited()
+        self.assertIn("2", self.followup.send.await_args.args[0])
+
+    async def test_revoked_admin_permissions_before_write_block_merge(self):
+        async def collect_and_revoke(_):
+            self.user.guild_permissions.manage_channels = False
+            return [SimpleNamespace(id=31, edited_at=None)]
+        self.env["collect_fusion_messages"] = collect_and_revoke
+        self.run_merge = isolated_executor(self.env)
+        await self.run_merge(
+            self.interaction, self.origin, self.destination,
+            "nuevo-nombre", True, 1, "personalizado", "nuevo-nombre", self.user.id,
+        )
+        self.destination.edit.assert_not_awaited()
+        self.destination.send.assert_not_awaited()
+        self.origin.delete.assert_not_awaited()
+        self.migrate.assert_not_awaited()
+
+    async def test_new_messages_during_copy_prevent_source_deletion(self):
+        original = SimpleNamespace(id=31, edited_at=None)
+        added = SimpleNamespace(id=32, edited_at=None)
+        self.collect.side_effect = [[original], [original, added]]
+        await self.run_merge(
+            self.interaction, self.origin, self.destination,
+            "archivo", True, 1, "destino", None, self.user.id,
+        )
+        self.migrate.assert_awaited_once()
+        self.origin.delete.assert_not_awaited()
+        self.destination.edit.assert_not_awaited()
+        self.audit.assert_awaited_once()
+        all_messages = "\n".join(
+            str(call.args[0]) for call in self.followup.send.await_args_list
+            if call.args
+        )
+        self.assertIn("Se conservó", all_messages)
+
+    async def test_recheck_failure_keeps_origin(self):
+        first = SimpleNamespace(id=31, edited_at=None)
+        self.collect.side_effect = [[first], RuntimeError("lectura no disponible")]
+        await self.run_merge(
+            self.interaction, self.origin, self.destination,
+            "archivo", True, 1, "destino", None, self.user.id,
+        )
+        self.migrate.assert_awaited_once()
+        self.origin.delete.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
