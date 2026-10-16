@@ -20815,6 +20815,7 @@ def embed_name_is_valid(name: str) -> bool:
             ch in EMBED_NAME_PUNCTUATION
             or unicodedata.category(ch)[0] in {"L", "N", "M"}
             or (unicodedata.category(ch) in {"So", "Sk"} and ch not in "`^~\\")
+            or ch == "\U0001FABD"  # Emoji de alas (Unicode 15), ausente en Python 3.11.
             for ch in name
         )
     )

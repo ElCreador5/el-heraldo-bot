@@ -9,6 +9,7 @@ import unicodedata
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
 CODE = SOURCE.read_text("utf-8")
@@ -49,6 +50,14 @@ class EmbedNamesTests(unittest.TestCase):
                 self.assertEqual(result, normalized)
                 self.assertTrue(self.valid(result))
         self.assertTrue(self.valid("x"*64))
+
+    def test_new_emoji_is_stable_on_python_311(self):
+        # Python 3.11 incluye Unicode 14 y clasifica este emoji como Cn.
+        original = unicodedata.category
+        with patch.object(unicodedata, "category",
+                          side_effect=lambda ch: "Cn" if ch == "🪽" else original(ch)):
+            self.assertTrue(self.valid("bienvenida 🪽"))
+            self.assertFalse(self.valid("bienvenida " + chr(0x10FFFF)))
 
     def test_blocks_oversize_markdown_mentions_controls(self):
         invalid = ("", " "*5, "x"*65, "@everyone", "ver\nreglas", "ver\treglas",
