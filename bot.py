@@ -16085,7 +16085,7 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
 @bot.tree.command(name="condenar", description="Condenar a un miembro: guarda sus roles, los retira y aplica Condenado.")
 @discord.app_commands.describe(
     miembro="Miembro que será condenado",
-    motivo="Motivo de la condena",
+    motivo="Motivo (opcional únicamente en El Heraldo Test)",
     duracion="Duración: 30m, 12h, 2d…; vacío = usa la configurada; «indefinida» = hasta retirar",
     purga="Qué borrar del condenado; vacío = últimas 24h, 0 = no borrar",
 )
@@ -16094,12 +16094,15 @@ async def honeypot_channel_deleted(channel: discord.abc.GuildChannel) -> None:
 async def condenar(
     interaction: discord.Interaction,
     miembro: discord.Member,
-    motivo: str,
+    motivo: Optional[str] = None,
     duracion: Optional[str] = None,
     purga: Optional[str] = None,
 ) -> None:
     guild = interaction.guild
     reason = (motivo or "").strip()[:1000]
+    is_heraldo_test = os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+    if not reason and is_heraldo_test:
+        reason = "Prueba funcional autorizada de El Heraldo Test."
     if not reason:
         await interaction.response.send_message("Error: El motivo de la condena es obligatorio.", ephemeral=True)
         return
