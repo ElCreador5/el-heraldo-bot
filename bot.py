@@ -18457,6 +18457,94 @@ async def moderation_ban(interaction: discord.Interaction, usuario: discord.Memb
     await interaction.followup.send(("Listo. " if ok else "No pude hacerlo: ") + note, ephemeral=True)
 
 
+async def moderation_case_live_status(guild: discord.Guild, user_id: int) -> str:
+    """Estado actual, nunca una etiqueta inferida de la sanción histórica."""
+    member = guild.get_member(user_id)
+    try:
+        ban = await guild.fetch_ban(discord.Object(id=user_id))
+    except discord.NotFound:
+        ban = None
+    except (discord.Forbidden, discord.HTTPException):
+        ban = "unknown"
+    if ban is not None and ban != "unknown":
+        return "Baneado del servidor"
+    if ban == "unknown":
+        status = "Baneo no verificable"
+    else:
+        status = "Permanece en el servidor" if member else "Fuera del servidor (expulsión o salida no verificable)"
+    if member:
+        active, total = moderation_warning_counts(guild.id, user_id)
+        status += f" · Advertencias vigentes: {active}/{moderation_warning_limit(guild.id)} (historial: {total})"
+    return status
+
+
+class ModerationCaseActionModal(discord.ui.Modal):
+    reason = discord.ui.TextInput(label="Motivo de la medida", style=discord.TextStyle.paragraph, max_length=500)
+
+    def __init__(self, guild_id, case_number, action):
+        super().__init__(title=f"Expediente · {action}")
+        self.guild_id, self.case_number, self.action = guild_id, case_number, action
+
+    async def on_submit(self, interaction):
+        guild = interaction.guild
+        if guild is None or guild.id != self.guild_id:
+            await interaction.response.send_message("Servidor incorrecto.", ephemeral=True)
+            return
+        permission = "ban_members" if self.action == "BAN" else "moderate_members"
+        if not getattr(interaction.user.guild_permissions, permission, False):
+            await interaction.response.send_message("No tiene permisos para esta sanción.", ephemeral=True)
+            return
+        row = moderation_case_get(guild.id, self.case_number)
+        if row is None or not row["open"]:
+            await interaction.response.send_message("El expediente ya no está abierto.", ephemeral=True)
+            return
+        member = guild.get_member(int(row["user_id"]))
+        if member is None:
+            await interaction.response.send_message(
+                "La persona no está en el servidor. Esta acción requiere un miembro presente.", ephemeral=True)
+            return
+        reason = str(self.reason).strip()
+        if not reason:
+            await interaction.response.send_message("Indique un motivo.", ephemeral=True)
+            return
+        # Una nueva sanción genera expediente vinculado por referencia, sin alterar el original.
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        ok, note, new_case = await moderation_apply_case_punishment(
+            interaction, member, self.action, reason, None,
+            f"Expediente de origen: {moderation_case_code(self.case_number, guild.id)}")
+        status = await moderation_case_live_status(guild, member.id)
+        await interaction.followup.send(
+            f"{note}\n**Estado actual:** {status}" if ok else f"No se aplicó la medida: {note}",
+            ephemeral=True)
+
+
+class ModerationCaseActionsView(discord.ui.View):
+    def __init__(self, guild_id, case_number, owner_id):
+        super().__init__(timeout=600)
+        self.guild_id, self.case_number, self.owner_id = guild_id, case_number, owner_id
+
+    async def interaction_check(self, interaction):
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id):
+            await interaction.response.send_message("Este panel corresponde a otra sesión.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Advertir", style=discord.ButtonStyle.secondary)
+    async def warn(self, interaction, button):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("Se requiere permiso para moderar miembros.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ModerationCaseActionModal(self.guild_id, self.case_number, "WARN"))
+
+    @discord.ui.button(label="Banear", style=discord.ButtonStyle.danger)
+    async def ban(self, interaction, button):
+        if not interaction.user.guild_permissions.ban_members:
+            await interaction.response.send_message("Se requiere permiso para banear miembros.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ModerationCaseActionModal(self.guild_id, self.case_number, "BAN"))
+
+
 @bot.tree.command(name="caseinfo", description="Muestra la información de un caso de Moderation.")
 @app_commands.checks.has_permissions(moderate_members=True)
 @app_commands.guild_only()
@@ -18470,7 +18558,7 @@ async def moderation_caseinfo(interaction: discord.Interaction, caso: str) -> No
     if row is None:
         await interaction.response.send_message("No existe ese caso en este servidor.", ephemeral=True)
         return
-    await interaction.response.send_message(embed=moderation_case_embed(interaction.guild, row), ephemeral=True)
+    await interaction.response.send_message(embed=moderation_case_embed(interaction.guild, row), view=ModerationCaseActionsView(interaction.guild.id, case_number, interaction.user.id) if row["open"] else None, ephemeral=True)
 
 
 @bot.tree.command(name="caselist", description="Lista los casos más recientes de Moderation.")
@@ -18557,7 +18645,8 @@ async def moderation_caseclose(interaction: discord.Interaction, caso: str, moti
     await interaction.response.defer(ephemeral=True, thinking=True)
     effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
     moderation_case_close(interaction.guild.id, case_number, closed_by=interaction.user.id, resolution=motivo or "Cerrado manualmente")
-    await interaction.followup.send(f"Expediente {moderation_case_code(case_number, interaction.guild.id)} cerrado. {effect}", ephemeral=True)
+    current_status = await moderation_case_live_status(interaction.guild, int(row["user_id"]))
+    await interaction.followup.send(f"Expediente {moderation_case_code(case_number, interaction.guild.id)} cerrado. {effect}\\n**Estado actual:** {current_status}", ephemeral=True)
 
 
 @bot.tree.command(name="casedelete", description="Elimina definitivamente un caso de Moderation.")
