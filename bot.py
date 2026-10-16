@@ -15614,16 +15614,19 @@ async def condemnation_update_pardoned_card(
 ) -> bool:
     """Actualiza la tarjeta original en el sitio; conserva el identificador del expediente."""
     message_id = row["announcement_message_id"] if "announcement_message_id" in row.keys() else None
-    channel = member.guild.get_channel(condemnation_channel_id(member.guild.id))
-    if not isinstance(channel, discord.TextChannel):
-        return False
+    expected_channel_id = condemnation_channel_id(member.guild.id)
 
     try:
         if message is None:
-            if not message_id:
+            if not message_id or not expected_channel_id:
+                return False
+            channel = member.guild.get_channel(expected_channel_id)
+            if not isinstance(channel, discord.TextChannel):
+                channel = await member.guild.fetch_channel(expected_channel_id)
+            if not isinstance(channel, discord.TextChannel):
                 return False
             message = await channel.fetch_message(int(message_id))
-        elif message.channel.id != channel.id:
+        elif message.channel.id != expected_channel_id:
             return False
 
         condemned_at = datetime.fromisoformat(row["condemned_at"])
@@ -15669,6 +15672,9 @@ async def condemnation_update_pardoned_card(
         )
         return True
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        traceback.print_exc()
+        return False
+    except Exception:
         traceback.print_exc()
         return False
 
@@ -15999,6 +16005,19 @@ async def _release_condemned_member_inner(
     db_clear_tentado(member.guild.id, member.id)
     db_clear_sin_verificado(member.guild.id, member.id)
     db_clear_verify_pending(member.guild.id, member.id)
+    # Resolver la tarjeta principal ANTES de archivar el hilo o enviar avisos
+    # secundarios: un fallo de esos pasos no debe dejar controles antiguos visibles.
+    card_ok: bool | None = None
+    if pardon and row is not None and released_by is not None:
+        card_ok = await condemnation_update_pardoned_card(
+            member, row, released_by, len(restore), lost, message=announcement_message,
+        )
+        if not card_ok:
+            # Si Discord rechazó la edición completa, intentar al menos retirar
+            # los controles activos sin crear publicaciones ni sanciones nuevas.
+            await condemnation_mark_closed_card(
+                member.guild, row, "Condena perdonada — actualización visual pendiente",
+            )
     # La condena ya se levantó. El hilo permanece como expediente archivado.
     if row is not None and row["thread_id"]:
         await condemnation_close_private_thread(member.guild, int(row["thread_id"]))
@@ -16026,9 +16045,6 @@ async def _release_condemned_member_inner(
     if pardon and row is not None and released_by is not None:
         condemned_at = datetime.fromisoformat(row["condemned_at"])
         case_id = condemnation_case_id(member, condemned_at, linked_case_number)
-        card_ok = await condemnation_update_pardoned_card(
-            member, row, released_by, len(restore), lost, message=announcement_message
-        )
         dm_ok = await condemnation_send_pardon_dm(member, row, released_by, len(restore), lost)
         await log_embed(
             member.guild, "Condena perdonada",
@@ -16036,13 +16052,12 @@ async def _release_condemned_member_inner(
             f"Motivo original: {row['reason']}\nOrigen: {condemnation_origin_label(row['origin'])}\n"
             f"Perdonó: {released_by.mention}\nRoles: {text}\n"
             f"Roles sin restaurar (IDs): {pending_role_details if lost else 'Ninguno'}\n"
-            f"Tarjeta original: {'cerrada' if card_ok else 'Advertencia: no cerrada'}\n"
-            f"Tarjeta de resolución: {'creada' if card_ok else 'Advertencia: no creada'}\n"
+            f"Tarjeta original: {'actualizada' if card_ok else 'Advertencia: actualización pendiente'}\n"
             f"DM: {'enviado' if dm_ok else 'Advertencia: no enviado'}",
             discord.Color.green(),
         )
         return True, text + (
-            "; tarjeta de resolución creada" if card_ok else "; no pude publicar la tarjeta de resolución"
+            "; tarjeta original actualizada" if card_ok else "; actualización de tarjeta pendiente"
         ) + ("; DM de perdón enviado" if dm_ok else "; DM de perdón no disponible")
     await log_embed(member.guild, "Condena levantada", f"{member.mention} — {text}. Por: {released_by.mention if released_by else 'El Heraldo'}.", discord.Color.green())
     return True, text
