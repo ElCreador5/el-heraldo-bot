@@ -60,6 +60,7 @@ class ButtonPaletteTests(unittest.TestCase):
         editor = (root / "message_editor.py").read_text("utf-8")
         automation = (root / "message_automation.py").read_text("utf-8")
         self.assertIn("self.execute.style", actions)
+        self.assertIn("for action in definition.get('acciones', [])", actions)
         self.assertIn("discord.ButtonStyle.danger", actions)
         self.assertIn("label='Retirar embed', style=discord.ButtonStyle.danger", editor)
         self.assertIn("label='Añadir embed', style=discord.ButtonStyle.primary", editor)

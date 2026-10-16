@@ -78,8 +78,7 @@ def build_view(template, guild_id):
         if definition['tipo'] == 'boton':
             button_style = (discord.ButtonStyle.danger
                             if any(action.get('tipo') == 'eliminar'
-                                   for option in definition.get('opciones', [])
-                                   for action in option.get('acciones', []))
+                                   for action in definition.get('acciones', []))
                             else discord.ButtonStyle.secondary)
             view.add_item(discord.ui.Button(
                 label=definition['etiqueta'], custom_id=custom_id,
