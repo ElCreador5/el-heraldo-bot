@@ -92,6 +92,9 @@ class ExecutionTests(unittest.TestCase):
             "moderation_case_code": lambda number, guild_id: "A12B345",
             "_moderation_emoji_key": lambda s: s,
             "run_purge_job": purge, "purge_result_text": lambda x: "2 mensajes",
+            "moderation_effective_ban_minutes": lambda guild_id, minutes: minutes,
+            "heraldo_kick": lambda member, **kw: sanction(**kw),
+            "heraldo_ban": lambda member, **kw: sanction(**kw),
         }
         return isolated("execute_moderation_report_action", env), guild, target, message, events
 

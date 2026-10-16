@@ -15,6 +15,7 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
         b.db_set_sin_verificado(self.guild_id, self.user_id, self.now - b.timedelta(minutes=10))
         self.member = NS(id=self.user_id, mention='<@20>', roles=[NS(id=40)], kick=AsyncMock(), ban=AsyncMock())
         self.guild = NS(id=self.guild_id, get_member=lambda _: self.member)
+        self.member.guild = self.guild  # Baneo centralizado necesita conocer el servidor.
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.object(b.bot, 'get_guild', return_value=self.guild))
@@ -23,6 +24,8 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
         self.stack.enter_context(patch.object(b, 'get_sin_verificado_role_id', return_value=40))
         self.stack.enter_context(patch.object(b, 'get_verify_role_id', return_value=41))
         self.stack.enter_context(patch.object(b, 'get_eval_role_ids', return_value={42}))
+        self.stack.enter_context(patch.object(b, 'moderation_effective_ban_minutes', return_value=None))
+        self.stack.enter_context(patch.object(b, 'heraldo_is_test', return_value=False))
         self.stack.enter_context(patch.object(b, 'get_verify_timeout', return_value=300))
         self.stack.enter_context(patch.object(b, 'get_sin_verificado_window', return_value=b.timedelta(seconds=300)))
         self.action = self.stack.enter_context(patch.object(b, 'get_verify_action', return_value='kick'))

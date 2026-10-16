@@ -80,6 +80,8 @@ class PardonCardRuntimeTests(unittest.IsolatedAsyncioTestCase):
             condemnation_channel_id=lambda gid: 21,
             condemnation_case_id=lambda *args: "5L138ZJ",
             condemnation_duration_text=lambda row: "2 minutos",
+            heraldo_is_test=lambda: False,
+            HERALDO_TEST_REASON="Prueba funcional autorizada de El Heraldo Test.",
             datetime=datetime, timezone=timezone, traceback=traceback,
         )
         exec(isolated_card(), self.ns)

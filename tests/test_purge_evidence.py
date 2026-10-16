@@ -164,10 +164,16 @@ class PurgeEvidenceTests(unittest.IsolatedAsyncioTestCase):
     def test_no_ban_can_delete_without_archive(self):
         import ast
         tree = ast.parse(Path(b.__file__).read_text(encoding='utf-8'))
-        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and
-                 isinstance(n.func, ast.Attribute) and n.func.attr == 'ban']
-        self.assertGreater(len(calls), 0)
-        for call in calls:
-            values = {kw.arg: kw.value for kw in call.keywords}
-            self.assertIsInstance(values['delete_message_seconds'], ast.Constant)
-            self.assertEqual(values['delete_message_seconds'].value, 0)
+        wrapper = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef)
+                       and n.name == "heraldo_ban")
+        calls = [n for n in ast.walk(wrapper) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Call)
+                 and isinstance(n.func.func, ast.Name)
+                 and n.func.func.id == "getattr"
+                 and len(n.func.args) == 2
+                 and isinstance(n.func.args[1], ast.Constant)
+                 and n.func.args[1].value == "ban"]
+        self.assertEqual(len(calls), 1)
+        options = {kw.arg: kw.value for kw in calls[0].keywords}
+        self.assertIsInstance(options["delete_message_seconds"], ast.Constant)
+        self.assertEqual(options["delete_message_seconds"].value, 0)

@@ -13621,7 +13621,7 @@ async def heraldo_ban(member: discord.Member, *, reason: str,
     effective = moderation_effective_ban_minutes(member.guild.id, duration_minutes)
     if heraldo_is_test():
         await send_test_removal_notice(member, "BAN", effective)
-    await getattr(member, "ban")(reason=reason, delete_message_seconds=delete_message_seconds)
+    await getattr(member, "ban")(reason=reason, delete_message_seconds=0)
     # Otras rutas crean su propio caso. No duplicar expedientes.
     if record_case and effective is not None:
         try:
@@ -14015,8 +14015,6 @@ async def execute_moderation_report_action(
     purge_minutes = int(purge_minutes) if purge_minutes else None
     duration_minutes = rule.get("duration_minutes")
     duration_minutes = int(duration_minutes) if duration_minutes else None
-    if action == "ban":
-        duration_minutes = moderation_effective_ban_minutes(guild.id, duration_minutes)
     reason = f"Reporte automático: {rule.get('label', 'reporte')} · {reporter_count} reporte(s) distintos"
 
     protection = condemnation_protection_reason(target)
@@ -14076,6 +14074,8 @@ async def execute_moderation_report_action(
         return False, "El Heraldo no puede actuar sobre un miembro con un rol igual o superior."
     if action == "timeout" and not duration_minutes:
         return False, "La regla de aislamiento no tiene una duración válida."
+    if action == "ban":
+        duration_minutes = moderation_effective_ban_minutes(guild.id, duration_minutes)
 
     # No eliminar mensajes antes de comprobar la acción ni antes de archivar
     # la evidencia necesaria para una condena.
