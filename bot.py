@@ -18514,6 +18514,279 @@ def fusion_clean_name(name: str) -> str:
     return name[:100] or "canal-fusionado"
 
 
+def fusion_preview_embed(
+    origen: discord.TextChannel,
+    destino: discord.TextChannel,
+    final_name: str,
+    eliminar_origen: bool,
+    message_count: int,
+) -> discord.Embed:
+    """Vista previa fiel al orden y a las condiciones reales del migrador."""
+    rename = final_name != destino.name
+    sequence = [
+        f"**1. Comprobación.** Verificar permisos y que siguen siendo **{message_count:,}** mensajes en el origen.",
+        (f"**2. Nombre del destino.** Cambiar `#{destino.name}` a `#{final_name}` antes de publicar."
+         if rename else "**2. Nombre del destino.** Conservar el nombre actual."),
+        f"**3. Copia de mensajes.** Leer {origen.mention} de más antiguo a más reciente y "
+        f"recrear sus **{message_count:,}** mensajes al final de {destino.mention}.",
+        "**4. Archivos y resultados.** Volver a subir los adjuntos cuando sea posible; "
+        "si no, dejar enlaces de respaldo y registrar los errores.",
+        ("**5. Canal origen.** Eliminarlo solo si todos los mensajes y adjuntos se migran "
+         "correctamente y no aparecen mensajes nuevos."
+         if eliminar_origen else "**5. Canal origen.** Conservarlo sin eliminar mensajes."),
+    ]
+    embed = discord.Embed(
+        title="Confirmación de fusión de canales",
+        description=(
+            "**Ruta de la migración**\n"
+            f"{fusion_channel_label(origen)} **→** {fusion_channel_label(destino)}\n\n"
+            "Los mensajes no se trasladan de forma nativa: El Heraldo los recrea "
+            "en el destino. Los mensajes que ya existen allí **se conservan**."
+        ),
+        color=discord.Color.orange(),
+    )
+    embed.add_field(name="Mensajes del origen", value=f"**{message_count:,}** (recuento actual)", inline=True)
+    embed.add_field(name="Nombre final del destino", value=f"`#{final_name}`", inline=True)
+    embed.add_field(
+        name="Canal origen al terminar",
+        value="Eliminar, solo si se completa con seguridad" if eliminar_origen else "Conservar",
+        inline=True,
+    )
+    embed.add_field(name="Orden de ejecución", value="\n".join(sequence), inline=False)
+    embed.add_field(
+        name="Importante",
+        value=(
+            "Los mensajes recreados aparecerán como publicaciones de El Heraldo; "
+            "en los mensajes de texto se muestra el autor y la fecha originales. "
+            "Algunos archivos pueden necesitar enlaces de respaldo y las respuestas "
+            "no mantienen sus enlaces originales. Si cambia el recuento o faltan permisos, "
+            "se detendrá la operación antes de modificar los canales."
+        ),
+        inline=False,
+    )
+    embed.set_footer(text="Volver permite modificar el borrador. Solo quien inició el comando puede confirmar.")
+    return embed
+
+
+class FusionCustomNameModal(discord.ui.Modal, title="Nombre final del canal"):
+    final_name = discord.ui.TextInput(
+        label="Nombre personalizado", min_length=1, max_length=100,
+        placeholder="Por ejemplo: anuncios-unificados",
+    )
+
+    def __init__(self, parent: "FusionChannelsEditView"):
+        super().__init__()
+        self.parent = parent
+        self.final_name.default = parent.custom_name or parent.destino.name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.parent.interaction_check(interaction):
+            return
+        raw = str(self.final_name).strip()
+        if not raw:
+            await interaction.response.send_message("Indique un nombre para el canal.", ephemeral=True)
+            return
+        self.parent.custom_name = fusion_clean_name(raw)
+        self.parent.name_mode = "personalizado"
+        self.parent.refresh_controls()
+        await interaction.response.edit_message(embed=self.parent.summary(), view=self.parent)
+
+
+class FusionChannelsEditView(discord.ui.View):
+    """Regreso seguro a un borrador; los controles no ejecutan la fusión."""
+    def __init__(
+        self, executor_id: int, origen: discord.TextChannel,
+        destino: discord.TextChannel, name_mode: str, custom_name: str | None,
+        eliminar_origen: bool,
+    ) -> None:
+        super().__init__(timeout=300)
+        self.executor_id = executor_id
+        self.guild_id = origen.guild.id
+        self.origen, self.destino = origen, destino
+        self.name_mode = name_mode
+        self.custom_name = custom_name
+        self.eliminar_origen = eliminar_origen
+        self.source_select = discord.ui.ChannelSelect(
+            placeholder="Canal origen: de dónde salen los mensajes",
+            channel_types=[discord.ChannelType.text], row=0,
+        )
+        self.source_select.callback = self.select_source
+        self.add_item(self.source_select)
+        self.destination_select = discord.ui.ChannelSelect(
+            placeholder="Canal destino: dónde se recrearán",
+            channel_types=[discord.ChannelType.text], row=1,
+        )
+        self.destination_select.callback = self.select_destination
+        self.add_item(self.destination_select)
+        self.name_select = discord.ui.Select(
+            placeholder="Nombre que tendrá el canal final",
+            options=[
+                discord.SelectOption(label="Mantener nombre del destino", value="destino"),
+                discord.SelectOption(label="Usar nombre del origen", value="origen"),
+                discord.SelectOption(label="Nombre personalizado", value="personalizado"),
+            ], row=2,
+        )
+        self.name_select.callback = self.select_name
+        self.add_item(self.name_select)
+        self.refresh_controls()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.executor_id
+                or not interaction.user.guild_permissions.manage_channels):
+            await interaction.response.send_message(
+                "Solo quien inició la fusión, con permiso Gestionar canales, puede editarla.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    def refresh_controls(self) -> None:
+        for selector, channel in (
+            (self.source_select, self.origen),
+            (self.destination_select, self.destino),
+        ):
+            selector.default_values = [
+                discord.SelectDefaultValue(id=channel.id, type=discord.SelectDefaultValueType.channel)
+            ]
+        for option in self.name_select.options:
+            option.default = option.value == self.name_mode
+        self.toggle_source.label = "Eliminar origen: sí" if self.eliminar_origen else "Eliminar origen: no"
+
+    def summary(self) -> discord.Embed:
+        final_name = fusion_clean_name(fusion_final_name(
+            self.origen, self.destino, self.name_mode, self.custom_name,
+        ))
+        embed = discord.Embed(
+            title="Editar fusión de canales",
+            description=(
+                "**Borrador sin guardar ni ejecutar.** Modifique los canales, el nombre final "
+                "o la conservación del origen. Al finalizar, pulse **Actualizar vista previa** "
+                "para comprobar la cantidad real de mensajes antes de confirmar."
+            ),
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="Origen → Destino", value=(
+            f"{fusion_channel_label(self.origen)}\n**↓ Se recrearán los mensajes en**\n"
+            f"{fusion_channel_label(self.destino)}"
+        ), inline=False)
+        embed.add_field(name="Nombre final", value=f"`#{final_name}`", inline=True)
+        embed.add_field(name="Origen al terminar", value=(
+            "Eliminar tras migración completa" if self.eliminar_origen else "Conservar"
+        ), inline=True)
+        embed.set_footer(text="Este editor no publica, elimina ni modifica canales.")
+        return embed
+
+    async def select_source(self, interaction: discord.Interaction) -> None:
+        values = self.source_select.values
+        channel = interaction.guild.get_channel(values[0].id) if values and interaction.guild else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Seleccione un canal de texto existente.", ephemeral=True)
+            return
+        self.origen = channel
+        self.refresh_controls()
+        await interaction.response.edit_message(embed=self.summary(), view=self)
+
+    async def select_destination(self, interaction: discord.Interaction) -> None:
+        values = self.destination_select.values
+        channel = interaction.guild.get_channel(values[0].id) if values and interaction.guild else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Seleccione un canal de texto existente.", ephemeral=True)
+            return
+        self.destino = channel
+        self.refresh_controls()
+        await interaction.response.edit_message(embed=self.summary(), view=self)
+
+    async def select_name(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {"destino", "origen", "personalizado"}:
+            await interaction.response.send_message("Seleccione un nombre final válido.", ephemeral=True)
+            return
+        if values[0] == "personalizado" and not self.custom_name:
+            await interaction.response.send_modal(FusionCustomNameModal(self))
+            return
+        self.name_mode = values[0]
+        self.refresh_controls()
+        await interaction.response.edit_message(embed=self.summary(), view=self)
+
+    @discord.ui.button(label="Nombre personalizado", style=discord.ButtonStyle.primary, row=3)
+    async def edit_name(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(FusionCustomNameModal(self))
+
+    @discord.ui.button(label="Eliminar origen: no", style=discord.ButtonStyle.primary, row=3)
+    async def toggle_source(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.eliminar_origen = not self.eliminar_origen
+        self.refresh_controls()
+        await interaction.response.edit_message(embed=self.summary(), view=self)
+
+    @discord.ui.button(label="Actualizar vista previa", style=discord.ButtonStyle.primary, row=4)
+    async def preview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = interaction.guild
+        origen = guild.get_channel(self.origen.id) if guild else None
+        destino = guild.get_channel(self.destino.id) if guild else None
+        if not isinstance(origen, discord.TextChannel) or not isinstance(destino, discord.TextChannel):
+            await interaction.response.send_message("Alguno de los canales ya no existe.", ephemeral=True)
+            return
+        if origen.id == destino.id:
+            await interaction.response.send_message("Origen y destino deben ser diferentes.", ephemeral=True)
+            return
+        me = guild.me
+        if me is None:
+            await interaction.response.send_message("No fue posible comprobar los permisos de El Heraldo.", ephemeral=True)
+            return
+        src_perms = origen.permissions_for(me)
+        dst_perms = destino.permissions_for(me)
+        if not (src_perms.view_channel and src_perms.read_message_history
+                and dst_perms.view_channel and dst_perms.send_messages and dst_perms.embed_links):
+            await interaction.response.send_message(
+                "Faltan permisos para leer el origen o publicar en el destino.", ephemeral=True,
+            )
+            return
+        final_name = fusion_clean_name(fusion_final_name(
+            origen, destino, self.name_mode, self.custom_name,
+        ))
+        if (final_name != destino.name or self.eliminar_origen) and not dst_perms.manage_channels:
+            # Borrar el origen usa los permisos del origen; renombrar el destino, los suyos.
+            if final_name != destino.name:
+                await interaction.response.send_message(
+                    "El Heraldo necesita Gestionar canales en el destino para cambiar el nombre.", ephemeral=True,
+                )
+                return
+        if self.eliminar_origen and not src_perms.manage_channels:
+            await interaction.response.send_message(
+                "El Heraldo necesita Gestionar canales en el origen para poder eliminarlo.", ephemeral=True,
+            )
+            return
+        await interaction.response.defer()
+        try:
+            messages = await collect_fusion_messages(origen)
+        except discord.HTTPException:
+            await interaction.followup.send("No fue posible comprobar los mensajes del origen.", ephemeral=True)
+            return
+        if not messages or len(messages) >= FUSION_MAX_MESSAGES:
+            await interaction.followup.send(
+                "No se puede preparar esta fusión: el origen está vacío o alcanza el límite de mensajes.",
+                ephemeral=True,
+            )
+            return
+        self.stop()
+        new_view = FusionChannelsView(
+            self.executor_id, origen, destino, final_name, self.eliminar_origen,
+            len(messages), self.name_mode, self.custom_name,
+        )
+        await interaction.edit_original_response(embed=fusion_preview_embed(
+            origen, destino, final_name, self.eliminar_origen, len(messages)
+        ), view=new_view)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=4)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content="Fusión cancelada. No se modificó ningún canal.",
+            embed=None, view=None,
+        )
+
+
 class FusionChannelsView(discord.ui.View):
     def __init__(
         self,
@@ -18523,8 +18796,13 @@ class FusionChannelsView(discord.ui.View):
         final_name: str,
         eliminar_origen: bool,
         message_count: int,
+        name_mode: str = "destino",
+        custom_name: str | None = None,
     ) -> None:
-        super().__init__(timeout=120)
+        super().__init__(timeout=300)
+        self.name_mode = name_mode
+        self.custom_name = custom_name
+        self.processing = False
         self.executor_id = executor_id
         self.origen = origen
         self.destino = destino
@@ -18533,21 +18811,28 @@ class FusionChannelsView(discord.ui.View):
         self.message_count = message_count
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.executor_id:
+        if (interaction.guild is None or interaction.guild.id != self.origen.guild.id
+                or interaction.user.id != self.executor_id
+                or not interaction.user.guild_permissions.manage_channels):
             await interaction.response.send_message(
-                "Error: Solo quien inició esta fusión puede confirmarla.", ephemeral=True
+                "Solo quien inició la fusión y conserve Gestionar canales puede confirmarla.",
+                ephemeral=True,
             )
+            return False
+        if self.processing:
+            await interaction.response.send_message("La comprobación ya está en curso.", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="Confirmar fusión", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Confirmar fusión", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.processing = True
         self.stop()
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(
-            content="Fusión confirmada. Estoy migrando los mensajes; el canal origen no se tocará hasta terminar correctamente.",
-            view=self,
+            content="Confirmación recibida. Verificando de nuevo mensajes y permisos antes de comenzar.",
+            embed=None, view=self,
         )
         asyncio.create_task(
             execute_channel_merge(
@@ -18557,15 +18842,30 @@ class FusionChannelsView(discord.ui.View):
                 self.final_name,
                 self.eliminar_origen,
                 self.message_count,
+                self.name_mode,
+                self.custom_name,
+                self.executor_id,
             )
         )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        editor = FusionChannelsEditView(
+            self.executor_id, self.origen, self.destino,
+            self.name_mode, self.custom_name, self.eliminar_origen,
+        )
+        await interaction.response.edit_message(content=None, embed=editor.summary(), view=editor)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         for child in self.children:
             child.disabled = True
-        await interaction.response.edit_message(content="Fusión cancelada. No se modificó ningún canal.", view=self)
+        await interaction.response.edit_message(
+            content="Fusión cancelada. No se modificó ningún canal.",
+            embed=None, view=self,
+        )
 
 
 async def collect_fusion_messages(channel: discord.TextChannel) -> list[discord.Message]:
@@ -18725,6 +19025,9 @@ async def execute_channel_merge(
     final_name: str,
     eliminar_origen: bool,
     expected_count: int,
+    name_mode: str = "destino",
+    custom_name: str | None = None,
+    executor_id: int | None = None,
 ) -> None:
     guild = interaction.guild
     if guild is None:
@@ -18734,6 +19037,16 @@ async def execute_channel_merge(
     # mientras el administrador tenía abierta la confirmación.
     if origen.id == destino.id:
         await interaction.followup.send("Error: La fusión fue cancelada: origen y destino son el mismo canal.", ephemeral=True)
+        return
+    if (executor_id is not None and interaction.user.id != executor_id) or not interaction.user.guild_permissions.manage_channels:
+        await interaction.followup.send(
+            "Fusión detenida: el administrador ya no dispone de autorización suficiente.",
+            ephemeral=True,
+        )
+        return
+    if (guild.get_channel(origen.id) is None or guild.get_channel(destino.id) is None
+            or origen.guild.id != guild.id or destino.guild.id != guild.id):
+        await interaction.followup.send("Fusión detenida: uno de los canales ya no está disponible.", ephemeral=True)
         return
 
     me = guild.me
@@ -18767,8 +19080,42 @@ async def execute_channel_merge(
             ephemeral=True,
         )
         return
+    if len(messages) != expected_count:
+        refreshed = FusionChannelsView(
+            interaction.user.id, origen, destino, final_name, eliminar_origen,
+            len(messages), name_mode, custom_name,
+        )
+        await interaction.followup.send(
+            f"El origen cambió de **{expected_count:,}** a **{len(messages):,}** mensajes. "
+            "No se modificaron los canales. Revise la nueva vista previa para confirmar otra vez.",
+            embed=fusion_preview_embed(origen, destino, final_name, eliminar_origen, len(messages)),
+            view=refreshed, ephemeral=True,
+        )
+        return
+    if not interaction.user.guild_permissions.manage_channels:
+        await interaction.followup.send(
+            "Fusión detenida: se revocó Gestionar canales antes de comenzar.", ephemeral=True,
+        )
+        return
+    # Revisar nuevamente los permisos tras descargar el historial.
+    me = guild.me
+    if me is None:
+        await interaction.followup.send("Fusión detenida: no se pudo verificar El Heraldo.", ephemeral=True)
+        return
+    src_perms = origen.permissions_for(me)
+    dest_perms = destino.permissions_for(me)
+    if not (src_perms.view_channel and src_perms.read_message_history
+            and dest_perms.view_channel and dest_perms.send_messages and dest_perms.embed_links):
+        await interaction.followup.send("Fusión detenida: se revocaron permisos necesarios.", ephemeral=True)
+        return
 
     final_name = fusion_clean_name(final_name)
+    if final_name != destino.name and not dest_perms.manage_channels:
+        await interaction.followup.send("Fusión detenida: falta Gestionar canales para renombrar el destino.", ephemeral=True)
+        return
+    if eliminar_origen and not src_perms.manage_channels:
+        await interaction.followup.send("Fusión detenida: falta Gestionar canales para eliminar el origen.", ephemeral=True)
+        return
     if final_name != destino.name:
         try:
             await destino.edit(name=final_name, reason=f"Fusión de canales solicitada por {interaction.user}")
@@ -18966,21 +19313,7 @@ async def fusionar_canales(
 
     final_name = fusion_final_name(origen, destino, nombre.value, nombre_personalizado)
     final_name = fusion_clean_name(final_name)
-    embed = discord.Embed(
-        title="Vista previa de fusión de canales",
-        description=(
-            "Revisa cuidadosamente esta operación. **Los mensajes se recrearán en el destino; Discord no permite moverlos directamente.**\n\n"
-            "El canal origen solo se eliminará si activaste esa opción y **todos** los mensajes se migran correctamente."
-        ),
-        color=discord.Color.orange(),
-    )
-    embed.add_field(name="Origen", value=fusion_channel_label(origen), inline=True)
-    embed.add_field(name="Destino", value=fusion_channel_label(destino), inline=True)
-    embed.add_field(name="Mensajes", value=f"**{len(messages):,}**", inline=True)
-    embed.add_field(name="Nombre final", value=f"`#{final_name}`", inline=True)
-    embed.add_field(name="Canal origen", value="Se eliminará si todo sale bien" if eliminar_origen else "Se conservará", inline=True)
-    embed.add_field(name="Seguridad", value="No se toca el origen hasta terminar la migración.", inline=True)
-    embed.set_footer(text="La confirmación solo puede hacerla quien ejecutó el comando.")
+    embed = fusion_preview_embed(origen, destino, final_name, eliminar_origen, len(messages))
 
     await interaction.followup.send(
         embed=embed,
@@ -18991,6 +19324,8 @@ async def fusionar_canales(
             final_name,
             eliminar_origen,
             len(messages),
+            nombre.value,
+            nombre_personalizado,
         ),
         ephemeral=True,
     )
