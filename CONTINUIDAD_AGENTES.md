@@ -1,3 +1,19 @@
+## CIERRE PREVENTIVO — 2026-10-16, auditoría de fiabilidad (estado verificado)
+
+**Rama y SHA:** `Pruebas@fa543af74cc62c73d86400b3cd220cfecfa280a2`. **`main` no modificada.** No se han ejecutado pruebas interactivas de Discord ni sanciones reales. No se ha actualizado Obsidian remoto. El archivo de continuidad se conserva en el repositorio en vez de duplicarse.
+
+**Objetivo autorizado:** auditoría prioritaria de vistas tras reinicio, permisos y jerarquías, y operaciones discord.py + SQLite incompletas, a partir de la matriz comunitaria integrada anteriormente.
+
+**Commits verificados:** `bded3bb1` (aislamiento de fallos de arranque por servidor, lectura SQLite en modo seguro y revalidación de componentes públicos tras fetch); `c518382c` (compatibilidad con tabla de acciones ausente en SQLite histórica); `cfc8ab1e` (corrección del error de sintaxis introducido en la prueba nueva); `fa543af7` (vencimiento de MUTE: no levantar aislamientos más recientes ni cerrar casos cuando Discord no confirmó la revocación). Archivos principales: `bot.py`, `tests/test_reliability_startup_roles.py`, `ESTADO_PROYECTO.md`, `DECISIONES.md`, `PRUEBAS_DISCORD.md` y este documento.
+
+**Verificaciones automáticas por SHA `fa543af7`:** GitHub Actions `python-checks` = SUCCESS. Suites offline de Python 3.11, 3.12 y 3.13 = FAILURE general (en 3.12/3.13: 356 pruebas, 2 fallos y 16 errores ya observados antes de la auditoría; no tratarlos como validados). Las **9 pruebas de `test_reliability_startup_roles.py` pasaron** en logs de Python 3.12 y 3.13, incluida la recuperación de MUTE y la verificación SQLite. Railway Test: ambos servicios con `fa543af7` = SUCCESS. El estado SUCCESS no equivale a validación de botones en Discord.
+
+**Pendientes prioritarios:** ejecutar en Heraldo's Lab pruebas de reinicio, permisos revocados a mitad de interacción, SQLite bloqueada, expiración MUTE con error HTTP, vencimiento de una sanción anterior ante una más reciente y componentes persistentes; revisar los **2 fallos y 16 errores** de las regresiones offline preexistentes, sin corregir a ciegas ni atribuirlos a este cambio; continuar auditoría de integridad discord.py+SQLite y recuperación tras fallos parciales, con protección de evidencias privadas. No fusionar ni desplegar `main` sin autorización expresa.
+
+**Trabajo sin guardar:** ninguno de este cierre; no se mantuvieron ediciones locales. **Siguiente paso:** leer estado SHA actual (otros agentes pueden avanzar simultáneamente), este punto de control, `AGENTS.md` y los documentos obligatorios. Confirmar estado CI/Deploy antes de nuevas escrituras y trabajar únicamente en `Pruebas`, sin force push, nuevas ramas ni PRs temporales.
+
+---
+ 
 ## Punto de control: MUTE vencido y operaciones incompletas — 2026-10-16
 
 Adicional a la corrección `cfc8ab1e` de arranque/roles/SQLite: se identificó que `moderation_case_expiry_loop` cerraba el MUTE aunque Discord rechazase `timeout(None)`, y podía levantar otro aislamiento posterior. Se agregó `moderation_expire_mute_safely` con revisión de casos posteriores, consulta fresca de miembro y resultados expired/pending/superseded/different. No levantar restricciones en situación dudosa; registrar lo pendiente. Pruebas aisladas añadidas, CI y Discord Test por validar. main intacta.
