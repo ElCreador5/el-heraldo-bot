@@ -111,6 +111,7 @@ import contextvars
 import copy
 import io
 from collections import deque
+import hashlib
 import json
 import message_payload
 import message_components
@@ -2604,9 +2605,6 @@ async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> N
 
 
 # Conciliación conservadora: no sancionar retroactivamente roles sin fecha de origen.
-_verification_orphan_reports: dict[int, tuple[tuple[int, ...], tuple[int, ...]]] = {}
-
-
 async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
     """Examina roles no seguidos; solo rearma ingresos recientes con plazo completo nuevo."""
     unverified_id = get_sin_verificado_role_id(guild.id)
@@ -2615,6 +2613,9 @@ async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> t
     verified_id = get_verify_role_id(guild.id)
     orientation_ids = get_eval_role_ids(guild.id)
     can_rearm = bool(verify_enabled(guild.id) and verified_id and guild.get_role(verified_id))
+    # Test no puede reactivar plazos en un servidor ajeno al laboratorio autorizado.
+    if heraldo_is_test() and os.getenv("HERALDO_TEST_LAB_GUILD_ID") != str(guild.id):
+        can_rearm = False
     now = datetime.now(timezone.utc)
     rearmed: list[int] = []
     review: list[int] = []
@@ -2650,25 +2651,34 @@ async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> t
 
 @tasks.loop(minutes=30)
 async def reconcile_untracked_verifications() -> None:
-    """Auditoría de miembros, sin llamadas a expulsión, ban ni cambios de roles."""
+    """Persistir el último aviso entregado; reinicios sin cambios no generan otro."""
     for guild in bot.guilds:
         try:
             rearmed, review, inconsistent = await reconcile_untracked_verifications_for_guild(guild)
-            fingerprint = (tuple(sorted(review)), tuple(sorted(inconsistent)))
-            previous = _verification_orphan_reports.get(guild.id)
-            if rearmed or (fingerprint != ((), ()) and fingerprint != previous):
-                await log_embed(
+            # Nunca guardar identificadores visibles en el registro de avisos.
+            fingerprint = hashlib.sha256(
+                json.dumps((sorted(review), sorted(inconsistent)),
+                           separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            key = f"verification_orphan_notice:v1:{guild.id}"
+            previous = db_meta_get(key)
+            should_notify = bool(rearmed or ((review or inconsistent) and fingerprint != previous))
+            if should_notify:
+                delivered = await log_embed(
                     guild, "Verificación: pendientes sin seguimiento",
-                    f"Plazo nuevo iniciado: **{len(rearmed)}**. "
+                    f"Plazos nuevos iniciados: **{len(rearmed)}**. "
                     f"Miembros que requieren revisión manual: **{len(review)}**. "
                     f"Roles contradictorios con la verificación: **{len(inconsistent)}**. "
                     "No se expulsaron miembros ni se modificaron roles durante esta revisión. "
-                    "Los casos antiguos nunca se sancionan retroactivamente.",
+                    "Los casos antiguos no se sancionan retroactivamente.",
                     discord.Color.orange(),
                 )
-            _verification_orphan_reports[guild.id] = fingerprint
+                if delivered is not None:
+                    db_meta_set(key, fingerprint)
+            elif not review and not inconsistent and previous is not None and previous != fingerprint:
+                # Estado vacío: una reaparición posterior sí se notificará.
+                db_meta_set(key, fingerprint)
         except Exception:
-            # Errores de API/SQLite no producen sanción ni borrado de pendientes.
             print(f"Advertencia: conciliación de verificación pendiente en servidor {guild.id}.")
 
 

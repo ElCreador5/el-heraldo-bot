@@ -47,6 +47,7 @@ class VerificationReconciliationTests(unittest.IsolatedAsyncioTestCase):
             "get_verify_role_id":lambda _:41,
             "get_eval_role_ids":lambda _:{42},
             "verify_enabled":lambda _:self.enabled,
+            "heraldo_is_test":lambda:False,
             "condemnation_get":lambda gid,uid:True if uid in self.condemned else None,
             "db_get":lambda gid,uid:self.rows.get((gid,uid)),
             "db_set_verify_pending":self.enroll
