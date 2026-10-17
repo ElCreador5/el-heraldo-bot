@@ -1,3 +1,7 @@
+## Verificación: evitar expulsiones retroactivas por estado huérfano — 2026-10-17
+
+Para miembros con rol Sin Verificar sin temporizador SQLite (p. ej., después de desconexión), no inferir que `joined_at` indica cuándo se asignó el rol. Se permite reiniciar un plazo completo solo en ingresos recientes (máximo 15 minutos, 25 por ronda) que cumplan las comprobaciones de roles, verificación activa, condena y estados actuales. Los antiguos o contradictorios requieren revisión administrativa; la auditoría no expulsa ni modifica roles. Conservar los plazos efectivos y acciones configuradas, incluidos Solo registrar, permisos y protección de duplicados. Producción se trata por separado y requiere respaldo reciente recuperable antes de cambiar Serverless o desplegar `main`.
+
 ## UX de confirmación secundaria — Honeypot — 2026-10-17
 
 Decisión del propietario: cuando `Publicar aviso` abra una confirmación secundaria, Confirmar debe ejecutar la acción validada, actualizar el embed de la pantalla original y retirar el mensaje efímero; Cancelar lo retira sin guardar. La interacción se reconoce inmediatamente para evitar timeout. Frente a permisos revocados, concurrencia, cambios obsoletos, fallos parciales o errores de Discord nunca informar un éxito no comprobado. Se aplica en esta etapa a la publicación de avisos de Honeypot, conservando el flujo de guardado explícito y evitando cambios extensivos al resto de `/setup`.
