@@ -5231,15 +5231,132 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotSubView):
         await self._stage(interaction)
 
 
+def hp_notice_snapshot(guild_id: int) -> tuple:
+    """Estado visible del aviso; permite invalidar confirmaciones obsoletas."""
+    return (
+        hp_warning_enabled(guild_id),
+        hp_warning_style(guild_id),
+        hp_warning_text(guild_id),
+        tuple(sorted(hp_warning_custom(guild_id).items())),
+    )
+
+
+class HoneypotPublishWarningConfirmView(discord.ui.View):
+    """Publicar/actualizar avisos guardados, nunca un borrador no confirmado."""
+
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.original_traps = set(hp_traps(guild_id))
+        self.original_notice = hp_notice_snapshot(guild_id)
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Confirmar publicación", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message(
+                "Esta confirmación ya se resolvió.", ephemeral=True,
+            )
+            return
+        guild = interaction.guild
+        if (
+            guild is None or guild.id != self.guild_id
+            or set(hp_traps(self.guild_id)) != self.original_traps
+            or hp_notice_snapshot(self.guild_id) != self.original_notice
+        ):
+            await interaction.response.send_message(
+                "La configuración del aviso o los canales cambió. Abra de nuevo el panel.",
+                ephemeral=True,
+            )
+            return
+        if not self.original_traps:
+            await interaction.response.send_message(
+                "No existen canales trampa registrados. Añada uno antes de publicar.",
+                ephemeral=True,
+            )
+            return
+        me = guild.me
+        for channel_id in sorted(self.original_traps):
+            channel = guild.get_channel(channel_id)
+            if not isinstance(channel, discord.TextChannel) or me is None:
+                await interaction.response.send_message(
+                    "Uno de los canales trampa ya no está disponible. No se publicó el aviso.",
+                    ephemeral=True,
+                )
+                return
+            perms = channel.permissions_for(me)
+            if not all(
+                getattr(perms, name, False)
+                for name in ("view_channel", "send_messages", "manage_messages",
+                             "read_message_history", "embed_links")
+            ):
+                await interaction.response.send_message(
+                    f"Faltan permisos para publicar y fijar avisos en {channel.mention}. "
+                    "No se publicó el aviso.", ephemeral=True,
+                )
+                return
+        self.finished = True
+        self.stop()
+        await interaction.response.defer(ephemeral=True)
+        if not hp_warning_enabled(self.guild_id):
+            hp_setting_set(self.guild_id, "honeypot_warning_enabled", "1")
+        try:
+            errors = await hp_sync_all_warnings(guild)
+        except Exception as exc:
+            # La publicación pudo ser parcial; no afirmar que todo terminó.
+            print(f"Honeypot: sincronización de aviso interrumpida ({type(exc).__name__}).")
+            await interaction.followup.send(
+                "La sincronización del aviso se interrumpió. Revise los canales trampa "
+                "y los registros antes de reintentar.", ephemeral=True,
+            )
+            return
+        if errors:
+            await interaction.followup.send(
+                "El aviso se actualizó parcialmente. Revise los canales indicados:\n"
+                + "\n".join(f"• {error}" for error in errors[:8]),
+                ephemeral=True,
+            )
+            return
+        await interaction.followup.send(
+            f"Aviso publicado o actualizado en {len(self.original_traps)} "
+            "canal(es) trampa. Los avisos existentes se actualizaron sin duplicarlos.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.response.send_message(
+                "Esta confirmación ya se resolvió.", ephemeral=True,
+            )
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content="Publicación cancelada. No se hicieron cambios.", view=None,
+        )
+
+
 class HeraldoHoneypotNoticeView(HeraldoHoneypotSubView):
     def _embed(self, guild: discord.Guild) -> discord.Embed:
+        traps = hp_traps(guild.id)
+        enabled = hp_warning_enabled(guild.id)
         return discord.Embed(
             title="Honeypot — Configurar aviso",
             description=(
-                "El aviso se publica en los canales trampa.\n\n"
-                "**Texto del aviso:** editar el mensaje fijado.\n"
-                "**Diseño del aviso:** personalizar su título, imagen y apariencia.\n\n"
-                "Cada edición solicita su propia confirmación antes de guardarse."
+                f"**Aviso:** {'Activado' if enabled else 'Desactivado'}\n"
+                f"**Canales trampa:** {len(traps)}\n\n"
+                "Edite el texto o diseño con confirmación independiente. "
+                "**Publicar aviso** publicará o actualizará el aviso guardado "
+                "en los canales trampa tras su confirmación."
             ), color=discord.Color.blurple(),
         )
 
@@ -5250,6 +5367,33 @@ class HeraldoHoneypotNoticeView(HeraldoHoneypotSubView):
     @discord.ui.button(label="Editar diseño", style=discord.ButtonStyle.primary, row=0)
     async def visual_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningEmbedModal(self.parent.guild_id))
+
+    @discord.ui.button(label="Publicar aviso", style=discord.ButtonStyle.success, row=1)
+    async def publish_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.parent._pending_lines(interaction.guild):
+            await interaction.response.send_message(
+                "Hay cambios pendientes en Honeypot. Guárdelos o descártelos "
+                "antes de publicar el aviso.", ephemeral=True,
+            )
+            return
+        if not hp_traps(self.parent.guild_id):
+            await interaction.response.send_message(
+                "Añada primero un canal trampa desde Honeypot.", ephemeral=True,
+            )
+            return
+        initially_disabled = not hp_warning_enabled(self.parent.guild_id)
+        await interaction.response.send_message(
+            "Confirme la publicación del aviso guardado en todos los canales trampa. "
+            "Si ya existe, se actualizará sin duplicarlo. "
+            + (
+                "El aviso está desactivado; al confirmar también se activará."
+                if initially_disabled else "No se modificarán los demás ajustes de Honeypot."
+            ),
+            view=HoneypotPublishWarningConfirmView(
+                self.parent.guild_id, self.parent.owner_id,
+            ),
+            ephemeral=True,
+        )
 
 
 class HeraldoHoneypotDetailsView(HeraldoHoneypotSubView):
