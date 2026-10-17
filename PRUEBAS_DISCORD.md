@@ -1,3 +1,7 @@
+## Honeypot sin retención de evidencias — comprobaciones cerradas (2026-10-17)
+
+**GitHub Actions:** commit de código `8816b319`, run `39062591876` SUCCESS en Python 3.11, 3.12 y 3.13; run de Mensajes `39062591851` SUCCESS. Fallo inicial detectado en run `39062406007` (duplicado aún archivaba pruebas) y una vía con límite de cantidad corregidos por `8816b319`. Nueva suite `tests/test_honeypot_no_evidence.py` y pruebas de aislamiento/expulsión actualizadas. **Railway Test:** worker y cron, código `8816b319`, estado SUCCESS. **DISCORD REAL: NO REALIZADO**: pendiente aceptación en Heraldo's Lab con miembros ficticios autorizados. No se alteró main; no afirmar equivalencia entre CI y prueba interactiva.
+
 ## Honeypot: exclusión de evidencias por origen — 2026-10-17
 
 Regresiones añadidas `tests/test_honeypot_no_evidence.py`: sólo autor detectado y mismo servidor, límites temporales, permisos revocados, concurrencia, purga en varios canales sin eliminar ajenos, no escritura de contenido, conservación del archivo para moderación ajena y propagación del origen. Actualizadas pruebas de aislamiento y expulsión. **Pruebas automáticas remotas y Discord real: PENDIENTES** al preparar el commit. En Heraldo's Lab validar expulsión de cuenta de prueba y búsqueda sólo de sus mensajes en diferentes canales; aislamiento y condena sin archivo pero con expediente; sanción manual sí conserva evidencia; comprobar roles, falsas capturas, reinicios y canales sin permisos. Nunca usar producción.
