@@ -1,3 +1,15 @@
+## Auditoría y preparación H-03 de producción — 2026-10-17
+
+**Estado comprobado, sin activación productiva:** `main@c6a5c1642d84b776e522473d62cf92c60e018cb3`; base actual de `Pruebas@13b08382e16880d432b486082c1525a36946093a`. Railway producción Online/SUCCESS, despliegue `b2426f15-4826-4e22-9cd1-90ff3573d41b`, volumen de 500 MB montado según el plano de control. Solo DB_PATH, DISCORD_TOKEN y MESSAGE_CONTENT_INTENT configuradas; H-03 sin credenciales, clave, cuota ni activación. El cron `15 6 * * *` pertenece exclusivamente a Railway Test y respalda datos sintéticos.
+
+**Supabase consultado hoy:** bucket privado; una generación productiva de 100609 bytes creada el 2026-10-13 22:09:20 UTC, cuatro generaciones Lab, última Lab el 2026-10-16 06:18:09 UTC. Presencia externa confirmada; descarga/descifrado/restauración de la copia real NO repetidos en esta sesión. Recuperación independiente de Bitwarden sigue sin verificar según documentación; no se accedió ni se movió la clave. Se respeta el bloqueo solicitado por el propietario.
+
+**Código candidato destinado a Pruebas, no integrado:** H-03 amplía `run_once` con propósito preupdate e ID único por actualización, manifiesto cifrado que liga origen/candidato, recibo distinto del diario, bloqueo común y comprobación de montaje real. `preupdate_gate.py` vuelve a descargar/validar/restaurar, exige antigüedad máxima de 15 minutos desde inicio y consume una autorización durable antes de invocar un controlador confiable; errores y resultados inciertos bloquean. Es una primitiva preparada, NO una barrera obligatoria ya conectada a GitHub/Railway.
+
+**Verificación local final:** 482 casos de tests/ + 39 raíz = **521 aprobados** en Python 3.12, incluidos 22 nuevos; SQLite sintética y AES-GCM real, HTTP y publicación simulados. Compilación, dependencias y diff correctos. CI del commit: consultar PR. Discord real: no realizado; ningún segundo bot iniciado.
+
+**Pendientes para activar:** recuperación desde segunda copia independiente de la clave; ejecutor autenticado dentro del dueño del volumen; secretos productivos propios y RLS separada de Lab; respaldo nuevo real descargado/restaurado; controlador protegido obligatorio antes de main y de cada despliegue, sin vías directas de bypass; mantener proceso diario disponible frente a sleepApplication=true y comprobar ejecución real a las 06:15 UTC. El ruleset actual solo exige PR y python-checks; Railway checkSuites=false. No se modificaron Railway, Supabase, main ni datos. Honeypot aplazado hasta cumplir respaldos operativos. Informe: [audit/H03_PRODUCCION_2026-10-17.md](audit/H03_PRODUCCION_2026-10-17.md).
+
 ## Preparación sin despliegue y recuperación aplazada — 2026-10-14
 
 El propietario aplaza hasta noviembre de 2026 la verificación independiente de Bitwarden. Existe una nota privada importada con la clave original, pero NO se ha probado su recuperación/descifrado desde una sesión o dispositivo independiente ni la recuperación de acceso a la bóveda. No tocar la clave, no repetir la importación y no ejecutar operaciones productivas que dependan de ese requisito. Esto permite seguir preparando y verificando código con datos sintéticos.
