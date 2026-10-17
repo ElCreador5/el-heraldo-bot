@@ -132,9 +132,10 @@ class HoneypotKickPurgeSetupTests(unittest.IsolatedAsyncioTestCase):
         await selectors[0].callback(i2)
         self.assertEqual(view2.pending_timeout_minutes, 360)
         i3 = interaction()
-        i3.data = {"values": ["time:1440"]}
+        # Elegir el valor ya guardado (1 día) no genera borrador; cambiar a 3 días sí.
+        i3.data = {"values": ["time:4320"]}
         await selectors[1].callback(i3)
-        self.assertEqual(view2.pending_purge_spec, ("time", 1440))
+        self.assertEqual(view2.pending_purge_spec, ("time", 4320))
 
     def test_ban_override_uses_separate_setting_from_global_moderation(self):
         with (
