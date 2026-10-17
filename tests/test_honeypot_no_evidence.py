@@ -105,6 +105,21 @@ class HoneypotWithoutEvidenceTests(unittest.IsolatedAsyncioTestCase):
         preserve.assert_not_awaited()
         standard_delete.assert_not_awaited()
 
+    async def test_count_limited_honeypot_purge_uses_origin_and_does_not_archive(self):
+        with (
+            patch.object(b, "purge_targets", new=AsyncMock(return_value=[self.channel])),
+            patch.object(b, "_collect_user_messages", new=AsyncMock(return_value=[300])),
+            patch.object(b, "delete_with_evidence", new=AsyncMock()) as archive_delete,
+            patch.object(b.evidence_archive, "preserve", new=AsyncMock()) as preserve,
+        ):
+            result = await b.purge_user_messages(
+                self.guild, 20, limit=1, purge_origin="honeypot",
+            )
+        self.assertEqual((result.deleted, result.failed), (1, 0))
+        self.message.delete.assert_awaited_once()
+        archive_delete.assert_not_awaited()
+        preserve.assert_not_awaited()
+
     async def test_kick_and_timeout_propagate_honeypot_origin(self):
         member = NS(id=20, guild=self.guild, mention="<@20>")
         with (

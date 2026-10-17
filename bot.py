@@ -15736,7 +15736,7 @@ async def purge_user_messages(
         for message_id, ch in pairs:
             by_channel.setdefault(ch.id, (ch, []))[1].append(message_id)
         for ch, ids in by_channel.values():
-            d, f = await _delete_ids(ch, ids)
+            d, f = await _delete_ids(ch, ids, **delete_kwargs)
             result.deleted += d
             result.failed += f
     return result
@@ -17617,7 +17617,7 @@ async def honeypot_listener(message: discord.Message) -> None:
     busy_key = (message.guild.id, member.id)
     if busy_key in _hp_busy:
         try:
-            await delete_with_evidence(message.channel, message.id)
+            await delete_honeypot_message(message.channel, message.id, member.id)
         except discord.HTTPException:
             pass
         return
