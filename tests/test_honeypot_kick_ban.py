@@ -134,6 +134,7 @@ class HoneypotRemovalActionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(b, "heraldo_kick", new=AsyncMock()) as kick,
             patch.object(b, "heraldo_ban", new=AsyncMock()) as ban,
+            patch.object(b, "hp_start_kick_purge", return_value="purga solicitada en segundo plano (1 d)") as purge,
             patch.object(b, "moderation_case_create", return_value=7) as record,
             patch.object(b, "moderation_case_code", return_value="XY8ZD72"),
         ):
@@ -143,6 +144,8 @@ class HoneypotRemovalActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("XY8ZD72", note)
         kick.assert_awaited_once_with(member, reason="Honeypot: escribió en un canal trampa")
         ban.assert_not_awaited()
+        purge.assert_called_once_with(member)
+        self.assertIn("purga solicitada", note)
         args, opts = record.call_args
         self.assertEqual(args[:3], (901, "KICK", 75))
         self.assertIsNone(opts["author_id"])
@@ -202,12 +205,14 @@ class HoneypotRemovalActionTests(unittest.IsolatedAsyncioTestCase):
         )
         with (
             patch.object(b, "heraldo_kick", new=AsyncMock(side_effect=exc)) as kick,
+            patch.object(b, "hp_start_kick_purge") as purge,
             patch.object(b, "moderation_case_create") as record,
         ):
             ok, note = await b.hp_punish(member, "kick", 202)
         self.assertFalse(ok)
         self.assertIn("Discord", note)
         kick.assert_awaited_once()
+        purge.assert_not_called()
         record.assert_not_called()
 
     async def test_case_failure_does_not_retry_sanction_and_is_reported(self):

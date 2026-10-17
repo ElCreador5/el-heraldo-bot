@@ -4674,6 +4674,14 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_enabled: bool | None = None
         self.pending_paused: bool | None = None
         self.pending_action: str | None = None
+        self.pending_kick_purge_minutes: int | None = None
+        self.pending_ban_minutes: int | None = None
+        self.pending_timeout_minutes: int | None = None
+        self.pending_purge_spec: tuple[str, int] | None = None
+        self.original_kick_purge_minutes = hp_kick_purge_minutes(guild_id)
+        self.original_ban_minutes = hp_ban_duration_minutes(guild_id)
+        self.original_timeout_minutes = hp_timeout_minutes(guild_id)
+        self.original_purge_spec = hp_purge_spec(guild_id)
         self.original_enabled = honeypot_enabled(guild_id)
         self.original_paused = honeypot_paused(guild_id)
         self.original_action = hp_action(guild_id)
@@ -4722,6 +4730,17 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             changes.append("Protección: pausar" if self.pending_paused else "Protección: reanudar")
         if self.pending_action is not None:
             changes.append(f"Acción: {HONEYPOT_ACTION_LABELS.get(self.pending_action, self.pending_action)}")
+        if self.pending_kick_purge_minutes is not None:
+            changes.append(f"Purga al expulsar: últimos {format_duration(self.pending_kick_purge_minutes)}")
+        if self.pending_timeout_minutes is not None:
+            changes.append(f"Duración de aislamiento: {format_duration(self.pending_timeout_minutes)}")
+        if self.pending_purge_spec is not None:
+            changes.append(f"Purga del castigo: {format_purge_spec(*self.pending_purge_spec)}")
+        if self.pending_ban_minutes is not None:
+            changes.append(
+                f"Duración del baneo Honeypot: "
+                f"{format_duration(self.pending_ban_minutes) if self.pending_ban_minutes else 'Permanente'}"
+            )
         return changes
 
     def _embed(self, guild: discord.Guild) -> discord.Embed:
@@ -4869,6 +4888,10 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if (honeypot_enabled(self.guild_id) != self.original_enabled
                 or honeypot_paused(self.guild_id) != self.original_paused
                 or hp_action(self.guild_id) != self.original_action
+                or hp_kick_purge_minutes(self.guild_id) != self.original_kick_purge_minutes
+                or hp_ban_duration_minutes(self.guild_id) != self.original_ban_minutes
+                or hp_timeout_minutes(self.guild_id) != self.original_timeout_minutes
+                or hp_purge_spec(self.guild_id) != self.original_purge_spec
                 or set(hp_traps(self.guild_id)) != self.original_traps):
             await interaction.response.send_message(
                 "La configuración cambió desde que abrió este panel. Vuelva a abrirlo antes de guardar.",
@@ -4933,7 +4956,24 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             hp_setting_set(self.guild_id, "honeypot_paused", "1" if self.pending_paused else "0")
         if self.pending_action is not None:
             hp_setting_set(self.guild_id, "honeypot_action", hp_action_storage(self.pending_action))
+        if self.pending_kick_purge_minutes is not None:
+            hp_setting_set(
+                self.guild_id, "honeypot_kick_purge_minutes", str(self.pending_kick_purge_minutes),
+            )
+        if self.pending_ban_minutes is not None:
+            hp_setting_set(self.guild_id, "honeypot_ban_minutes", str(self.pending_ban_minutes))
+        if self.pending_timeout_minutes is not None:
+            hp_setting_set(self.guild_id, "honeypot_timeout_minutes", str(self.pending_timeout_minutes))
+        if self.pending_purge_spec is not None:
+            kind, value = self.pending_purge_spec
+            hp_setting_set(self.guild_id, "honeypot_purge_spec", f"{kind}:{value}")
         self.pending_trap_id = self.pending_enabled = self.pending_paused = self.pending_action = None
+        self.pending_kick_purge_minutes = self.pending_ban_minutes = None
+        self.pending_timeout_minutes = self.pending_purge_spec = None
+        self.original_kick_purge_minutes = hp_kick_purge_minutes(self.guild_id)
+        self.original_ban_minutes = hp_ban_duration_minutes(self.guild_id)
+        self.original_timeout_minutes = hp_timeout_minutes(self.guild_id)
+        self.original_purge_spec = hp_purge_spec(self.guild_id)
         self.original_enabled = honeypot_enabled(self.guild_id)
         self.original_paused = honeypot_paused(self.guild_id)
         self.original_action = hp_action(self.guild_id)
@@ -4947,6 +4987,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_trap_id = self.pending_enabled = self.pending_paused = self.pending_action = None
+        self.pending_kick_purge_minutes = self.pending_ban_minutes = None
+        self.pending_timeout_minutes = self.pending_purge_spec = None
         self.selected_channel_id = None
         await self._refresh(interaction)
 
@@ -4977,39 +5019,50 @@ class HeraldoHoneypotSubView(discord.ui.View):
 
 
 class HeraldoHoneypotActionView(HeraldoHoneypotSubView):
+    """Acciones y parámetros configurables en /setup; solo Guardar persiste."""
+
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
         super().__init__(parent)
         current = parent.pending_action or hp_action(parent.guild_id)
         choices = [
-            ("Aplicar rol de castigo", "role", "Requiere rol manejable; aplica la purga configurada"),
-            ("Solo registrar", "log", "Sin sanción; para comprobaciones"),
-            ("Aislar temporalmente", "timeout", "Timeout con duración configurada"),
-            ("Expulsar", "kick", "Retira al miembro; no purga mensajes anteriores"),
-            ("Banear", "ban", "Impide reingresar; usa la duración de baneo configurada"),
+            ("Aplicar rol de castigo", "role", "Rol de condena y purga configurada"),
+            ("Solo registrar", "log", "No aplica sanción"),
+            ("Aislar temporalmente", "timeout", "Duración y purga editables"),
+            ("Expulsar", "kick", "Purga al menos 1 día con evidencias"),
+            ("Banear", "ban", "Duración de baneo editable"),
         ]
         selector = discord.ui.Select(
             placeholder="Seleccionar acción para las detecciones",
             options=[
-                discord.SelectOption(label=label, value=value, description=description,
-                                     default=value == current)
+                discord.SelectOption(
+                    label=label, value=value, description=description, default=value == current,
+                )
                 for label, value, description in choices
             ], row=0,
         )
         selector.callback = self.choose
         self.add_item(selector)
+        self.parameters.disabled = current == "log"
 
     def _embed(self, guild: discord.Guild) -> discord.Embed:
-        current = self.parent.pending_action or hp_action(guild.id)
+        action = self.parent.pending_action or hp_action(guild.id)
+        details = {
+            "kick": "Purga de mensajes del miembro desde las últimas 24 horas; puede ampliarse. "
+                    "Cada mensaje se conserva como evidencia antes de eliminarlo.",
+            "ban": "El baneo no realiza purga adicional; su duración puede configurarse aquí.",
+            "role": "Usa el rol de condena configurado en /setup; ajuste la purga desde este panel.",
+            "timeout": "Configure la duración del aislamiento y su purga desde este panel.",
+            "log": "Solo registra la detección, sin una sanción adicional.",
+        }
         return discord.Embed(
             title="Honeypot — Acción",
             description=(
-                f"Acción seleccionada: **{HONEYPOT_ACTION_LABELS.get(current, current)}**.\n\n"
-                "Seleccione otra acción para añadirla al borrador. La selección no sanciona "
-                "a nadie ni guarda la configuración. Confirme con Guardar cambios en el panel principal.\n\n"
-                "El rol, la purga y el aislamiento se ajustan mediante `/honeypot setup`. "
-                "El baneo utiliza la duración predeterminada de Moderation y no purga mensajes anteriores. "
-                "Expulsar y Banear requieren permisos específicos del administrador y del bot."
-            ), color=discord.Color.blurple(),
+                f"**Acción seleccionada:** {HONEYPOT_ACTION_LABELS.get(action, action)}\n"
+                f"{details[action]}\n\n"
+                "Seleccione una acción y use **Configurar medida** para ajustar sus parámetros. "
+                "Regrese al panel principal y pulse **Guardar cambios** para aplicar el borrador."
+            ),
+            color=discord.Color.blurple(),
         )
 
     async def choose(self, interaction: discord.Interaction) -> None:
@@ -5017,13 +5070,165 @@ class HeraldoHoneypotActionView(HeraldoHoneypotSubView):
         if len(values) != 1 or values[0] not in {"role", "log", "timeout", "kick", "ban"}:
             await interaction.response.send_message("Acción no válida.", ephemeral=True)
             return
+        old_action = self.parent.pending_action or hp_action(self.parent.guild_id)
+        if values[0] != old_action:
+            self.parent.pending_kick_purge_minutes = None
+            self.parent.pending_ban_minutes = None
+            self.parent.pending_timeout_minutes = None
+            self.parent.pending_purge_spec = None
         self.parent.pending_action = (
             values[0] if values[0] != hp_action(self.parent.guild_id) else None
         )
         self.parent._sync_controls()
+        updated = HeraldoHoneypotActionView(self.parent)
         await interaction.response.edit_message(
-            content=None, embed=self.parent._embed(interaction.guild), view=self.parent,
+            content=None, embed=updated._embed(interaction.guild), view=updated,
         )
+
+    @discord.ui.button(label="Configurar medida", style=discord.ButtonStyle.primary, row=1)
+    async def parameters(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoHoneypotParametersView(self.parent)
+        await interaction.response.edit_message(
+            content=None, embed=view._embed(interaction.guild), view=view,
+        )
+
+
+class HeraldoHoneypotParametersView(HeraldoHoneypotSubView):
+    """Selectores contextuales de la acción activa. Ninguno guarda automáticamente."""
+
+    def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
+        super().__init__(parent)
+        self.action = parent.pending_action or hp_action(parent.guild_id)
+        if self.action == "kick":
+            choices = [(v, f"{format_duration(v)}") for v in (1440, 2880, 4320, 10080, 20160, 43200)]
+            selected = parent.pending_kick_purge_minutes or hp_kick_purge_minutes(parent.guild_id)
+            self._add_duration_selector(choices, selected, self.select_kick_purge, "Purga del expulsado", 0)
+        elif self.action == "ban":
+            selected = (
+                parent.pending_ban_minutes if parent.pending_ban_minutes is not None
+                else (hp_ban_duration_minutes(parent.guild_id) or 0)
+            )
+            choices = [(v, ("Permanente" if v == 0 else format_duration(v)))
+                       for v in (0, 5, 60, 1440, 10080, 43200)]
+            self._add_duration_selector(choices, selected, self.select_ban_duration, "Duración del baneo", 0)
+        elif self.action == "timeout":
+            selected = parent.pending_timeout_minutes or hp_timeout_minutes(parent.guild_id)
+            choices = [(v, format_duration(v)) for v in (10, 30, 60, 360, 1440, 10080, 40320)]
+            self._add_duration_selector(choices, selected, self.select_timeout, "Duración del aislamiento", 0)
+            self._add_purge_selector(1)
+        elif self.action == "role":
+            self._add_purge_selector(0)
+
+    def _add_duration_selector(self, choices, selected, callback, placeholder, row) -> None:
+        options = [
+            discord.SelectOption(label=label, value=str(minutes), default=minutes == selected)
+            for minutes, label in choices
+        ]
+        select = discord.ui.Select(placeholder=placeholder, options=options, row=row)
+        select.callback = callback
+        self.add_item(select)
+
+    def _add_purge_selector(self, row: int) -> None:
+        selected = self.parent.pending_purge_spec or hp_purge_spec(self.parent.guild_id)
+        options = [
+            discord.SelectOption(
+                label=label, value=f"{kind}:{value}", default=(kind, value) == selected,
+            )
+            for kind, value, label in [
+                ("none", 0, "Sin purga"),
+                ("time", 60, "Última hora"),
+                ("time", 360, "Últimas 6 horas"),
+                ("time", 1440, "Último día"),
+                ("time", 4320, "Últimos 3 días"),
+                ("time", 10080, "Últimos 7 días"),
+            ]
+        ]
+        select = discord.ui.Select(placeholder="Purga de la acción", options=options, row=row)
+        select.callback = self.select_purge
+        self.add_item(select)
+
+    def _embed(self, guild: discord.Guild) -> discord.Embed:
+        action = self.action
+        lines = [f"**Medida:** {HONEYPOT_ACTION_LABELS[action]}"]
+        if action == "kick":
+            minutes = self.parent.pending_kick_purge_minutes or hp_kick_purge_minutes(guild.id)
+            lines.extend([
+                f"**Purga:** últimos {format_duration(minutes)} del miembro expulsado.",
+                "Solo se borrarán mensajes con evidencias archivadas. "
+                "El resultado real de la purga se notificará en Logs.",
+            ])
+        elif action == "ban":
+            minutes = (
+                self.parent.pending_ban_minutes if self.parent.pending_ban_minutes is not None
+                else hp_ban_duration_minutes(guild.id)
+            )
+            lines.append(
+                f"**Duración:** {format_duration(minutes) if minutes else 'Permanente'}."
+            )
+            lines.append("No se aplica purga adicional al ban.")
+        elif action == "timeout":
+            minutes = self.parent.pending_timeout_minutes or hp_timeout_minutes(guild.id)
+            lines.append(f"**Duración:** {format_duration(minutes)}.")
+        elif action == "role":
+            role_id = hp_punish_role_id(guild.id)
+            lines.append(f"**Rol de castigo:** {f'<@&{role_id}>' if role_id else 'No configurado'}.")
+            lines.append("El rol se administra desde la sección de roles de /setup.")
+        if action in {"role", "timeout"}:
+            spec = self.parent.pending_purge_spec or hp_purge_spec(guild.id)
+            lines.append(f"**Purga:** {format_purge_spec(*spec)}.")
+        lines.append("Estos ajustes son un borrador hasta pulsar **Guardar cambios** en Honeypot.")
+        return discord.Embed(
+            title="Honeypot — Configurar medida",
+            description="\n".join(lines),
+            color=discord.Color.blurple(),
+        )
+
+    async def _stage(self, interaction: discord.Interaction) -> None:
+        updated = HeraldoHoneypotParametersView(self.parent)
+        await interaction.response.edit_message(
+            content=None, embed=updated._embed(interaction.guild), view=updated,
+        )
+
+    async def select_kick_purge(self, interaction: discord.Interaction) -> None:
+        value = int(interaction.data["values"][0])
+        if value not in {1440, 2880, 4320, 10080, 20160, 43200}:
+            await interaction.response.send_message("Duración de purga no válida.", ephemeral=True)
+            return
+        saved = hp_kick_purge_minutes(self.parent.guild_id)
+        self.parent.pending_kick_purge_minutes = value if value != saved else None
+        await self._stage(interaction)
+
+    async def select_timeout(self, interaction: discord.Interaction) -> None:
+        value = int(interaction.data["values"][0])
+        if value not in {10, 30, 60, 360, 1440, 10080, 40320}:
+            await interaction.response.send_message("Duración no válida.", ephemeral=True)
+            return
+        self.parent.pending_timeout_minutes = (
+            value if value != hp_timeout_minutes(self.parent.guild_id) else None
+        )
+        await self._stage(interaction)
+
+    async def select_ban_duration(self, interaction: discord.Interaction) -> None:
+        value = int(interaction.data["values"][0])
+        if value not in {0, 5, 60, 1440, 10080, 43200}:
+            await interaction.response.send_message("Duración de baneo no válida.", ephemeral=True)
+            return
+        current = hp_ban_duration_minutes(self.parent.guild_id) or 0
+        self.parent.pending_ban_minutes = value if value != current else None
+        await self._stage(interaction)
+
+    async def select_purge(self, interaction: discord.Interaction) -> None:
+        value = interaction.data["values"][0]
+        allowed = {"none:0", "time:60", "time:360", "time:1440", "time:4320", "time:10080"}
+        if value not in allowed:
+            await interaction.response.send_message("Purga no válida.", ephemeral=True)
+            return
+        kind, minutes = value.split(":")
+        spec = (kind, int(minutes))
+        self.parent.pending_purge_spec = (
+            spec if spec != hp_purge_spec(self.parent.guild_id) else None
+        )
+        await self._stage(interaction)
 
 
 class HeraldoHoneypotNoticeView(HeraldoHoneypotSubView):
@@ -14846,6 +15051,36 @@ def hp_purge_spec(guild_id: int) -> tuple[str, int]:
     return HONEYPOT_PURGE_DEFAULT
 
 
+def hp_kick_purge_minutes(guild_id: int) -> int:
+    """Purga de expulsión: un día por defecto; no se permite menos de 24 horas."""
+    raw = hp_setting_get(guild_id, "honeypot_kick_purge_minutes")
+    try:
+        value = int(raw) if raw is not None else 1440
+    except (TypeError, ValueError):
+        return 1440
+    return value if 1440 <= value <= 30 * 1440 else 1440
+
+
+def hp_ban_override_minutes(guild_id: int) -> int | None:
+    """None = configuración general; 0 = baneo permanente explícito."""
+    raw = hp_setting_get(guild_id, "honeypot_ban_minutes")
+    if raw is None:
+        return None
+    try:
+        minutes = int(raw)
+    except (ValueError, TypeError):
+        return None
+    return minutes if 0 <= minutes <= 365 * 1440 else None
+
+
+def hp_ban_duration_minutes(guild_id: int) -> int | None:
+    raw = hp_setting_get(guild_id, "honeypot_ban_minutes")
+    if raw is None:
+        return moderation_default_ban_minutes(guild_id)
+    minutes = hp_ban_override_minutes(guild_id)
+    return minutes if minutes else None
+
+
 def hp_timeout_minutes(guild_id: int) -> int:
     v = hp_setting_get(guild_id, "honeypot_timeout_minutes")
     if v is not None:
@@ -14916,9 +15151,9 @@ def hp_config_summary(guild: discord.Guild) -> str:
         lines.append(f"**Aislamiento:** {format_duration(hp_timeout_minutes(guild.id))}")
         lines.append(f"**Purga:** {format_purge_spec(*hp_purge_spec(guild.id))}")
     elif action == "kick":
-        lines.append("**Expulsión:** sin eliminar mensajes anteriores.")
+        lines.append(f"**Purga:** mensajes de los últimos {format_duration(hp_kick_purge_minutes(guild.id))} (con evidencias).")
     elif action == "ban":
-        minutes = moderation_default_ban_minutes(guild.id)
+        minutes = hp_ban_duration_minutes(guild.id)
         lines.append(f"**Duración del baneo:** {format_duration(minutes) if minutes else 'Permanente'}")
         lines.append("**Purga adicional:** ninguna.")
     lines.append(f"**Aviso:** {'Activado' if hp_warning_enabled(guild.id) else 'Desactivado'}")
@@ -14954,9 +15189,11 @@ def hp_setup_embed(guild: discord.Guild, pending: list[str] | None = None) -> di
         measure_lines.append(f"**Duración:** {format_duration(hp_timeout_minutes(guild.id))}")
         measure_lines.append(f"**Purga:** {format_purge_spec(*hp_purge_spec(guild.id))}")
     elif action == "kick":
-        measure_lines.append("**Expulsión:** sin purgar mensajes anteriores.")
+        measure_lines.append(
+            f"**Purga:** mensajes de los últimos {format_duration(hp_kick_purge_minutes(guild.id))} (con evidencias)"
+        )
     elif action == "ban":
-        minutes = moderation_default_ban_minutes(guild.id)
+        minutes = hp_ban_duration_minutes(guild.id)
         measure_lines.append(
             f"**Duración:** {format_duration(minutes) if minutes else 'Permanente'}"
         )
@@ -15422,6 +15659,24 @@ async def _complete_condemnation_purge_log(
                 f"{requested_by} · {user.mention}\nAlcance: {scope_text}\n{purge_result_text(result)}",
                 discord.Color.green(),
             )
+
+def hp_start_kick_purge(member: discord.Member) -> str:
+    """Inicia una purga de 24 horas o más SOLO tras una expulsión confirmada.
+
+    El motor compartido archiva cada mensaje individualmente antes de borrarlo;
+    mensajes que no puedan archivarse quedan intactos y se registran como fallidos.
+    """
+    minutes = hp_kick_purge_minutes(member.guild.id)
+    scope = format_purge_spec("time", minutes)
+    asyncio.create_task(
+        run_purge_job(
+            member.guild, member, scope_text=scope,
+            requested_by="Honeypot · Expulsión", after=datetime.now(timezone.utc) - timedelta(minutes=minutes),
+            title="Purga de expulsión Honeypot completada",
+        )
+    )
+    return f"purga solicitada en segundo plano ({scope}; archivo de evidencias obligatorio)"
+
 
 def hp_start_purge(member: discord.Member) -> str | None:
     """Lanza la purga del honeypot en segundo plano (sin tope: puede tardar). Devuelve un texto
@@ -17020,12 +17275,20 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
             # Reutilizar las mismas rutas de Discord y el aviso previo de Test.
             # Nunca aplicar la purga de condena a una expulsión ni a un baneo.
             duration = None
+            purge_note = ""
             if action == "kick":
                 await heraldo_kick(member, reason=reason)
+                # Nunca borrar por el mecanismo de expulsión de Discord.
+                # La purga asíncrona utiliza delete_with_evidence por mensaje.
+                try:
+                    purge_note = hp_start_kick_purge(member)
+                except Exception:
+                    traceback.print_exc()
+                    purge_note = "purga no iniciada; requiere revisión"
             else:
                 duration = await heraldo_ban(
                     member, reason=reason, delete_message_seconds=0,
-                    duration_minutes=None, record_case=False,
+                    duration_minutes=hp_ban_override_minutes(guild.id), record_case=False,
                 )
             # Discord ya confirmó la medida. Un fallo posterior de SQLite
             # nunca debe volver a ejecutar kick/ban; informar la falta del caso.
@@ -17043,12 +17306,14 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
                     f"{'Expulsado' if action == 'kick' else 'Baneado'} · "
                     f"Expediente {code}"
                     + (f" · Duración {format_duration(duration)}" if duration else "")
+                    + (f" · {purge_note}" if purge_note else "")
                 )
             except Exception:
                 traceback.print_exc()
                 return True, (
                     f"{'Expulsión' if action == 'kick' else 'Baneo'} aplicado, "
                     "pero no se pudo registrar el expediente. Requiere revisión administrativa."
+                    + (f" {purge_note}" if purge_note else "")
                 )
     except discord.Forbidden:
         return False, "Faltan permisos del bot o jerarquía para aplicar la medida"
