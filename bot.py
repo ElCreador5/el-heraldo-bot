@@ -14976,14 +14976,14 @@ def condemnation_parse_role_ids(value: str) -> list[int]:
         return []
 
 
-def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
+def hp_log_trigger(member: discord.Member, channel_id: int, action: str,
                    success: bool, note: str) -> None:
     conn = db_connect()
     conn.execute(
         "INSERT INTO honeypot_triggers (guild_id, user_id, username, channel_id, content, action, success, note, "
         "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            member.guild.id, member.id, str(member), channel_id, content[:1500], action, int(success), note,
+            member.guild.id, member.id, str(member), channel_id, "", action, int(success), note,
             member.created_at.isoformat(),
             member.joined_at.isoformat() if member.joined_at else None,
             datetime.now(timezone.utc).isoformat(),
@@ -15295,7 +15295,7 @@ def hp_config_summary(guild: discord.Guild) -> str:
         lines.append(f"**Aislamiento:** {format_duration(hp_timeout_minutes(guild.id))}")
         lines.append(f"**Purga:** {format_purge_spec(*hp_purge_spec(guild.id))}")
     elif action == "kick":
-        lines.append(f"**Purga:** mensajes de los últimos {format_duration(hp_kick_purge_minutes(guild.id))} (con evidencias).")
+        lines.append(f"**Purga:** mensajes de los últimos {format_duration(hp_kick_purge_minutes(guild.id))} (sin archivo de evidencias).")
     elif action == "ban":
         minutes = hp_ban_duration_minutes(guild.id)
         lines.append(f"**Duración del baneo:** {format_duration(minutes) if minutes else 'Permanente'}")
@@ -15621,11 +15621,54 @@ async def delete_with_evidence(channel, message_id: int) -> bool:
         _evidence_delete_inflight.discard(key)
 
 
-async def _delete_ids(ch, ids: list[int]) -> tuple[int, int]:
-    """Cada id requiere su copia completa; un fallo no autoriza borrar ese mensaje."""
+async def delete_honeypot_message(
+    channel, message_id: int, expected_author_id: int,
+    *, after: datetime | None = None, before: datetime | None = None,
+) -> bool:
+    """Solo Honeypot: borrar sin archivo, verificando servidor, autor y rango vigente."""
+    guild = channel.guild
+    key = (guild.id, channel.id, message_id)
+    if key in _evidence_delete_inflight or expected_author_id <= 0 or guild.me is None:
+        return False
+    permissions = channel.permissions_for(guild.me)
+    if not (permissions.view_channel and permissions.read_message_history and permissions.manage_messages):
+        return False
+    _evidence_delete_inflight.add(key)
+    try:
+        message = await channel.fetch_message(message_id)
+        if (
+            message.guild.id != guild.id or message.channel.id != channel.id
+            or message.author.id != expected_author_id
+            or (after is not None and message.created_at <= after)
+            or (before is not None and message.created_at >= before)
+        ):
+            return False
+        await message.delete()
+        return True
+    except Exception as exc:
+        # No registrar el contenido ni los datos de un mensaje eliminado.
+        print(f"Honeypot: borrado omitido ({type(exc).__name__}).")
+        return False
+    finally:
+        _evidence_delete_inflight.discard(key)
+
+
+async def _delete_ids(
+    ch, ids: list[int], *, origin: str = "moderation",
+    expected_author_id: int | None = None,
+    after: datetime | None = None, before: datetime | None = None,
+) -> tuple[int, int]:
+    """Conservar evidencia salvo para la excepción explícita de origen Honeypot."""
     deleted = failed = 0
     for message_id in dict.fromkeys(ids):
-        if await delete_with_evidence(ch, message_id):
+        if origin == "honeypot":
+            ok = (expected_author_id is not None and
+                  await delete_honeypot_message(
+                      ch, message_id, expected_author_id, after=after, before=before,
+                  ))
+        else:
+            ok = await delete_with_evidence(ch, message_id)
+        if ok:
             deleted += 1
         else:
             failed += 1
@@ -15642,6 +15685,7 @@ async def purge_user_messages(
     limit: int | None = None,
     progress=None,
     content_type: str = "all",
+    purge_origin: str = "moderation",
 ) -> PurgeResult:
     """Borra mensajes de un usuario (aunque ya no esté en el servidor), sin tope propio:
     - sin after/before/limit -> TODOS sus mensajes
@@ -15650,6 +15694,10 @@ async def purge_user_messages(
     `progress(hechos, total, borrados)` se llama a medida que avanza."""
     result = PurgeResult()
     targets = await purge_targets(guild, channel, after)
+    delete_kwargs = (
+        {"origin": "honeypot", "expected_author_id": user_id, "after": after, "before": before}
+        if purge_origin == "honeypot" else {}
+    )
     sem = asyncio.Semaphore(4)  # 4 canales a la vez; discord.py gestiona el rate limit
     collected: list[tuple[object, list[int]]] = []
     done = 0
@@ -15665,7 +15713,7 @@ async def purge_user_messages(
                 ids = await _collect_user_messages(ch, user_id, after, before, limit, content_type)
                 result.channels_scanned += 1
                 if limit is None and ids:  # sin tope global: se borra canal a canal
-                    d, f = await _delete_ids(ch, ids)
+                    d, f = await _delete_ids(ch, ids, **delete_kwargs)
                     result.deleted += d
                     result.failed += f
                 elif ids:
@@ -15717,6 +15765,7 @@ async def run_purge_job(
     content_type: str = "all",
     title: str = "Purga completada",
     log_success: bool = True,
+    purge_origin: str = "moderation",
 ) -> PurgeResult | None:
     """Ejecuta una purga con control de duplicados; el llamador puede integrar el aviso de éxito."""
     key = (guild.id, user.id)
@@ -15726,7 +15775,8 @@ async def run_purge_job(
     try:
         result = await purge_user_messages(
             guild, user.id, channel=channel, after=after, before=before, limit=limit,
-            progress=progress, content_type=content_type
+            progress=progress, content_type=content_type,
+            **({"purge_origin": "honeypot"} if purge_origin == "honeypot" else {}),
         )
     except Exception:
         traceback.print_exc()
@@ -15757,6 +15807,7 @@ async def _complete_condemnation_purge_log(
     limit: int | None,
     base_description: str,
     log_message: discord.Message | None,
+    purge_origin: str = "moderation",
 ) -> None:
     """Actualiza el registro de condena al finalizar su purga, sin perder la auditoría."""
     try:
@@ -15764,6 +15815,7 @@ async def _complete_condemnation_purge_log(
             guild, user, scope_text=scope_text, requested_by=requested_by,
             after=after, limit=limit, title="Purga de condena completada",
             log_success=log_message is None,
+            **({"purge_origin": "honeypot"} if purge_origin == "honeypot" else {}),
         )
     except Exception:
         # run_purge_job ya deja una advertencia independiente cuando falla.
@@ -15805,10 +15857,9 @@ async def _complete_condemnation_purge_log(
             )
 
 def hp_start_kick_purge(member: discord.Member) -> str:
-    """Inicia una purga de 24 horas o más SOLO tras una expulsión confirmada.
+    """Purga solo al expulsado, desde hace 24 horas o más, sin archivo de evidencias.
 
-    El motor compartido archiva cada mensaje individualmente antes de borrarlo;
-    mensajes que no puedan archivarse quedan intactos y se registran como fallidos.
+    Verificar cada autor y mensaje; los canales sin acceso se omiten y se registran.
     """
     minutes = hp_kick_purge_minutes(member.guild.id)
     scope = format_purge_spec("time", minutes)
@@ -15816,10 +15867,10 @@ def hp_start_kick_purge(member: discord.Member) -> str:
         run_purge_job(
             member.guild, member, scope_text=scope,
             requested_by="Honeypot · Expulsión", after=datetime.now(timezone.utc) - timedelta(minutes=minutes),
-            title="Purga de expulsión Honeypot completada",
+            title="Purga de expulsión Honeypot completada", purge_origin="honeypot",
         )
     )
-    return f"purga solicitada en segundo plano ({scope}; archivo de evidencias obligatorio)"
+    return f"purga solicitada en segundo plano ({scope}; sin archivo de evidencias)"
 
 
 def hp_start_purge(member: discord.Member) -> str | None:
@@ -15835,6 +15886,7 @@ def hp_start_purge(member: discord.Member) -> str | None:
         run_purge_job(
             member.guild, member, scope_text=scope, requested_by="Honeypot",
             after=after, limit=limit, title="Purga del honeypot completada",
+            purge_origin="honeypot",
         )
     )
     return f"purga en segundo plano ({scope})"
@@ -16933,20 +16985,23 @@ async def _condemn_member_inner(
     db_clear_verify_pending(member.guild.id, member.id)
     db_zero_week_messages(member.guild.id, member.id)
 
-    evidence_url, evidence_text = await condemnation_archive_evidence(
-        member.guild,
-        member,
-        source_message_url=source_message_url,
-        reason=reason,
-        applied_by=applied_by,
-    )
+    if origin == "honeypot":
+        evidence_url, evidence_text = None, None
+    else:
+        evidence_url, evidence_text = await condemnation_archive_evidence(
+            member.guild, member, source_message_url=source_message_url,
+            reason=reason, applied_by=applied_by,
+        )
 
     # Ambos destinos reciben la misma resolución y el mismo Moderation Case.
     condemnation_when = datetime.now(timezone.utc)
     linked_case_number: int | None = None
     if send_dm or announce:
         try:
-            verified = evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            verified = (
+                None if origin == "honeypot"
+                else evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            )
             linked_case_number = moderation_case_create(
                 member.guild.id, "CONDEMN", member.id, reason,
                 duration_minutes=duration_minutes,
@@ -16986,7 +17041,7 @@ async def _condemn_member_inner(
             )
             if not thread_ready:
                 role_note += "; hilo privado pendiente: revisa los permisos del canal de condenados"
-    if purge_spec and purge_spec[0] != "none" and source_message_url and not evidence_url:
+    if origin != "honeypot" and purge_spec and purge_spec[0] != "none" and source_message_url and not evidence_url:
         role_note += "; purga cancelada: no se pudo conservar íntegramente la evidencia en un canal privado"
         purge_spec = None
     purge_scope: str | None = None
@@ -17022,6 +17077,7 @@ async def _condemn_member_inner(
                 requested_by=f"Condena ({condemnation_origin_label(origin)})",
                 after=purge_after, limit=purge_limit,
                 base_description=log_description, log_message=log_message,
+                **({"purge_origin": "honeypot"} if origin == "honeypot" else {}),
             )
         )
     return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
@@ -17467,16 +17523,10 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
 
 
 async def hp_report(guild: discord.Guild, member: discord.Member, channel: discord.abc.GuildChannel,
-                    content: str, attachments: int, action: str, success: bool, note: str) -> None:
+                    action: str, success: bool, note: str) -> None:
     log_channel = guild.get_channel(get_log_channel_id(guild.id))
     if log_channel is None:
         return
-    evidence = content.replace("`", "'")[:900] if content else ""
-    if not evidence:
-        evidence = ("(sin texto)" if attachments or os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
-                    else "(no disponible: activa MESSAGE_CONTENT_INTENT=1 y el intent en el portal)")
-    if attachments:
-        evidence += f"\n{attachments} adjunto(s)"
     embed = discord.Embed(
         title="Honeypot: miembro atrapado" if success else "Honeypot: castigo FALLIDO",
         color=discord.Color.orange() if success else discord.Color.red(),
@@ -17491,7 +17541,6 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
     )
     embed.add_field(name="Canal", value=channel.mention, inline=True)
     embed.add_field(name="Acción", value=f"{HONEYPOT_ACTION_LABELS.get(action, action)} — {note}", inline=False)
-    embed.add_field(name="Mensaje", value=evidence, inline=False)
     embed.set_thumbnail(url=member.display_avatar.url)
     role_id = hp_ping_role_id(guild.id)
     try:
@@ -17506,8 +17555,6 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
 
 async def hp_handle_trigger(message: discord.Message, member: discord.Member) -> None:
     guild = member.guild
-    content = message.content or ""
-    attachments = len(message.attachments)
     action = hp_action(guild.id)
 
     # Comprobar primero la protección antifallos: el mensaje que activa
@@ -17538,15 +17585,15 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
         )
         return
 
-    # En el resto de detecciones se mantiene el archivo obligatorio antes del borrado.
+    # Honeypot solo elimina el mensaje del autor detectado, sin archivarlo.
     try:
-        await delete_with_evidence(message.channel, message.id)
+        await delete_honeypot_message(message.channel, message.id, member.id)
     except discord.HTTPException:
         pass
 
     success, note = await hp_punish(member, action, message.channel.id)
-    hp_log_trigger(member, message.channel.id, content, action, success, note)
-    await hp_report(guild, member, message.channel, content, attachments, action, success, note)
+    hp_log_trigger(member, message.channel.id, action, success, note)
+    await hp_report(guild, member, message.channel, action, success, note)
 
 
 @bot.listen("on_message")
@@ -17563,7 +17610,7 @@ async def honeypot_listener(message: discord.Message) -> None:
     punish_id = hp_punish_role_id(message.guild.id)
     if punish_id and any(r.id == punish_id for r in member.roles):
         try:
-            await delete_with_evidence(message.channel, message.id)
+            await delete_honeypot_message(message.channel, message.id, member.id)
         except discord.HTTPException:
             pass
         return
@@ -19347,13 +19394,11 @@ async def honeypot_history(
     )
     for r in rows:
         when = discord.utils.format_dt(datetime.fromisoformat(r["triggered_at"]), "R")
-        content = (r["content"] or "(sin texto)").replace("`", "'")[:150]
         embed.add_field(
             name=f"{'Completado' if r['success'] else 'Error'} · {r['username']} · {when}",
             value=(
                 f"<#{r['channel_id']}> · {HONEYPOT_ACTION_LABELS.get(r['action'], r['action'])}\n"
-                f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}\n"
-                + content
+                f"Cuenta creada: {discord.utils.format_dt(datetime.fromisoformat(r['account_created']), 'R')}"
             ),
             inline=False,
         )
