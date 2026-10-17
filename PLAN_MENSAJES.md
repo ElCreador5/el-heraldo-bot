@@ -1,3 +1,7 @@
+## Registros compactos de miembros según referencia Sapphire — 2026-10-17
+
+En `Pruebas@cfa65386` se armonizó la vista de salida, expulsión y baneo para el módulo de Logs: líneas compactas con usuario, ID, ingreso relativo, roles, recuento de miembros y miniatura de perfil; motivo/responsable en sanciones y duración/vencimiento de BAN cuando conste realmente en expediente reciente. Se reutiliza el editor de plantillas, los canales configurables y la deduplicación de expulsiones por falta de orientación, que conserva su estado de DM y oportunidad. No se generan enlaces de Warned/Muted/Kicked/Banned sin mensajes reales de destino conocidos. CI 3.11–3.13 y Mensajes SUCCESS; prueba visual Discord Test pendiente. No fusionar a producción sin autorización y seguridad de datos.
+
 ## Corrección de color: Cancelar y Cerrar — 2026-10-16
 
 Por decisión nueva del propietario, los botones Cancelar y Cerrar usan **rojo**, no gris. También aplica «Cancelar edición». Afecta a los componentes visuales y formularios de Mensajes y /setup. Mantener Cancelar sin guardar y Cerrar solo cerrando; «Volver» y «Vista previa» siguen grises. La norma anterior de Cancelar/Cerrar grises queda reemplazada, sin alterar los demás significados de colores ni resolver la tarea independiente de simplificar Guardar/Descartar/Cancelar en las programaciones de embeds.
