@@ -1,3 +1,7 @@
+## Honeypot: pausa segura y mensaje intacto — 2026-10-17
+
+El propietario autorizó conservar el mensaje del miembro veterano que activa el umbral antifallos (3 miembros distintos del mismo servidor durante 5 minutos), suspender Honeypot en ese servidor y notificar a administradores mediante Logs, sin imponer sanción a ese evento. La comprobación se realiza antes del borrado; la ruta normal conserva el archivo de evidencia antes de eliminar y sus acciones habituales. No reconstruir mensajes eliminados antes del umbral, no notificar en canales públicos alternativos y no alterar `main` sin aprobación específica.
+
 ## Seguridad Honeypot: aislamiento multiservidor — 2026-10-16
 
 Se autoriza corregir exclusivamente los dos estados de Honeypot compartidos entre servidores y reforzar `history`/claridad de exenciones, preservando sanciones, configuración, DB y flujo existente. Antifallos: umbral 3 veteranos distintos/5 minutos **por servidor**, sin reiniciar contadores de otros servidores; candado de castigo **por servidor y miembro**. No se habilitan nuevas sanciones ni se cambia el orden de eliminación/antifallos sin decisión adicional. Pruebas aisladas primero; solo laboratorio para Discord. `main` requiere aprobación separada.

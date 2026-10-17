@@ -16658,12 +16658,8 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
     attachments = len(message.attachments)
     action = hp_action(guild.id)
 
-    # Borra el mensaje trampa (si el castigo no lo purga ya).
-    try:
-        await delete_with_evidence(message.channel, message.id)
-    except discord.HTTPException:
-        pass
-
+    # Comprobar primero la protección antifallos: el mensaje que activa
+    # la pausa debe permanecer intacto, sin borrado ni sanción.
     # Protección contra fallos: varios miembros veteranos atrapados en pocos minutos.
     now = datetime.now(timezone.utc)
     if member.joined_at and now - member.joined_at > HONEYPOT_MISFIRE_MEMBER_AGE:
@@ -16679,14 +16675,22 @@ async def hp_handle_trigger(message: discord.Message, member: discord.Member) ->
             entry for entry in _hp_veteran_hits if entry[1] != guild.id
         ]
         await log_embed(
-            guild, "⏸️ Honeypot pausado (protección contra fallos)",
-            f"{HONEYPOT_MISFIRE_THRESHOLD}+ miembros con más de 30 días en el servidor escribieron en la trampa en "
-            f"pocos minutos: probablemente apunta a un canal que tu comunidad usa de verdad.\n"
-            f"Revisa los canales trampa con `/honeypot setup` y reactiva con `/honeypot resume`. "
-            f"Este último mensaje ({member.mention}) **no** fue castigado.",
+            guild, "Honeypot pausado — protección contra fallos",
+            f"{HONEYPOT_MISFIRE_THRESHOLD} miembros con más de 30 días en el servidor escribieron "
+            f"en canales trampa durante los últimos 5 minutos. La configuración podría ser incorrecta.\n"
+            f"Se conservó el mensaje de {member.mention} en {message.channel.mention} "
+            f"y no se aplicó ninguna sanción a este miembro.\n"
+            "Revise los canales trampa con `/honeypot setup` y reactive la protección "
+            "con `/honeypot resume` tras corregir la configuración.",
             discord.Color.red(),
         )
         return
+
+    # En el resto de detecciones se mantiene el archivo obligatorio antes del borrado.
+    try:
+        await delete_with_evidence(message.channel, message.id)
+    except discord.HTTPException:
+        pass
 
     success, note = await hp_punish(member, action, message.channel.id)
     hp_log_trigger(member, message.channel.id, content, action, success, note)

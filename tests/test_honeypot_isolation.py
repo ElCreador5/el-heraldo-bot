@@ -27,7 +27,7 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
     def message(member, message_id):
         return NS(
             guild=member.guild, author=member, id=message_id,
-            channel=NS(id=member.guild.id + 1000),
+            channel=NS(id=member.guild.id + 1000, mention=f"<#{member.guild.id + 1000}>"),
             content="Mensaje de prueba", attachments=[], webhook_id=None,
         )
 
@@ -66,6 +66,77 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
             ])
             self.assertEqual(punish.await_count, 4)
             self.assertEqual(b._hp_veteran_hits, [])
+
+    async def test_threshold_message_stays_original_and_moderators_are_notified(self):
+        now = b.datetime.now(b.timezone.utc)
+        b._hp_veteran_hits.extend([
+            (now - b.timedelta(minutes=2), 101, 11),
+            (now - b.timedelta(minutes=1), 101, 12),
+            (now - b.timedelta(minutes=1), 202, 21),
+        ])
+        member = self.veteran(101, 13)
+        message = self.message(member, 1113)
+        deleted = AsyncMock(return_value=True)
+        punished = AsyncMock(return_value=(True, "Registrado"))
+        notice = AsyncMock()
+        with (
+            patch.object(b, "hp_action", return_value="role"),
+            patch.object(b, "delete_with_evidence", new=deleted),
+            patch.object(b, "hp_punish", new=punished),
+            patch.object(b, "hp_log_trigger") as history,
+            patch.object(b, "hp_report", new=AsyncMock()) as report,
+            patch.object(b, "hp_setting_set") as pause,
+            patch.object(b, "log_embed", new=notice),
+        ):
+            await b.hp_handle_trigger(message, member)
+
+        # La conservación es literal: ni siquiera se intenta borrar el original.
+        deleted.assert_not_awaited()
+        punished.assert_not_awaited()
+        history.assert_not_called()
+        report.assert_not_awaited()
+        pause.assert_called_once_with(101, "honeypot_paused", "1")
+        notice.assert_awaited_once()
+        args = notice.call_args.args
+        self.assertEqual(args[0].id, 101)
+        self.assertIn("Honeypot pausado", args[1])
+        self.assertIn("Se conservó el mensaje", args[2])
+        self.assertIn(message.channel.mention, args[2])
+        self.assertIn(member.mention, args[2])
+        self.assertEqual({(guild_id, user_id) for _, guild_id, user_id in b._hp_veteran_hits}, {(202, 21)})
+
+    async def test_normal_detection_still_archives_before_punishment(self):
+        member = self.veteran(101, 20)
+        message = self.message(member, 1120)
+        events = []
+
+        async def delete(channel, message_id):
+            events.append(("delete", channel.id, message_id))
+            return True
+
+        async def punish(target, action, channel_id):
+            events.append(("punish", target.id, action, channel_id))
+            return True, "Condena aplicada"
+
+        with (
+            patch.object(b, "hp_action", return_value="role"),
+            patch.object(b, "delete_with_evidence", new=delete),
+            patch.object(b, "hp_punish", new=punish),
+            patch.object(b, "hp_log_trigger") as history,
+            patch.object(b, "hp_report", new=AsyncMock()) as report,
+            patch.object(b, "hp_setting_set") as pause,
+            patch.object(b, "log_embed", new=AsyncMock()) as notification,
+        ):
+            await b.hp_handle_trigger(message, member)
+
+        self.assertEqual(events, [
+            ("delete", message.channel.id, message.id),
+            ("punish", member.id, "role", message.channel.id),
+        ])
+        pause.assert_not_called()
+        notification.assert_not_awaited()
+        history.assert_called_once()
+        report.assert_awaited_once()
 
     async def test_busy_lock_isolated_by_guild_and_keeps_same_guild_dedup(self):
         first = MagicMock(spec=b.discord.Member)
