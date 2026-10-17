@@ -114,6 +114,9 @@ class DepartureCardTests(unittest.TestCase):
         self.assertEqual(renderer.call_args.kwargs["category"], "members")
         self.assertEqual(renderer.call_args.kwargs["event_key"], "member_ban")
         built.set_thumbnail.assert_called_once_with(url=self.member.display_avatar.url)
+        built.set_thumbnail.reset_mock()
+        fn(self.member, "member_leave")
+        self.assertEqual(renderer.call_args.args[3], "red")
 
 
 class BanMetadataTests(unittest.TestCase):

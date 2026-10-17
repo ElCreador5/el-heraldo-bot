@@ -2369,7 +2369,7 @@ def member_departure_embed(member: discord.Member, kind: str, **kwargs) -> disco
     body = member_departure_description(member, kind, **kwargs)
     embed = build_log_template_embed(
         member.guild, title, body,
-        discord.Color.red() if kind in {"member_kick", "member_ban"} else discord.Color.dark_grey(),
+        discord.Color.red(),
         category="members", event_key=kind,
     )
     if not embed.thumbnail.url:
@@ -2467,7 +2467,7 @@ async def heraldo_member_departure(member: discord.Member) -> None:
     description = member_departure_description(member, kind, **kwargs)
     await log_embed(
         guild, labels[kind], description,
-        discord.Color.red() if kind != "member_leave" else discord.Color.dark_grey(),
+        discord.Color.red(),
         member=member,
     )
 
