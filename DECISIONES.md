@@ -1,3 +1,7 @@
+## Honeypot: excepción exclusiva de evidencias — 2026-10-17
+
+**Decisión definitiva del propietario (prevalece sobre dudas históricas):** ninguna acción causada por Honeypot archiva mensajes, adjuntos o pruebas del incidente, incluso si la acción es condenar. La eliminación del disparador y las purgas Kick/Timeout/Condena usarán una ruta especial con verificación de autor, servidor, permisos y periodo. Solo la persona que escribió en la trampa puede ser objeto de la purga; expulsión: al menos últimas 24 horas, ampliables desde /setup. Los demás módulos conservan el archivo verificable previo al borrado, los expedientes y sus garantías. Mantener registros administrativos de Honeypot sin contenido original; no borrar archivos previos. La protección antifallos por miembros antiguos, exenciones y permisos sigue activa para evitar falsos positivos.
+
 ## Honeypot: publicación explícita de avisos y protección de evidencias — 2026-10-17
 
 El propietario solicita que `/setup` concentre los ajustes y disponga de **Publicar aviso**. Se confirma la solución con acción visible en `Configurar aviso`, edición y fijado idempotente en todos los canales trampa registrados y confirmación explícita antes de ejecutar. Crear aviso activa la opción de publicación si estaba desactivada; Cancelar no modifica nada. El aviso usa configuración guardada y la confirmación se rechaza si el panel tiene cambios pendientes, faltan permisos/canales o la plantilla se ha vuelto obsoleta.

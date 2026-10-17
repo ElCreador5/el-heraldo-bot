@@ -44,7 +44,8 @@ class HoneypotKickPurgeSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(kwargs.get("limit"))
         self.assertGreaterEqual((b.datetime.now(b.timezone.utc) - kwargs["after"]).total_seconds(), 86390)
         self.assertLess((b.datetime.now(b.timezone.utc) - kwargs["after"]).total_seconds(), 86500)
-        self.assertIn("archivo de evidencias obligatorio", note)
+        self.assertEqual(kwargs["purge_origin"], "honeypot")
+        self.assertIn("sin archivo de evidencias", note)
 
     async def test_configure_measure_stages_kick_duration_in_main_draft(self):
         view = self.make_view()

@@ -36,7 +36,7 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
         paused = MagicMock()
         with (
             patch.object(b, "hp_action", return_value="role"),
-            patch.object(b, "delete_with_evidence", new=AsyncMock(return_value=True)),
+            patch.object(b, "delete_honeypot_message", new=AsyncMock(return_value=True)),
             patch.object(b, "hp_punish", new=punish),
             patch.object(b, "hp_log_trigger"),
             patch.object(b, "hp_report", new=AsyncMock()),
@@ -81,7 +81,7 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
         notice = AsyncMock()
         with (
             patch.object(b, "hp_action", return_value="role"),
-            patch.object(b, "delete_with_evidence", new=deleted),
+            patch.object(b, "delete_honeypot_message", new=deleted),
             patch.object(b, "hp_punish", new=punished),
             patch.object(b, "hp_log_trigger") as history,
             patch.object(b, "hp_report", new=AsyncMock()) as report,
@@ -105,13 +105,13 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(member.mention, args[2])
         self.assertEqual({(guild_id, user_id) for _, guild_id, user_id in b._hp_veteran_hits}, {(202, 21)})
 
-    async def test_normal_detection_still_archives_before_punishment(self):
+    async def test_normal_detection_deletes_without_archive_before_punishment(self):
         member = self.veteran(101, 20)
         message = self.message(member, 1120)
         events = []
 
-        async def delete(channel, message_id):
-            events.append(("delete", channel.id, message_id))
+        async def delete(channel, message_id, author_id):
+            events.append(("delete", channel.id, message_id, author_id))
             return True
 
         async def punish(target, action, channel_id):
@@ -120,7 +120,7 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(b, "hp_action", return_value="role"),
-            patch.object(b, "delete_with_evidence", new=delete),
+            patch.object(b, "delete_honeypot_message", new=delete),
             patch.object(b, "hp_punish", new=punish),
             patch.object(b, "hp_log_trigger") as history,
             patch.object(b, "hp_report", new=AsyncMock()) as report,
@@ -130,7 +130,7 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
             await b.hp_handle_trigger(message, member)
 
         self.assertEqual(events, [
-            ("delete", message.channel.id, message.id),
+            ("delete", message.channel.id, message.id, member.id),
             ("punish", member.id, "role", message.channel.id),
         ])
         pause.assert_not_called()
@@ -166,11 +166,11 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(b, "hp_is_exempt", return_value=False),
             patch.object(b, "hp_punish_role_id", return_value=0),
             patch.object(b, "hp_handle_trigger", new=handle),
-            patch.object(b, "delete_with_evidence", new=deleted),
+            patch.object(b, "delete_honeypot_message", new=deleted),
         ):
             await b.honeypot_listener(initial)
         self.assertEqual(seen, [(101, 500, 1101), (202, 500, 2201)])
-        deleted.assert_awaited_once_with(same_guild_duplicate.channel, 1102)
+        deleted.assert_awaited_once_with(same_guild_duplicate.channel, 1102, 500)
         self.assertEqual(b._hp_busy, set())
 
     async def test_history_rechecks_permission_before_reading_private_events(self):
@@ -195,7 +195,7 @@ class HoneypotIsolationTests(unittest.IsolatedAsyncioTestCase):
         member = self.veteran(101, 11)
         with (
             patch.object(b, "hp_action", return_value="log"),
-            patch.object(b, "delete_with_evidence", new=AsyncMock(return_value=True)),
+            patch.object(b, "delete_honeypot_message", new=AsyncMock(return_value=True)),
             patch.object(b, "hp_punish", new=AsyncMock(return_value=(True, "Registro"))),
             patch.object(b, "hp_log_trigger"),
             patch.object(b, "hp_report", new=AsyncMock()),
