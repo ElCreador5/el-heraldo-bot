@@ -255,6 +255,58 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             content="Confirmación cerrada.", embed=None, view=None,
         )
 
+    async def test_new_unsaved_draft_invalidates_confirmation(self):
+        i, traps, settings, _, get_traps, enabled, _ = self._setup()
+        with (
+            patch.object(b, "hp_traps", side_effect=get_traps),
+            patch.object(b, "hp_warning_enabled", side_effect=enabled),
+            patch.object(b, "hp_sync_all_warnings", new=AsyncMock()) as sync,
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+        ):
+            parent = b.HeraldoHoneypotSetupView(901, 10)
+            await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
+            proposal = i.followup.send.call_args.kwargs["view"]
+            parent.pending_action = "log"
+            confirm_i = interaction()
+            confirm_i.guild = i.guild
+            await proposal.confirm.callback(confirm_i)
+        sync.assert_not_awaited()
+        self.assertIn("cambios pendientes", confirm_i.followup.send.call_args.args[0])
+        confirm_i.delete_original_response.assert_awaited_once()
+
+    async def test_cancel_wins_while_confirmation_is_checking_access(self):
+        i, traps, settings, _, get_traps, enabled, _ = self._setup()
+        waiting = b.asyncio.Event()
+        released = b.asyncio.Event()
+        confirm_i = interaction()
+        confirm_i.guild = i.guild
+        cancel_i = interaction()
+        cancel_i.guild = i.guild
+
+        async def check(current, *_):
+            if current is confirm_i:
+                waiting.set()
+                await released.wait()
+            return True
+
+        with (
+            patch.object(b, "hp_traps", side_effect=get_traps),
+            patch.object(b, "hp_warning_enabled", side_effect=enabled),
+            patch.object(b, "hp_sync_all_warnings", new=AsyncMock()) as sync,
+            patch.object(b, "configuration_access", new=AsyncMock(side_effect=check)),
+        ):
+            parent = b.HeraldoHoneypotSetupView(901, 10)
+            await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
+            proposal = i.followup.send.call_args.kwargs["view"]
+            pending = b.asyncio.create_task(proposal.confirm.callback(confirm_i))
+            await waiting.wait()
+            await proposal.cancel.callback(cancel_i)
+            released.set()
+            await pending
+        sync.assert_not_awaited()
+        cancel_i.delete_original_response.assert_awaited_once()
+        self.assertIn("ya se resolvió", confirm_i.followup.send.call_args.args[0])
+
     async def test_existing_warning_is_updated_without_creating_duplicate(self):
         guild = NS(id=901)
         channel = self._channel(101)

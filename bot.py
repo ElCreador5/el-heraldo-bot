@@ -5296,6 +5296,9 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
             self.stop()
             await self._dismiss(interaction)
             return
+        if self.finished:
+            await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
+            return
 
         # No realizar llamadas con await entre la comprobación y el bloqueo del botón.
         self.finished = True
@@ -5308,6 +5311,8 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
             or hp_notice_snapshot(self.guild_id) != self.original_notice
         ):
             problem = "La configuración del aviso o los canales cambió. Abra de nuevo el panel."
+        elif self.panel_view is not None and self.panel_view.parent._pending_lines(guild):
+            problem = "Hay cambios pendientes en Honeypot. Guárdelos o descártelos antes de publicar."
         elif not self.original_traps:
             problem = "No existen canales trampa registrados. Añada uno antes de publicar."
         else:
@@ -5369,6 +5374,9 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
             await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
             return
         if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
             return
         self.finished = True
         self.stop()
