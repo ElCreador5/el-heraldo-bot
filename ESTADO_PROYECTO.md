@@ -1,3 +1,7 @@
+## Cierre automatizado — Conciliación de verificación (2026-10-17)
+
+**VERIFICADO AUTOMÁTICAMENTE en `Pruebas@8fe6ad50`:** GitHub Actions `39070454746`, Python 3.11/3.12/3.13 SUCCESS, y Mensajes `39070454752`, SUCCESS. En Python 3.11 se ejecutaron las seis pruebas nuevas `VerificationReconciliationTests` satisfactoriamente (442 casos de tests/ en ese job). Railway Test: worker y cron SUCCESS; worker registró conexión al Gateway. **DISCORD REAL: NO REALIZADA.** La producción no se modificó; la desactivación de `sleepApplication` queda pendiente de recuperación productiva reciente y revisión de rollback. Código de la solución: `22078f82`.
+
 ## Verificación: recuperación conservadora tras desconexiones — 2026-10-17
 
 **IMPLEMENTADO en `Pruebas@22078f822a6918ae29026d6ebdd3a9bb387ff67c`:** `bot.py` inicia un loop de conciliación cada 30 minutos que enumera miembros con la API de Discord y detecta rol Sin Verificar sin vencimiento persistido. Solo ingresos de menos de 15 minutos, con verificación activa, rol configurado, sin verificación previa, sanción o temporizador, reciben un plazo NUEVO; máximo 25 por ronda. Los demás se enumeran agregadamente para revisión, incluyendo contradicciones de rol; el bucle no expulsa ni cambia roles. Conserva la corrección ya vigente en Pruebas para reintentos y temporizadores simultáneos. `tests/test_verification_reconciliation.py` incluye seis casos offline, sin Gateway.
