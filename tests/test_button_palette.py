@@ -37,9 +37,12 @@ class ButtonPaletteTests(unittest.TestCase):
         for _, label, style in decorators():
             if label.startswith("Guardar") or label in {
                 "Publicar", "Confirmar acceso", "Confirmar edición",
-                "Publicar / actualizar", "Activar", "Crear canal",
+                "Publicar / actualizar", "Activar",
             }:
                 self.assertEqual(style, "success", label)
+            if label == "Crear canal":
+                # En Honeypot prepara una confirmación: azul; ejecución directa: verde.
+                self.assertIn(style, ("primary", "success"), label)
 
     def test_editor_buttons_are_blue(self):
         for _, label, style in decorators():

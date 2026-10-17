@@ -146,6 +146,8 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         view = self.make_view(traps={123: None}, enabled=True)
         notice = b.HeraldoHoneypotNoticeView(view)
         i1, i2 = interaction(), interaction()
+        i1.response.send_modal = AsyncMock()
+        i2.response.send_modal = AsyncMock()
         await notice.text_warning.callback(i1)
         await notice.visual_warning.callback(i2)
         self.assertIsInstance(i1.response.send_modal.call_args.args[0], b.HoneypotWarningModal)
