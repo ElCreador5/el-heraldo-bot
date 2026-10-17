@@ -26,6 +26,7 @@ def interaction(allowed=True, guild_id=901):
               user=NS(id=10, mention='<@10>', guild_permissions=b.discord.Permissions(manage_guild=allowed)),
               response=NS(is_done=lambda: False, send_message=AsyncMock(), edit_message=AsyncMock(), defer=AsyncMock()),
               edit_original_response=AsyncMock(),
+              delete_original_response=AsyncMock(),
               followup=NS(send=AsyncMock()))
 
 

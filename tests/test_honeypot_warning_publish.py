@@ -47,10 +47,15 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(notice.text_warning.style, b.discord.ButtonStyle.primary)
             self.assertEqual(notice.visual_warning.style, b.discord.ButtonStyle.primary)
             await notice.publish_warning.callback(i)
-            confirmation = i.response.send_message.call_args.kwargs["view"]
+            confirmation = i.followup.send.call_args.kwargs["view"]
             self.assertIsInstance(confirmation, b.HoneypotPublishWarningConfirmView)
             self.assertEqual(confirmation.confirm.style, b.discord.ButtonStyle.success)
             self.assertEqual(confirmation.cancel.style, b.discord.ButtonStyle.danger)
+            i.response.defer.assert_awaited_once()
+            self.assertTrue(i.followup.send.call_args.kwargs["ephemeral"])
+            self.assertTrue(i.followup.send.call_args.kwargs["wait"])
+            self.assertIs(confirmation.panel_interaction, i)
+            self.assertIsInstance(confirmation.panel_view, b.HeraldoHoneypotNoticeView)
 
     async def test_no_traps_does_not_offer_publication(self):
         i, traps, settings, _, get_traps, enabled, _ = self._setup(traps={})
@@ -87,8 +92,11 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
         ):
             parent = b.HeraldoHoneypotSetupView(901, 10)
             await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
-            proposal = i.response.send_message.call_args.kwargs["view"]
-            await proposal.cancel.callback(interaction())
+            proposal = i.followup.send.call_args.kwargs["view"]
+            cancelled = interaction()
+            await proposal.cancel.callback(cancelled)
+            cancelled.response.defer.assert_awaited_once()
+            cancelled.delete_original_response.assert_awaited_once()
             save.assert_not_called()
             sync.assert_not_awaited()
             self.assertFalse(settings["active"])
@@ -104,16 +112,20 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
         ):
             parent = b.HeraldoHoneypotSetupView(901, 10)
             await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
-            proposal = i.response.send_message.call_args.kwargs["view"]
+            proposal = i.followup.send.call_args.kwargs["view"]
             confirm_interaction = interaction()
             confirm_interaction.guild = i.guild
             await proposal.confirm.callback(confirm_interaction)
             save.assert_called_once_with(901, "honeypot_warning_enabled", "1")
             sync.assert_awaited_once_with(i.guild)
-            confirm_interaction.followup.send.assert_awaited_once()
+            confirm_interaction.followup.send.assert_not_awaited()
+            confirm_interaction.response.defer.assert_awaited_once()
+            confirm_interaction.delete_original_response.assert_awaited_once()
             self.assertTrue(settings["active"])
             self.assertTrue(proposal.finished)
-            self.assertIn("1 canal", confirm_interaction.followup.send.call_args.args[0])
+            i.edit_original_response.assert_awaited_once()
+            self.assertIn("1 canal", i.edit_original_response.call_args.kwargs["embed"].description)
+            self.assertEqual(i.edit_original_response.call_args.kwargs["view"], proposal.panel_view)
 
     async def test_permission_revocation_does_not_publish(self):
         i, traps, settings, resources, get_traps, enabled, _ = self._setup()
@@ -126,7 +138,8 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             proposal = b.HoneypotPublishWarningConfirmView(901, 10)
             await proposal.confirm.callback(i)
             sync.assert_not_awaited()
-            self.assertFalse(proposal.finished)
+            self.assertTrue(proposal.finished)
+            i.delete_original_response.assert_awaited_once()
 
     async def test_missing_permissions_or_channel_aborts_before_change(self):
         for no_channel in (False, True):
@@ -145,9 +158,11 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
                 ):
                     proposal = b.HoneypotPublishWarningConfirmView(901, 10)
                     await proposal.confirm.callback(i)
+                    i.delete_original_response.assert_awaited_once()
                     save.assert_not_called()
                     sync.assert_not_awaited()
-                    self.assertFalse(proposal.finished)
+                    self.assertTrue(proposal.finished)
+                    i.delete_original_response.assert_awaited_once()
 
     async def test_trap_or_template_changes_invalidate_confirmation(self):
         for changed in ("trap", "template"):
@@ -168,7 +183,8 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
                         templates["value"] = ("new notice",)
                     await proposal.confirm.callback(i)
                     sync.assert_not_awaited()
-                    self.assertIn("cambió", i.response.send_message.call_args.args[0])
+                    self.assertIn("cambió", i.followup.send.call_args.args[0])
+            i.delete_original_response.assert_awaited_once()
 
     async def test_partial_publish_not_reported_as_success(self):
         i, traps, settings, resources, get_traps, enabled, _ = self._setup()
@@ -181,8 +197,63 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             proposal = b.HoneypotPublishWarningConfirmView(901, 10)
             await proposal.confirm.callback(i)
             message = i.followup.send.call_args.args[0]
-            self.assertIn("parcialmente", message)
+            self.assertIn("No se completó", message)
             self.assertNotIn("1 canal(es)", message)
+
+    async def test_double_confirm_does_not_publish_again(self):
+        i, traps, settings, _, get_traps, enabled, _ = self._setup()
+        with (
+            patch.object(b, "hp_traps", side_effect=get_traps),
+            patch.object(b, "hp_warning_enabled", side_effect=enabled),
+            patch.object(b, "hp_sync_all_warnings", new=AsyncMock(return_value=[])) as sync,
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+        ):
+            parent = b.HeraldoHoneypotSetupView(901, 10)
+            await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
+            proposal = i.followup.send.call_args.kwargs["view"]
+            first = interaction()
+            first.guild = i.guild
+            await proposal.confirm.callback(first)
+            second = interaction()
+            second.guild = i.guild
+            await proposal.confirm.callback(second)
+        sync.assert_awaited_once()
+        first.delete_original_response.assert_awaited_once()
+        self.assertIn("ya se resolvió", second.followup.send.call_args.args[0])
+
+    async def test_publication_refresh_failure_is_reported_without_second_success(self):
+        i, traps, settings, _, get_traps, enabled, _ = self._setup()
+        error = b.discord.Forbidden(NS(status=403, reason="Forbidden"), "Acceso revocado")
+        i.edit_original_response.side_effect = error
+        with (
+            patch.object(b, "hp_traps", side_effect=get_traps),
+            patch.object(b, "hp_warning_enabled", side_effect=enabled),
+            patch.object(b, "hp_sync_all_warnings", new=AsyncMock(return_value=[])) as sync,
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+        ):
+            parent = b.HeraldoHoneypotSetupView(901, 10)
+            await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
+            proposal = i.followup.send.call_args.kwargs["view"]
+            confirm_i = interaction()
+            confirm_i.guild = i.guild
+            await proposal.confirm.callback(confirm_i)
+        sync.assert_awaited_once()
+        self.assertIn("no se pudo refrescar", confirm_i.followup.send.call_args.args[0])
+        confirm_i.delete_original_response.assert_awaited_once()
+
+    async def test_delete_ephemeral_failure_removes_buttons(self):
+        i, traps, settings, _, get_traps, enabled, _ = self._setup()
+        cancelled = interaction()
+        cancelled.delete_original_response.side_effect = b.discord.Forbidden(
+            NS(status=403, reason="Forbidden"), "Error"
+        )
+        with patch.object(b, "hp_traps", side_effect=get_traps), \
+             patch.object(b, "hp_warning_enabled", side_effect=enabled):
+            proposal = b.HoneypotPublishWarningConfirmView(901, 10)
+            await proposal.cancel.callback(cancelled)
+        cancelled.edit_original_response.assert_awaited_once_with(
+            content="Confirmación cerrada.", embed=None, view=None,
+        )
 
     async def test_existing_warning_is_updated_without_creating_duplicate(self):
         guild = NS(id=901)
