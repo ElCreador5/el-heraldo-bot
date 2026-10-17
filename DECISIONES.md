@@ -1,3 +1,7 @@
+## UX de confirmación secundaria — Honeypot — 2026-10-17
+
+Decisión del propietario: cuando `Publicar aviso` abra una confirmación secundaria, Confirmar debe ejecutar la acción validada, actualizar el embed de la pantalla original y retirar el mensaje efímero; Cancelar lo retira sin guardar. La interacción se reconoce inmediatamente para evitar timeout. Frente a permisos revocados, concurrencia, cambios obsoletos, fallos parciales o errores de Discord nunca informar un éxito no comprobado. Se aplica en esta etapa a la publicación de avisos de Honeypot, conservando el flujo de guardado explícito y evitando cambios extensivos al resto de `/setup`.
+
 ## Honeypot: excepción exclusiva de evidencias — 2026-10-17
 
 **Decisión definitiva del propietario (prevalece sobre dudas históricas):** ninguna acción causada por Honeypot archiva mensajes, adjuntos o pruebas del incidente, incluso si la acción es condenar. La eliminación del disparador y las purgas Kick/Timeout/Condena usarán una ruta especial con verificación de autor, servidor, permisos y periodo. Solo la persona que escribió en la trampa puede ser objeto de la purga; expulsión: al menos últimas 24 horas, ampliables desde /setup. Los demás módulos conservan el archivo verificable previo al borrado, los expedientes y sus garantías. Mantener registros administrativos de Honeypot sin contenido original; no borrar archivos previos. La protección antifallos por miembros antiguos, exenciones y permisos sigue activa para evitar falsos positivos.
