@@ -2128,6 +2128,8 @@ async def on_ready() -> None:
         raid_expiry_loop.start()
     if not check_pending_verifications.is_running():
         check_pending_verifications.start()
+    if not reconcile_untracked_verifications.is_running():
+        reconcile_untracked_verifications.start()
     for guild in bot.guilds:
         for recovery in (condemnation_reconcile, condemnation_recover_private_threads):
             try:
@@ -2599,6 +2601,75 @@ async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> N
     if delay > 0:
         await asyncio.sleep(delay)
     await evaluate_member(guild_id, user_id)
+
+
+# Conciliación conservadora: no sancionar retroactivamente roles sin fecha de origen.
+_verification_orphan_reports: dict[int, tuple[tuple[int, ...], tuple[int, ...]]] = {}
+
+
+async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
+    """Examina roles no seguidos; solo rearma ingresos recientes con plazo completo nuevo."""
+    unverified_id = get_sin_verificado_role_id(guild.id)
+    if not unverified_id or guild.get_role(unverified_id) is None:
+        return (), (), ()
+    verified_id = get_verify_role_id(guild.id)
+    orientation_ids = get_eval_role_ids(guild.id)
+    can_rearm = bool(verify_enabled(guild.id) and verified_id and guild.get_role(verified_id))
+    now = datetime.now(timezone.utc)
+    rearmed: list[int] = []
+    review: list[int] = []
+    inconsistent: list[int] = []
+    # No depender de que la caché esté completa después de un largo período desconectado.
+    async for member in guild.fetch_members(limit=None):
+        if member.bot:
+            continue
+        roles = {role.id for role in member.roles}
+        if unverified_id not in roles:
+            continue
+        if verified_id in roles or roles & orientation_ids:
+            inconsistent.append(member.id)
+            continue
+        if condemnation_get(guild.id, member.id) is not None:
+            continue
+        row = db_get(guild.id, member.id)
+        if row is not None and any(row[key] is not None for key in
+                                   ("verify_pending_at", "sin_verificado_at", "tentado_at")):
+            continue
+        joined = getattr(member, "joined_at", None)
+        age = (now - joined).total_seconds() if joined is not None and joined.tzinfo else -1
+        # joined_at no prueba cuándo se otorgó el rol: tras 15 min, solo informar.
+        # Reanudar crea una ventana NUEVA; nunca un vencimiento calculado hacia atrás.
+        if (can_rearm and not getattr(member, "pending", False)
+                and 0 <= age <= 900 and len(rearmed) < 25):
+            db_set_verify_pending(guild.id, member.id, now)
+            rearmed.append(member.id)
+        else:
+            review.append(member.id)
+    return tuple(rearmed), tuple(review), tuple(inconsistent)
+
+
+@tasks.loop(minutes=30)
+async def reconcile_untracked_verifications() -> None:
+    """Auditoría de miembros, sin llamadas a expulsión, ban ni cambios de roles."""
+    for guild in bot.guilds:
+        try:
+            rearmed, review, inconsistent = await reconcile_untracked_verifications_for_guild(guild)
+            fingerprint = (tuple(sorted(review)), tuple(sorted(inconsistent)))
+            previous = _verification_orphan_reports.get(guild.id)
+            if rearmed or (fingerprint != ((), ()) and fingerprint != previous):
+                await log_embed(
+                    guild, "Verificación: pendientes sin seguimiento",
+                    f"Plazo nuevo iniciado: **{len(rearmed)}**. "
+                    f"Miembros que requieren revisión manual: **{len(review)}**. "
+                    f"Roles contradictorios con la verificación: **{len(inconsistent)}**. "
+                    "No se expulsaron miembros ni se modificaron roles durante esta revisión. "
+                    "Los casos antiguos nunca se sancionan retroactivamente.",
+                    discord.Color.orange(),
+                )
+            _verification_orphan_reports[guild.id] = fingerprint
+        except Exception:
+            # Errores de API/SQLite no producen sanción ni borrado de pendientes.
+            print(f"Advertencia: conciliación de verificación pendiente en servidor {guild.id}.")
 
 
 @tasks.loop(minutes=2)
