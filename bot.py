@@ -4784,7 +4784,9 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 return
             await interaction.response.send_message(
                 f"Confirme el registro de {existing.mention} como canal trampa. No se creará otro canal.",
-                view=HoneypotTrapActionConfirmView(self.guild_id, self.owner_id, "add", existing.id),
+                view=HoneypotTrapActionConfirmView(
+                    self.guild_id, self.owner_id, "add", existing.id, from_setup=True,
+                ),
                 ephemeral=True,
             )
             return
@@ -18478,8 +18480,14 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
         self.stop()
         await interaction.response.defer(ephemeral=True)
         if self.action == "add":
-            hp_add_trap(guild.id, channel.id)
-            warning = await hp_sync_warning(channel)
+            if self.from_setup:
+                note = await _setup_apply_system_channel(
+                    guild, "honeypot", channel, publish_messages=True,
+                )
+                warning = None if "pero " not in note else note
+            else:
+                hp_add_trap(guild.id, channel.id)
+                warning = await hp_sync_warning(channel)
             await interaction.followup.send(
                 f"{channel.mention} se añadió como canal trampa."
                 + (f"\nAdvertencia: {warning}" if warning else ""), ephemeral=True,

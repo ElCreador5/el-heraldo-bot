@@ -103,6 +103,25 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         await proposed.confirm.callback(denied)
         denied.guild.create_text_channel.assert_not_awaited()
 
+    async def test_existing_honeypot_channel_proposes_confirmed_system_link(self):
+        view = self.make_view(traps={}, enabled=False)
+        i = interaction()
+        channel = MagicMock(spec=b.discord.TextChannel)
+        channel.id, channel.mention, channel.name = 777, "<#777>", "honeypot"
+        i.guild.text_channels = [channel]
+        i.guild.get_channel = lambda _id: None
+        with (
+            patch.object(b, "get_guild_channel_id", return_value=0),
+            patch.object(b, "hp_protected_channel_reason", return_value=None),
+            patch.object(b, "_setup_apply_system_channel", new=AsyncMock()) as apply,
+        ):
+            await view.create_channel.callback(i)
+            proposed = i.response.send_message.call_args.kwargs["view"]
+            self.assertEqual(proposed.action, "add")
+            self.assertTrue(proposed.from_setup)
+            apply.assert_not_awaited()
+        self.assertEqual(proposed.channel_id, 777)
+
     async def test_old_draft_blocks_save_after_concurrent_setting_change(self):
         view = self.make_view(traps={123: None}, enabled=False, action="log")
         view.pending_action = "timeout"
