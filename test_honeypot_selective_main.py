@@ -84,5 +84,84 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertIn("minutes if 1440 <= minutes <= 30 * 1440 else 1440", fn)
 
 
+    def test_storage_values_are_safe_in_execution(self):
+        code = compile(definition("hp_action"), "<isolated-honeypot-action>", "exec")
+        for stored, wanted in (
+            ("kick", "role"), ("ban", "role"), ("kick_enabled", "kick"),
+            ("ban_enabled", "ban"), ("log", "log"), ("timeout", "timeout"),
+            ("role", "role"), (None, "role"),
+        ):
+            namespace = {
+                "hp_setting_get": lambda guild_id, name, value=stored: value,
+                "HONEYPOT_DESTRUCTIVE_ACTION_STORAGE": {
+                    "kick": "kick_enabled", "ban": "ban_enabled",
+                },
+            }
+            exec(code, namespace)
+            self.assertEqual(namespace["hp_action"](123), wanted)
+
+    def test_setup_save_is_explicit_and_revalidated(self):
+        panel = SOURCE[
+            SOURCE.index("class HeraldoHoneypotSetupView("):
+            SOURCE.index("class HoneypotPublishWarningConfirmView(")
+        ]
+        self.assertIn("Guardar cambios", panel)
+        self.assertIn("Descartar cambios", panel)
+        self.assertIn("pending_action", panel)
+        self.assertIn("pending_ban_minutes", panel)
+        self.assertIn("pending_kick_purge_minutes", panel)
+        self.assertIn("self._snapshot() != self._original_config", panel)
+        self.assertIn("hp_action_storage(self.pending_action)", panel)
+        select = panel[panel.index("async def select_action"):panel.index("async def interaction_check")]
+        self.assertNotIn("hp_setting_set(", select)
+
+    def test_notice_publication_requires_confirmation_and_rechecks(self):
+        code = SOURCE[
+            SOURCE.index("class HoneypotPublishWarningConfirmView("):
+            SOURCE.index("class HoneypotCreateChannelConfirmView(")
+        ]
+        self.assertIn("Confirmar publicación", code)
+        self.assertIn("self.original_notice", code)
+        self.assertIn("self.original_traps", code)
+        self.assertIn("hp_sync_all_warnings(guild)", code)
+        self.assertIn("self.finished = True", code)
+        self.assertIn("read_message_history", code)
+        self.assertIn("Cancelar", code)
+
+    def test_new_channel_requires_confirmation_and_revalidates(self):
+        code = SOURCE[
+            SOURCE.index("class HoneypotCreateChannelConfirmView("):
+            SOURCE.index("def heraldo_permissions_summary(")
+        ]
+        self.assertIn("Confirmar", code)
+        self.assertIn("self.original_traps", code)
+        self.assertIn("guild.create_text_channel(", code)
+        self.assertIn("_setup_apply_system_channel(", code)
+        self.assertIn("Cancelar", code)
+
+    def test_notice_modals_only_prepare_confirmation(self):
+        text = SOURCE[
+            SOURCE.index("class HoneypotWarningModal("):
+            SOURCE.index("@honeypot_group.command(name=\"setup\"")
+        ]
+        embed = SOURCE[
+            SOURCE.index("class HoneypotWarningEmbedModal("):
+            SOURCE.index("@honeypot_group.command(name=\"warning_embed\"")
+        ]
+        for modal in (text, embed):
+            submit = modal[modal.index("async def on_submit"): ]
+            self.assertIn("HoneypotNoticeEditConfirmView(", submit)
+            self.assertNotIn("hp_setting_set(", submit)
+            self.assertNotIn("hp_sync_all_warnings(", submit)
+        confirm = SOURCE[
+            SOURCE.index("class HoneypotNoticeEditConfirmView("):
+            SOURCE.index("class HoneypotWarningModal(")
+        ]
+        self.assertIn("self.finished", confirm)
+        self.assertIn("hp_setting_set(", confirm)
+        self.assertIn("La configuración cambió", confirm)
+        cancel = confirm[confirm.index("async def cancel"):]
+        self.assertNotIn("hp_setting_set(", cancel)
+
 if __name__ == "__main__":
     unittest.main()
