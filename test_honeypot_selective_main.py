@@ -193,5 +193,145 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
 
 
 
+# Pruebas funcionales del comportamiento real, aisladas del proceso de Discord.
+# Extraen las funciones para ejecutarlas con dobles de SQLite/Discord; no importa bot.py.
+import asyncio
+import copy
+from datetime import datetime, timezone, timedelta
+from types import SimpleNamespace as Namespace
+from unittest.mock import AsyncMock, Mock
+
+
+def isolated_function(name: str, namespace: dict):
+    node = next(n for n in TREE.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name)
+    standalone = copy.deepcopy(node)
+    standalone.decorator_list = []
+    module = ast.fix_missing_locations(ast.Module(body=[standalone], type_ignores=[]))
+    exec(compile(module, "<isolated-honeypot-runtime>", "exec"), namespace)
+    return namespace[name]
+
+
+class HoneypotBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    async def _expiry_case(self, case_type: str, fail: str | None):
+        class HttpError(Exception):
+            pass
+
+        class MissingError(HttpError):
+            pass
+
+        row = {
+            "guild_id": 123,
+            "user_id": 456,
+            "case_number": 7,
+            "type": case_type,
+            "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat(),
+        }
+        connection = Mock()
+        connection.execute.return_value.fetchall.return_value = [row]
+        member = Namespace(timeout=AsyncMock())
+        guild = Namespace(
+            id=123,
+            get_member=lambda user_id: member,
+            unban=AsyncMock(),
+        )
+        action = member.timeout if case_type == "MUTE" else guild.unban
+        if fail == "http":
+            action.side_effect = HttpError()
+        elif fail == "missing":
+            action.side_effect = MissingError()
+        close = Mock()
+        ns = {
+            "datetime": datetime,
+            "timezone": timezone,
+            "timedelta": timedelta,
+            "db_connect": lambda: connection,
+            "sqlite3": Namespace(Row=object),
+            "bot": Namespace(get_guild=lambda guild_id: guild),
+            "discord": Namespace(
+                Object=lambda id: Namespace(id=id),
+                NotFound=MissingError,
+                HTTPException=HttpError,
+            ),
+            "moderation_case_code": lambda number, guild_id: "C000001",
+            "moderation_case_close": close,
+            "traceback": Namespace(print_exc=lambda: None),
+        }
+        function = isolated_function("moderation_case_expiry_loop", ns)
+        await function()
+        return action, close
+
+    async def test_expired_ban_retries_when_discord_rejects_unban(self):
+        action, close = await self._expiry_case("BAN", "http")
+        action.assert_awaited_once()
+        close.assert_not_called()
+
+    async def test_expired_ban_closes_after_unban(self):
+        action, close = await self._expiry_case("BAN", None)
+        action.assert_awaited_once()
+        close.assert_called_once_with(123, 7, closed_by=None, resolution="Expirado automáticamente")
+
+    async def test_expired_ban_already_removed_is_idempotent(self):
+        action, close = await self._expiry_case("BAN", "missing")
+        action.assert_awaited_once()
+        close.assert_called_once()
+
+    async def test_expired_timeout_retries_when_discord_rejects(self):
+        action, close = await self._expiry_case("MUTE", "http")
+        action.assert_awaited_once()
+        close.assert_not_called()
+
+    async def test_purge_collects_only_infractor_messages(self):
+        # Un mensaje de otra persona nunca entra en la lista que se envía a borrar.
+        messages = [
+            Namespace(id=1001, author=Namespace(id=777)),
+            Namespace(id=1002, author=Namespace(id=888)),
+            Namespace(id=1003, author=Namespace(id=777)),
+        ]
+
+        class Channel:
+            async def history(self, **kwargs):
+                for message in messages:
+                    yield message
+
+        ns = {"_purge_message_matches": lambda message, kind: True}
+        collect = isolated_function("_collect_user_messages", ns)
+        self.assertEqual(await collect(Channel(), 777, None, None, None), [1001, 1003])
+        self.assertEqual(await collect(Channel(), 888, None, None, None), [1002])
+
+    async def test_purge_scans_channels_without_storing_evidence(self):
+        # Aislamiento: no se proporcionan funciones de archivo de evidencias.
+        permissions = Namespace(view_channel=True, read_message_history=True, manage_messages=True)
+        channels = [
+            Namespace(id=4, permissions_for=lambda member: permissions),
+            Namespace(id=5, permissions_for=lambda member: permissions),
+        ]
+        scanned_users = []
+
+        async def collect(channel, user_id, after, before, limit, content_type):
+            scanned_users.append(user_id)
+            return [channel.id * 100 + 1]
+
+        async def erase(channel, ids):
+            return len(ids), 0
+
+        ns = {
+            "discord": Namespace(Guild=object),
+            "datetime": datetime,
+            "PurgeResult": lambda: Namespace(
+                deleted=0, failed=0, channels_scanned=0, channels_skipped=0,
+            ),
+            "asyncio": asyncio,
+            "purge_targets": AsyncMock(return_value=channels),
+            "_collect_user_messages": collect,
+            "_delete_ids": erase,
+        }
+        purge = isolated_function("purge_user_messages", ns)
+        result = await purge(Namespace(me=object()), 777, after=datetime.now(timezone.utc) - timedelta(days=1))
+        self.assertEqual(scanned_users, [777, 777])
+        self.assertEqual(result.deleted, 2)
+        self.assertEqual(result.channels_scanned, 2)
+        self.assertEqual(result.channels_skipped, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
