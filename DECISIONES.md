@@ -1,3 +1,21 @@
+## Bloqueo explícito: activación H-03 productiva y actualización de `main` — 2026-10-17
+
+Decisión autorizada por el propietario tras auditoría de Claude (ver audit/H03_PRODUCCION_2026-10-17.md y PR #18).
+Mientras no se cumplan las tres condiciones siguientes, no se fusiona PR #18 ni ningún cambio
+relacionado con H-03/respaldo productivo a `main`, no se activa el horario productivo 06:15 UTC,
+no se añaden las variables Supabase/clave H-03 al servicio de Railway producción, y no se
+desactiva sleepApplication:
+
+1. Recuperación independiente de la clave verificada de hecho (aplazada por el propietario
+   hasta noviembre de 2026; esta entrada no acorta ese plazo).
+2. `main` exige revisión aprobatoria (required_approving_review_count ≥ 1) y, cuando exista,
+   el check H-03 del controlador de respaldo previo, antes de admitir merge.
+3. Generación productiva nueva y verificada (descarga + descifrado + restauración real,
+   no solo metadatos de Storage) antes de cualquier despliegue a `main` dependiente de H-03.
+
+Reemplaza cualquier lectura de "Aplicación H-03 — 2026-10-12" o "Almacenamiento externo de
+respaldos — 2026-10-13" como autorización suficiente para activar producción.
+
 ## Logs de miembros: patrón visual de Sapphire sin enlaces ficticios — 2026-10-17
 
 Se aprueba una tarjeta coherente en español para salida, expulsión y baneo (temporal o permanente), con título de evento, cuerpo en líneas de cita, avatar a la derecha y fecha del mensaje. Mostrar usuario, ID, fecha relativa de ingreso, roles y cantidad de miembros; agregar motivo y moderador para sanciones si proceden. Mostrar duración y vencimiento para baneo cuando el expediente reciente concuerde con motivo y fecha, sin presentar los baneos externos sin duración acreditada como permanentes. Omitir enlaces Warned/Muted/Kicked/Banned cuando no existe un registro real y verificable. Mantener las plantillas configurables, los canales de logs por evento y la deduplicación de la tarjeta de orientación; esa tarjeta conserva DM y número de oportunidad. Solo rama `Pruebas`, sin intervención en producción.
