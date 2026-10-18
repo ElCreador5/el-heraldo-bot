@@ -12060,8 +12060,10 @@ async def _hp_sync_warning_locked(channel: discord.TextChannel) -> str | None:
                 await existing.pin()
             return None
         message = await channel.send(embed=hp_warning_embed(channel))
-        await message.pin()
+        # Persistir el ID antes de fijar: si Discord permite enviar pero falla
+        # pin(), el siguiente intento recupera y fija el MISMO aviso sin duplicarlo.
         hp_set_warning_message(channel.guild.id, channel.id, message.id)
+        await message.pin()
         # Quita el mensaje de sistema "X ha fijado un mensaje".
         async for m in channel.history(limit=5):
             if m.type == discord.MessageType.pins_add:

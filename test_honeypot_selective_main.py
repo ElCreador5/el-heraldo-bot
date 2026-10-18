@@ -190,6 +190,10 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertIn("await _hp_sync_warning_locked(channel)", wrapper)
         self.assertIn("channel.fetch_message(msg_id)", worker)
         self.assertIn("hp_set_warning_message(channel.guild.id, channel.id, message.id)", worker)
+        self.assertLess(
+            worker.index("hp_set_warning_message(channel.guild.id, channel.id, message.id)"),
+            worker.index("await message.pin()"),
+        )
 
 
 
