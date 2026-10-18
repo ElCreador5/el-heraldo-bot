@@ -4742,6 +4742,7 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
             "Avisos publicados o actualizados." if not errors
             else "Publicación parcial: revise los canales afectados."
         )
+        self.parent._original_config = self.parent._snapshot()
         refreshed = await self._refresh_parent(guild)
         if errors or not refreshed:
             await interaction.followup.send(
@@ -4857,7 +4858,12 @@ class HoneypotCreateChannelConfirmView(discord.ui.View):
         self.panel._original_config = self.panel._snapshot()
         self.panel.last_publication_status = note
         try:
-            await self.panel_interaction.message.edit(
+            if self.panel._origin_interaction is not None:
+                await self.panel._origin_interaction.edit_original_response(
+                    content=self.panel._content(guild), view=self.panel,
+                )
+            else:
+                await self.panel_interaction.message.edit(
                 content=self.panel._content(guild), view=self.panel,
             )
         except (discord.HTTPException, AttributeError):
