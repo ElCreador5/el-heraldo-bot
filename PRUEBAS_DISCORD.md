@@ -1,3 +1,20 @@
+## H-03 Test real — primer respaldo externo recuperado (2026-10-18)
+
+Base GitHub comprobada y sincronizada: Pruebas@926f6d552f42aca1b63b0e8cbff6d8dd7b335d27.
+Implementación directa autorizada por el propietario: worker con backup SQLite
+online, bucket/identidad/clave exclusivos Test, recibo anterior a upload,
+recuperación aislada por fecha y horario 06:15 UTC con catch-up. Se conserva el
+cron sintético con sus credenciales y las generaciones históricas. 18 tests nuevos,
+72 H-03 y 39 base OK; compilación y dependencias OK. Suite global SSH interrumpida:
+pendiente CI. Transferencia REAL completada 18/10/2026 09:02:59 UTC: 479232 bytes SQLite,
+89228 cifrados; descarga, AES-GCM, integridad/FK, esquema y contenido recuperados
+correctos. Bot en el mismo proceso y copias previas conservadas. Programador
+aún pendiente de despliegue/activación y verificación posterior.
+Detalles operativos únicos en RESPALDOS_SUPABASE.md. PR #18 revisada, en borrador:
+CI 39075261350 SUCCESS, 22 tests del guard; no integra publicador ni evita bypass.
+No se fusionó la PR. main y producción conservan el bloqueo de DECISIONES.md.
+Discord interactivo y recuperación independiente de clave ORIGINAL: no realizados.
+
 ## H-03 — Contrato de controlador de laboratorio (2026-10-17)
 
 **VERIFICADO AUTOMÁTICAMENTE:** `python -m unittest discover -s tests -p 'test_*.py' -v` mediante GitHub Actions `39089544729`, Python 3.11/3.12/3.13 SUCCESS. Los 15 tests nuevos de `tests/test_h03_release_controller_contract.py` figuran OK (Python 3.12: 475 tests/ OK). Incluyen fallos de copia no verificada, origen/candidato alterado, devolución sin publicación, callback omitido/repetido, adaptador ausente e intento de producción; ningún test utiliza datos privados, servicios reales ni Discord. **Discord real: NO REALIZADO**. **Railway Test: el SUCCESS del despliegue no certifica acciones H-03**. PR #18 continúa bloqueada; la integración real del guard remoto/custodia queda pendiente de autorización y pruebas. Ver `audit/H03_CONTROLADOR_LAB_2026-10-17.md`.

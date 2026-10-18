@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlite_recovery import validate_backup
 
 BUCKET = "heraldo-sqlite-backups"
+TEST_BUCKET = "heraldo-test-sqlite-backups"
 PREFIX = b"ELHERALDO-BACKUP-1\x00"
 AAD = b"ElHeraldo:H03:Supabase:2026:1"
 MAX_UPLOAD_BYTES = 45_000_000  # Margen bajo el limite Free de 50 MB.
@@ -155,17 +156,19 @@ def _session(base_url, anon, email, password, expected_uid):
 def _storage(environment):
     _environment(environment)
     base, anon, email, password, uid = _config()
-    return (base + "/storage/v1/object/" + BUCKET + "/",
+    bucket = TEST_BUCKET if environment == "heraldo-test" else BUCKET
+    return (base + "/storage/v1/object/" + bucket + "/",
             _session(base, anon, email, password, uid))
 
 
-def upload(package, environment):
+def upload(package, environment, *, object_name=None):
     environment = _environment(environment)
     key = _key()
     blob, manifest = _bundle(package, environment, key)
     remote, headers = _storage(environment)
-    object_name = (environment + "/" + manifest["created_at"][:10].replace("-", "") +
-                   "/" + uuid.uuid4().hex + ".h03e")
+    object_name = _object_key(object_name, environment) if object_name is not None else (
+        environment + "/" + manifest["created_at"][:10].replace("-", "") +
+        "/" + uuid.uuid4().hex + ".h03e")
     _http(remote + parse.quote(object_name, safe="/"), method="POST",
           headers={**headers, "Content-Type": "application/octet-stream",
                    "Cache-Control": "no-store", "x-upsert": "false"},

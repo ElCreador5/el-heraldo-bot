@@ -1,3 +1,14 @@
+## Autorización vigente de Test real — 2026-10-18
+
+El propietario autoriza implementación directa en Pruebas, sin ramas ni PR nuevas,
+configuración del worker Test y recorrido completo con su SQLite real: instantánea
+online consistente, cifrado, almacenamiento aislado, descarga y recuperación
+obligatoriamente separada de DB_PATH. Se conservan todas las generaciones. Esta
+petición sustituye las restricciones históricas a datos exclusivamente sintéticos
+en Test; no autoriza restaurar la SQLite activa ni activar producción. Para dar
+continuidad al scheduler se prepara desactivar sleepApplication SOLO en Test;
+el bloqueo productivo y la custodia original aplazada hasta noviembre siguen vigentes.
+
 ## Bloqueo explícito: activación H-03 productiva y actualización de `main` — 2026-10-17
 
 Decisión autorizada por el propietario tras auditoría de Claude (ver audit/H03_PRODUCCION_2026-10-17.md y PR #18).

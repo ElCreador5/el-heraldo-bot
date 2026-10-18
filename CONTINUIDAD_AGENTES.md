@@ -1,3 +1,20 @@
+## H-03 Test real — primer respaldo externo recuperado (2026-10-18)
+
+Base GitHub comprobada y sincronizada: Pruebas@926f6d552f42aca1b63b0e8cbff6d8dd7b335d27.
+Implementación directa autorizada por el propietario: worker con backup SQLite
+online, bucket/identidad/clave exclusivos Test, recibo anterior a upload,
+recuperación aislada por fecha y horario 06:15 UTC con catch-up. Se conserva el
+cron sintético con sus credenciales y las generaciones históricas. 18 tests nuevos,
+72 H-03 y 39 base OK; compilación y dependencias OK. Suite global SSH interrumpida:
+pendiente CI. Transferencia REAL completada 18/10/2026 09:02:59 UTC: 479232 bytes SQLite,
+89228 cifrados; descarga, AES-GCM, integridad/FK, esquema y contenido recuperados
+correctos. Bot en el mismo proceso y copias previas conservadas. Programador
+aún pendiente de despliegue/activación y verificación posterior.
+Detalles operativos únicos en RESPALDOS_SUPABASE.md. PR #18 revisada, en borrador:
+CI 39075261350 SUCCESS, 22 tests del guard; no integra publicador ni evita bypass.
+No se fusionó la PR. main y producción conservan el bloqueo de DECISIONES.md.
+Discord interactivo y recuperación independiente de clave ORIGINAL: no realizados.
+
 ## H-03 — Auditoría integral de requisitos antes de nuevos trabajos (2026-10-18)
 
 Se revisaron SHA actuales `Pruebas@8cc938fb` y `main@c6a5c164`, la PR #18 en borrador, ambos entornos Railway, la estructura del cron de Test y las políticas de Supabase. **NUEVO INFORME**: `audit/H03_MATRIZ_DE_SALIDA_2026-10-18.md`, commit `b880bbd2`. Identifica todos los obstáculos comprobables: recuperación de clave original aplazada hasta noviembre; cron Test respalda solo SQLite sintética, no worker; credenciales Lab/Prod sin aislamiento RLS por prefijo; solo una copia productiva de 13/10 y cinco copias Lab hasta 18/10 06:15 UTC; la SQLite no cubre adjuntos/evidencias en disco; `sleepApplication=true` en ambos workers; bypass desde Railway, cambios de configuración/redeploy e imágenes, check H03 todavía inexistente; no verificación de capacidad, restauración ni alertas productivas. **DOCUMENTADO, NO RESUELTO EN PRODUCCIÓN**. No acceder a datos reales, no cambiar la clave ni descongelar producción. `Pruebas` puede seguir en desarrollo. **Pruebas en Discord:** no realizadas. **Obsidian:** sin conexión demostrada.

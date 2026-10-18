@@ -15,6 +15,7 @@ import stat
 import sys
 import hashlib
 import shutil
+import uuid
 
 from sqlite_recovery import create_backup, inspect_database, readonly, validate_backup
 from supabase_backup import upload, download_verify
@@ -24,6 +25,33 @@ PRODUCTION_IDS = (
     "a2ce7142-f315-4ab9-8d6e-ad058c1dc9fc",
     "78a0bdb2-95aa-41e0-8785-32ba17ffeb70",
 )
+TEST_IDS = (
+    "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61",
+    "71b77daf-9092-4af0-913f-32c57367fff3",
+    "13a555fc-7ddd-4712-a9bc-e88509e18b2b",
+)
+TEST_STATE_DIR = Path("/data/.heraldo-h03-test")
+
+
+def _test_volume(source, state_root):
+    """Only the actual Test worker volume and configured live database."""
+    observed = tuple(os.environ.get(k) for k in
+                     ("RAILWAY_PROJECT_ID", "RAILWAY_ENVIRONMENT_ID", "RAILWAY_SERVICE_ID"))
+    if observed != TEST_IDS or os.environ.get("HERALDO_TEST_BACKUP_ENABLED") != "enabled":
+        raise BackupJobError("test_not_authorized")
+    mount = Path("/data")
+    if (os.environ.get("RAILWAY_VOLUME_NAME") != "worker-volume" or
+            os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") != str(mount) or
+            mount.is_symlink() or not mount.is_mount()):
+        raise BackupJobError("test_volume_mismatch")
+    configured = Path(os.environ.get("DB_PATH", ""))
+    if (not source.is_absolute() or source != source.resolve() or
+            source != configured or not source.is_relative_to(mount) or
+            state_root != TEST_STATE_DIR or state_root.resolve() != TEST_STATE_DIR or
+            source.is_relative_to(TEST_STATE_DIR)):
+        raise BackupJobError("test_path_mismatch")
+    if os.environ.get("HERALDO_BACKUP_VOLUME_CAP_MB") != "500":
+        raise BackupJobError("unverified_volume_budget")
 
 
 class BackupJobError(RuntimeError):
@@ -45,6 +73,8 @@ def _guard(environment, source, state_root):
         if (not source.resolve().is_relative_to(mount) or
                 not state_root.resolve().is_relative_to(mount)):
             raise BackupJobError("production_path_outside_volume")
+    elif environment == "heraldo-test":
+        _test_volume(source, state_root)
     elif environment != "lab":
         raise BackupJobError("environment_not_allowed")
     elif os.environ.get("RAILWAY_PROJECT_ID") == PRODUCTION_IDS[0]:
@@ -201,6 +231,10 @@ def run_once(source, state_root, *, environment, revision, now=None):
     """Una única ejecución por día UTC; un error nunca produce reintento ciego."""
     source, state_root = Path(source), Path(state_root)
     _guard(environment, source, state_root)
+    if environment == "heraldo-test" and (
+            not re.fullmatch(r"[0-9a-f]{40}", revision or "") or
+            revision != os.environ.get("RAILWAY_GIT_COMMIT_SHA")):
+        raise BackupJobError("source_revision_mismatch")
     if not revision or len(revision) > 100 or not re.fullmatch(r"[A-Za-z0-9_.-]+", revision):
         raise BackupJobError("invalid_revision")
     root = _private_root(state_root)
@@ -215,6 +249,9 @@ def run_once(source, state_root, *, environment, revision, now=None):
             if receipt_status(receipt_path) == "verified_and_restored":
                 raise BackupJobError("already_attempted_today")
             raise BackupJobError("previous_attempt_needs_review")
+        if environment == "heraldo-test" and any(
+                receipt_status(p) != "verified_and_restored" for p in root.glob("heraldo-test-*.json")):
+            raise BackupJobError("previous_attempt_needs_review")
         receipt = {"version": 1, "environment": environment, "utc_day": stamp,
                    "status": "started", "started_at": today.astimezone(timezone.utc).isoformat()}
         _write_receipt(receipt_path, receipt, initial=True)
@@ -225,9 +262,14 @@ def run_once(source, state_root, *, environment, revision, now=None):
                                        environment=environment, revision=revision, timeout=90)
             manifest = validate_backup(generation, environment=environment)
             receipt["sqlite_sha256"] = manifest["sha256"]
+            # Persist the exact object BEFORE transfer so a lost HTTP response
+            # can be reconciled by downloading it, without a second upload.
+            if environment == "heraldo-test":
+                receipt["object"] = environment + "/" + stamp + "/" + uuid.uuid4().hex + ".h03e"
             receipt["status"] = "upload_unconfirmed"
             _write_receipt(receipt_path, receipt)
-            published = upload(generation, environment)
+            published = (upload(generation, environment, object_name=receipt["object"])
+                         if environment == "heraldo-test" else upload(generation, environment))
             receipt["object"] = published["object"]
             receipt["status"] = "uploaded_unverified"
             _write_receipt(receipt_path, receipt)

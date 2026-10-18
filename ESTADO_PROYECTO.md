@@ -1,3 +1,20 @@
+## H-03 Test real — primer respaldo externo recuperado (2026-10-18)
+
+Base GitHub comprobada y sincronizada: Pruebas@926f6d552f42aca1b63b0e8cbff6d8dd7b335d27.
+Implementación directa autorizada por el propietario: worker con backup SQLite
+online, bucket/identidad/clave exclusivos Test, recibo anterior a upload,
+recuperación aislada por fecha y horario 06:15 UTC con catch-up. Se conserva el
+cron sintético con sus credenciales y las generaciones históricas. 18 tests nuevos,
+72 H-03 y 39 base OK; compilación y dependencias OK. Suite global SSH interrumpida:
+pendiente CI. Transferencia REAL completada 18/10/2026 09:02:59 UTC: 479232 bytes SQLite,
+89228 cifrados; descarga, AES-GCM, integridad/FK, esquema y contenido recuperados
+correctos. Bot en el mismo proceso y copias previas conservadas. Programador
+aún pendiente de despliegue/activación y verificación posterior.
+Detalles operativos únicos en RESPALDOS_SUPABASE.md. PR #18 revisada, en borrador:
+CI 39075261350 SUCCESS, 22 tests del guard; no integra publicador ni evita bypass.
+No se fusionó la PR. main y producción conservan el bloqueo de DECISIONES.md.
+Discord interactivo y recuperación independiente de clave ORIGINAL: no realizados.
+
 ## H-03 — Inventario exhaustivo de precondiciones (2026-10-18)
 
 **AUDITADO:** `audit/H03_MATRIZ_DE_SALIDA_2026-10-18.md` describe estado verificado y pendientes de datos, almacenamiento, claves, permisos, retención, respaldos de archivos no SQLite, controlador con protección anti-bypass, rollback, avisos y cumplimiento de horario. **DETECTADO:** cron Lab protege exclusivamente SQLite sintética, no datos reales del worker; cinco copias de laboratorio al 18/10 06:15 UTC y única copia productiva antigua del 13/10; el mismo usuario de Storage puede leer/escribir prefijos Lab y producción; worker Test y bot oficial tienen `sleepApplication=true`; el check H03 obligatorio aún no existe. **PENDIENTE:** ciclo completo real de Test y recuperación de clave oficial; PR #18 en borrador. Se preservan todos los bloqueos vigentes y no se realizaron acciones sobre `main`, secretos ni Railway/Supabase producción. **VERIFICACIÓN EN DISCORD:** no realizada.

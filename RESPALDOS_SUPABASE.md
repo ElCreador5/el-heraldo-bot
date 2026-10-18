@@ -1,3 +1,57 @@
+## SQLite real de Test — implementación 2026-10-18
+
+El encargo actual autoriza trabajar directamente en `Pruebas`, configurar Test y
+respaldar su SQLite real. `test_backup_scheduler.py` ejecuta un proceso corto
+`python -m test_backup_runtime due` desde el worker propietario del volumen. La
+primera activación respalda inmediatamente; luego comprueba el vencimiento diario
+06:15 UTC (02:15 Santo Domingo), con recuperación del disparo tras reinicio.
+El subproceso no recibe DISCORD_TOKEN. Una réplica, volumen worker-volume de
+500 MB, identidad Railway exacta, DB_PATH canónico y estado fijo privado son
+requisitos; no se permite el cron sintético ni producción. Activación explícita:
+HERALDO_TEST_BACKUP_ENABLED=enabled y HERALDO_BACKUP_VOLUME_CAP_MB=500.
+
+Test utiliza `heraldo-test-sqlite-backups`, privado, límite 45 MB y MIME binario,
+cuenta técnica nueva y clave AES independiente. RLS permite solo INSERT/SELECT,
+exige identidad exacta y prefijo heraldo-test. Las políticas del bucket histórico
+no se modificaron. Las seis variables estándar del worker fueron reemplazadas
+por las exclusivas de Test, después de conservar valores independientes en el
+cron; así el cron no pierde acceso a sus generaciones antiguas ni el worker
+conserva las credenciales históricas. La custodia local de Test está cifrada con
+Windows DPAPI; depende de la cuenta Windows, no acredita recuperación de la
+clave ORIGINAL de producción desde otro dispositivo.
+
+El motor usa Connection.backup con origen mode=ro, valida integridad/FK y
+manifiesto, cifra AES-256-GCM antes de red, sube sin upsert, descarga/autentica y
+restaura a archivo nuevo. Compara esquema, recuentos y hashes de todas las filas.
+Guarda la ruta del objeto en el recibo privado ANTES de la subida: una respuesta
+perdida se reconcilia mediante descarga, sin repetir la transferencia. Un fallo
+pendiente bloquea nuevas generaciones hasta resolverlo. Un lock y un recibo por
+día impiden duplicados entre scheduler, CLI, reinicios y procesos concurrentes.
+No se eliminan generaciones; el presupuesto de disco conserva 64 MiB de margen.
+
+Para comprobar/recuperar una generación ya registrada, ejecutar DENTRO del
+worker Test: `python -m test_backup_runtime recover --day AAAAMMDD`. El comando
+no acepta destino: siempre usa un directorio temporal privado del volumen,
+valida el respaldo remoto, compara contenido, elimina únicamente su temporal y
+registra last_recovery_at. También permite reconciliar upload_unconfirmed cuando
+el objeto remoto realmente existe. Si falta o está corrupto, conserva el bloqueo;
+no borrar recibos para forzar intentos. Los paquetes y la primera restauración
+verificada permanecen en el estado privado; la SQLite activa nunca es destino.
+La pérdida de recibos requiere recuperar su copia administrativa o localizar
+la generación en Storage; esta CLI no inventa recibos ni enumera datos privados.
+
+Validación previa: 18 casos nuevos, 72 casos H-03 (incluyen los 18) y 39 base
+aprobados en Linux, compilación y pip check correctos. La suite global en SSH
+se interrumpió y no se acredita; se verifica en CI GitHub. Transferencia REAL comprobada el 18/10/2026 09:02:59 UTC (05:02:59 local):
+SQLite del worker en WAL, 479232 bytes; objeto cifrado 89228 bytes; AES-GCM,
+SHA-256, integridad/FK, esquema/recuentos/contenido recuperados correctos.
+Fuente desplegada 926f6d552f42aca1b63b0e8cbff6d8dd7b335d27. Se ejecutaron los
+módulos candidatos ya probados en un proceso temporal del worker; el bot conservó
+su proceso y los respaldos locales anteriores conservaron sus hashes. Supabase
+confirma una generación Test y mantiene 5 Lab + 1 producción en el bucket antiguo.
+El programador aún requiere despliegue/activación y comprobación posterior.
+No incluye archivos de evidencias de Discord ni activación de producción.
+
 ## Automatización H-03 verificada en laboratorio — 2026-10-14
 
 Código de ejecución publicado en Pruebas: cf9f2da77406dd79a6abf254fe445e3092a3bb4f, sobre e59bb4f. Main y producción conservan 6f9f9ee0a7ed1c7b7e6c48a13817b9b5f3a5b667. Sin ramas nuevas ni PR; PR #16 no integrado. Checkout anterior divergente preservado.

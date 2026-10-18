@@ -2165,6 +2165,11 @@ async def on_ready() -> None:
         print(f"H03_DAILY status=BLOCKED reason={type(exc).__name__}", flush=True)
 
     _startup_done = True
+    try:
+        from test_backup_scheduler import start_if_authorized as start_test_backup
+        start_test_backup()
+    except Exception as exc:
+        print(f"H03_TEST_SCHEDULE status=BLOCKED reason={type(exc).__name__}", flush=True)
     print(f"El Heraldo conectado como {bot.user}")
 
 
