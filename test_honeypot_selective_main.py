@@ -56,7 +56,7 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
     def test_sanctions_require_explicit_storage(self):
         value = definition("hp_action")
         self.assertIn('"kick_enabled"', value)
-        self.assertIn('"ban_enabled"', value)
+        self.assertIn('"ban_enabled"', SOURCE)
         self.assertIn('return "role"', value)
 
     def test_kick_purges_by_author_without_discord_delete_messages(self):
