@@ -4364,6 +4364,12 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.owner_id = owner_id
         self.pending_trap_id: int | None = None
         self.pending_enabled: bool | None = None
+        self.pending_action: str | None = None
+        self.pending_kick_purge_minutes: int | None = None
+        self.pending_ban_minutes: int | None = None
+        self.last_publication_status: str | None = None
+        self._original_config = self._snapshot()
+        self._original_traps = set(hp_traps(guild_id))
         channel = discord.ui.ChannelSelect(
             placeholder="Seleccionar / añadir canal trampa",
             channel_types=[discord.ChannelType.text],
@@ -4373,10 +4379,95 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         )
         channel.callback = self.select_trap
         self.add_item(channel)
+        action = discord.ui.Select(
+            placeholder="Configurar acción (no guarda)",
+            options=[
+                discord.SelectOption(label=label, value=value)
+                for label, value in (
+                    ("Condenar", "role"), ("Solo registrar", "log"),
+                    ("Aislar", "timeout"), ("Expulsar", "kick"), ("Banear", "ban"),
+                )
+            ],
+            row=3,
+        )
+        action.callback = self.select_action
+        self.add_item(action)
+        duration = discord.ui.Select(
+            placeholder="Configurar duración o purga (no guarda)",
+            options=[
+                discord.SelectOption(label=label, value=value)
+                for label, value in (
+                    ("Expulsar: purgar 1 día", "kick:1440"),
+                    ("Expulsar: purgar 2 días", "kick:2880"),
+                    ("Expulsar: purgar 7 días", "kick:10080"),
+                    ("Expulsar: purgar 30 días", "kick:43200"),
+                    ("Banear 1 día", "ban:1440"), ("Banear 7 días", "ban:10080"),
+                    ("Banear 30 días", "ban:43200"), ("Banear permanentemente", "ban:0"),
+                )
+            ],
+            row=4,
+        )
+        duration.callback = self.select_duration
+        self.add_item(duration)
+
+    _config_keys = (
+        "honeypot_enabled", "honeypot_paused", "honeypot_action",
+        "honeypot_kick_purge_minutes", "honeypot_ban_minutes",
+    )
+
+    def _snapshot(self) -> tuple[str | None, ...]:
+        return tuple(hp_setting_get(self.guild_id, name) for name in self._config_keys)
+
+    def _has_pending(self) -> bool:
+        return any(item is not None for item in (
+            self.pending_trap_id, self.pending_enabled, self.pending_action,
+            self.pending_kick_purge_minutes, self.pending_ban_minutes,
+        ))
+
+    def _reset_draft(self) -> None:
+        self.pending_trap_id = None
+        self.pending_enabled = None
+        self.pending_action = None
+        self.pending_kick_purge_minutes = None
+        self.pending_ban_minutes = None
+
+    async def select_action(self, interaction: discord.Interaction) -> None:
+        choice = interaction.data["values"][0]
+        if choice in {"kick", "ban"}:
+            issue = hp_sanction_permission_problem(
+                interaction.guild, choice, interaction.user.guild_permissions,
+            )
+            if issue:
+                await interaction.response.send_message(issue, ephemeral=True)
+                return
+        self.pending_action = choice if choice != hp_action(self.guild_id) else None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    async def select_duration(self, interaction: discord.Interaction) -> None:
+        kind, _, value = interaction.data["values"][0].partition(":")
+        if kind not in {"kick", "ban"} or not value.isdecimal():
+            await interaction.response.send_message("Configuración de duración inválida.", ephemeral=True)
+            return
+        minutes = int(value)
+        if kind == "kick":
+            if not 1440 <= minutes <= 43200:
+                await interaction.response.send_message("La purga debe durar al menos un día.", ephemeral=True)
+                return
+            self.pending_kick_purge_minutes = minutes
+        else:
+            if minutes > 365 * 1440:
+                await interaction.response.send_message("Duración fuera de rango.", ephemeral=True)
+                return
+            self.pending_ban_minutes = minutes
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
+        if interaction.guild is None or interaction.guild.id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel no le corresponde.", ephemeral=True)
+            return False
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if perms is None or not (perms.manage_guild or perms.administrator):
+            await interaction.response.send_message("Necesita Gestionar servidor.", ephemeral=True)
             return False
         return True
 
@@ -4387,7 +4478,16 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             items.append(f"Añadir canal trampa → {channel.mention if channel else self.pending_trap_id}")
         if self.pending_enabled is not None:
             items.append(f"Honeypot → {'activo' if self.pending_enabled else 'desactivado'}")
-        return "**El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
+        if self.pending_action is not None:
+            items.append("Acción: " + HONEYPOT_ACTION_LABELS[self.pending_action])
+        if self.pending_kick_purge_minutes is not None:
+            items.append("Purga al expulsar: " + format_duration(self.pending_kick_purge_minutes))
+        if self.pending_ban_minutes is not None:
+            items.append("Baneo: " + (format_duration(self.pending_ban_minutes) if self.pending_ban_minutes else "permanente"))
+        result = "**El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
+        if self.last_publication_status:
+            result += "\n\n" + self.last_publication_status
+        return result
 
     async def select_trap(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
