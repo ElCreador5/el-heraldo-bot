@@ -31,7 +31,8 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         func = definition("hp_log_trigger")
         self.assertIn('channel_id, "", action', func)
         report = definition("hp_report")
-        self.assertNotIn("content", report)
+        self.assertNotIn("message.content", report)
+        self.assertNotIn('name="Mensaje"', report)
         self.assertNotIn("attachments", report)
 
     def test_honeypot_skips_evidence_without_skipping_cases(self):
