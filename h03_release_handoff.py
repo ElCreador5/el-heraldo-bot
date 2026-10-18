@@ -191,6 +191,13 @@ def prepare_handoff(plan, *, root, source_revision, target_approved,
             previous = _read(directory, "h03-lab-release-" + previous_id + ".json")
             if previous.get("phase") != "completed":
                 raise HandoffBlocked("previous_release_not_closed")
+            # Caída entre grabar el diario y actualizar el puntero: el
+            # archivo huérfano NO permite autorizar otra publicación.
+            for candidate in journal_files:
+                if candidate.name == "h03-lab-release-" + previous_id + ".json":
+                    continue
+                if _read(directory, candidate.name).get("phase") != "completed":
+                    raise HandoffBlocked("unreconciled_orphan_release")
             if (directory / _name(info)).exists() or (directory / _name(info)).is_symlink():
                 raise HandoffBlocked("request_id_reused")
             if previous.get("plan", {}).get("target_revision") != info["source_revision"]:

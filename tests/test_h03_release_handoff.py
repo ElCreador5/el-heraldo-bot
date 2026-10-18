@@ -302,6 +302,19 @@ class DurableHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(h.HandoffBlocked, "corrupt_active_pointer"):
             self.prepare(ReleasePlan("lab", B, C, TWO))
 
+    def test_orphan_after_pointer_is_fail_closed(self):
+        self.prepare()
+        self.dispatch()
+        self.running = B
+        self.boot()
+        self.finalize()
+        self.source = B
+        orphan = self.root / ("h03-lab-release-" + TWO + ".json")
+        orphan.write_text('{"phase":"prepared"}')
+        orphan.chmod(0o600)
+        with self.assertRaisesRegex(h.HandoffBlocked, "unreconciled_orphan_release"):
+            self.prepare(ReleasePlan("lab", B, C, "3" * 32))
+
     def test_failure_never_restores_live_sqlite(self):
         self.prepare()
         self.dispatch()
