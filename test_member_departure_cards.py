@@ -178,5 +178,51 @@ class WiringTests(unittest.TestCase):
         self.assertIn('await channel.send(embed=embed)', code)
 
 
+class OrientationDedupeBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    """Probar el consumo del marcador sin enviar mensajes a Discord."""
+
+    async def test_special_log_suppresses_exactly_one_generic_duplicate(self):
+        import asyncio
+        member = sample_member()
+        key = (member.guild.id, member.id, member.joined_at)
+        sent = {key: 100.0}
+        variables = {
+            "asyncio": asyncio,
+            "time": NS(monotonic=lambda: 101.0),
+            "bot": NS(user=NS(id=9)),
+            "_ORIENTATION_KICK_REASON": "No definió su orientación",
+            "_ORIENTATION_LOG_WINDOW": 30.0,
+            "_orientation_kick_log_pending": {},
+            "_orientation_kick_log_sent": sent,
+            "orientation_kick_log_key": lambda item: (item.guild.id, item.id, item.joined_at),
+            "orientation_prune_kick_log_markers": lambda now: None,
+        }
+        check = isolate("orientation_departure_has_detailed_log", variables)
+        bot_actor = NS(id=9)
+        self.assertTrue(await check(member, "member_kick", bot_actor, "No definió su orientación"))
+        self.assertNotIn(key, sent)
+        # El mismo usuario y evento no puede ocultar una segunda salida.
+        self.assertFalse(await check(member, "member_kick", bot_actor, "No definió su orientación"))
+
+    async def test_missing_special_log_keeps_generic_departure(self):
+        import asyncio
+        member = sample_member()
+        variables = {
+            "asyncio": asyncio,
+            "time": NS(monotonic=lambda: 101.0),
+            "bot": NS(user=NS(id=9)),
+            "_ORIENTATION_KICK_REASON": "No definió su orientación",
+            "_ORIENTATION_LOG_WINDOW": 30.0,
+            "_orientation_kick_log_pending": {},
+            "_orientation_kick_log_sent": {},
+            "orientation_kick_log_key": lambda item: (item.guild.id, item.id, item.joined_at),
+            "orientation_prune_kick_log_markers": lambda now: None,
+        }
+        check = isolate("orientation_departure_has_detailed_log", variables)
+        self.assertFalse(await check(member, "member_kick", NS(id=9), "No definió su orientación"))
+        self.assertFalse(await check(member, "member_kick", NS(id=8), "No definió su orientación"))
+        self.assertFalse(await check(member, "member_leave", None, None))
+
+
 if __name__ == "__main__":
     unittest.main()
