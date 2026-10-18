@@ -14352,6 +14352,58 @@ honeypot_group = HoneypotGroup(
 )
 
 
+class HoneypotNoticeEditConfirmView(discord.ui.View):
+    """Borrador efímero de edición: Cancelar nunca escribe ni publica."""
+
+    def __init__(self, guild_id: int, owner_id: int, changes: dict[str, str]):
+        super().__init__(timeout=240)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.changes = changes
+        self.original = {key: hp_setting_get(guild_id, key) for key in changes}
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id):
+            await interaction.response.send_message(
+                "Esta edición no corresponde a su sesión.", ephemeral=True,
+            )
+            return False
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if perms is None or not (perms.manage_guild or perms.administrator):
+            await interaction.response.send_message(
+                "No tiene permiso Gestionar servidor.", ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar y guardar", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        if any(hp_setting_get(self.guild_id, key) != old for key, old in self.original.items()):
+            await interaction.followup.send(
+                "La configuración cambió. Abra la edición nuevamente.", ephemeral=True,
+            )
+            await interaction.edit_original_response(content="Edición desactualizada.", view=None)
+            return
+        for key, value in self.changes.items():
+            hp_setting_set(self.guild_id, key, value)
+        await interaction.edit_original_response(
+            content="Cambios guardados. Use Publicar aviso en /setup cuando desee aplicarlos.",
+            view=None,
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content="Edición cancelada. No se guardó nada.", view=None)
+        self.finished = True
+        self.stop()
+
+
 class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
     text = discord.ui.TextInput(
         label="Aviso (vacío = texto por defecto)",
@@ -14368,18 +14420,20 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.text).strip()
-        if value and value != HONEYPOT_WARNING_TEXT_DEFAULT:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", value)
-        else:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "text")
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
+        if interaction.guild is None or interaction.guild.id != self.guild_id:
+            await interaction.response.send_message("El servidor no está disponible.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "Revise el nuevo texto del aviso. Solo se guardará al pulsar Confirmar; "
+            "deberá publicarlo después desde /setup.",
+            view=HoneypotNoticeEditConfirmView(
+                self.guild_id, interaction.user.id, {
+                    "honeypot_warning_text": value if value != HONEYPOT_WARNING_TEXT_DEFAULT else "",
+                    "honeypot_warning_style": "text",
+                },
+            ),
             ephemeral=True,
         )
-
 
 @honeypot_group.command(name="setup", description="Ver o cambiar la configuración del honeypot.")
 @discord.app_commands.describe(
@@ -14632,28 +14686,22 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
                 await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
                 return
 
-        hp_setting_set(interaction.guild.id, "honeypot_warning_title", title)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_description", description)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_color", color.upper())
-        hp_setting_set(interaction.guild.id, "honeypot_warning_image", image)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_thumbnail", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_footer", footer)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "custom")
-
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Embed personalizado guardado y aplicado a los avisos fijados."
-            + ("\n" + "\n".join(errors) if errors else ""),
+        await interaction.response.send_message(
+            "La edición está pendiente de confirmación. Confirme para guardar "
+            "y luego pulse Publicar aviso desde /setup para actualizar los canales.",
+            view=HoneypotNoticeEditConfirmView(
+                self.guild_id, interaction.user.id, {
+                    "honeypot_warning_title": title,
+                    "honeypot_warning_description": description,
+                    "honeypot_warning_color": color.upper(),
+                    "honeypot_warning_image": image,
+                    "honeypot_warning_thumbnail": "",
+                    "honeypot_warning_footer": footer,
+                    "honeypot_warning_style": "custom",
+                },
+            ),
             ephemeral=True,
         )
-        await log_embed(
-            interaction.guild,
-            "Embed del honeypot actualizado",
-            f"{interaction.user.mention} personalizó título, descripción, color, imagen y pie del aviso.",
-            discord.Color.blurple(),
-        )
-
 
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
 async def honeypot_warning_embed_cmd(interaction: discord.Interaction) -> None:
