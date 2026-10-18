@@ -11,11 +11,12 @@ from pathlib import Path
 import re
 
 from discord.ext import tasks
-from backup_job import BackupJobError, PRODUCTION_IDS, _guard, run_once
+from backup_job import (BackupJobError, PRODUCTION_IDS, PRODUCTION_STATE_DIR,
+                        _guard, _production_volume, run_once)
 from supabase_backup import _key, _config, _environment
 
 UTC_RUN_TIME = time(6, 15, tzinfo=timezone.utc)
-STATE_DIR = Path("/data/.heraldo-h03-daily")
+STATE_DIR = PRODUCTION_STATE_DIR
 _REQUIRED_SECRETS = (
     "SUPABASE_BACKUP_URL",
     "SUPABASE_BACKUP_PUBLISHABLE_KEY",
@@ -60,6 +61,7 @@ def preflight(db_path, environ=None):
     # alone is not necessarily the effective volume quota.
     if env.get("HERALDO_BACKUP_VOLUME_CAP_MB") != "500":
         raise BackupJobError("unverified_volume_budget")
+    _production_volume(source, STATE_DIR, env)
     return source, revision
 
 

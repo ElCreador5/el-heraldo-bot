@@ -31,6 +31,8 @@ TEST_IDS = (
     "13a555fc-7ddd-4712-a9bc-e88509e18b2b",
 )
 TEST_STATE_DIR = Path("/data/.heraldo-h03-test")
+PRODUCTION_VOLUME_NAME = "heraldo-data"
+PRODUCTION_STATE_DIR = Path("/data/.heraldo-h03-daily")
 
 
 def _test_volume(source, state_root):
@@ -58,6 +60,30 @@ class BackupJobError(RuntimeError):
     """Motivo seguro sin datos de SQLite ni detalles de credenciales."""
 
 
+def _production_volume(source, state_root, environ=None):
+    """Verify mounted Railway production volume and database identity."""
+    env = os.environ if environ is None else environ
+    mount = Path("/data")
+    if (env.get("RAILWAY_VOLUME_NAME") != PRODUCTION_VOLUME_NAME or
+            env.get("RAILWAY_VOLUME_MOUNT_PATH") != str(mount) or mount.is_symlink()):
+        raise BackupJobError("production_volume_identity_mismatch")
+    mounted = os.path.ismount(mount)
+    if not mounted:
+        try:
+            mounted = any(line.split()[4] == str(mount)
+                          for line in Path("/proc/self/mountinfo").read_text().splitlines())
+        except (OSError, IndexError):
+            mounted = False
+    if not mounted:
+        raise BackupJobError("production_volume_not_mounted")
+    db_path = env.get("DB_PATH")
+    if (not db_path or not Path(db_path).is_absolute() or
+            source.resolve() != Path(db_path).resolve() or
+            not source.resolve().is_relative_to(mount) or
+            state_root.resolve() != PRODUCTION_STATE_DIR):
+        raise BackupJobError("production_path_mismatch")
+
+
 def _guard(environment, source, state_root):
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", environment):
         raise BackupJobError("invalid_environment")
@@ -73,6 +99,7 @@ def _guard(environment, source, state_root):
         if (not source.resolve().is_relative_to(mount) or
                 not state_root.resolve().is_relative_to(mount)):
             raise BackupJobError("production_path_outside_volume")
+        _production_volume(source, state_root)
     elif environment == "heraldo-test":
         _test_volume(source, state_root)
     elif environment != "lab":
@@ -227,8 +254,9 @@ def _require_backup_headroom(source, state_root):
         raise BackupJobError("insufficient_backup_headroom")
 
 
-def run_once(source, state_root, *, environment, revision, now=None):
-    """Una única ejecución por día UTC; un error nunca produce reintento ciego."""
+def run_once(source, state_root, *, environment, revision, now=None,
+             purpose="daily", request_id=None, target_revision=None):
+    """Respaldo diario o preactualización vinculada a una revisión, sin reintento ciego."""
     source, state_root = Path(source), Path(state_root)
     _guard(environment, source, state_root)
     if environment == "heraldo-test" and (
@@ -237,29 +265,49 @@ def run_once(source, state_root, *, environment, revision, now=None):
         raise BackupJobError("source_revision_mismatch")
     if not revision or len(revision) > 100 or not re.fullmatch(r"[A-Za-z0-9_.-]+", revision):
         raise BackupJobError("invalid_revision")
+    if environment == "heraldo-production" and (
+            not re.fullmatch(r"[0-9a-f]{40}", revision or "") or
+            revision != os.environ.get("RAILWAY_GIT_COMMIT_SHA")):
+        raise BackupJobError("source_revision_mismatch")
+    operation = None
+    if purpose == "preupdate":
+        if not isinstance(request_id, str) or not re.fullmatch(r"[0-9a-f]{32}", request_id):
+            raise BackupJobError("invalid_update_id")
+        if not isinstance(target_revision, str) or not re.fullmatch(r"[0-9a-f]{40}", target_revision):
+            raise BackupJobError("invalid_target_revision")
+        operation = {"purpose": purpose, "request_id": request_id,
+                     "source_revision": revision, "target_revision": target_revision}
+    elif purpose != "daily" or request_id is not None or target_revision is not None:
+        raise BackupJobError("invalid_backup_purpose")
     root = _private_root(state_root)
-    _require_backup_headroom(source, root)
     today = now or datetime.now(timezone.utc)
     if today.tzinfo is None:
         raise BackupJobError("naive_time")
     stamp = today.astimezone(timezone.utc).strftime("%Y%m%d")
-    receipt_path = root / (environment + "-" + stamp + ".json")
+    basename = (environment + "-" + stamp if purpose == "daily" else
+                environment + "-preupdate-" + request_id)
+    receipt_path = root / (basename + ".json")
     with _exclusive_job_lock(root):
         if receipt_path.is_symlink() or receipt_path.exists():
             if receipt_status(receipt_path) == "verified_and_restored":
-                raise BackupJobError("already_attempted_today")
+                raise BackupJobError("already_attempted_today" if purpose == "daily"
+                                     else "update_already_attempted")
             raise BackupJobError("previous_attempt_needs_review")
         if environment == "heraldo-test" and any(
                 receipt_status(p) != "verified_and_restored" for p in root.glob("heraldo-test-*.json")):
             raise BackupJobError("previous_attempt_needs_review")
+        _require_backup_headroom(source, root)
         receipt = {"version": 1, "environment": environment, "utc_day": stamp,
                    "status": "started", "started_at": today.astimezone(timezone.utc).isoformat()}
+        if operation:
+            receipt.update(version=2, operation=operation)
         _write_receipt(receipt_path, receipt, initial=True)
         try:
             # Retain all generations and recovered files on the persistent volume.
-            workspace = _private_root(root / (environment + "-" + stamp))
+            workspace = _private_root(root / basename)
             generation = create_backup(source, workspace / "generations",
-                                       environment=environment, revision=revision, timeout=90)
+                                       environment=environment, revision=revision, timeout=90,
+                                       **({"operation": operation} if operation else {}))
             manifest = validate_backup(generation, environment=environment)
             receipt["sqlite_sha256"] = manifest["sha256"]
             # Persist the exact object BEFORE transfer so a lost HTTP response
@@ -280,6 +328,8 @@ def run_once(source, state_root, *, environment, revision, now=None):
             remote_manifest = validate_backup(remote["local_package"], environment=environment)
             if remote_manifest["sha256"] != manifest["sha256"]:
                 raise BackupJobError("download_manifest_mismatch")
+            if operation and remote_manifest.get("operation") != operation:
+                raise BackupJobError("download_operation_mismatch")
             _isolated_restore(remote["local_package"], workspace / "restored.sqlite", manifest)
             receipt["status"] = "verified_and_restored"
             receipt["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -298,13 +348,18 @@ def main(argv=None):
     parser.add_argument("--state-directory", default=os.environ.get("HERALDO_BACKUP_STATE_DIRECTORY", ""))
     parser.add_argument("--environment", default=os.environ.get("HERALDO_BACKUP_ENVIRONMENT", ""))
     parser.add_argument("--revision", default=os.environ.get("HERALDO_BACKUP_REVISION", ""))
+    parser.add_argument("--purpose", choices=("daily", "preupdate"), default="daily")
+    parser.add_argument("--request-id")
+    parser.add_argument("--target-revision")
     args = parser.parse_args(argv)
     if not args.db or not args.state_directory:
         print("H03_JOB status=BLOCKED reason=missing_paths", flush=True)
         return 1
     try:
         status = run_once(args.db, args.state_directory,
-                          environment=args.environment, revision=args.revision)
+                          environment=args.environment, revision=args.revision,
+                          purpose=args.purpose, request_id=args.request_id,
+                          target_revision=args.target_revision)
         print("H03_JOB status=" + status, flush=True)
         return 0
     except BaseException as exc:

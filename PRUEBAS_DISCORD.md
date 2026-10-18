@@ -1,3 +1,7 @@
+## H-03 — núcleo de respaldo previo preparado en Pruebas (2026-10-18)
+
+**IMPLEMENTADO SOLO EN `Pruebas`, INACTIVO EN PRODUCCIÓN:** incorporación de `preupdate_gate.py` y pruebas offline de PR #18, reconciliados con el respaldo de Test actual; `backup_job.py` permite una generación `preupdate` única, vinculada a SHA de origen/destino dentro de manifiesto cifrado y restaurado. `sqlite_recovery.py` conserva la compatibilidad de copias diarias. Identidad real del volumen productivo verificada en preflight, sin acceder a secretos. Ningún script se invoca automáticamente para publicar versiones. **PENDIENTE:** adaptador autorizado conectado a GitHub/Railway, barrera obligatoria de despliegue, prueba end-to-end del publicador y validación en producción. No fusionar `main` por la existencia de este código. Verificar CI antes de afirmar éxito. Pruebas Discord de este núcleo: no realizadas. La PR #19 de Honeypot continúa separada y sin desplegar.
+
 ## H-03 Test real — primer respaldo externo recuperado (2026-10-18)
 
 Base GitHub comprobada y sincronizada: Pruebas@926f6d552f42aca1b63b0e8cbff6d8dd7b335d27.

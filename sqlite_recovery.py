@@ -105,7 +105,7 @@ def service_lock(db_path, *, exclusive=False):
         os.close(fd)
 
 
-def create_backup(source, destination, *, environment, revision, timeout=30):
+def create_backup(source, destination, *, environment, revision, timeout=30, operation=None):
     """Copia online publicada únicamente tras validación y fsync."""
     if not environment or not revision or timeout <= 0:
         raise RecoveryError("missing_backup_identity")
@@ -135,6 +135,8 @@ def create_backup(source, destination, *, environment, revision, timeout=30):
             **inspect_database(database),
             "evidence_files_included": False,
         }
+        if operation is not None:
+            manifest["operation"] = operation
         metadata = stage / "manifest.json"
         fd = os.open(metadata, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(fd, "w") as stream:
