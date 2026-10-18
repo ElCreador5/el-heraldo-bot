@@ -115,6 +115,20 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         select = panel[panel.index("async def select_action"):panel.index("async def interaction_check")]
         self.assertNotIn("hp_setting_set(", select)
 
+    def test_trigger_history_is_not_described_as_captures(self):
+        summary = definition("hp_config_summary")
+        self.assertIn("Activaciones registradas", summary)
+        self.assertNotIn("Capturas en el historial", summary)
+        self.assertIn("sin contenido del mensaje", summary)
+
+    def test_toggle_twice_discards_draft(self):
+        panel = SOURCE[
+            SOURCE.index("class HeraldoHoneypotSetupView("):
+            SOURCE.index("class HoneypotPublishWarningConfirmView(")
+        ]
+        toggle = panel[panel.index("async def toggle("):panel.index("async def edit_warning(")]
+        self.assertIn("target != honeypot_enabled(self.guild_id) else None", toggle)
+
     def test_notice_publication_requires_confirmation_and_rechecks(self):
         code = SOURCE[
             SOURCE.index("class HoneypotPublishWarningConfirmView("):

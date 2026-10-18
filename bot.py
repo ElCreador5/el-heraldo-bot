@@ -4551,7 +4551,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if target and not hp_traps(self.guild_id) and self.pending_trap_id is None:
             await interaction.response.send_message("Añade al menos un canal trampa antes de activar el Honeypot.", ephemeral=True)
             return
-        self.pending_enabled = target
+        self.pending_enabled = target if target != honeypot_enabled(self.guild_id) else None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Editar aviso", style=discord.ButtonStyle.secondary, row=1)
@@ -11991,7 +11991,7 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Rol a mencionar en reportes:** {ping}",
         f"**Roles exentos:** {', '.join(f'<@&{i}>' for i in hp_exempt_ids(guild.id, 'role')) or '—'}",
         f"**Miembros exentos:** {', '.join(f'<@{i}>' for i in hp_exempt_ids(guild.id, 'member')) or '—'}",
-        f"**Capturas en el historial:** {hp_total_triggers(guild.id)} (se guardan {format_duration(hp_retention_minutes(guild.id))})",
+        f"**Activaciones registradas:** {hp_total_triggers(guild.id)} (se conservan {format_duration(hp_retention_minutes(guild.id))}; sin contenido del mensaje)",
     ]
     return "\n".join(lines)
 
