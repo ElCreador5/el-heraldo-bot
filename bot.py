@@ -4502,51 +4502,45 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_trap_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.primary, row=1)
     async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self._has_pending():
+            await interaction.response.send_message(
+                "Guarde o descarte sus cambios pendientes antes de crear otro canal.", ephemeral=True,
+            )
+            return
         guild = interaction.guild
         existing_id = get_guild_channel_id(self.guild_id, "honeypot")
         channel = guild.get_channel(existing_id) if existing_id else None
-        created_now = False
         if not isinstance(channel, discord.TextChannel):
-            channel = next((c for c in guild.text_channels if c.name.casefold() == "honeypot"), None)
-        if not isinstance(channel, discord.TextChannel):
+            channel = next(
+                (item for item in guild.text_channels if item.name.casefold() == "honeypot"), None,
+            )
+        if channel and channel.id in hp_traps(self.guild_id):
+            await interaction.response.send_message(
+                "El canal Honeypot ya está registrado. No se creará otro.", ephemeral=True,
+            )
+            return
+        if channel is not None and hp_protected_channel_reason(channel):
+            await interaction.response.send_message(
+                "El canal encontrado está reservado para otro módulo.", ephemeral=True,
+            )
+            return
+        if channel is None:
             me = guild.me
             if me is None or not me.guild_permissions.manage_channels:
                 await interaction.response.send_message(
-                    "El Heraldo necesita Gestionar canales para crear el Honeypot.",
-                    ephemeral=True,
+                    "El bot necesita Gestionar canales para crear Honeypot.", ephemeral=True,
                 )
                 return
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    create_public_threads=False,
-                    create_private_threads=False,
-                    send_messages_in_threads=False,
-                )
-            }
-            await interaction.response.defer(ephemeral=True)
-            try:
-                channel = await guild.create_text_channel(
-                    "Honeypot",
-                    overwrites=overwrites,
-                    reason="El Heraldo: crear canal Honeypot desde /setup",
-                )
-                created_now = True
-            except discord.HTTPException as exc:
-                await interaction.followup.send(f"No pude crear el canal: `{exc}`.", ephemeral=True)
-                return
-        else:
-            await interaction.response.defer(ephemeral=True)
-
-        note = await _setup_apply_system_channel(guild, "honeypot", channel, publish_messages=True)
-        self.pending_trap_id = None
-        action = "Creé" if created_now else "Reutilicé"
-        await interaction.edit_original_response(
-            content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
-            view=self,
+        message = (
+            f"¿Confirma utilizar {channel.mention} como canal trampa?"
+            if channel is not None else
+            "¿Confirma crear y registrar un nuevo canal Honeypot?"
+        )
+        await interaction.response.send_message(
+            message, ephemeral=True,
+            view=HoneypotCreateChannelConfirmView(self, interaction, channel.id if channel else None),
         )
 
     @discord.ui.button(label="Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
@@ -4750,6 +4744,127 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.parent.interaction_check(interaction):
+            return
+        await interaction.response.defer()
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        await self._dismiss(interaction)
+
+
+
+class HoneypotCreateChannelConfirmView(discord.ui.View):
+    def __init__(
+        self, panel: HeraldoHoneypotSetupView, panel_interaction: discord.Interaction,
+        existing_channel_id: int | None,
+    ):
+        super().__init__(timeout=240)
+        self.panel = panel
+        self.panel_interaction = panel_interaction
+        self.existing_channel_id = existing_channel_id
+        self.original_traps = set(hp_traps(panel.guild_id))
+        self.finished = False
+
+    async def _dismiss(self, interaction: discord.Interaction) -> None:
+        try:
+            await interaction.delete_original_response()
+        except discord.HTTPException:
+            try:
+                await interaction.edit_original_response(content="Confirmación cerrada.", view=None)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.panel.interaction_check(interaction):
+            return
+        await interaction.response.defer()
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        guild = interaction.guild
+        if (guild is None or guild.id != self.panel.guild_id or self.panel._has_pending()
+                or set(hp_traps(self.panel.guild_id)) != self.original_traps):
+            await interaction.followup.send("El estado cambió. Reabra el panel.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        me = guild.me
+        channel = guild.get_channel(self.existing_channel_id) if self.existing_channel_id else None
+        if self.existing_channel_id is not None and not isinstance(channel, discord.TextChannel):
+            await interaction.followup.send("El canal seleccionado ya no existe.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        if channel is None:
+            if me is None or not me.guild_permissions.manage_channels:
+                await interaction.followup.send("El bot necesita Gestionar canales.", ephemeral=True)
+                await self._dismiss(interaction)
+                return
+            if any(ch.name.casefold() == "honeypot" for ch in guild.text_channels):
+                await interaction.followup.send(
+                    "Ya existe un canal con ese nombre; vuelva al panel para revisarlo.", ephemeral=True,
+                )
+                await self._dismiss(interaction)
+                return
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True,
+                    create_public_threads=False, create_private_threads=False,
+                    send_messages_in_threads=False,
+                ),
+            }
+            try:
+                channel = await guild.create_text_channel(
+                    "Honeypot", overwrites=overwrites,
+                    reason="Canal Honeypot confirmado desde /setup",
+                )
+            except discord.HTTPException:
+                await interaction.followup.send("Discord impidió crear el canal.", ephemeral=True)
+                await self._dismiss(interaction)
+                return
+        if hp_protected_channel_reason(channel) or channel.id in hp_traps(self.panel.guild_id):
+            await interaction.followup.send("El canal ya no es válido como trampa.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        perms = channel.permissions_for(guild.me) if guild.me else None
+        if perms is None or not all(getattr(perms, p, False) for p in (
+            "view_channel", "send_messages", "read_message_history", "manage_messages",
+        )):
+            await interaction.followup.send(
+                "El bot carece de permisos para administrar avisos en ese canal.", ephemeral=True,
+            )
+            await self._dismiss(interaction)
+            return
+        try:
+            note = await _setup_apply_system_channel(guild, "honeypot", channel, publish_messages=True)
+        except Exception:
+            await interaction.followup.send(
+                "La vinculación del canal falló. Compruebe su estado en /setup.", ephemeral=True,
+            )
+            await self._dismiss(interaction)
+            return
+        self.panel._original_traps = set(hp_traps(self.panel.guild_id))
+        self.panel._original_config = self.panel._snapshot()
+        self.panel.last_publication_status = note
+        try:
+            await self.panel_interaction.message.edit(
+                content=self.panel._content(guild), view=self.panel,
+            )
+        except (discord.HTTPException, AttributeError):
+            try:
+                await self.panel_interaction.edit_original_response(
+                    content=self.panel._content(guild), view=self.panel,
+                )
+            except discord.HTTPException:
+                await interaction.followup.send(
+                    "El canal se configuró, pero el panel no pudo actualizarse.", ephemeral=True,
+                )
+        await self._dismiss(interaction)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.panel.interaction_check(interaction):
             return
         await interaction.response.defer()
         if self.finished:
