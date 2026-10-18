@@ -13432,12 +13432,17 @@ async def moderation_case_expiry_loop() -> None:
                 try:
                     await member.timeout(None, reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
                 except discord.HTTPException:
-                    pass
+                    # Mantener el expediente abierto para volver a intentarlo.
+                    continue
             elif case_type == "BAN":
                 try:
                     await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
-                except (discord.NotFound, discord.HTTPException):
+                except discord.NotFound:
+                    # Ya no tiene baneo activo; la operación es idempotente.
                     pass
+                except discord.HTTPException:
+                    # No cerrar el expediente si los permisos/API impidieron desbanear.
+                    continue
             moderation_case_close(guild.id, int(row["case_number"]), closed_by=None, resolution="Expirado automáticamente")
         except Exception:
             traceback.print_exc()
