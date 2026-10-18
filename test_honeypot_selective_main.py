@@ -163,5 +163,17 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         cancel = confirm[confirm.index("async def cancel"):]
         self.assertNotIn("hp_setting_set(", cancel)
 
+    def test_warning_updates_are_serialized_by_channel(self):
+        wrapper = definition("hp_sync_warning")
+        worker = definition("_hp_sync_warning_locked")
+        self.assertIn("key = (channel.guild.id, channel.id)", wrapper)
+        self.assertIn("_hp_warning_locks.setdefault(key, asyncio.Lock())", wrapper)
+        self.assertIn("async with lock:", wrapper)
+        self.assertIn("await _hp_sync_warning_locked(channel)", wrapper)
+        self.assertIn("channel.fetch_message(msg_id)", worker)
+        self.assertIn("hp_set_warning_message(channel.guild.id, channel.id, message.id)", worker)
+
+
+
 if __name__ == "__main__":
     unittest.main()
