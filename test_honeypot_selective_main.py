@@ -142,7 +142,7 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
     def test_notice_modals_only_prepare_confirmation(self):
         text = SOURCE[
             SOURCE.index("class HoneypotWarningModal("):
-            SOURCE.index("@honeypot_group.command(name=\"setup\"")
+            SOURCE.index("class HoneypotSlashConfigConfirmView(")
         ]
         embed = SOURCE[
             SOURCE.index("class HoneypotWarningEmbedModal("):
