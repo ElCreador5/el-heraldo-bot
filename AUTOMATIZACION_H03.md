@@ -4,6 +4,19 @@
 
 **Secuencia mínima para recuperación real:** comprobar custodia desde un contexto independiente y seguro; cargar credenciales del almacenamiento productivo y clave AES original en variables privadas de un entorno Linux aislado (no en argumentos CLI ni repositorio); seleccionar la generación productiva histórica mediante su ruta privada, descargarla autenticando cifrado y manifiesto, crear/restaurar una SQLite NUEVA en el entorno aislado y comprobar `integrity_check`, `foreign_key_check`, esquema y contenido. Anotar solo éxito/fracaso, fecha y generación como referencia privada. La generación disponible en Storage data del 13/10/2026 no demuestra descifrado por sí misma. Si falta una credencial o la capacidad de restauración, **bloquear el avance sin alterar datos**.
 
+### Verificador ejecutable: recuperación productiva histórica, sin acceso al bot
+
+**PREPARADO EN `Pruebas`, NO EJECUTADO CON CREDENCIALES PRODUCTIVAS:** `tools/verify_h03_production_recovery.py`, con regresiones de seguridad en `tests/test_h03_production_offline_recovery.py`. CI para el commit `cd46098c`: Heraldo Lab Python 3.11/3.12/3.13 SUCCESS (run 39118443886) y Mensajes SUCCESS (run 39118443870). Estos tests restauran exclusivamente SQLite sintética; **no certifican** la copia productiva ni la recuperación de Bitwarden.
+
+Procedimiento para custodio autorizado, **solo en Linux aislado, con almacenamiento temporal privado en un volumen cifrado**:
+
+1. Recuperar la clave ORIGINAL H-03 desde el gestor privado en una sesión/dispositivo independiente; no enviarla a GitHub, Railway Test, ChatGPT, logs ni pantallas compartidas. Validar también acceso a credenciales Supabase históricas y a la generación cifrada privada de producción. No cambiar ni revocar la clave antes de terminar.
+2. Preparar fuera de Railway un directorio absoluto existente, propiedad del ejecutor con permisos `0700`, ubicado en el volumen cifrado. Cargar en el proceso `HERALDO_BACKUP_ENCRYPTION_KEY` y las variables `SUPABASE_BACKUP_*` mediante el gestor de secretos, sin exponer valores en argumentos, historial del shell o repositorio.
+3. Ejecutar `python -m tools.verify_h03_production_recovery --object "$H03_PRIVATE_OBJECT" --workspace-root "$H03_PRIVATE_WORKSPACE"`; `H03_PRIVATE_OBJECT` debe ser el nombre privado exacto de la generación `heraldo-production/AAAAMMDD/<uuid>.h03e`, obtenido de la consola privada de Storage. La utilidad no admite ruta de restauración, no importa `bot.py`, prohíbe ejecución dentro de Railway y destruye sus temporales tras validar la descarga autenticada, el manifiesto y la SQLite restaurada.
+4. Conservar **solo** la constancia privada del operador de que la clave procede de custodia independiente y de que apareció `H03_PRODUCTION_RECOVERY result=VERIFIED_REMOTE_AND_ISOLATED`. Si aparece `BLOCKED`, no tocar `main`, no regenerar secretos y no borrar copias ni diarios. Revisar el error localmente sin difundir datos privados.
+
+Esta comprobación valida la generación histórica disponible del 13/10/2026; **no sustituye** una copia productiva nueva, verificación de restauración de esa copia, aislamiento de RLS y controlador H-03 obligatorio antes de actualizar producción. La eliminación de la fecha de noviembre no concede autorización para desplegar.
+
 ## Preparación sin despliegue y recuperación aplazada — 2026-10-14
 
 El propietario aplaza hasta noviembre de 2026 la verificación independiente de Bitwarden. Existe una nota privada importada con la clave original, pero NO se ha probado su recuperación/descifrado desde una sesión o dispositivo independiente ni la recuperación de acceso a la bóveda. No tocar la clave, no repetir la importación y no ejecutar operaciones productivas que dependan de ese requisito. Esto permite seguir preparando y verificando código con datos sintéticos.
