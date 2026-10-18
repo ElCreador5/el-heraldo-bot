@@ -1,3 +1,13 @@
+## H-03 — Autorización explícita para adelantar la recuperación productiva (2026-10-18)
+
+**DECISIÓN VIGENTE DEL PROPIETARIO:** se revoca el aplazamiento hasta noviembre de 2026 **únicamente para realizar desde ahora la verificación independiente de la clave original y los ensayos de recuperación productiva**. Esta decisión corrige la referencia histórica al aplazamiento del 17/10 y la reiteración en la autorización de Test del 18/10. No equivale a declarar recuperada la clave, validar la copia remota ni autorizar un despliegue.
+
+**ALCANCE AUTORIZADO:** consultar configuración y metadatos de GitHub/Railway/Supabase, recuperar y probar la clave desde su custodia privada mediante un procedimiento aislado autorizado, comprobar que la copia productiva existente se descarga, descifra, autentica y restaura en una SQLite **distinta** de la activa; verificar integridad, esquema y claves foráneas; preparar y probar el controlador de despliegue en `Pruebas` y elaborar preflight de producción. No publicar claves, tokens, contenido, datos de expedientes, identificadores privados ni objetos de Storage. No copiar la clave original a GitHub, chats, logs o entornos de prueba. Si no hay acceso a la custodia, registrar PENDIENTE sin fingir verificación.
+
+**PROHIBICIONES QUE NO CAMBIAN:** no modificar `main`, desplegar/reiniciar el servicio de producción, alterar la SQLite viva o sus respaldos, activar el programador productivo, incorporar credenciales H-03 al servicio oficial, modificar `sleepApplication` productivo ni fusionar PR #18 mientras falten las verificaciones exigidas en el bloqueo del 17/10 y no exista autorización expresa adicional para esas acciones.
+
+**GATES:** 1) clave original recuperable de manera independiente y descifrado/restauración aislados; 2) copia productiva **nueva** y restauración independiente validada; 3) revisión obligatoria y controlador H-03 no eludible por Railway/GitHub, pruebas y recuperación/rollback; 4) autorización específica del propietario para tocar producción. Eliminar una espera de calendario NO elimina ninguna puerta técnica.
+
 ## Autorización vigente de Test real — 2026-10-18
 
 El propietario autoriza implementación directa en Pruebas, sin ramas ni PR nuevas,
@@ -7,7 +17,7 @@ obligatoriamente separada de DB_PATH. Se conservan todas las generaciones. Esta
 petición sustituye las restricciones históricas a datos exclusivamente sintéticos
 en Test; no autoriza restaurar la SQLite activa ni activar producción. Para dar
 continuidad al scheduler se prepara desactivar sleepApplication SOLO en Test;
-el bloqueo productivo y la custodia original aplazada hasta noviembre siguen vigentes.
+el bloqueo productivo sigue vigente. El aplazamiento histórico de la comprobación de la clave se revocó mediante la autorización posterior del 18/10/2026.
 
 ## Bloqueo explícito: activación H-03 productiva y actualización de `main` — 2026-10-17
 
@@ -17,8 +27,8 @@ relacionado con H-03/respaldo productivo a `main`, no se activa el horario produ
 no se añaden las variables Supabase/clave H-03 al servicio de Railway producción, y no se
 desactiva sleepApplication:
 
-1. Recuperación independiente de la clave verificada de hecho (aplazada por el propietario
-   hasta noviembre de 2026; esta entrada no acorta ese plazo).
+1. Recuperación independiente de la clave verificada de hecho (autorizada desde el
+   18/10/2026, pero PENDIENTE hasta comprobar descifrado/restauración real aislada).
 2. `main` exige revisión aprobatoria (required_approving_review_count ≥ 1) y, cuando exista,
    el check H-03 del controlador de respaldo previo, antes de admitir merge.
 3. Generación productiva nueva y verificada (descarga + descifrado + restauración real,
