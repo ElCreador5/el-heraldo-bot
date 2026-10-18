@@ -149,12 +149,14 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         ]
         confirm = code[code.index("async def confirm("):code.index("@discord.ui.button(label=\"Cancelar\"")]
         self.assertLess(confirm.index("await interaction.response.defer()"), confirm.index("hp_sync_all_warnings(guild)"))
-        self.assertLess(confirm.index("self.finished = True"), confirm.index("await self._allowed(interaction)"))
+        self.assertLess(confirm.index("await self._allowed(interaction)"), confirm.index("self.finished = True"))
         self.assertLess(confirm.index("await self._allowed(interaction)"), confirm.index("hp_setting_set("))
         allowed = code[code.index("async def _allowed("):code.index("@discord.ui.button(label=\"Confirmar publicación\"")]
-        self.assertIn("guild.id != self.parent.guild_id", allowed)
-        self.assertIn("interaction.user.id != self.parent.owner_id", allowed)
-        self.assertIn("perms.manage_guild or perms.administrator", allowed)
+        self.assertIn("hp_config_interaction_allowed", allowed)
+        gate = definition("hp_config_interaction_allowed")
+        self.assertIn("guild.id == guild_id", gate)
+        self.assertIn("interaction.user.id == owner_id", gate)
+        self.assertIn("perms.manage_guild or perms.administrator", gate)
         cancel = code[code.index("async def cancel("):]
         self.assertIn("await interaction.response.defer()", cancel)
         self.assertNotIn("hp_setting_set(", cancel)
@@ -190,7 +192,7 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
             SOURCE.index("class HoneypotWarningModal(")
         ]
         self.assertIn("self.finished", confirm)
-        self.assertIn("hp_setting_set(", confirm)
+        self.assertIn("hp_save_settings(", confirm)
         self.assertIn("La configuración cambió", confirm)
         cancel = confirm[confirm.index("async def cancel"):]
         self.assertNotIn("hp_setting_set(", cancel)
