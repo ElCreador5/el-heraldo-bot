@@ -6,8 +6,12 @@ los SHA históricos no autorizan sobrescritura. No crear otra rama/PR.
 
 Cambios: `bot.py`, pruebas funcionales y CI; documentación de esta rama
 selectiva. Resultados y límites completos en [PRUEBAS_DISCORD.md](PRUEBAS_DISCORD.md).
-89 pruebas, dependencias y compilación aprobadas en Railway Test. API real de
+91 pruebas, dependencias y compilación aprobadas en Railway Test. API real de
 avisos/purga comprobada. Copia productiva nueva recuperada el 18/10/2026.
+
+Commits de continuación: `be742f3` (controles, privacidad, purgas y sanciones;
+CI aprobada), seguido por la corrección de huella de imágenes de Discord.
+Consultar el comentario de entrega en PR #19 para HEAD y CI definitivos.
 
 No fusionar todavía: falta revisor independiente, recuperación de clave desde
 Bitwarden y controlador H-03 no eludible. Falta aceptación humana del candidato

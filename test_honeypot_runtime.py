@@ -343,6 +343,55 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
         message.pin.assert_awaited_once()
         self.assertEqual(b.hp_traps(self.gid)[self.channel.id], message.id)
 
+    async def test_lost_image_warning_recovers_despite_discord_media_metadata(self):
+        embed = b.discord.Embed(title="aviso", description="texto de laboratorio")
+        embed.set_image(url="https://example.org/aviso.png")
+        embed.set_thumbnail(url="https://example.org/miniatura.png")
+        embed.set_footer(text="El Heraldo", icon_url="https://example.org/icono.png")
+        received = embed.to_dict()
+        for field in ("image", "thumbnail"):
+            received[field] = {**received[field], "proxy_url": "https://proxy.example.org/image",
+                               "width": 512, "height": 256, "content_type": "image/png",
+                               "placeholder": "server-data", "flags": 0}
+        received["footer"] = {**received["footer"], "proxy_icon_url": "https://proxy.example.org/icon"}
+        message = self.warning_message()
+        message.embeds = [b.discord.Embed.from_dict(received)]
+        self.channel.send = AsyncMock(side_effect=http_error())
+        async def history(**kwargs):
+            yield message
+        self.channel.history = history
+        with patch.object(b, "hp_warning_embed", return_value=embed):
+            self.assertIsNotNone(await b.hp_sync_warning(self.channel))
+            b._hp_warning_locks.clear()
+            self.assertIsNone(await b.hp_sync_warning(self.channel))
+        self.channel.send.assert_awaited_once()
+        message.edit.assert_awaited_once()
+        message.pin.assert_awaited_once()
+        self.assertEqual(b.hp_traps(self.gid)[self.channel.id], message.id)
+        self.assertNotIn("proxy_url", embed.to_dict()["image"])
+
+    async def test_warning_recovery_blocks_different_image_and_multiple_matches(self):
+        embed = b.discord.Embed(title="aviso").set_image(url="https://example.org/aviso.png")
+        for multiple in (False, True):
+            b.hp_setting_set(self.gid, f"honeypot_warning_pending_{self.channel.id}", "")
+            message = self.warning_message()
+            other = embed.copy().set_image(url="https://example.org/otro.png")
+            message.embeds = [embed if multiple else other]
+            self.channel.send = AsyncMock(side_effect=http_error())
+            async def history(**kwargs):
+                yield message
+                if multiple:
+                    yield NS(id=10002, author=message.author, embeds=[embed])
+            self.channel.history = history
+            with patch.object(b, "hp_warning_embed", return_value=embed):
+                self.assertIsNotNone(await b.hp_sync_warning(self.channel))
+                b._hp_warning_locks.clear()
+                self.assertIn("conciliación", await b.hp_sync_warning(self.channel))
+            self.channel.send.assert_awaited_once()
+            message.edit.assert_not_awaited()
+            message.pin.assert_not_awaited()
+            self.assertIsNone(b.hp_traps(self.gid)[self.channel.id])
+
     async def test_kick_and_ban_block_protected_hierarchy_and_missing_bot_permission(self):
         for action in ("kick", "ban"):
             for problem in ("owner", "exempt", "hierarchy", "permission"):

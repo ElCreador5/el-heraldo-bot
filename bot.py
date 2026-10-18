@@ -12096,6 +12096,20 @@ def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord
     )
 
 
+def hp_warning_fingerprint(embed: discord.Embed) -> str:
+    """Compara el contenido enviado, sin metadatos de imágenes añadidos por Discord."""
+    data = embed.to_dict()
+    for field in ("image", "thumbnail"):
+        if field in data:
+            data[field] = {key: value for key, value in data[field].items()
+                           if key in ("url", "description")}
+    for field in ("footer", "author"):
+        if field in data:
+            data[field] = {key: value for key, value in data[field].items()
+                           if key != "proxy_icon_url"}
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
 async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
     """Serializa actualizaciones del aviso por servidor/canal y evita publicaciones simultáneas."""
     key = (channel.guild.id, channel.id)
@@ -12137,7 +12151,7 @@ async def _hp_sync_warning_locked(channel: discord.TextChannel) -> str | None:
             async for candidate in channel.history(after=since, limit=None):
                 if candidate.author.id != me.id or len(candidate.embeds) != 1:
                     continue
-                digest = hashlib.sha256(json.dumps(candidate.embeds[0].to_dict(), sort_keys=True).encode()).hexdigest()
+                digest = hp_warning_fingerprint(candidate.embeds[0])
                 if digest == receipt["embed_sha256"]:
                     matches.append(candidate)
             if len(matches) == 1:
@@ -12168,8 +12182,8 @@ async def _hp_sync_warning_locked(channel: discord.TextChannel) -> str | None:
                 await existing.pin()
             return None
         embed = hp_warning_embed(channel)
-        receipt = {"since": datetime.now(timezone.utc).isoformat(), "embed_sha256": hashlib.sha256(
-            json.dumps(embed.to_dict(), sort_keys=True).encode()).hexdigest()}
+        receipt = {"since": datetime.now(timezone.utc).isoformat(),
+                   "embed_sha256": hp_warning_fingerprint(embed)}
         hp_setting_set(channel.guild.id, pending_key, json.dumps(receipt))
         message = await channel.send(embed=embed)
         # Persistir el ID antes de fijar: si Discord permite enviar pero falla
