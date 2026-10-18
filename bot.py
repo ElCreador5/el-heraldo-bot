@@ -4368,6 +4368,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_kick_purge_minutes: int | None = None
         self.pending_ban_minutes: int | None = None
         self.last_publication_status: str | None = None
+        self._origin_interaction: discord.Interaction | None = None
         self._original_config = self._snapshot()
         self._original_traps = set(hp_traps(guild_id))
         channel = discord.ui.ChannelSelect(
@@ -4673,6 +4674,14 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
                 print("Honeypot: no se pudo cerrar la confirmación.")
 
     async def _refresh_parent(self, guild: discord.Guild) -> bool:
+        if self.parent._origin_interaction is not None:
+            try:
+                await self.parent._origin_interaction.edit_original_response(
+                    content=self.parent._content(guild), view=self.parent,
+                )
+                return True
+            except discord.HTTPException:
+                pass
         try:
             await self.panel_interaction.message.edit(
                 content=self.parent._content(guild), view=self.parent,
@@ -7614,11 +7623,12 @@ class HeraldoAutomodSetupView(discord.ui.View):
 
     @discord.ui.button(label="Honeypot", style=discord.ButtonStyle.primary, row=0)
     async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        panel = HeraldoHoneypotSetupView(self.guild_id, self.owner_id)
+        panel._origin_interaction = interaction
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
-            content="**El Heraldo · AutoMod · Honeypot**\n\n" + hp_config_summary(interaction.guild),
-            embed=None,
-            view=HeraldoHoneypotSetupView(self.guild_id, self.owner_id),
+            content=panel._content(interaction.guild),
+            embed=None, view=panel,
         )
 
     @discord.ui.button(label="Raid Protection", style=discord.ButtonStyle.primary, row=0)
