@@ -273,6 +273,12 @@ DM_TEXT = (
 # sobrevivan a los deploys. Sin la variable, usa un archivo local (pruebas en PC).
 DB_PATH = os.environ.get("DB_PATH", "heraldo.db")
 
+# H-03: preflight de solo lectura antes de crear el bot o conectar a Discord.
+# Requiere bandera y permiso productivo explícitos; Test permanece inalterado.
+if __name__ == "__main__":
+    from h03_startup_gate import enforce_startup as _h03_enforce_startup
+    _h03_enforce_startup()
+
 intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
