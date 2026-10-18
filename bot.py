@@ -4629,9 +4629,135 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self._reset_draft()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Publicar aviso", style=discord.ButtonStyle.success, row=2)
+    async def publish_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self._has_pending():
+            await interaction.response.send_message(
+                "Guarde o descarte los cambios pendientes antes de publicar.", ephemeral=True,
+            )
+            return
+        if not hp_traps(self.guild_id):
+            await interaction.response.send_message("No existen canales trampa registrados.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "¿Confirma publicar o actualizar el aviso fijado en los canales trampa?",
+            view=HoneypotPublishWarningConfirmView(self, interaction),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+class HoneypotPublishWarningConfirmView(discord.ui.View):
+    """Publicación idempotente, con verificación del estado y controles efímeros."""
+
+    _notice_keys = (
+        "honeypot_warning_enabled", "honeypot_warning_style", "honeypot_warning_text",
+        "honeypot_warning_title", "honeypot_warning_description", "honeypot_warning_color",
+        "honeypot_warning_image", "honeypot_warning_thumbnail", "honeypot_warning_footer",
+    )
+
+    def __init__(self, parent: HeraldoHoneypotSetupView, panel_interaction: discord.Interaction):
+        super().__init__(timeout=240)
+        self.parent = parent
+        self.panel_interaction = panel_interaction
+        self.original_traps = set(hp_traps(parent.guild_id))
+        self.original_notice = self._snapshot()
+        self.finished = False
+
+    def _snapshot(self) -> tuple[str | None, ...]:
+        return tuple(hp_setting_get(self.parent.guild_id, key) for key in self._notice_keys)
+
+    async def _dismiss(self, interaction: discord.Interaction) -> None:
+        try:
+            await interaction.delete_original_response()
+        except discord.HTTPException:
+            try:
+                await interaction.edit_original_response(content="Confirmación cerrada.", view=None)
+            except discord.HTTPException:
+                print("Honeypot: no se pudo cerrar la confirmación.")
+
+    async def _refresh_parent(self, guild: discord.Guild) -> bool:
+        try:
+            await self.panel_interaction.message.edit(
+                content=self.parent._content(guild), view=self.parent,
+            )
+            return True
+        except (discord.HTTPException, AttributeError):
+            try:
+                await self.panel_interaction.edit_original_response(
+                    content=self.parent._content(guild), view=self.parent,
+                )
+                return True
+            except discord.HTTPException:
+                print("Honeypot: no se pudo actualizar el panel original.")
+                return False
+
+    @discord.ui.button(label="Confirmar publicación", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        # Comprobar el actor antes de reconocer la interacción.
+        if not await self.parent.interaction_check(interaction):
+            return
+        await interaction.response.defer()
+        if self.finished:
+            await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        guild = interaction.guild
+        if (guild is None or guild.id != self.parent.guild_id or self.parent._has_pending()
+                or set(hp_traps(self.parent.guild_id)) != self.original_traps
+                or self._snapshot() != self.original_notice or not self.original_traps):
+            await interaction.followup.send(
+                "La configuración cambió. Abra el panel de nuevo antes de publicar.", ephemeral=True,
+            )
+            await self._dismiss(interaction)
+            return
+        me = guild.me
+        for cid in sorted(self.original_traps):
+            channel = guild.get_channel(cid)
+            perms = channel.permissions_for(me) if channel and me else None
+            if (not isinstance(channel, discord.TextChannel) or perms is None
+                    or not all(getattr(perms, key, False) for key in (
+                        "view_channel", "read_message_history", "send_messages",
+                        "embed_links", "manage_messages",
+                    ))):
+                await interaction.followup.send(
+                    "Faltan permisos o un canal trampa no está disponible. No se publicó.",
+                    ephemeral=True,
+                )
+                await self._dismiss(interaction)
+                return
+        try:
+            if not hp_warning_enabled(self.parent.guild_id):
+                hp_setting_set(self.parent.guild_id, "honeypot_warning_enabled", "1")
+            errors = await hp_sync_all_warnings(guild)
+        except Exception:
+            errors = ["La publicación se interrumpió. Revise los canales y los registros."]
+        self.parent.last_publication_status = (
+            "Avisos publicados o actualizados." if not errors
+            else "Publicación parcial: revise los canales afectados."
+        )
+        refreshed = await self._refresh_parent(guild)
+        if errors or not refreshed:
+            await interaction.followup.send(
+                "El aviso o el panel no se actualizaron completamente; revise los canales.",
+                ephemeral=True,
+            )
+        await self._dismiss(interaction)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.parent.interaction_check(interaction):
+            return
+        await interaction.response.defer()
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        await self._dismiss(interaction)
+
 
 
 def heraldo_permissions_summary(guild: discord.Guild) -> str:
