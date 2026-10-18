@@ -4697,17 +4697,30 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
                 print("Honeypot: no se pudo actualizar el panel original.")
                 return False
 
+    async def _allowed(self, interaction: discord.Interaction) -> bool:
+        guild = interaction.guild
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if (guild is None or guild.id != self.parent.guild_id
+                or interaction.user.id != self.parent.owner_id
+                or perms is None or not (perms.manage_guild or perms.administrator)):
+            await interaction.followup.send(
+                "No dispone de permisos para confirmar esta operación.", ephemeral=True,
+            )
+            return False
+        return True
+
     @discord.ui.button(label="Confirmar publicación", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        # Comprobar el actor antes de reconocer la interacción.
-        if not await self.parent.interaction_check(interaction):
-            return
+        # Responder a Discord antes de la consulta y proteger el estado antes de awaits.
         await interaction.response.defer()
         if self.finished:
             await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
             return
         self.finished = True
         self.stop()
+        if not await self._allowed(interaction):
+            await self._dismiss(interaction)
+            return
         guild = interaction.guild
         if (guild is None or guild.id != self.parent.guild_id or self.parent._has_pending()
                 or set(hp_traps(self.parent.guild_id)) != self.original_traps
@@ -4753,13 +4766,15 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await self.parent.interaction_check(interaction):
-            return
         await interaction.response.defer()
         if self.finished:
+            await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
             return
         self.finished = True
         self.stop()
+        if not await self._allowed(interaction):
+            await self._dismiss(interaction)
+            return
         await self._dismiss(interaction)
 
 
