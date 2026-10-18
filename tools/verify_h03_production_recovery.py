@@ -69,7 +69,7 @@ def main(argv=None):
     parser.add_argument("--workspace-root", required=True, help="Directorio Linux privado y cifrado")
     args = parser.parse_args(argv)
     try:
-        if not re.fullmatch(r"heraldo-production/[0-9]{8}/[0-9a-f]{32}\\.h03e", args.object):
+        if not re.fullmatch(r"heraldo-production/[0-9]{8}/[0-9a-f]{32}\.h03e", args.object):
             raise VerificationBlocked("invalid_object")
         verify_historical_recovery(args.object, args.workspace_root)
         print("H03_PRODUCTION_RECOVERY result=VERIFIED_REMOTE_AND_ISOLATED")
