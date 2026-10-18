@@ -4569,26 +4569,64 @@ class HeraldoHoneypotSetupView(discord.ui.View):
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_trap_id is None and self.pending_enabled is None:
+        if not self._has_pending():
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
+        if self._snapshot() != self._original_config or set(hp_traps(self.guild_id)) != self._original_traps:
+            await interaction.response.send_message(
+                "La configuración fue modificada. Abra nuevamente el panel antes de guardar.", ephemeral=True,
+            )
+            return
+        guild = interaction.guild
+        action = self.pending_action or hp_action(self.guild_id)
+        if action in {"kick", "ban"}:
+            issue = hp_sanction_permission_problem(guild, action, interaction.user.guild_permissions)
+            if issue:
+                await interaction.response.send_message(issue + " No se guardaron cambios.", ephemeral=True)
+                return
+        if action == "ban" and self.pending_ban_minutes is None and hp_ban_override_minutes(self.guild_id) is None:
+            await interaction.response.send_message(
+                "Seleccione explícitamente la duración del baneo (incluido Permanente).", ephemeral=True,
+            )
+            return
+        if action == "role" and self.pending_action == "role" and guild.get_role(hp_punish_role_id(self.guild_id)) is None:
+            await interaction.response.send_message("Configure el rol de condena antes de guardar.", ephemeral=True)
+            return
+        channel = guild.get_channel(self.pending_trap_id) if self.pending_trap_id is not None else None
+        if self.pending_trap_id is not None:
+            me = guild.me
+            perms = channel.permissions_for(me) if channel and me else None
+            if (not isinstance(channel, discord.TextChannel)
+                or hp_protected_channel_reason(channel) or perms is None
+                or not all(getattr(perms, name, False) for name in (
+                    "view_channel", "read_message_history", "send_messages", "manage_messages",
+                ))):
+                await interaction.response.send_message(
+                    "El canal seleccionado ya no es válido. No se guardó nada.", ephemeral=True,
+                )
+                return
+        await interaction.response.defer()
         if self.pending_trap_id is not None:
             hp_add_trap(self.guild_id, self.pending_trap_id)
-            channel = interaction.guild.get_channel(self.pending_trap_id)
-            if isinstance(channel, discord.TextChannel):
-                await hp_sync_warning(channel)
+        if self.pending_action is not None:
+            hp_setting_set(self.guild_id, "honeypot_action", hp_action_storage(self.pending_action))
+        if self.pending_kick_purge_minutes is not None:
+            hp_setting_set(self.guild_id, "honeypot_kick_purge_minutes", str(self.pending_kick_purge_minutes))
+        if self.pending_ban_minutes is not None:
+            hp_setting_set(self.guild_id, "honeypot_ban_minutes", str(self.pending_ban_minutes))
         if self.pending_enabled is not None:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
             hp_setting_set(self.guild_id, "honeypot_paused", "0")
-        self.pending_trap_id = None
-        self.pending_enabled = None
-        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+        self._reset_draft()
+        self._original_config = self._snapshot()
+        self._original_traps = set(hp_traps(self.guild_id))
+        await interaction.edit_original_response(
+            content=self._content(guild) + "\n\nCambios guardados.", view=self,
+        )
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.pending_trap_id = None
-        self.pending_enabled = None
+        self._reset_draft()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
