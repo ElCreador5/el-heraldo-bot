@@ -14,10 +14,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validar sintaxis
-        run: python -m py_compile bot.py sqlite_recovery.py supabase_backup.py backup_job.py production_backup_scheduler.py test_member_logs.py test_regressions.py test_release_report_only.py test_honeypot_selective_main.py test_honeypot_runtime.py
+        run: python -m py_compile bot.py sqlite_recovery.py supabase_backup.py backup_job.py production_backup_scheduler.py test_member_logs.py test_member_departure_cards.py test_regressions.py test_release_report_only.py test_honeypot_selective_main.py test_honeypot_runtime.py
       - name: Instalar dependencias
         run: pip install -r requirements.txt
       - name: Validar dependencias
         run: pip check
       - name: Regresiones de logs
-        run: python -m unittest test_member_logs test_regressions test_release_report_only test_honeypot_selective_main test_honeypot_runtime -v
+        run: python -m unittest test_member_logs test_member_departure_cards test_regressions test_release_report_only test_honeypot_selective_main test_honeypot_runtime -v

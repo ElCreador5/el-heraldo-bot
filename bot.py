@@ -2157,45 +2157,188 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
         traceback.print_exc()
 
 
+# Registro de actividad de miembros. Las acciones de moderación se identifican
+# mediante la auditoría de Discord; ante falta de permisos se clasifica como salida.
+async def classify_member_departure(member):
+    guild = member.guild
+    observed = datetime.now(timezone.utc)
+    if not guild.me or not guild.me.guild_permissions.view_audit_log:
+        return "member_leave", None, None, "No se pudo confirmar la causa: falta acceso a la auditoría."
+    for delay in (2, 3, 5):
+        await asyncio.sleep(delay)
+        try:
+            for action, event in ((discord.AuditLogAction.ban, "member_ban"),
+                                  (discord.AuditLogAction.kick, "member_kick")):
+                async for entry in guild.audit_logs(limit=25, action=action, after=observed - timedelta(seconds=20)):
+                    if (getattr(entry.target, "id", None) == member.id
+                            and abs((entry.created_at - observed).total_seconds()) <= 20):
+                        return event, entry.user, entry.reason, None
+        except discord.Forbidden:
+            return "member_leave", None, None, "No se pudo confirmar la causa: acceso a auditoría denegado."
+        except discord.HTTPException:
+            continue
+    return "member_leave", None, None, "Salida observada; no se encontró una expulsión o baneo en la auditoría consultada."
+
+
+
+def member_departure_description(
+    member: discord.Member, kind: str, *,
+    moderator: discord.abc.User | None = None,
+    reason: str | None = None,
+    uncertainty: str | None = None,
+    ban_duration_known: bool = False,
+    ban_duration_minutes: int | None = None,
+    ban_expires_at: datetime | None = None,
+    extra: list[tuple[str, str]] | None = None,
+) -> str:
+    """Tarjeta compacta con hechos comprobados del evento, sin enlaces ficticios."""
+    guild = member.guild
+    joined = discord.utils.format_dt(member.joined_at, "R") if member.joined_at else "No disponible"
+    roles = [role.mention for role in member.roles if role.id != guild.default_role.id]
+    shown: list[str] = []
+    for role in roles:
+        if len(", ".join((*shown, role))) > 850:
+            break
+        shown.append(role)
+    roles_text = ", ".join(shown) if shown else "Ninguno"
+    if len(shown) < len(roles):
+        roles_text += f" y {len(roles) - len(shown)} más"
+    name = discord.utils.escape_markdown(str(member.display_name))[:100]
+    lines = [
+        f"> **Usuario:** {name} ({member.mention})",
+        f"> **ID:** \u0060{member.id}\u0060",
+        f"> **Ingresó:** {joined}",
+        f"> **Roles:** {roles_text}",
+        f"> **Miembros:** {guild.member_count if guild.member_count is not None else 'No disponible'}",
+    ]
+    if kind in {"member_kick", "member_ban"}:
+        if reason:
+            clean_reason = discord.utils.escape_markdown(str(reason)[:500]).replace("\n", " ")
+            lines.append(f"> **Motivo:** {clean_reason}")
+        if moderator is not None:
+            lines.append(f"> **Responsable:** {moderator.mention}")
+    if kind == "member_ban":
+        if ban_duration_known:
+            duration = format_duration(ban_duration_minutes) if ban_duration_minutes else "Permanente"
+            lines.append(f"> **Duración:** {duration}")
+            if ban_duration_minutes and ban_expires_at:
+                lines.append(f"> **Finaliza:** {discord.utils.format_dt(ban_expires_at, 'R')}")
+        else:
+            lines.append("> **Duración:** No consta en los registros disponibles")
+    if kind == "member_leave" and uncertainty:
+        lines.append(f"> **Clasificación:** {discord.utils.escape_markdown(uncertainty[:220])}")
+    for label, value in (extra or []):
+        lines.append(f"> **{label}:** {value}")
+    return "\n".join(lines)
+
+
+def member_departure_embed(member: discord.Member, kind: str, **kwargs) -> discord.Embed:
+    """Respeta el editor de plantillas existente, con avatar por defecto."""
+    title = dict(LOG_EVENT_CATALOG["members"])[kind]
+    body = member_departure_description(member, kind, **kwargs)
+    embed = build_log_template_embed(
+        member.guild, title, body,
+        discord.Color.red(),
+        category="members", event_key=kind,
+    )
+    if not embed.thumbnail.url:
+        embed.set_thumbnail(url=member.display_avatar.url)
+    return embed
+
+
+def member_departure_ban_details(
+    guild_id: int, user_id: int, when: datetime, reason: str | None,
+) -> tuple[bool, int | None, datetime | None]:
+    """Mostrar duración solo si un expediente reciente confirma el mismo baneo."""
+    try:
+        cases = moderation_case_list(guild_id, user_id, case_type="BAN", limit=5)
+    except (sqlite3.Error, ValueError):
+        return False, None, None
+    for case in cases:
+        try:
+            created = datetime.fromisoformat(case["created_at"])
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if abs((when - created).total_seconds()) > 90:
+                continue
+            if reason and (case["reason"] or "").strip() != reason.strip():
+                continue
+            duration = int(case["duration_minutes"]) if case["duration_minutes"] else None
+            expiration = datetime.fromisoformat(case["expires_at"]) if case["expires_at"] else None
+            return True, duration, expiration
+        except (ValueError, TypeError, KeyError):
+            continue
+    return False, None, None
+
+
+# Evitar dos tarjetas por la misma expulsión de verificación, sin ocultar
+# expulsiones externas ni perder el único registro cuando falle su publicación.
+_ORIENTATION_KICK_REASON = "No definió su orientación"
+_ORIENTATION_LOG_WINDOW = 30.0
+_orientation_kick_log_pending: dict[tuple, asyncio.Event] = {}
+_orientation_kick_log_sent: dict[tuple, float] = {}
+
+
+def orientation_kick_log_key(member: discord.Member) -> tuple:
+    # La fecha de entrada distingue dos sesiones del mismo usuario.
+    return (member.guild.id, member.id, getattr(member, "joined_at", None))
+
+
+def orientation_prune_kick_log_markers(now: float | None = None) -> None:
+    now = time.monotonic() if now is None else now
+    for key, observed in list(_orientation_kick_log_sent.items()):
+        if now - observed > _ORIENTATION_LOG_WINDOW:
+            _orientation_kick_log_sent.pop(key, None)
+
+
+async def orientation_departure_has_detailed_log(
+    member: discord.Member, kind: str, moderator: discord.abc.User | None, reason: str | None,
+) -> bool:
+    """Solo omitir el log genérico si la tarjeta detallada YA fue enviada."""
+    if kind not in {"member_kick", "member_leave"}:
+        return False
+    if kind == "member_kick":
+        bot_user = bot.user
+        if (bot_user is None or getattr(moderator, "id", None) != bot_user.id
+                or (reason or "").strip() != _ORIENTATION_KICK_REASON):
+            return False
+    key = orientation_kick_log_key(member)
+    pending = _orientation_kick_log_pending.get(key)
+    if pending is not None:
+        try:
+            await asyncio.wait_for(pending.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            pass  # Evitar bloquear la auditoría cuando Discord no responde.
+    now = time.monotonic()
+    orientation_prune_kick_log_markers(now)
+    logged_at = _orientation_kick_log_sent.pop(key, None)
+    return logged_at is not None and 0 <= now - logged_at <= _ORIENTATION_LOG_WINDOW
+
+
 @bot.listen("on_member_remove")
 async def heraldo_member_departure(member: discord.Member) -> None:
     guild = member.guild
     if not any(log_member_event_enabled(guild.id, key) for key in ("member_leave", "member_kick", "member_ban")):
         return
-    await asyncio.sleep(2)
-    kind = "member_leave"
-    moderator = None
-    reason = None
-    try:
-        if guild.me and guild.me.guild_permissions.view_audit_log:
-            for action, event in ((discord.AuditLogAction.ban, "member_ban"),
-                                  (discord.AuditLogAction.kick, "member_kick")):
-                async for entry in guild.audit_logs(limit=5, action=action):
-                    if (getattr(entry.target, "id", None) == member.id
-                            and (datetime.now(timezone.utc) - entry.created_at).total_seconds() < 20):
-                        kind = event
-                        moderator = entry.user
-                        reason = entry.reason
-                        break
-                if kind != "member_leave":
-                    break
-    except (discord.Forbidden, discord.HTTPException):
-        pass
+    kind, moderator, reason, uncertainty = await classify_member_departure(member)
+    if await orientation_departure_has_detailed_log(member, kind, moderator, reason):
+        return  # El informe específico de verificación ya explica esta expulsión.
     if not log_member_event_enabled(guild.id, kind):
         return
     labels = dict(LOG_EVENT_CATALOG["members"])
-    joined = discord.utils.format_dt(member.joined_at, "R") if member.joined_at else "No disponible"
-    roles = [role.mention for role in member.roles if role != guild.default_role]
-    details = [f"Usuario: {discord.utils.escape_markdown(str(member))}",
-               f"ID: {member.id}", f"Se incorporó: {joined}",
-               f"Miembros restantes: {guild.member_count if guild.member_count is not None else 'No disponible'}",
-               f"Roles: {', '.join(roles)[:700] if roles else 'Ninguno'}"]
-    if moderator:
-        details.append(f"Responsable: {moderator.mention}")
-    if reason:
-        details.append(f"Motivo: {discord.utils.escape_markdown(reason[:500])}")
-    await log_embed(guild, labels[kind], "\n".join(details),
-                    discord.Color.red() if kind != "member_leave" else discord.Color.orange(), member=member)
+    kwargs = {"moderator": moderator, "reason": reason, "uncertainty": uncertainty}
+    if kind == "member_ban":
+        known, minutes, expires = member_departure_ban_details(
+            guild.id, member.id, datetime.now(timezone.utc), reason,
+        )
+        kwargs.update(ban_duration_known=known, ban_duration_minutes=minutes,
+                      ban_expires_at=expires)
+    description = member_departure_description(member, kind, **kwargs)
+    await log_embed(
+        guild, labels[kind], description,
+        discord.Color.red(),
+        member=member,
+    )
 
 
 @bot.event
@@ -2486,30 +2629,38 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     if not report:
         return
 
-    embed = discord.Embed(
-        title="Kick — Falta de verificación",
-        color=discord.Color.red() if kicked else discord.Color.dark_red(),
-        timestamp=datetime.now(timezone.utc),
-    )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="Usuario", value=f"{member.mention} (`{member.id}`)", inline=False)
-    embed.add_field(
-        name="Razón",
-        value="No definió su orientación.",
-        inline=False,
-    )
-    embed.add_field(name="Falta", value="1ra — se le dio otra oportunidad" if is_first_fault else "2da — sin nueva oportunidad", inline=True)
+    # El listener de salidas espera esta publicación antes de emitir un segundo log.
+    log_key = orientation_kick_log_key(member)
+    pending = asyncio.Event()
+    if kicked:
+        orientation_prune_kick_log_markers()
+        _orientation_kick_log_pending[log_key] = pending
+
+    extra = [("Oportunidad", "Primera" if is_first_fault else "Segunda")]
     if dm_ok is not None:
-        embed.add_field(name="DM de recuperación", value="Enviado" if dm_ok else "Advertencia: Falló (DMs cerrados)", inline=True)
-    embed.add_field(name="Resultado", value="Expulsado" if kicked else "Advertencia: Falló — revisa jerarquía de roles", inline=True)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+        extra.append(("DM de recuperación", "Enviado" if dm_ok else "No disponible"))
+    extra.append(("Resultado", "Expulsado" if kicked else "No se pudo expulsar; revisar jerarquía"))
+    embed = member_departure_embed(
+        member, "member_kick", moderator=member.guild.me,
+        reason="No definió su orientación", extra=extra,
+    )
+    if not kicked:
+        embed.color = discord.Color.dark_red()
 
     channel = member.guild.get_channel(get_log_channel_id(member.guild.id))
-    if channel is not None:
-        try:
-            await channel.send(embed=embed)
-        except discord.Forbidden:
-            print("Sin permisos para escribir en el canal de logs")
+    try:
+        if channel is not None:
+            try:
+                await channel.send(embed=embed)
+            except discord.HTTPException:
+                print("No se pudo publicar la tarjeta de expulsión por verificación")
+            else:
+                if kicked:
+                    _orientation_kick_log_sent[log_key] = time.monotonic()
+    finally:
+        if kicked:
+            _orientation_kick_log_pending.pop(log_key, None)
+            pending.set()
 
 
 async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
