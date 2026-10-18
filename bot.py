@@ -10141,7 +10141,11 @@ HONEYPOT_ACTION_LABELS = {
     "role": "Purgar y aplicar rol de castigo",
     "log": "Solo registrar",
     "timeout": "Aislar (timeout)",
+    "kick": "Expulsar",
+    "ban": "Banear",
 }
+# Valores históricos 'kick'/'ban' no habilitan nuevas sanciones destructivas.
+HONEYPOT_DESTRUCTIVE_ACTION_STORAGE = {"kick": "kick_enabled", "ban": "ban_enabled"}
 HONEYPOT_RETENTION_DEFAULT_MINUTES = 30 * 24 * 60  # el historial (y el texto guardado) se borra a los 30 días
 HONEYPOT_PURGE_DEFAULT = ("time", 24 * 60)  # por defecto: mensajes de las últimas 24 h (sin tope máximo)
 HONEYPOT_TIMEOUT_MINUTES_DEFAULT = 24 * 60  # duración del timeout (1 min a 28 días)
@@ -11360,10 +11364,34 @@ def honeypot_paused(guild_id: int) -> bool:
 
 
 def hp_action(guild_id: int) -> str:
-    v = hp_setting_get(guild_id, "honeypot_action")
-    if v in (None, "", "kick", "ban"):
-        return "role"
-    return v
+    value = hp_setting_get(guild_id, "honeypot_action")
+    if value in HONEYPOT_DESTRUCTIVE_ACTION_STORAGE.values():
+        return "kick" if value == "kick_enabled" else "ban"
+    if value in {"role", "log", "timeout"}:
+        return value
+    # Valores históricos no deben volverse sanciones destructivas inadvertidas.
+    return "role"
+
+
+def hp_sanction_permission_problem(guild: discord.Guild, action: str, actor_permissions=None) -> str | None:
+    if action not in {"kick", "ban"}:
+        return None
+    perm = "kick_members" if action == "kick" else "ban_members"
+    label = "Expulsar miembros" if action == "kick" else "Banear miembros"
+    if actor_permissions is not None and not (
+        getattr(actor_permissions, perm, False) or getattr(actor_permissions, "administrator", False)
+    ):
+        return f"El administrador necesita el permiso {label}."
+    me = guild.me
+    if me is None:
+        return "No se pudo comprobar la identidad del bot en este servidor."
+    if not (getattr(me.guild_permissions, perm, False) or me.guild_permissions.administrator):
+        return f"El Heraldo necesita el permiso {label}."
+    return None
+
+
+def hp_action_storage(action: str) -> str:
+    return HONEYPOT_DESTRUCTIVE_ACTION_STORAGE.get(action, action)
 
 
 def hp_punish_role_id(guild_id: int) -> int:
@@ -11458,6 +11486,28 @@ def hp_purge_spec(guild_id: int) -> tuple[str, int]:
     return HONEYPOT_PURGE_DEFAULT
 
 
+def hp_kick_purge_minutes(guild_id: int) -> int:
+    """Como mínimo 24 horas y hasta 30 días; nunca purga a otros autores."""
+    raw = hp_setting_get(guild_id, "honeypot_kick_purge_minutes")
+    try:
+        minutes = int(raw) if raw is not None else 1440
+    except (TypeError, ValueError):
+        minutes = 1440
+    return minutes if 1440 <= minutes <= 30 * 1440 else 1440
+
+
+def hp_ban_override_minutes(guild_id: int) -> int | None:
+    """None: no configurado, 0: permanente explícito; resto duración temporal."""
+    raw = hp_setting_get(guild_id, "honeypot_ban_minutes")
+    if raw is None:
+        return None
+    try:
+        minutes = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return minutes if 0 <= minutes <= 365 * 1440 else None
+
+
 def hp_timeout_minutes(guild_id: int) -> int:
     v = hp_setting_get(guild_id, "honeypot_timeout_minutes")
     if v is not None:
@@ -11521,6 +11571,8 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Canales trampa:** {trap_text}",
         f"**Acción:** {HONEYPOT_ACTION_LABELS.get(hp_action(guild.id), hp_action(guild.id))}",
         f"**Rol de castigo:** {f'<@&{hp_punish_role_id(guild.id)}>' if hp_punish_role_id(guild.id) else '—'}",
+        f"**Purga al expulsar:** {format_duration(hp_kick_purge_minutes(guild.id))}",
+        f"**Duración de baneo:** {format_duration(hp_ban_override_minutes(guild.id)) if hp_ban_override_minutes(guild.id) else 'Permanente' if hp_setting_get(guild.id, 'honeypot_ban_minutes') == '0' else 'Sin configurar'}",
         f"**Purga al castigado:** {format_purge_spec(*hp_purge_spec(guild.id))}",
         f"**Duración del timeout:** {format_duration(hp_timeout_minutes(guild.id))}",
         f"**Aviso fijado:** {'sí' if hp_warning_enabled(guild.id) else 'no'}"
@@ -12985,31 +13037,85 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
     reason = "Honeypot: escribió en un canal trampa"
     if action == "log":
         return True, "Solo registrado (sin castigo)"
-    if member.top_role >= guild.me.top_role:
-        return False, "Su rol es igual o superior al del bot (jerarquía de roles)"
+
+    me = guild.me
+    if me is None:
+        return False, "No se pudo comprobar la identidad del bot"
+    if member.id == guild.owner_id or getattr(member, "bot", False):
+        return False, "Miembro protegido frente a medidas automáticas"
+    if member.top_role >= me.top_role:
+        return False, "Jerarquía de roles insuficiente"
+
+    if action in {"kick", "ban"}:
+        problem = hp_sanction_permission_problem(guild, action)
+        if problem:
+            return False, problem
+
     try:
         if action == "timeout":
-            minutes = hp_timeout_minutes(member.guild.id)
+            minutes = hp_timeout_minutes(guild.id)
             await member.timeout(timedelta(minutes=minutes), reason=reason)
             purge_note = hp_start_purge(member)
             return True, f"Aislado {format_duration(minutes)}" + (f"; {purge_note}" if purge_note else "")
         if action == "role":
-            purge_spec = hp_purge_spec(member.guild.id)
             return await condemn_member(
-                member,
-                reason="Honeypot: escribió en un canal trampa",
-                duration_minutes=condemnation_default_duration_minutes(member.guild.id),
-                purge_spec=purge_spec,
-                origin="honeypot",
-                applied_by=None,
-                source_channel_id=source_channel_id,
-                send_dm=True,
-                announce=True,
+                member, reason=reason, duration_minutes=condemnation_default_duration_minutes(guild.id),
+                purge_spec=hp_purge_spec(guild.id), origin="honeypot", applied_by=None,
+                source_channel_id=source_channel_id, send_dm=True, announce=True,
             )
+        if action in {"kick", "ban"}:
+            duration = None
+            if action == "ban":
+                duration = hp_ban_override_minutes(guild.id)
+                if duration is None:
+                    return False, "Configure explícitamente la duración del baneo en /setup."
+            # Discord no debe purgar mensajes al expulsar ni al banear; Honeypot
+            # realiza cualquier purga separadamente, por autor y por canal.
+            if action == "kick":
+                await member.kick(reason=reason)
+            else:
+                await member.ban(reason=reason, delete_message_seconds=0)
+
+            purge_note = ""
+            if action == "kick":
+                minutes = hp_kick_purge_minutes(guild.id)
+                try:
+                    task = asyncio.create_task(run_purge_job(
+                        guild, member, scope_text=f"últimas {format_duration(minutes)}",
+                        requested_by="Honeypot", after=datetime.now(timezone.utc) - timedelta(minutes=minutes),
+                        title="Purga por expulsión Honeypot completada",
+                    ))
+                    # La purga posterior no debe volver a ejecutar una sanción.
+                    task.add_done_callback(lambda future: future.exception() if not future.cancelled() else None)
+                    purge_note = f"purga iniciada ({format_duration(minutes)})"
+                except Exception:
+                    traceback.print_exc()
+                    purge_note = "purga no iniciada; requiere revisión"
+            try:
+                # Conservar expediente pero no almacenar transcripciones ni evidencias.
+                case_number = moderation_case_create(
+                    guild.id, action.upper(), member.id, reason,
+                    duration_minutes=duration if duration else None, author_id=None,
+                    include_message_history=False,
+                    moderator_notes="Medida automática de Honeypot.",
+                )
+                return True, (
+                    f"{'Expulsado' if action == 'kick' else 'Baneado'} · "
+                    f"Expediente {moderation_case_code(case_number, guild.id)}"
+                    + (f" · {format_duration(duration)}" if duration else "")
+                    + (f" · {purge_note}" if purge_note else "")
+                )
+            except Exception:
+                traceback.print_exc()
+                return True, (
+                    f"{'Expulsión' if action == 'kick' else 'Baneo'} ejecutado; "
+                    "expediente pendiente de revisión administrativa."
+                    + (f" {purge_note}" if purge_note else "")
+                )
     except discord.Forbidden:
-        return False, "Faltan permisos (Moderar miembros / Gestionar roles)"
-    except discord.HTTPException as e:
-        return False, f"Error de Discord: `{e}`"
+        return False, "El bot carece de permisos o jerarquía"
+    except discord.HTTPException:
+        return False, "Discord rechazó la medida automática"
     return False, f"Acción desconocida: {action}"
 
 

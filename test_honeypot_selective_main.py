@@ -53,5 +53,36 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertIn("_hp_busy.discard(key)", definition("honeypot_listener"))
 
 
+    def test_sanctions_require_explicit_storage(self):
+        value = definition("hp_action")
+        self.assertIn('"kick_enabled"', value)
+        self.assertIn('"ban_enabled"', value)
+        self.assertIn('return "role"', value)
+
+    def test_kick_purges_by_author_without_discord_delete_messages(self):
+        fn = definition("hp_punish")
+        self.assertIn("await member.kick(reason=reason)", fn)
+        self.assertIn("run_purge_job(", fn)
+        self.assertIn("hp_kick_purge_minutes(guild.id)", fn)
+        self.assertNotIn("delete_message_days", fn)
+
+    def test_ban_explicit_duration_and_case(self):
+        fn = definition("hp_punish")
+        self.assertIn("hp_ban_override_minutes(guild.id)", fn)
+        self.assertIn("if duration is None:", fn)
+        self.assertIn("delete_message_seconds=0", fn)
+        self.assertIn("include_message_history=False", fn)
+
+    def test_sanction_permissions_and_hierarchy(self):
+        fn = definition("hp_punish")
+        self.assertIn("hp_sanction_permission_problem", fn)
+        self.assertIn("member.id == guild.owner_id", fn)
+        self.assertIn("member.top_role >= me.top_role", fn)
+
+    def test_kick_purge_minimum_is_one_day(self):
+        fn = definition("hp_kick_purge_minutes")
+        self.assertIn("minutes if 1440 <= minutes <= 30 * 1440 else 1440", fn)
+
+
 if __name__ == "__main__":
     unittest.main()
