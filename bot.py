@@ -10559,6 +10559,7 @@ HONEYPOT_MISFIRE_THRESHOLD = 3
 
 _hp_busy: set[tuple[int, int]] = set()  # claves por servidor y miembro
 _hp_veteran_hits: list[tuple[datetime, int, int]] = []  # hora, servidor, miembro
+_hp_warning_locks: dict[tuple[int, int], asyncio.Lock] = {}  # serializa publicación por canal
 
 
 # --- Persistencia -----------------------------------------------------------
@@ -12013,8 +12014,15 @@ def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord
 
 
 async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
-    """Publica/actualiza (o borra) el aviso fijado de un canal trampa. Devuelve un
-    texto de error o None si todo fue bien."""
+    """Serializa actualizaciones del aviso por servidor/canal y evita publicaciones simultáneas."""
+    key = (channel.guild.id, channel.id)
+    lock = _hp_warning_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        return await _hp_sync_warning_locked(channel)
+
+
+async def _hp_sync_warning_locked(channel: discord.TextChannel) -> str | None:
+    """Publica/actualiza (o borra) un único aviso; se llama con el lock adquirido."""
     msg_id = hp_traps(channel.guild.id).get(channel.id)
     existing: discord.Message | None = None
     if msg_id:
