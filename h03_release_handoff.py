@@ -183,11 +183,16 @@ def prepare_handoff(plan, *, root, source_revision, target_approved,
         journal_files = list(directory.glob("h03-lab-release-*.json"))
         if (directory / _INDEX).is_file():
             index = _read(directory, _INDEX)
-            if index.get("version") != 1 or not isinstance(index.get("request_id"), str):
+            previous_id = index.get("request_id")
+            if (index.get("version") != 1 or
+                    not isinstance(previous_id, str) or
+                    not _REQUEST.fullmatch(previous_id)):
                 raise HandoffBlocked("corrupt_active_pointer")
-            previous = _read(directory, "h03-lab-release-" + index["request_id"] + ".json")
+            previous = _read(directory, "h03-lab-release-" + previous_id + ".json")
             if previous.get("phase") != "completed":
                 raise HandoffBlocked("previous_release_not_closed")
+            if (directory / _name(info)).exists() or (directory / _name(info)).is_symlink():
+                raise HandoffBlocked("request_id_reused")
             if previous.get("plan", {}).get("target_revision") != info["source_revision"]:
                 raise HandoffBlocked("release_history_diverged")
         elif journal_files:
