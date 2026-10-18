@@ -10158,8 +10158,8 @@ HONEYPOT_MISFIRE_MEMBER_AGE = timedelta(days=30)
 HONEYPOT_MISFIRE_WINDOW = timedelta(minutes=5)
 HONEYPOT_MISFIRE_THRESHOLD = 3
 
-_hp_busy: set[int] = set()  # usuarios en pleno castigo (evita doble castigo si postea en varias trampas)
-_hp_veteran_hits: list[tuple[datetime, int]] = []
+_hp_busy: set[tuple[int, int]] = set()  # claves por servidor y miembro
+_hp_veteran_hits: list[tuple[datetime, int, int]] = []  # hora, servidor, miembro
 
 
 # --- Persistencia -----------------------------------------------------------
@@ -10755,7 +10755,7 @@ def moderation_case_message_history(guild_id: int, user_id: int) -> str:
     return json.dumps(grouped, ensure_ascii=False)
 
 
-def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None) -> int:
+def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None, include_message_history: bool = True) -> int:
     case_type = case_type.upper()
     if case_type not in MODERATION_CASE_TYPES:
         raise ValueError("Tipo de caso inválido.")
@@ -10770,7 +10770,7 @@ def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: 
         (guild_id, case_number, case_type, user_id, reason[:1000], duration_minutes, now.isoformat(),
          expires_at.isoformat() if expires_at else None, author_id, (proof or "")[:2000],
          (verified_proof or "")[:2000], (moderator_notes or "")[:2000],
-         moderation_case_message_history(guild_id, user_id)),
+         moderation_case_message_history(guild_id, user_id) if include_message_history else None),
     )
     conn.close()
     moderation_case_code(case_number, guild_id)
@@ -11271,14 +11271,15 @@ def condemnation_parse_role_ids(value: str) -> list[int]:
         return []
 
 
-def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
+def hp_log_trigger(member: discord.Member, channel_id: int, action: str,
                    success: bool, note: str) -> None:
+    """El historial registra el incidente, nunca conserva el contenido del mensaje."""
     conn = db_connect()
     conn.execute(
         "INSERT INTO honeypot_triggers (guild_id, user_id, username, channel_id, content, action, success, note, "
         "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            member.guild.id, member.id, str(member), channel_id, content[:1500], action, int(success), note,
+            member.guild.id, member.id, str(member), channel_id, "", action, int(success), note,
             member.created_at.isoformat(),
             member.joined_at.isoformat() if member.joined_at else None,
             datetime.now(timezone.utc).isoformat(),
@@ -12675,26 +12676,33 @@ async def _condemn_member_inner(
     db_clear_verify_pending(member.guild.id, member.id)
     db_zero_week_messages(member.guild.id, member.id)
 
-    evidence_url, evidence_text = await condemnation_archive_evidence(
-        member.guild,
-        member,
-        source_message_url=source_message_url,
-        reason=reason,
-        applied_by=applied_by,
-    )
+    # Los incidentes Honeypot conservan el expediente, pero no archivan evidencias.
+    if origin == "honeypot":
+        evidence_url, evidence_text = None, None
+    else:
+        evidence_url, evidence_text = await condemnation_archive_evidence(
+            member.guild,
+            member,
+            source_message_url=source_message_url,
+            reason=reason,
+            applied_by=applied_by,
+        )
 
     # Ambos destinos reciben la misma resolución y el mismo Moderation Case.
     condemnation_when = datetime.now(timezone.utc)
     linked_case_number: int | None = None
     if send_dm or announce:
         try:
-            verified = evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            verified = (
+                evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            ) if origin != "honeypot" else None
             linked_case_number = moderation_case_create(
                 member.guild.id, "CONDEMN", member.id, reason,
                 duration_minutes=duration_minutes,
                 author_id=applied_by.id if applied_by else None,
-                proof=evidence_url or source_message_url,
+                proof=(evidence_url or source_message_url) if origin != "honeypot" else None,
                 verified_proof=verified,
+                include_message_history=(origin != "honeypot"),
             )
             conn = db_connect()
             conn.execute(
@@ -13006,18 +13014,13 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
 
 
 async def hp_report(guild: discord.Guild, member: discord.Member, channel: discord.abc.GuildChannel,
-                    content: str, attachments: int, action: str, success: bool, note: str) -> None:
+                    action: str, success: bool, note: str) -> None:
+    """Notificación administrativa sin archivar ni reproducir el mensaje disparador."""
     log_channel = guild.get_channel(get_log_channel_id(guild.id))
     if log_channel is None:
         return
-    evidence = content.replace("`", "'")[:900] if content else ""
-    if not evidence:
-        evidence = ("(sin texto)" if attachments or os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
-                    else "(no disponible: activa MESSAGE_CONTENT_INTENT=1 y el intent en el portal)")
-    if attachments:
-        evidence += f"\n{attachments} adjunto(s)"
     embed = discord.Embed(
-        title="Honeypot: miembro atrapado" if success else "Honeypot: castigo FALLIDO",
+        title="Honeypot: miembro detectado" if success else "Honeypot: acción fallida",
         color=discord.Color.orange() if success else discord.Color.red(),
         timestamp=datetime.now(timezone.utc),
     )
@@ -13030,7 +13033,6 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
     )
     embed.add_field(name="Canal", value=channel.mention, inline=True)
     embed.add_field(name="Acción", value=f"{HONEYPOT_ACTION_LABELS.get(action, action)} — {note}", inline=False)
-    embed.add_field(name="Mensaje", value=f"```{evidence}```", inline=False)
     embed.set_thumbnail(url=member.display_avatar.url)
     role_id = hp_ping_role_id(guild.id)
     try:
@@ -13039,43 +13041,48 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
             embed=embed,
             allowed_mentions=discord.AllowedMentions(roles=True, users=False, everyone=False),
         )
-    except discord.HTTPException as e:
-        print(f"Honeypot: no pude reportar en el canal de logs: {e}")
+    except discord.HTTPException:
+        print("Honeypot: no se pudo notificar en el canal de logs")
 
 
 async def hp_handle_trigger(message: discord.Message, member: discord.Member) -> None:
     guild = member.guild
-    content = message.content or ""
-    attachments = len(message.attachments)
     action = hp_action(guild.id)
 
-    # Borra el mensaje trampa (si el castigo no lo purga ya).
-    try:
-        await message.delete()
-    except discord.HTTPException:
-        pass
-
-    # Protección contra fallos: varios miembros veteranos atrapados en pocos minutos.
+    # La protección antifallos debe ejecutarse antes de cualquier borrado.
     now = datetime.now(timezone.utc)
     if member.joined_at and now - member.joined_at > HONEYPOT_MISFIRE_MEMBER_AGE:
-        _hp_veteran_hits.append((now, member.id))
-    _hp_veteran_hits[:] = [(t, u) for t, u in _hp_veteran_hits if now - t <= HONEYPOT_MISFIRE_WINDOW]
-    if len({u for _, u in _hp_veteran_hits}) >= HONEYPOT_MISFIRE_THRESHOLD:
+        _hp_veteran_hits.append((now, guild.id, member.id))
+    _hp_veteran_hits[:] = [
+        (at, guild_id, user_id)
+        for at, guild_id, user_id in _hp_veteran_hits
+        if now - at <= HONEYPOT_MISFIRE_WINDOW
+    ]
+    affected = {user_id for _, guild_id, user_id in _hp_veteran_hits if guild_id == guild.id}
+    if len(affected) >= HONEYPOT_MISFIRE_THRESHOLD:
         hp_setting_set(guild.id, "honeypot_paused", "1")
-        _hp_veteran_hits.clear()
+        _hp_veteran_hits[:] = [
+            item for item in _hp_veteran_hits if item[1] != guild.id
+        ]
         await log_embed(
-            guild, "⏸️ Honeypot pausado (protección contra fallos)",
-            f"{HONEYPOT_MISFIRE_THRESHOLD}+ miembros con más de 30 días en el servidor escribieron en la trampa en "
-            f"pocos minutos: probablemente apunta a un canal que tu comunidad usa de verdad.\n"
-            f"Revisa los canales trampa con `/honeypot setup` y reactiva con `/honeypot resume`. "
-            f"Este último mensaje ({member.mention}) **no** fue castigado.",
+            guild, "Honeypot pausado — protección contra fallos",
+            "Varios miembros veteranos escribieron en canales trampa durante un breve periodo. "
+            f"Se conservó el último mensaje de {member.mention} y no se le sancionó. "
+            "Revise la configuración y reactive la protección cuando sea seguro.",
             discord.Color.red(),
         )
         return
 
+    # Solo registrar significa ninguna acción destructiva, tampoco borrar el disparador.
+    if action != "log":
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            pass
+
     success, note = await hp_punish(member, action, message.channel.id)
-    hp_log_trigger(member, message.channel.id, content, action, success, note)
-    await hp_report(guild, member, message.channel, content, attachments, action, success, note)
+    hp_log_trigger(member, message.channel.id, action, success, note)
+    await hp_report(guild, member, message.channel, action, success, note)
 
 
 @bot.listen("on_message")
@@ -13090,25 +13097,27 @@ async def honeypot_listener(message: discord.Message) -> None:
     if not isinstance(member, discord.Member) or hp_is_exempt(member):
         return
     punish_id = hp_punish_role_id(message.guild.id)
-    if punish_id and any(r.id == punish_id for r in member.roles):
+    if hp_action(message.guild.id) != "log" and punish_id and any(r.id == punish_id for r in member.roles):
         try:
             await message.delete()  # ya está castigado: solo se borra lo que siga escribiendo
         except discord.HTTPException:
             pass
         return
-    if member.id in _hp_busy:
+    key = (message.guild.id, member.id)
+    if key in _hp_busy:
         try:
-            await message.delete()
+            if hp_action(message.guild.id) != "log":
+                await message.delete()
         except discord.HTTPException:
             pass
         return
-    _hp_busy.add(member.id)
+    _hp_busy.add(key)
     try:
         await hp_handle_trigger(message, member)
     except Exception:
         traceback.print_exc()
     finally:
-        _hp_busy.discard(member.id)
+        _hp_busy.discard(key)
 
 
 @bot.listen("on_guild_channel_delete")
