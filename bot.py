@@ -5008,8 +5008,8 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotSubView):
             minutes = self.parent.pending_kick_purge_minutes or hp_kick_purge_minutes(guild.id)
             lines.extend([
                 f"**Purga:** últimos {format_duration(minutes)} del miembro expulsado.",
-                "Solo se borrarán mensajes con evidencias archivadas. "
-                "El resultado real de la purga se notificará en Logs.",
+                "La purga se limita al autor y el período configurados. "
+                "Honeypot no archiva contenido como evidencia.",
             ])
         elif action == "ban":
             minutes = (
@@ -5442,6 +5442,60 @@ class HeraldoHoneypotDetailsView(HeraldoHoneypotSubView):
     @discord.ui.button(label="Ver historial", style=discord.ButtonStyle.secondary, row=0)
     async def history(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await honeypot_history.callback(interaction, cantidad=10)
+
+
+class HoneypotRemoveTrapConfirmView(discord.ui.View):
+    """Confirmación para retirar una trampa registrada; conserva el canal físico."""
+    def __init__(self, parent: HeraldoHoneypotSetupView, channel_id: int) -> None:
+        super().__init__(timeout=240)
+        self.parent, self.channel_id = parent, channel_id
+        self.original_traps = set(hp_traps(parent.guild_id))
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await hp_config_interaction_allowed(interaction, self.parent.guild_id, self.parent.owner_id)
+
+    @discord.ui.button(label="Confirmar retirada", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await interaction.followup.send("La solicitud ya fue resuelta.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        guild = interaction.guild
+        if (self.parent._has_pending() or set(hp_traps(self.parent.guild_id)) != self.original_traps
+                or self.channel_id not in self.original_traps
+                or not isinstance(guild.get_channel(self.channel_id), discord.TextChannel)):
+            await interaction.followup.send("La configuración cambió. Abra de nuevo Honeypot.", ephemeral=True)
+            return
+        hp_remove_trap(self.parent.guild_id, self.channel_id)
+        if not hp_traps(self.parent.guild_id) and honeypot_enabled(self.parent.guild_id):
+            hp_setting_set(self.parent.guild_id, "honeypot_enabled", "0")
+        self.parent._original_traps = set(hp_traps(self.parent.guild_id))
+        self.parent.original_traps = set(self.parent._original_traps)
+        self.parent._original_config = self.parent._snapshot()
+        self.parent.selected_channel_id = None
+        self.parent._sync_controls()
+        try:
+            if self.parent._origin_interaction is not None:
+                await self.parent._origin_interaction.edit_original_response(
+                    content=None, embed=self.parent._embed(guild), view=self.parent,
+                )
+        except discord.HTTPException:
+            await interaction.followup.send(
+                "El canal fue retirado, pero el panel no pudo actualizarse.", ephemeral=True,
+            )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content="Operación cancelada.", view=None)
 
 
 def heraldo_permissions_summary(guild: discord.Guild) -> str:
@@ -12586,7 +12640,7 @@ def hp_setup_embed(guild: discord.Guild, pending: list[str] | None = None) -> di
     elif action == "ban":
         minutes = hp_ban_override_minutes(guild.id)
         measure_lines.append(
-            f"**Duración:** {format_duration(minutes) if minutes else 'Permanente'}"
+            f"**Duración:** {format_duration(minutes) if minutes else 'Permanente' if hp_setting_get(guild.id, 'honeypot_ban_minutes') == '0' else 'Sin configurar'}"
         )
         measure_lines.append("**Purga adicional:** ninguna.")
 
