@@ -109,6 +109,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 import asyncio
 import contextvars
 import copy
+import hashlib
 import io
 from collections import deque
 import json
@@ -4515,6 +4516,13 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.owner_id = owner_id
         self.pending_trap_id: int | None = None
         self.pending_enabled: bool | None = None
+        self.pending_action: str | None = None
+        self.pending_kick_purge_minutes: int | None = None
+        self.pending_ban_minutes: int | None = None
+        self.last_publication_status: str | None = None
+        self._origin_interaction: discord.Interaction | None = None
+        self._original_config = self._snapshot()
+        self._original_traps = set(hp_traps(guild_id))
         channel = discord.ui.ChannelSelect(
             placeholder="Seleccionar / añadir canal trampa",
             channel_types=[discord.ChannelType.text],
@@ -4524,12 +4532,90 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         )
         channel.callback = self.select_trap
         self.add_item(channel)
+        action = discord.ui.Select(
+            placeholder="Configurar acción (no guarda)",
+            options=[
+                discord.SelectOption(label=label, value=value)
+                for label, value in (
+                    ("Condenar", "role"), ("Solo registrar", "log"),
+                    ("Aislar", "timeout"), ("Expulsar", "kick"), ("Banear", "ban"),
+                )
+            ],
+            row=3,
+        )
+        action.callback = self.select_action
+        self.add_item(action)
+        duration = discord.ui.Select(
+            placeholder="Configurar duración o purga (no guarda)",
+            options=[
+                discord.SelectOption(label=label, value=value)
+                for label, value in (
+                    ("Expulsar: purgar 1 día", "kick:1440"),
+                    ("Expulsar: purgar 2 días", "kick:2880"),
+                    ("Expulsar: purgar 7 días", "kick:10080"),
+                    ("Expulsar: purgar 30 días", "kick:43200"),
+                    ("Banear 1 día", "ban:1440"), ("Banear 7 días", "ban:10080"),
+                    ("Banear 30 días", "ban:43200"), ("Banear permanentemente", "ban:0"),
+                )
+            ],
+            row=4,
+        )
+        duration.callback = self.select_duration
+        self.add_item(duration)
+
+    _config_keys = (
+        "honeypot_enabled", "honeypot_paused", "honeypot_action",
+        "honeypot_kick_purge_minutes", "honeypot_ban_minutes",
+    )
+
+    def _snapshot(self) -> tuple[str | None, ...]:
+        return tuple(hp_setting_get(self.guild_id, name) for name in self._config_keys)
+
+    def _has_pending(self) -> bool:
+        return any(item is not None for item in (
+            self.pending_trap_id, self.pending_enabled, self.pending_action,
+            self.pending_kick_purge_minutes, self.pending_ban_minutes,
+        ))
+
+    def _reset_draft(self) -> None:
+        self.pending_trap_id = None
+        self.pending_enabled = None
+        self.pending_action = None
+        self.pending_kick_purge_minutes = None
+        self.pending_ban_minutes = None
+
+    async def select_action(self, interaction: discord.Interaction) -> None:
+        choice = interaction.data["values"][0]
+        if choice in {"kick", "ban"}:
+            issue = hp_sanction_permission_problem(
+                interaction.guild, choice, interaction.guild.get_member(self.owner_id).guild_permissions,
+            )
+            if issue:
+                await interaction.response.send_message(issue, ephemeral=True)
+                return
+        self.pending_action = choice if choice != hp_action(self.guild_id) else None
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    async def select_duration(self, interaction: discord.Interaction) -> None:
+        kind, _, value = interaction.data["values"][0].partition(":")
+        if kind not in {"kick", "ban"} or not value.isdecimal():
+            await interaction.response.send_message("Configuración de duración inválida.", ephemeral=True)
+            return
+        minutes = int(value)
+        if kind == "kick":
+            if not 1440 <= minutes <= 43200:
+                await interaction.response.send_message("La purga debe durar al menos un día.", ephemeral=True)
+                return
+            self.pending_kick_purge_minutes = minutes
+        else:
+            if minutes > 365 * 1440:
+                await interaction.response.send_message("Duración fuera de rango.", ephemeral=True)
+                return
+            self.pending_ban_minutes = minutes
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
-            return False
-        return True
+        return await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id)
 
     def _content(self, guild: discord.Guild) -> str:
         items = []
@@ -4538,7 +4624,16 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             items.append(f"Añadir canal trampa → {channel.mention if channel else self.pending_trap_id}")
         if self.pending_enabled is not None:
             items.append(f"Honeypot → {'activo' if self.pending_enabled else 'desactivado'}")
-        return "**El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
+        if self.pending_action is not None:
+            items.append("Acción: " + HONEYPOT_ACTION_LABELS[self.pending_action])
+        if self.pending_kick_purge_minutes is not None:
+            items.append("Purga al expulsar: " + format_duration(self.pending_kick_purge_minutes))
+        if self.pending_ban_minutes is not None:
+            items.append("Baneo: " + (format_duration(self.pending_ban_minutes) if self.pending_ban_minutes else "permanente"))
+        result = "**El Heraldo · Honeypot**\n\n" + hp_config_summary(guild) + _pending_config_text(items)
+        if self.last_publication_status:
+            result += "\n\n" + self.last_publication_status
+        return result
 
     async def select_trap(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -4553,51 +4648,45 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.pending_trap_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.primary, row=1)
     async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self._has_pending():
+            await interaction.response.send_message(
+                "Guarde o descarte sus cambios pendientes antes de crear otro canal.", ephemeral=True,
+            )
+            return
         guild = interaction.guild
         existing_id = get_guild_channel_id(self.guild_id, "honeypot")
         channel = guild.get_channel(existing_id) if existing_id else None
-        created_now = False
         if not isinstance(channel, discord.TextChannel):
-            channel = next((c for c in guild.text_channels if c.name.casefold() == "honeypot"), None)
-        if not isinstance(channel, discord.TextChannel):
+            channel = next(
+                (item for item in guild.text_channels if item.name.casefold() == "honeypot"), None,
+            )
+        if channel and channel.id in hp_traps(self.guild_id):
+            await interaction.response.send_message(
+                "El canal Honeypot ya está registrado. No se creará otro.", ephemeral=True,
+            )
+            return
+        if channel is not None and hp_protected_channel_reason(channel):
+            await interaction.response.send_message(
+                "El canal encontrado está reservado para otro módulo.", ephemeral=True,
+            )
+            return
+        if channel is None:
             me = guild.me
             if me is None or not me.guild_permissions.manage_channels:
                 await interaction.response.send_message(
-                    "El Heraldo necesita Gestionar canales para crear el Honeypot.",
-                    ephemeral=True,
+                    "El bot necesita Gestionar canales para crear Honeypot.", ephemeral=True,
                 )
                 return
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    create_public_threads=False,
-                    create_private_threads=False,
-                    send_messages_in_threads=False,
-                )
-            }
-            await interaction.response.defer(ephemeral=True)
-            try:
-                channel = await guild.create_text_channel(
-                    "Honeypot",
-                    overwrites=overwrites,
-                    reason="El Heraldo: crear canal Honeypot desde /setup",
-                )
-                created_now = True
-            except discord.HTTPException as exc:
-                await interaction.followup.send(f"No pude crear el canal: `{exc}`.", ephemeral=True)
-                return
-        else:
-            await interaction.response.defer(ephemeral=True)
-
-        note = await _setup_apply_system_channel(guild, "honeypot", channel, publish_messages=True)
-        self.pending_trap_id = None
-        action = "Creé" if created_now else "Reutilicé"
-        await interaction.edit_original_response(
-            content=self._content(guild) + f"\n\n{action} {channel.mention}. {note}",
-            view=self,
+        message = (
+            f"¿Confirma utilizar {channel.mention} como canal trampa?"
+            if channel is not None else
+            "¿Confirma crear y registrar un nuevo canal Honeypot?"
+        )
+        await interaction.response.send_message(
+            message, ephemeral=True,
+            view=HoneypotCreateChannelConfirmView(self, interaction, channel.id if channel else None),
         )
 
     @discord.ui.button(label="Activar / Pausar", style=discord.ButtonStyle.primary, row=1)
@@ -4607,44 +4696,386 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if target and not hp_traps(self.guild_id) and self.pending_trap_id is None:
             await interaction.response.send_message("Añade al menos un canal trampa antes de activar el Honeypot.", ephemeral=True)
             return
-        self.pending_enabled = target
+        self.pending_enabled = target if target != honeypot_enabled(self.guild_id) else None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Editar aviso", style=discord.ButtonStyle.secondary, row=1)
     async def edit_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id, self.owner_id, self, interaction))
 
     @discord.ui.button(label="Texto aviso", style=discord.ButtonStyle.secondary, row=1)
     async def edit_text(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HoneypotWarningModal(self.guild_id))
+        await interaction.response.send_modal(HoneypotWarningModal(self.guild_id, self.owner_id, self, interaction))
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_trap_id is None and self.pending_enabled is None:
-            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
             return
-        await interaction.response.defer(ephemeral=True)
+        if not self._has_pending():
+            await interaction.followup.send("No hay cambios pendientes.", ephemeral=True)
+            return
+        if self._snapshot() != self._original_config or set(hp_traps(self.guild_id)) != self._original_traps:
+            await interaction.followup.send(
+                "La configuración fue modificada. Abra nuevamente el panel antes de guardar.", ephemeral=True,
+            )
+            return
+        guild = interaction.guild
+        action = self.pending_action or hp_action(self.guild_id)
+        if action in {"kick", "ban"}:
+            issue = hp_sanction_permission_problem(guild, action, interaction.guild.get_member(self.owner_id).guild_permissions)
+            if issue:
+                await interaction.followup.send(issue + " No se guardaron cambios.", ephemeral=True)
+                return
+        if action == "ban" and self.pending_ban_minutes is None and hp_ban_override_minutes(self.guild_id) is None:
+            await interaction.followup.send(
+                "Seleccione explícitamente la duración del baneo (incluido Permanente).", ephemeral=True,
+            )
+            return
+        if action == "role" and self.pending_action == "role" and guild.get_role(hp_punish_role_id(self.guild_id)) is None:
+            await interaction.followup.send("Configure el rol de condena antes de guardar.", ephemeral=True)
+            return
+        channel = guild.get_channel(self.pending_trap_id) if self.pending_trap_id is not None else None
         if self.pending_trap_id is not None:
-            hp_add_trap(self.guild_id, self.pending_trap_id)
-            channel = interaction.guild.get_channel(self.pending_trap_id)
-            if isinstance(channel, discord.TextChannel):
-                await hp_sync_warning(channel)
+            me = guild.me
+            perms = channel.permissions_for(me) if channel and me else None
+            if (not isinstance(channel, discord.TextChannel)
+                or hp_protected_channel_reason(channel) or perms is None
+                or not all(getattr(perms, name, False) for name in (
+                    "view_channel", "read_message_history", "send_messages", "manage_messages",
+                ))):
+                await interaction.followup.send(
+                    "El canal seleccionado ya no es válido. No se guardó nada.", ephemeral=True,
+                )
+                return
+        changes = {}
+        if self.pending_action is not None:
+            changes["honeypot_action"] = hp_action_storage(self.pending_action)
+        if self.pending_kick_purge_minutes is not None:
+            changes["honeypot_kick_purge_minutes"] = str(self.pending_kick_purge_minutes)
+        if self.pending_ban_minutes is not None:
+            changes["honeypot_ban_minutes"] = str(self.pending_ban_minutes)
         if self.pending_enabled is not None:
-            hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
-            hp_setting_set(self.guild_id, "honeypot_paused", "0")
-        self.pending_trap_id = None
-        self.pending_enabled = None
-        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+            changes["honeypot_enabled"] = "1" if self.pending_enabled else "0"
+            changes["honeypot_paused"] = "0"
+        try:
+            hp_save_settings(self.guild_id, changes, self.pending_trap_id)
+        except Exception:
+            await interaction.followup.send("No se guardó el borrador. Inténtelo de nuevo.", ephemeral=True)
+            return
+        self._reset_draft()
+        self._original_config = self._snapshot()
+        self._original_traps = set(hp_traps(self.guild_id))
+        await interaction.edit_original_response(
+            content=self._content(guild) + "\n\nCambios guardados.", view=self,
+        )
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.pending_trap_id = None
-        self.pending_enabled = None
+        self._reset_draft()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Publicar aviso", style=discord.ButtonStyle.success, row=2)
+    async def publish_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self._has_pending():
+            await interaction.response.send_message(
+                "Guarde o descarte los cambios pendientes antes de publicar.", ephemeral=True,
+            )
+            return
+        if not hp_traps(self.guild_id):
+            await interaction.response.send_message("No existen canales trampa registrados.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "¿Confirma publicar o actualizar el aviso fijado en los canales trampa?",
+            view=HoneypotPublishWarningConfirmView(self, interaction),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._reset_draft()
+        self.stop()
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+class HoneypotPublishWarningConfirmView(discord.ui.View):
+    """Publicación idempotente, con verificación del estado y controles efímeros."""
+
+    _notice_keys = (
+        "honeypot_warning_enabled", "honeypot_warning_style", "honeypot_warning_text",
+        "honeypot_warning_title", "honeypot_warning_description", "honeypot_warning_color",
+        "honeypot_warning_image", "honeypot_warning_thumbnail", "honeypot_warning_footer",
+    )
+
+    def __init__(self, parent: HeraldoHoneypotSetupView, panel_interaction: discord.Interaction):
+        super().__init__(timeout=240)
+        self.parent = parent
+        self.panel_interaction = panel_interaction
+        self.original_traps = set(hp_traps(parent.guild_id))
+        self.original_notice = self._snapshot()
+        self.finished = False
+
+    def _snapshot(self) -> tuple[str | None, ...]:
+        return tuple(hp_setting_get(self.parent.guild_id, key) for key in self._notice_keys)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await self._allowed(interaction)
+
+    async def _dismiss(self, interaction: discord.Interaction) -> None:
+        try:
+            await interaction.delete_original_response()
+        except discord.HTTPException:
+            try:
+                await interaction.edit_original_response(content="Confirmación cerrada.", view=None)
+            except discord.HTTPException:
+                print("Honeypot: no se pudo cerrar la confirmación.")
+
+    async def _refresh_parent(self, guild: discord.Guild) -> bool:
+        if self.parent._origin_interaction is not None:
+            try:
+                await self.parent._origin_interaction.edit_original_response(
+                    content=self.parent._content(guild), view=self.parent,
+                )
+                return True
+            except discord.HTTPException:
+                pass
+        try:
+            await self.panel_interaction.message.edit(
+                content=self.parent._content(guild), view=self.parent,
+            )
+            return True
+        except (discord.HTTPException, AttributeError):
+            return False
+
+    async def _allowed(self, interaction: discord.Interaction) -> bool:
+        return await hp_config_interaction_allowed(
+            interaction, self.parent.guild_id, self.parent.owner_id,
+        )
+
+    @discord.ui.button(label="Confirmar publicación", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        # Responder a Discord antes de la consulta y proteger el estado antes de awaits.
+        await interaction.response.defer()
+        if not await self._allowed(interaction):
+            return
+        if self.finished:
+            await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        if not await self._allowed(interaction):
+            await self._dismiss(interaction)
+            return
+        guild = interaction.guild
+        if (guild is None or guild.id != self.parent.guild_id or self.parent._has_pending()
+                or set(hp_traps(self.parent.guild_id)) != self.original_traps
+                or self._snapshot() != self.original_notice or not self.original_traps):
+            await interaction.followup.send(
+                "La configuración cambió. Abra el panel de nuevo antes de publicar.", ephemeral=True,
+            )
+            await self._dismiss(interaction)
+            return
+        me = guild.me
+        for cid in sorted(self.original_traps):
+            channel = guild.get_channel(cid)
+            perms = channel.permissions_for(me) if channel and me else None
+            if (not isinstance(channel, discord.TextChannel) or perms is None
+                    or not all(getattr(perms, key, False) for key in (
+                        "view_channel", "read_message_history", "send_messages",
+                        "embed_links", "manage_messages",
+                    ))):
+                await interaction.followup.send(
+                    "Faltan permisos o un canal trampa no está disponible. No se publicó.",
+                    ephemeral=True,
+                )
+                await self._dismiss(interaction)
+                return
+        try:
+            if not hp_warning_enabled(self.parent.guild_id):
+                hp_setting_set(self.parent.guild_id, "honeypot_warning_enabled", "1")
+            errors = await hp_sync_all_warnings(guild)
+        except Exception:
+            errors = ["La publicación se interrumpió. Revise los canales y los registros."]
+        self.parent.last_publication_status = (
+            "Avisos publicados o actualizados." if not errors
+            else "Publicación parcial: revise los canales afectados."
+        )
+        self.parent._original_config = self.parent._snapshot()
+        refreshed = await self._refresh_parent(guild)
+        if errors or not refreshed:
+            await interaction.followup.send(
+                "El aviso o el panel no se actualizaron completamente; revise los canales.",
+                ephemeral=True,
+            )
+        await self._dismiss(interaction)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if not await self._allowed(interaction):
+            return
+        if self.finished:
+            await interaction.followup.send("Esta confirmación ya se resolvió.", ephemeral=True)
+            return
+        self.finished = True
+        self.stop()
+        if not await self._allowed(interaction):
+            await self._dismiss(interaction)
+            return
+        await self._dismiss(interaction)
+
+
+
+class HoneypotCreateChannelConfirmView(discord.ui.View):
+    def __init__(
+        self, panel: HeraldoHoneypotSetupView, panel_interaction: discord.Interaction,
+        existing_channel_id: int | None,
+    ):
+        super().__init__(timeout=240)
+        self.panel = panel
+        self.panel_interaction = panel_interaction
+        self.existing_channel_id = existing_channel_id
+        self.original_traps = set(hp_traps(panel.guild_id))
+        self.finished = False
+
+    async def _dismiss(self, interaction: discord.Interaction) -> None:
+        try:
+            await interaction.delete_original_response()
+        except discord.HTTPException:
+            try:
+                await interaction.edit_original_response(content="Confirmación cerrada.", view=None)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.panel.interaction_check(interaction):
+            return
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.panel.guild_id, self.panel.owner_id):
+            return
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        lock = _hp_channel_create_locks.setdefault(self.panel.guild_id, asyncio.Lock())
+        async with lock:
+            await self._apply(interaction)
+
+    async def _apply(self, interaction):
+        if not await hp_config_interaction_allowed(interaction, self.panel.guild_id, self.panel.owner_id):
+            return
+        guild = interaction.guild
+        if (guild is None or guild.id != self.panel.guild_id or self.panel._has_pending()
+                or set(hp_traps(self.panel.guild_id)) != self.original_traps):
+            await interaction.followup.send("El estado cambió. Reabra el panel.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        me = guild.me
+        channel = guild.get_channel(self.existing_channel_id) if self.existing_channel_id else None
+        if self.existing_channel_id is not None and not isinstance(channel, discord.TextChannel):
+            await interaction.followup.send("El canal seleccionado ya no existe.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        if channel is None:
+            if me is None or not me.guild_permissions.manage_channels:
+                await interaction.followup.send("El bot necesita Gestionar canales.", ephemeral=True)
+                await self._dismiss(interaction)
+                return
+            if any(ch.name.casefold() == "honeypot" for ch in guild.text_channels):
+                await interaction.followup.send(
+                    "Ya existe un canal con ese nombre; vuelva al panel para revisarlo.", ephemeral=True,
+                )
+                await self._dismiss(interaction)
+                return
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True,
+                    create_public_threads=False, create_private_threads=False,
+                    send_messages_in_threads=False,
+                ),
+            }
+            if hp_setting_get(guild.id, "honeypot_channel_create_pending"):
+                await interaction.followup.send(
+                    "Hay una creación pendiente de conciliación. Revise los canales existentes.", ephemeral=True,
+                )
+                await self._dismiss(interaction)
+                return
+            hp_setting_set(guild.id, "honeypot_channel_create_pending", "pending")
+            try:
+                channel = await guild.create_text_channel(
+                    "Honeypot", overwrites=overwrites,
+                    reason="Canal Honeypot confirmado desde /setup",
+                )
+                hp_setting_set(guild.id, "honeypot_channel_create_pending", str(channel.id))
+            except discord.HTTPException:
+                await interaction.followup.send("Discord impidió crear el canal.", ephemeral=True)
+                await self._dismiss(interaction)
+                return
+        if not await hp_config_interaction_allowed(interaction, self.panel.guild_id, self.panel.owner_id):
+            await self._dismiss(interaction)
+            return
+        if (self.panel._has_pending() or set(hp_traps(self.panel.guild_id)) != self.original_traps):
+            await interaction.followup.send("El estado cambió durante la creación; revise el canal sin vincular.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        if hp_protected_channel_reason(channel) or channel.id in hp_traps(self.panel.guild_id):
+            await interaction.followup.send("El canal ya no es válido como trampa.", ephemeral=True)
+            await self._dismiss(interaction)
+            return
+        perms = channel.permissions_for(guild.me) if guild.me else None
+        if perms is None or not all(getattr(perms, p, False) for p in (
+            "view_channel", "send_messages", "read_message_history", "manage_messages",
+        )):
+            await interaction.followup.send(
+                "El bot carece de permisos para administrar avisos en ese canal.", ephemeral=True,
+            )
+            await self._dismiss(interaction)
+            return
+        try:
+            note = await _setup_apply_system_channel(guild, "honeypot", channel, publish_messages=True)
+            hp_setting_set(guild.id, "honeypot_channel_create_pending", "")
+        except Exception:
+            await interaction.followup.send(
+                "La vinculación del canal falló. Compruebe su estado en /setup.", ephemeral=True,
+            )
+            await self._dismiss(interaction)
+            return
+        self.panel._original_traps = set(hp_traps(self.panel.guild_id))
+        self.panel._original_config = self.panel._snapshot()
+        self.panel.last_publication_status = note
+        try:
+            if self.panel._origin_interaction is not None:
+                await self.panel._origin_interaction.edit_original_response(
+                    content=self.panel._content(guild), view=self.panel,
+                )
+            else:
+                await self.panel_interaction.message.edit(
+                content=self.panel._content(guild), view=self.panel,
+            )
+        except (discord.HTTPException, AttributeError):
+            try:
+                await self.panel_interaction.edit_original_response(
+                    content=self.panel._content(guild), view=self.panel,
+                )
+            except discord.HTTPException:
+                await interaction.followup.send(
+                    "El canal se configuró, pero el panel no pudo actualizarse.", ephemeral=True,
+                )
+        await self._dismiss(interaction)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.panel.interaction_check(interaction):
+            return
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.panel.guild_id, self.panel.owner_id):
+            return
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        await self._dismiss(interaction)
+
 
 
 def heraldo_permissions_summary(guild: discord.Guild) -> str:
@@ -5773,7 +6204,7 @@ class DefaultMessageStudioView(discord.ui.View):
         await interaction.response.send_modal(SuggestionPanelVisualModal(self.guild_id))
 
     async def edit_honeypot(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id))
+        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.guild_id, self.owner_id))
 
     async def edit_condemnation_core(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
@@ -7386,11 +7817,12 @@ class HeraldoAutomodSetupView(discord.ui.View):
 
     @discord.ui.button(label="Honeypot", style=discord.ButtonStyle.primary, row=0)
     async def honeypot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        panel = HeraldoHoneypotSetupView(self.guild_id, self.owner_id)
+        panel._origin_interaction = interaction
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
-            content="**El Heraldo · AutoMod · Honeypot**\n\n" + hp_config_summary(interaction.guild),
-            embed=None,
-            view=HeraldoHoneypotSetupView(self.guild_id, self.owner_id),
+            content=panel._content(interaction.guild),
+            embed=None, view=panel,
         )
 
     @discord.ui.button(label="Raid Protection", style=discord.ButtonStyle.primary, row=0)
@@ -9995,6 +10427,10 @@ async def track_activity(message: discord.Message) -> None:
 async def moderation_cache_recent_messages(message: discord.Message) -> None:
     if message.guild is None or message.author.bot:
         return
+    # No conservar el contenido de las trampas, independientemente del orden
+    # en que Discord programe este listener y el de Honeypot.
+    if message.channel.id in hp_trap_ids(message.guild.id):
+        return
     conn = db_connect()
     conn.execute(
         "INSERT OR REPLACE INTO moderation_message_cache "
@@ -10292,7 +10728,11 @@ HONEYPOT_ACTION_LABELS = {
     "role": "Purgar y aplicar rol de castigo",
     "log": "Solo registrar",
     "timeout": "Aislar (timeout)",
+    "kick": "Expulsar",
+    "ban": "Banear",
 }
+# Valores históricos 'kick'/'ban' no habilitan nuevas sanciones destructivas.
+HONEYPOT_DESTRUCTIVE_ACTION_STORAGE = {"kick": "kick_enabled", "ban": "ban_enabled"}
 HONEYPOT_RETENTION_DEFAULT_MINUTES = 30 * 24 * 60  # el historial (y el texto guardado) se borra a los 30 días
 HONEYPOT_PURGE_DEFAULT = ("time", 24 * 60)  # por defecto: mensajes de las últimas 24 h (sin tope máximo)
 HONEYPOT_TIMEOUT_MINUTES_DEFAULT = 24 * 60  # duración del timeout (1 min a 28 días)
@@ -10309,8 +10749,10 @@ HONEYPOT_MISFIRE_MEMBER_AGE = timedelta(days=30)
 HONEYPOT_MISFIRE_WINDOW = timedelta(minutes=5)
 HONEYPOT_MISFIRE_THRESHOLD = 3
 
-_hp_busy: set[int] = set()  # usuarios en pleno castigo (evita doble castigo si postea en varias trampas)
-_hp_veteran_hits: list[tuple[datetime, int]] = []
+_hp_busy: set[tuple[int, int]] = set()  # claves por servidor y miembro
+_hp_veteran_hits: list[tuple[datetime, int, int]] = []  # hora, servidor, miembro
+_hp_warning_locks: dict[tuple[int, int], asyncio.Lock] = {}  # serializa publicación por canal
+_hp_channel_create_locks: dict[int, asyncio.Lock] = {}
 
 
 # --- Persistencia -----------------------------------------------------------
@@ -10431,6 +10873,47 @@ def hp_setting_get(guild_id: int, key: str) -> str | None:
 
 def hp_setting_set(guild_id: int, key: str, value: str) -> None:
     guild_config_set(guild_id, key, value)
+
+
+def hp_save_settings(guild_id: int, changes: dict[str, str], trap_id: int | None = None) -> None:
+    """Guardar un borrador completo o nada; no modificar ajustes de otros módulos."""
+    if any(not key.startswith("honeypot_") for key in changes):
+        raise ValueError("invalid_honeypot_setting")
+    conn = db_connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for key, value in changes.items():
+            conn.execute(
+                "INSERT INTO guild_settings (guild_id, key, value) VALUES (?, ?, ?) "
+                "ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value",
+                (guild_id, key, value),
+            )
+        if trap_id is not None:
+            conn.execute(
+                "INSERT OR IGNORE INTO guild_honeypot_channels (guild_id, channel_id) VALUES (?, ?)",
+                (guild_id, trap_id),
+            )
+        conn.execute("UPDATE guild_config SET updated_at = ? WHERE guild_id = ?",
+                     (datetime.now(timezone.utc).isoformat(), guild_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+async def hp_config_interaction_allowed(interaction, guild_id: int, owner_id: int) -> bool:
+    guild = interaction.guild
+    member = guild.get_member(owner_id) if guild else None
+    perms = getattr(member, "guild_permissions", None)
+    allowed = (guild is not None and guild.id == guild_id
+               and interaction.user.id == owner_id and perms is not None
+               and (perms.manage_guild or perms.administrator))
+    if not allowed:
+        send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        await send("Esta sesión requiere a su propietario con Gestionar servidor.", ephemeral=True)
+    return bool(allowed)
 
 
 def hp_trap_ids(guild_id: int) -> set[int]:
@@ -10906,7 +11389,7 @@ def moderation_case_message_history(guild_id: int, user_id: int) -> str:
     return json.dumps(grouped, ensure_ascii=False)
 
 
-def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None) -> int:
+def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None, include_message_history: bool = True) -> int:
     case_type = case_type.upper()
     if case_type not in MODERATION_CASE_TYPES:
         raise ValueError("Tipo de caso inválido.")
@@ -10921,7 +11404,7 @@ def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: 
         (guild_id, case_number, case_type, user_id, reason[:1000], duration_minutes, now.isoformat(),
          expires_at.isoformat() if expires_at else None, author_id, (proof or "")[:2000],
          (verified_proof or "")[:2000], (moderator_notes or "")[:2000],
-         moderation_case_message_history(guild_id, user_id)),
+         moderation_case_message_history(guild_id, user_id) if include_message_history else None),
     )
     conn.close()
     moderation_case_code(case_number, guild_id)
@@ -11422,14 +11905,15 @@ def condemnation_parse_role_ids(value: str) -> list[int]:
         return []
 
 
-def hp_log_trigger(member: discord.Member, channel_id: int, content: str, action: str,
+def hp_log_trigger(member: discord.Member, channel_id: int, action: str,
                    success: bool, note: str) -> None:
+    """El historial registra el incidente, nunca conserva el contenido del mensaje."""
     conn = db_connect()
     conn.execute(
         "INSERT INTO honeypot_triggers (guild_id, user_id, username, channel_id, content, action, success, note, "
         "account_created, joined_at, triggered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            member.guild.id, member.id, str(member), channel_id, content[:1500], action, int(success), note,
+            member.guild.id, member.id, str(member), channel_id, "", action, int(success), note,
             member.created_at.isoformat(),
             member.joined_at.isoformat() if member.joined_at else None,
             datetime.now(timezone.utc).isoformat(),
@@ -11510,10 +11994,34 @@ def honeypot_paused(guild_id: int) -> bool:
 
 
 def hp_action(guild_id: int) -> str:
-    v = hp_setting_get(guild_id, "honeypot_action")
-    if v in (None, "", "kick", "ban"):
-        return "role"
-    return v
+    value = hp_setting_get(guild_id, "honeypot_action")
+    if value in HONEYPOT_DESTRUCTIVE_ACTION_STORAGE.values():
+        return "kick" if value == "kick_enabled" else "ban"
+    if value in {"role", "log", "timeout"}:
+        return value
+    # Valores históricos no deben volverse sanciones destructivas inadvertidas.
+    return "role"
+
+
+def hp_sanction_permission_problem(guild: discord.Guild, action: str, actor_permissions=None) -> str | None:
+    if action not in {"kick", "ban"}:
+        return None
+    perm = "kick_members" if action == "kick" else "ban_members"
+    label = "Expulsar miembros" if action == "kick" else "Banear miembros"
+    if actor_permissions is not None and not (
+        getattr(actor_permissions, perm, False) or getattr(actor_permissions, "administrator", False)
+    ):
+        return f"El administrador necesita el permiso {label}."
+    me = guild.me
+    if me is None:
+        return "No se pudo comprobar la identidad del bot en este servidor."
+    if not (getattr(me.guild_permissions, perm, False) or me.guild_permissions.administrator):
+        return f"El Heraldo necesita el permiso {label}."
+    return None
+
+
+def hp_action_storage(action: str) -> str:
+    return HONEYPOT_DESTRUCTIVE_ACTION_STORAGE.get(action, action)
 
 
 def hp_punish_role_id(guild_id: int) -> int:
@@ -11608,6 +12116,28 @@ def hp_purge_spec(guild_id: int) -> tuple[str, int]:
     return HONEYPOT_PURGE_DEFAULT
 
 
+def hp_kick_purge_minutes(guild_id: int) -> int:
+    """Como mínimo 24 horas y hasta 30 días; nunca purga a otros autores."""
+    raw = hp_setting_get(guild_id, "honeypot_kick_purge_minutes")
+    try:
+        minutes = int(raw) if raw is not None else 1440
+    except (TypeError, ValueError):
+        minutes = 1440
+    return minutes if 1440 <= minutes <= 30 * 1440 else 1440
+
+
+def hp_ban_override_minutes(guild_id: int) -> int | None:
+    """None: no configurado, 0: permanente explícito; resto duración temporal."""
+    raw = hp_setting_get(guild_id, "honeypot_ban_minutes")
+    if raw is None:
+        return None
+    try:
+        minutes = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return minutes if 0 <= minutes <= 365 * 1440 else None
+
+
 def hp_timeout_minutes(guild_id: int) -> int:
     v = hp_setting_get(guild_id, "honeypot_timeout_minutes")
     if v is not None:
@@ -11671,6 +12201,8 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Canales trampa:** {trap_text}",
         f"**Acción:** {HONEYPOT_ACTION_LABELS.get(hp_action(guild.id), hp_action(guild.id))}",
         f"**Rol de castigo:** {f'<@&{hp_punish_role_id(guild.id)}>' if hp_punish_role_id(guild.id) else '—'}",
+        f"**Purga al expulsar:** {format_duration(hp_kick_purge_minutes(guild.id))}",
+        f"**Duración de baneo:** {format_duration(hp_ban_override_minutes(guild.id)) if hp_ban_override_minutes(guild.id) else 'Permanente' if hp_setting_get(guild.id, 'honeypot_ban_minutes') == '0' else 'Sin configurar'}",
         f"**Purga al castigado:** {format_purge_spec(*hp_purge_spec(guild.id))}",
         f"**Duración del timeout:** {format_duration(hp_timeout_minutes(guild.id))}",
         f"**Aviso fijado:** {'sí' if hp_warning_enabled(guild.id) else 'no'}"
@@ -11678,7 +12210,7 @@ def hp_config_summary(guild: discord.Guild) -> str:
         f"**Rol a mencionar en reportes:** {ping}",
         f"**Roles exentos:** {', '.join(f'<@&{i}>' for i in hp_exempt_ids(guild.id, 'role')) or '—'}",
         f"**Miembros exentos:** {', '.join(f'<@{i}>' for i in hp_exempt_ids(guild.id, 'member')) or '—'}",
-        f"**Capturas en el historial:** {hp_total_triggers(guild.id)} (se guardan {format_duration(hp_retention_minutes(guild.id))})",
+        f"**Activaciones registradas:** {hp_total_triggers(guild.id)} (se conservan {format_duration(hp_retention_minutes(guild.id))}; sin contenido del mensaje)",
     ]
     return "\n".join(lines)
 
@@ -11715,9 +12247,39 @@ def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord
     )
 
 
+def hp_warning_fingerprint(embed: discord.Embed) -> str:
+    """Compara el contenido enviado, sin metadatos de imágenes añadidos por Discord."""
+    data = embed.to_dict()
+    for field in ("image", "thumbnail"):
+        if field in data:
+            data[field] = {key: value for key, value in data[field].items()
+                           if key in ("url", "description")}
+    for field in ("footer", "author"):
+        if field in data:
+            data[field] = {key: value for key, value in data[field].items()
+                           if key != "proxy_icon_url"}
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
 async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
-    """Publica/actualiza (o borra) el aviso fijado de un canal trampa. Devuelve un
-    texto de error o None si todo fue bien."""
+    """Serializa actualizaciones del aviso por servidor/canal y evita publicaciones simultáneas."""
+    key = (channel.guild.id, channel.id)
+    lock = _hp_warning_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        return await _hp_sync_warning_locked(channel)
+
+
+async def _hp_sync_warning_locked(channel: discord.TextChannel) -> str | None:
+    """Publica/actualiza (o borra) un único aviso; se llama con el lock adquirido."""
+    me = channel.guild.me
+    perms = channel.permissions_for(me) if me else None
+    if perms is None or not all(getattr(perms, name, False) for name in (
+        "view_channel", "read_message_history", "send_messages", "embed_links", "manage_messages",
+    )):
+        return f"{channel.mention}: faltan permisos para administrar el aviso"
+    if channel.id not in hp_traps(channel.guild.id):
+        return f"{channel.mention}: el canal ya no es una trampa"
+    pending_key = f"honeypot_warning_pending_{channel.id}"
     msg_id = hp_traps(channel.guild.id).get(channel.id)
     existing: discord.Message | None = None
     if msg_id:
@@ -11727,6 +12289,37 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
             existing = None
         except discord.HTTPException as e:
             return f"{channel.mention}: no pude leer el aviso (`{e}`)"
+
+    # Un envío puede llegar a Discord aunque su respuesta o el guardado del ID
+    # fallen. Persistir ANTES de enviar y bloquear nuevos envíos ambiguos,
+    # incluso después de un reinicio. El ID confirmado permite continuar.
+    pending = hp_setting_get(channel.guild.id, pending_key)
+    if existing is None and pending:
+        try:
+            receipt = json.loads(pending)
+            since = datetime.fromisoformat(receipt["since"]) - timedelta(seconds=1)
+            matches = []
+            async for candidate in channel.history(after=since, limit=None):
+                if candidate.author.id != me.id or len(candidate.embeds) != 1:
+                    continue
+                digest = hp_warning_fingerprint(candidate.embeds[0])
+                if digest == receipt["embed_sha256"]:
+                    matches.append(candidate)
+            if len(matches) == 1:
+                existing = matches[0]
+                hp_set_warning_message(channel.guild.id, channel.id, existing.id)
+                hp_setting_set(channel.guild.id, pending_key, "")
+            else:
+                return f"{channel.mention}: envío pendiente de conciliación; no se duplicará el aviso"
+        except Exception:
+            return f"{channel.mention}: envío pendiente de conciliación; no se duplicará el aviso"
+    if existing is not None and existing.author.id != me.id:
+        return f"{channel.mention}: el aviso registrado no pertenece al bot"
+    perms = channel.permissions_for(me)
+    if channel.id not in hp_traps(channel.guild.id) or not all(getattr(perms, name, False) for name in (
+        "view_channel", "read_message_history", "send_messages", "embed_links", "manage_messages",
+    )):
+        return f"{channel.mention}: cambiaron los permisos o el canal trampa"
 
     try:
         if not hp_warning_enabled(channel.guild.id):
@@ -11739,9 +12332,16 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
             if not existing.pinned:
                 await existing.pin()
             return None
-        message = await channel.send(embed=hp_warning_embed(channel))
-        await message.pin()
+        embed = hp_warning_embed(channel)
+        receipt = {"since": datetime.now(timezone.utc).isoformat(),
+                   "embed_sha256": hp_warning_fingerprint(embed)}
+        hp_setting_set(channel.guild.id, pending_key, json.dumps(receipt))
+        message = await channel.send(embed=embed)
+        # Persistir el ID antes de fijar: si Discord permite enviar pero falla
+        # pin(), el siguiente intento recupera y fija el MISMO aviso sin duplicarlo.
         hp_set_warning_message(channel.guild.id, channel.id, message.id)
+        hp_setting_set(channel.guild.id, pending_key, "")
+        await message.pin()
         # Quita el mensaje de sistema "X ha fijado un mensaje".
         async for m in channel.history(limit=5):
             if m.type == discord.MessageType.pins_add:
@@ -11751,6 +12351,8 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
         return f"{channel.mention}: faltan permisos (Enviar mensajes y Gestionar mensajes)"
     except discord.HTTPException as e:
         return f"{channel.mention}: error al publicar el aviso (`{e}`)"
+    except Exception:
+        return f"{channel.mention}: operación interrumpida; revise el aviso registrado"
     return None
 
 
@@ -11762,6 +12364,8 @@ async def hp_sync_all_warnings(guild: discord.Guild) -> list[str]:
             err = await hp_sync_warning(channel)
             if err:
                 errors.append(err)
+        else:
+            errors.append("Un canal trampa no está disponible; publicación incompleta.")
     return errors
 
 
@@ -11922,6 +12526,77 @@ async def _delete_ids(ch, ids: list[int]) -> tuple[int, int]:
     return deleted, failed
 
 
+async def hp_extend_purge_targets(guild, targets, only, after):
+    """Incluir hilos privados accesibles sin ampliar las purgas de otros módulos."""
+    found = {item.id: item for item in targets}
+    omitted = 0
+    if only is not None:
+        return list(found.values()), omitted
+    try:
+        for thread in await guild.active_threads():
+            found[thread.id] = thread
+    except discord.HTTPException:
+        omitted += 1
+    for parent in guild.text_channels:
+        perms = parent.permissions_for(guild.me) if guild.me else None
+        if not perms or not (perms.view_channel and perms.read_message_history):
+            continue
+        joined = not perms.manage_threads
+        try:
+            async for thread in parent.archived_threads(private=True, joined=joined, limit=None):
+                # Los hilos unidos están ordenados por ID, no por fecha de archivo.
+                if after is not None and thread.archive_timestamp and thread.archive_timestamp < after:
+                    if not joined:
+                        break
+                    continue
+                found[thread.id] = thread
+        except discord.HTTPException:
+            omitted += 1
+    return list(found.values()), omitted
+
+
+async def hp_delete_ids(channel, ids, guild_id, user_id, after, before):
+    """Revalidar cada mensaje antes de eliminar, sin archivar ni leer su contenido."""
+    deleted = failed = 0
+    opened_thread = False
+    try:
+        for message_id in ids:
+            try:
+                message = await channel.fetch_message(message_id)
+                me = channel.guild.me
+                perms = channel.permissions_for(me) if me else None
+                if (channel.guild.id != guild_id or message.guild.id != guild_id
+                        or message.channel.id != channel.id or message.author.id != user_id
+                        or (after is not None and message.created_at <= after)
+                        or (before is not None and message.created_at >= before)
+                        or perms is None or not (perms.view_channel and perms.read_message_history and perms.manage_messages)):
+                    failed += 1
+                    continue
+                if isinstance(channel, discord.Thread) and channel.archived:
+                    if not perms.manage_threads:
+                        failed += 1
+                        continue
+                    channel = await channel.edit(archived=False, reason="Purga autorizada de Honeypot")
+                    opened_thread = True
+                    perms = channel.permissions_for(channel.guild.me)
+                    if not (perms.view_channel and perms.read_message_history and perms.manage_messages):
+                        failed += 1
+                        continue
+                await message.delete()
+                deleted += 1
+            except discord.NotFound:
+                continue
+            except discord.HTTPException:
+                failed += 1
+    finally:
+        if opened_thread:
+            try:
+                await channel.edit(archived=True, reason="Restablecer archivo tras purga Honeypot")
+            except discord.HTTPException:
+                failed += 1
+    return deleted, failed
+
+
 async def purge_user_messages(
     guild: discord.Guild,
     user_id: int,
@@ -11932,6 +12607,7 @@ async def purge_user_messages(
     limit: int | None = None,
     progress=None,
     content_type: str = "all",
+    honeypot: bool = False,
 ) -> PurgeResult:
     """Borra mensajes de un usuario (aunque ya no esté en el servidor), sin tope propio:
     - sin after/before/limit -> TODOS sus mensajes
@@ -11940,6 +12616,9 @@ async def purge_user_messages(
     `progress(hechos, total, borrados)` se llama a medida que avanza."""
     result = PurgeResult()
     targets = await purge_targets(guild, channel, after)
+    if honeypot:
+        targets, omitted = await hp_extend_purge_targets(guild, targets, channel, after)
+        result.channels_skipped += omitted
     sem = asyncio.Semaphore(4)  # 4 canales a la vez; discord.py gestiona el rate limit
     collected: list[tuple[object, list[int]]] = []
     done = 0
@@ -11955,7 +12634,8 @@ async def purge_user_messages(
                 ids = await _collect_user_messages(ch, user_id, after, before, limit, content_type)
                 result.channels_scanned += 1
                 if limit is None and ids:  # sin tope global: se borra canal a canal
-                    d, f = await _delete_ids(ch, ids)
+                    d, f = (await hp_delete_ids(ch, ids, guild.id, user_id, after, before)
+                            if honeypot else await _delete_ids(ch, ids))
                     result.deleted += d
                     result.failed += f
                 elif ids:
@@ -11978,7 +12658,8 @@ async def purge_user_messages(
         for message_id, ch in pairs:
             by_channel.setdefault(ch.id, (ch, []))[1].append(message_id)
         for ch, ids in by_channel.values():
-            d, f = await _delete_ids(ch, ids)
+            d, f = (await hp_delete_ids(ch, ids, guild.id, user_id, after, before)
+                    if honeypot else await _delete_ids(ch, ids))
             result.deleted += d
             result.failed += f
     return result
@@ -12006,6 +12687,7 @@ async def run_purge_job(
     progress=None,
     content_type: str = "all",
     title: str = "Purga completada",
+    honeypot: bool = False,
 ) -> PurgeResult | None:
     """Ejecuta una purga con control de duplicados y reporta el resultado en el log."""
     key = (guild.id, user.id)
@@ -12015,7 +12697,7 @@ async def run_purge_job(
     try:
         result = await purge_user_messages(
             guild, user.id, channel=channel, after=after, before=before, limit=limit,
-            progress=progress, content_type=content_type
+            progress=progress, content_type=content_type, honeypot=honeypot,
         )
     except Exception:
         traceback.print_exc()
@@ -12048,6 +12730,7 @@ def hp_start_purge(member: discord.Member) -> str | None:
         run_purge_job(
             member.guild, member, scope_text=scope, requested_by="Honeypot",
             after=after, limit=limit, title="Purga del honeypot completada",
+            honeypot=True,
         )
     )
     return f"purga en segundo plano ({scope})"
@@ -12787,6 +13470,8 @@ async def _condemn_member_inner(
     send_dm: bool,
     announce: bool,
 ) -> tuple[bool, str]:
+    if origin == "honeypot":
+        source_message_url = None
     existing = condemnation_get(member.guild.id, member.id)
     active_role_id = condemnation_role_id(existing)
     snapshot = preserve_role_ids
@@ -12826,26 +13511,33 @@ async def _condemn_member_inner(
     db_clear_verify_pending(member.guild.id, member.id)
     db_zero_week_messages(member.guild.id, member.id)
 
-    evidence_url, evidence_text = await condemnation_archive_evidence(
-        member.guild,
-        member,
-        source_message_url=source_message_url,
-        reason=reason,
-        applied_by=applied_by,
-    )
+    # Los incidentes Honeypot conservan el expediente, pero no archivan evidencias.
+    if origin == "honeypot":
+        evidence_url, evidence_text = None, None
+    else:
+        evidence_url, evidence_text = await condemnation_archive_evidence(
+            member.guild,
+            member,
+            source_message_url=source_message_url,
+            reason=reason,
+            applied_by=applied_by,
+        )
 
     # Ambos destinos reciben la misma resolución y el mismo Moderation Case.
     condemnation_when = datetime.now(timezone.utc)
     linked_case_number: int | None = None
     if send_dm or announce:
         try:
-            verified = evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            verified = (
+                evidence_text or await moderation_verified_proof(member.guild, source_message_url)
+            ) if origin != "honeypot" else None
             linked_case_number = moderation_case_create(
                 member.guild.id, "CONDEMN", member.id, reason,
                 duration_minutes=duration_minutes,
                 author_id=applied_by.id if applied_by else None,
-                proof=evidence_url or source_message_url,
+                proof=(evidence_url or source_message_url) if origin != "honeypot" else None,
                 verified_proof=verified,
+                include_message_history=(origin != "honeypot"),
             )
             conn = db_connect()
             conn.execute(
@@ -12892,6 +13584,7 @@ async def _condemn_member_inner(
                 after=after,
                 limit=limit,
                 title="Purga de condena completada",
+                honeypot=(origin == "honeypot"),
             )
         )
 
@@ -13080,6 +13773,24 @@ async def condemnation_reconcile(guild: discord.Guild) -> None:
         await asyncio.sleep(1)
 
 
+async def hp_expire_ban_case(guild, row) -> bool:
+    """Una solicitud ambigua no permite retirar un baneo posterior de otro origen."""
+    user = discord.Object(id=int(row["user_id"]))
+    expected = "Honeypot: escribió en un canal trampa · Expediente " + moderation_case_code(
+        int(row["case_number"]), guild.id,
+    )
+    try:
+        entry = await guild.fetch_ban(user)
+        if entry.reason != expected:
+            return True  # Nuestro baneo ya no está vigente; preservar el actual.
+        await guild.unban(user, reason="Expiró el expediente de Honeypot")
+        return True
+    except discord.NotFound:
+        return True
+    except discord.HTTPException:
+        return False
+
+
 @tasks.loop(minutes=1)
 async def moderation_case_expiry_loop() -> None:
     now = datetime.now(timezone.utc)
@@ -13105,12 +13816,24 @@ async def moderation_case_expiry_loop() -> None:
                 try:
                     await member.timeout(None, reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
                 except discord.HTTPException:
-                    pass
+                    # Mantener el expediente abierto para volver a intentarlo.
+                    continue
             elif case_type == "BAN":
+                if ("moderator_notes" in row.keys()
+                        and str(row["moderator_notes"] or "").startswith("Honeypot:")):
+                    if not await hp_expire_ban_case(guild, row):
+                        continue
+                    moderation_case_close(guild.id, int(row["case_number"]), closed_by=None,
+                                          resolution="Baneo de Honeypot vencido o ya sustituido")
+                    continue
                 try:
                     await guild.unban(discord.Object(id=int(row["user_id"])), reason=f"Expiró el expediente {moderation_case_code(row['case_number'], int(row['guild_id']))}")
-                except (discord.NotFound, discord.HTTPException):
+                except discord.NotFound:
+                    # Ya no tiene baneo activo; la operación es idempotente.
                     pass
+                except discord.HTTPException:
+                    # No cerrar el expediente si los permisos/API impidieron desbanear.
+                    continue
             moderation_case_close(guild.id, int(row["case_number"]), closed_by=None, resolution="Expirado automáticamente")
         except Exception:
             traceback.print_exc()
@@ -13128,47 +13851,131 @@ async def hp_punish(member: discord.Member, action: str, source_channel_id: int 
     reason = "Honeypot: escribió en un canal trampa"
     if action == "log":
         return True, "Solo registrado (sin castigo)"
-    if member.top_role >= guild.me.top_role:
-        return False, "Su rol es igual o superior al del bot (jerarquía de roles)"
+
+    me = guild.me
+    if me is None:
+        return False, "No se pudo comprobar la identidad del bot"
+    if member.id == guild.owner_id or getattr(member, "bot", False):
+        return False, "Miembro protegido frente a medidas automáticas"
+    if hp_is_exempt(member):
+        return False, "Miembro exento frente a medidas automáticas"
+    if member.top_role >= me.top_role:
+        return False, "Jerarquía de roles insuficiente"
+
+    if action in {"kick", "ban"}:
+        problem = hp_sanction_permission_problem(guild, action)
+        if problem:
+            return False, problem
+
     try:
         if action == "timeout":
-            minutes = hp_timeout_minutes(member.guild.id)
+            minutes = hp_timeout_minutes(guild.id)
             await member.timeout(timedelta(minutes=minutes), reason=reason)
             purge_note = hp_start_purge(member)
             return True, f"Aislado {format_duration(minutes)}" + (f"; {purge_note}" if purge_note else "")
         if action == "role":
-            purge_spec = hp_purge_spec(member.guild.id)
             return await condemn_member(
-                member,
-                reason="Honeypot: escribió en un canal trampa",
-                duration_minutes=condemnation_default_duration_minutes(member.guild.id),
-                purge_spec=purge_spec,
-                origin="honeypot",
-                applied_by=None,
-                source_channel_id=source_channel_id,
-                send_dm=True,
-                announce=True,
+                member, reason=reason, duration_minutes=condemnation_default_duration_minutes(guild.id),
+                purge_spec=hp_purge_spec(guild.id), origin="honeypot", applied_by=None,
+                source_channel_id=source_channel_id, send_dm=True, announce=True,
             )
+        if action in {"kick", "ban"}:
+            duration = None
+            case_number = None
+            if action == "ban":
+                duration = hp_ban_override_minutes(guild.id)
+                if duration is None:
+                    return False, "Configure explícitamente la duración del baneo en /setup."
+                pending_key = f"honeypot_ban_pending_{member.id}"
+                pending = hp_setting_get(guild.id, pending_key)
+                if pending:
+                    previous = moderation_case_get(guild.id, int(pending))
+                    if previous is None or previous["open"]:
+                        return False, "Baneo pendiente de conciliación; no se repetirá la solicitud."
+                    hp_setting_set(guild.id, pending_key, "")
+                # Guardar vencimiento antes de llamar a Discord: un fallo de
+                # SQLite posterior nunca debe convertir un baneo temporal en perpetuo.
+                try:
+                    case_number = moderation_case_create(
+                        guild.id, "BAN", member.id, reason,
+                        duration_minutes=duration or None, author_id=None,
+                        include_message_history=False,
+                        moderator_notes="Honeypot: solicitud pendiente de confirmación por Discord.",
+                    )
+                    hp_setting_set(guild.id, pending_key, str(case_number))
+                except Exception:
+                    return False, "No se pudo registrar el vencimiento; no se solicitó el baneo."
+            # Discord no debe purgar mensajes al expulsar ni al banear; Honeypot
+            # realiza cualquier purga separadamente, por autor y por canal.
+            if action == "kick":
+                await member.kick(reason=reason)
+            else:
+                try:
+                    await member.ban(reason=reason + " · Expediente " + moderation_case_code(case_number, guild.id),
+                                     delete_message_seconds=0)
+                except discord.HTTPException as exc:
+                    if 400 <= exc.status < 500 and exc.status != 429:
+                        moderation_case_close(guild.id, case_number, closed_by=None,
+                                              resolution="Discord rechazó el baneo; no aplicado")
+                        hp_setting_set(guild.id, pending_key, "")
+                    return False, "Discord no confirmó el baneo; consulte el expediente antes de reintentar."
+
+            purge_note = ""
+            if action == "kick":
+                minutes = hp_kick_purge_minutes(guild.id)
+                try:
+                    task = asyncio.create_task(run_purge_job(
+                        guild, member, scope_text=f"últimas {format_duration(minutes)}",
+                        requested_by="Honeypot", after=datetime.now(timezone.utc) - timedelta(minutes=minutes),
+                        title="Purga por expulsión Honeypot completada",
+                        honeypot=True,
+                    ))
+                    # La purga posterior no debe volver a ejecutar una sanción.
+                    task.add_done_callback(lambda future: future.exception() if not future.cancelled() else None)
+                    purge_note = f"purga iniciada ({format_duration(minutes)})"
+                except Exception:
+                    traceback.print_exc()
+                    purge_note = "purga no iniciada; requiere revisión"
+            try:
+                # Conservar expediente pero no almacenar transcripciones ni evidencias.
+                if case_number is None:
+                    case_number = moderation_case_create(
+                        guild.id, action.upper(), member.id, reason,
+                        duration_minutes=duration if duration else None, author_id=None,
+                        include_message_history=False,
+                        moderator_notes="Medida automática de Honeypot.",
+                    )
+                else:
+                    moderation_case_update(guild.id, case_number, notes="Honeypot: baneo confirmado.")
+                    hp_setting_set(guild.id, pending_key, "")
+                return True, (
+                    f"{'Expulsado' if action == 'kick' else 'Baneado'} · "
+                    f"Expediente {moderation_case_code(case_number, guild.id)}"
+                    + (f" · {format_duration(duration)}" if duration else "")
+                    + (f" · {purge_note}" if purge_note else "")
+                )
+            except Exception:
+                traceback.print_exc()
+                return True, (
+                    f"{'Expulsión' if action == 'kick' else 'Baneo'} ejecutado; "
+                    "expediente pendiente de revisión administrativa."
+                    + (f" {purge_note}" if purge_note else "")
+                )
     except discord.Forbidden:
-        return False, "Faltan permisos (Moderar miembros / Gestionar roles)"
-    except discord.HTTPException as e:
-        return False, f"Error de Discord: `{e}`"
+        return False, "El bot carece de permisos o jerarquía"
+    except discord.HTTPException:
+        return False, "Discord rechazó la medida automática"
     return False, f"Acción desconocida: {action}"
 
 
 async def hp_report(guild: discord.Guild, member: discord.Member, channel: discord.abc.GuildChannel,
-                    content: str, attachments: int, action: str, success: bool, note: str) -> None:
+                    action: str, success: bool, note: str) -> None:
+    """Notificación administrativa sin archivar ni reproducir el mensaje disparador."""
     log_channel = guild.get_channel(get_log_channel_id(guild.id))
     if log_channel is None:
         return
-    evidence = content.replace("`", "'")[:900] if content else ""
-    if not evidence:
-        evidence = ("(sin texto)" if attachments or os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
-                    else "(no disponible: activa MESSAGE_CONTENT_INTENT=1 y el intent en el portal)")
-    if attachments:
-        evidence += f"\n{attachments} adjunto(s)"
     embed = discord.Embed(
-        title="Honeypot: miembro atrapado" if success else "Honeypot: castigo FALLIDO",
+        title="Honeypot: miembro detectado" if success else "Honeypot: acción fallida",
         color=discord.Color.orange() if success else discord.Color.red(),
         timestamp=datetime.now(timezone.utc),
     )
@@ -13181,7 +13988,6 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
     )
     embed.add_field(name="Canal", value=channel.mention, inline=True)
     embed.add_field(name="Acción", value=f"{HONEYPOT_ACTION_LABELS.get(action, action)} — {note}", inline=False)
-    embed.add_field(name="Mensaje", value=f"```{evidence}```", inline=False)
     embed.set_thumbnail(url=member.display_avatar.url)
     role_id = hp_ping_role_id(guild.id)
     try:
@@ -13190,43 +13996,48 @@ async def hp_report(guild: discord.Guild, member: discord.Member, channel: disco
             embed=embed,
             allowed_mentions=discord.AllowedMentions(roles=True, users=False, everyone=False),
         )
-    except discord.HTTPException as e:
-        print(f"Honeypot: no pude reportar en el canal de logs: {e}")
+    except discord.HTTPException:
+        print("Honeypot: no se pudo notificar en el canal de logs")
 
 
 async def hp_handle_trigger(message: discord.Message, member: discord.Member) -> None:
     guild = member.guild
-    content = message.content or ""
-    attachments = len(message.attachments)
     action = hp_action(guild.id)
 
-    # Borra el mensaje trampa (si el castigo no lo purga ya).
-    try:
-        await message.delete()
-    except discord.HTTPException:
-        pass
-
-    # Protección contra fallos: varios miembros veteranos atrapados en pocos minutos.
+    # La protección antifallos debe ejecutarse antes de cualquier borrado.
     now = datetime.now(timezone.utc)
     if member.joined_at and now - member.joined_at > HONEYPOT_MISFIRE_MEMBER_AGE:
-        _hp_veteran_hits.append((now, member.id))
-    _hp_veteran_hits[:] = [(t, u) for t, u in _hp_veteran_hits if now - t <= HONEYPOT_MISFIRE_WINDOW]
-    if len({u for _, u in _hp_veteran_hits}) >= HONEYPOT_MISFIRE_THRESHOLD:
+        _hp_veteran_hits.append((now, guild.id, member.id))
+    _hp_veteran_hits[:] = [
+        (at, guild_id, user_id)
+        for at, guild_id, user_id in _hp_veteran_hits
+        if now - at <= HONEYPOT_MISFIRE_WINDOW
+    ]
+    affected = {user_id for _, guild_id, user_id in _hp_veteran_hits if guild_id == guild.id}
+    if len(affected) >= HONEYPOT_MISFIRE_THRESHOLD:
         hp_setting_set(guild.id, "honeypot_paused", "1")
-        _hp_veteran_hits.clear()
+        _hp_veteran_hits[:] = [
+            item for item in _hp_veteran_hits if item[1] != guild.id
+        ]
         await log_embed(
-            guild, "⏸️ Honeypot pausado (protección contra fallos)",
-            f"{HONEYPOT_MISFIRE_THRESHOLD}+ miembros con más de 30 días en el servidor escribieron en la trampa en "
-            f"pocos minutos: probablemente apunta a un canal que tu comunidad usa de verdad.\n"
-            f"Revisa los canales trampa con `/honeypot setup` y reactiva con `/honeypot resume`. "
-            f"Este último mensaje ({member.mention}) **no** fue castigado.",
+            guild, "Honeypot pausado — protección contra fallos",
+            "Varios miembros veteranos escribieron en canales trampa durante un breve periodo. "
+            f"Se conservó el último mensaje de {member.mention} y no se le sancionó. "
+            "Revise la configuración y reactive la protección cuando sea seguro.",
             discord.Color.red(),
         )
         return
 
+    # Solo registrar significa ninguna acción destructiva, tampoco borrar el disparador.
+    if action != "log":
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            pass
+
     success, note = await hp_punish(member, action, message.channel.id)
-    hp_log_trigger(member, message.channel.id, content, action, success, note)
-    await hp_report(guild, member, message.channel, content, attachments, action, success, note)
+    hp_log_trigger(member, message.channel.id, action, success, note)
+    await hp_report(guild, member, message.channel, action, success, note)
 
 
 @bot.listen("on_message")
@@ -13241,25 +14052,27 @@ async def honeypot_listener(message: discord.Message) -> None:
     if not isinstance(member, discord.Member) or hp_is_exempt(member):
         return
     punish_id = hp_punish_role_id(message.guild.id)
-    if punish_id and any(r.id == punish_id for r in member.roles):
+    if hp_action(message.guild.id) != "log" and punish_id and any(r.id == punish_id for r in member.roles):
         try:
             await message.delete()  # ya está castigado: solo se borra lo que siga escribiendo
         except discord.HTTPException:
             pass
         return
-    if member.id in _hp_busy:
+    key = (message.guild.id, member.id)
+    if key in _hp_busy:
         try:
-            await message.delete()
+            if hp_action(message.guild.id) != "log":
+                await message.delete()
         except discord.HTTPException:
             pass
         return
-    _hp_busy.add(member.id)
+    _hp_busy.add(key)
     try:
         await hp_handle_trigger(message, member)
     except Exception:
         traceback.print_exc()
     finally:
-        _hp_busy.discard(member.id)
+        _hp_busy.discard(key)
 
 
 @bot.listen("on_guild_channel_delete")
@@ -14009,6 +14822,65 @@ honeypot_group = HoneypotGroup(
 )
 
 
+class HoneypotNoticeEditConfirmView(discord.ui.View):
+    """Borrador efímero de edición: Cancelar nunca escribe ni publica."""
+
+    def __init__(self, guild_id: int, owner_id: int, changes: dict[str, str], panel=None, panel_interaction=None):
+        super().__init__(timeout=240)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.panel, self.panel_interaction = panel, panel_interaction
+        self.changes = changes
+        self.original = {key: hp_setting_get(guild_id, key) for key in changes}
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id)
+
+    async def _finish(self, interaction, status):
+        if self.panel is None:
+            await interaction.edit_original_response(content=status, view=None)
+            return
+        self.panel.last_publication_status = status
+        helper = HoneypotPublishWarningConfirmView(self.panel, self.panel_interaction)
+        if not await helper._refresh_parent(interaction.guild):
+            await interaction.followup.send(status + " Reabra /setup para ver el estado.", ephemeral=True)
+        await helper._dismiss(interaction)
+        helper.stop()
+
+    @discord.ui.button(label="Confirmar y guardar", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        if any(hp_setting_get(self.guild_id, key) != old for key, old in self.original.items()):
+            await interaction.followup.send(
+                "La configuración cambió. Abra la edición nuevamente.", ephemeral=True,
+            )
+            await interaction.edit_original_response(content="Edición desactualizada.", view=None)
+            return
+        try:
+            hp_save_settings(self.guild_id, self.changes)
+        except Exception:
+            await self._finish(interaction, "No se guardó la edición. Abra de nuevo el editor.")
+            return
+        await self._finish(interaction, "Cambios guardados. Use Publicar aviso para aplicarlos.")
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        await self._finish(interaction, "Edición cancelada. No se guardó nada.")
+
+
 class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
     text = discord.ui.TextInput(
         label="Aviso (vacío = texto por defecto)",
@@ -14018,24 +14890,106 @@ class HoneypotWarningModal(discord.ui.Modal, title="Texto del aviso fijado"):
         default="",
     )
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, owner_id: int, panel=None, panel_interaction=None) -> None:
         super().__init__()
-        self.guild_id = guild_id
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.panel, self.panel_interaction = panel, panel_interaction
+        self.original = tuple(hp_setting_get(guild_id, key) for key in HoneypotPublishWarningConfirmView._notice_keys)
         self.text.default = hp_setting_get(guild_id, "honeypot_warning_text") or HONEYPOT_WARNING_TEXT_DEFAULT
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        current = tuple(hp_setting_get(self.guild_id, key) for key in HoneypotPublishWarningConfirmView._notice_keys)
+        if current != self.original:
+            await interaction.response.send_message("El aviso cambió. Abra de nuevo el editor.", ephemeral=True)
+            return
         value = str(self.text).strip()
-        if value and value != HONEYPOT_WARNING_TEXT_DEFAULT:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", value)
-        else:
-            hp_setting_set(interaction.guild.id, "honeypot_warning_text", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "text")
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Aviso actualizado en los canales trampa." + ("\n" + "\n".join(errors) if errors else ""),
+        if interaction.guild is None or interaction.guild.id != self.guild_id:
+            await interaction.response.send_message("El servidor no está disponible.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "Revise el nuevo texto del aviso. Solo se guardará al pulsar Confirmar; "
+            "deberá publicarlo después desde /setup.",
+            view=HoneypotNoticeEditConfirmView(
+                self.guild_id, self.owner_id, {
+                    "honeypot_warning_text": value if value != HONEYPOT_WARNING_TEXT_DEFAULT else "",
+                    "honeypot_warning_style": "text",
+                }, self.panel, self.panel_interaction,
+            ),
             ephemeral=True,
         )
+
+class HoneypotSlashConfigConfirmView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, changes: dict[str, str]):
+        super().__init__(timeout=240)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.changes = changes
+        self.original = {name: hp_setting_get(guild_id, name) for name in changes}
+        self.traps = set(hp_traps(guild_id))
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        guild = interaction.guild
+        if (any(hp_setting_get(self.guild_id, key) != old for key, old in self.original.items())
+                or set(hp_traps(self.guild_id)) != self.traps):
+            await interaction.edit_original_response(
+                content="Configuración desactualizada; repita la edición.", view=None,
+            )
+            return
+        action_value = self.changes.get("honeypot_action", hp_setting_get(self.guild_id, "honeypot_action"))
+        action = next(
+            (key for key, value in HONEYPOT_DESTRUCTIVE_ACTION_STORAGE.items()
+             if value == action_value), action_value,
+        )
+        if action in {"kick", "ban"}:
+            issue = hp_sanction_permission_problem(guild, action, interaction.guild.get_member(self.owner_id).guild_permissions)
+            if issue:
+                await interaction.edit_original_response(content=issue, view=None)
+                return
+        if self.changes.get("honeypot_enabled") == "1" and not self.traps:
+            await interaction.edit_original_response(
+                content="Honeypot requiere al menos un canal trampa.", view=None,
+            )
+            return
+        effective_role = int(self.changes.get("honeypot_punish_role") or hp_punish_role_id(self.guild_id))
+        if action == "role" and guild.get_role(effective_role) is None:
+            await interaction.edit_original_response(
+                content="El rol de condena ya no está disponible.", view=None,
+            )
+            return
+        try:
+            hp_save_settings(self.guild_id, self.changes)
+        except Exception:
+            await interaction.edit_original_response(content="No se guardó la configuración.", view=None)
+            return
+        if "honeypot_retention_minutes" in self.changes:
+            hp_prune_history(self.guild_id)
+        errors = await hp_sync_all_warnings(guild) if "honeypot_warning_enabled" in self.changes else []
+        content = "Configuración guardada." if not errors else "Configuración guardada, pero hay errores en los avisos."
+        await interaction.edit_original_response(content=content, view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        if self.finished:
+            return
+        self.finished = True
+        self.stop()
+        await interaction.edit_original_response(content="Operación cancelada. No se guardó nada.", view=None)
 
 
 @honeypot_group.command(name="setup", description="Ver o cambiar la configuración del honeypot.")
@@ -14105,44 +15059,31 @@ async def honeypot_config(
         await interaction.response.send_message(f"Error: No guardé nada: {e}", ephemeral=True)
         return
 
-    changes: list[str] = []
+    changes: dict[str, str] = {}
     if activado is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_enabled", "1" if activado else "0")
+        changes["honeypot_enabled"] = "1" if activado else "0"
         if activado:
-            hp_setting_set(interaction.guild.id, "honeypot_paused", "0")
-        changes.append("activado" if activado else "desactivado")
+            changes["honeypot_paused"] = "0"
     if accion is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_action", accion.value)
-        changes.append(f"acción → {accion.name}")
+        changes["honeypot_action"] = accion.value
     if rol_castigo is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_punish_role", str(rol_castigo.id))
-        changes.append(f"rol de castigo → {rol_castigo.mention}")
+        changes["honeypot_punish_role"] = str(rol_castigo.id)
     if purga_spec is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_purge_spec", f"{purga_spec[0]}:{purga_spec[1]}")
-        changes.append(f"purga → {format_purge_spec(*purga_spec)}")
+        changes["honeypot_purge_spec"] = f"{purga_spec[0]}:{purga_spec[1]}"
     if timeout_min is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_timeout_minutes", str(timeout_min))
-        changes.append(f"timeout → {format_duration(timeout_min)}")
+        changes["honeypot_timeout_minutes"] = str(timeout_min)
     if retencion_min is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_retention_minutes", str(retencion_min))
-        hp_prune_history(interaction.guild.id)
-        changes.append(f"retención → {format_duration(retencion_min)}")
+        changes["honeypot_retention_minutes"] = str(retencion_min)
     if ping_rol is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_ping_role", str(ping_rol.id))
-        changes.append(f"ping → {ping_rol.mention}")
+        changes["honeypot_ping_role"] = str(ping_rol.id)
     if aviso is not None:
-        hp_setting_set(interaction.guild.id, "honeypot_warning_enabled", "1" if aviso else "0")
-        changes.append("aviso fijado activado" if aviso else "aviso fijado desactivado")
+        changes["honeypot_warning_enabled"] = "1" if aviso else "0"
 
-    await interaction.response.defer(ephemeral=True)
-    errors = await hp_sync_all_warnings(guild) if aviso is not None else []
-    await interaction.followup.send(
-        "Guardado: " + "; ".join(changes) + "\n\n" + hp_config_summary(guild)
-        + ("\n\nAdvertencia: " + "\n".join(errors) if errors else ""),
+    await interaction.response.send_message(
+        "Revise los cambios de Honeypot. No se aplicarán hasta confirmar.",
+        view=HoneypotSlashConfigConfirmView(guild.id, interaction.user.id, changes),
         ephemeral=True,
     )
-    await log_embed(guild, "Honeypot actualizado", f"{interaction.user.mention}: " + "; ".join(changes))
-
 
 @honeypot_group.command(name="add", description="Convertir un canal de texto existente en canal trampa.")
 @discord.app_commands.describe(canal="Canal de texto que todos puedan ver y en el que puedan escribir")
@@ -14261,9 +15202,11 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         max_length=2048,
     )
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, owner_id: int, panel=None, panel_interaction=None) -> None:
         super().__init__()
-        self.guild_id = guild_id
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.panel, self.panel_interaction = panel, panel_interaction
+        self.original = tuple(hp_setting_get(guild_id, key) for key in HoneypotPublishWarningConfirmView._notice_keys)
         cfg = hp_warning_custom(guild_id)
         self.title_input.default = cfg["title"]
         self.description_input.default = cfg["description"]
@@ -14272,6 +15215,12 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         self.footer_input.default = cfg["footer"]
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        current = tuple(hp_setting_get(self.guild_id, key) for key in HoneypotPublishWarningConfirmView._notice_keys)
+        if current != self.original:
+            await interaction.response.send_message("El aviso cambió. Abra de nuevo el editor.", ephemeral=True)
+            return
         title = str(self.title_input).strip()
         description = str(self.description_input).strip()
         color = str(self.color_input).strip().lstrip("#")
@@ -14289,37 +15238,31 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
                 await interaction.response.send_message(f"Error: La URL de {label} debe empezar por `http://` o `https://` (o ser una variable como `{{servericon}}`).", ephemeral=True)
                 return
 
-        hp_setting_set(interaction.guild.id, "honeypot_warning_title", title)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_description", description)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_color", color.upper())
-        hp_setting_set(interaction.guild.id, "honeypot_warning_image", image)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_thumbnail", "")
-        hp_setting_set(interaction.guild.id, "honeypot_warning_footer", footer)
-        hp_setting_set(interaction.guild.id, "honeypot_warning_style", "custom")
-
-        await interaction.response.defer(ephemeral=True)
-        errors = await hp_sync_all_warnings(interaction.guild)
-        await interaction.followup.send(
-            "Embed personalizado guardado y aplicado a los avisos fijados."
-            + ("\n" + "\n".join(errors) if errors else ""),
+        await interaction.response.send_message(
+            "La edición está pendiente de confirmación. Confirme para guardar "
+            "y luego pulse Publicar aviso desde /setup para actualizar los canales.",
+            view=HoneypotNoticeEditConfirmView(
+                self.guild_id, self.owner_id, {
+                    "honeypot_warning_title": title,
+                    "honeypot_warning_description": description,
+                    "honeypot_warning_color": color.upper(),
+                    "honeypot_warning_image": image,
+                    "honeypot_warning_thumbnail": "",
+                    "honeypot_warning_footer": footer,
+                    "honeypot_warning_style": "custom",
+                }, self.panel, self.panel_interaction,
+            ),
             ephemeral=True,
         )
-        await log_embed(
-            interaction.guild,
-            "Embed del honeypot actualizado",
-            f"{interaction.user.mention} personalizó título, descripción, color, imagen y pie del aviso.",
-            discord.Color.blurple(),
-        )
-
 
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")
 async def honeypot_warning_embed_cmd(interaction: discord.Interaction) -> None:
-    await interaction.response.send_modal(HoneypotWarningEmbedModal(interaction.guild.id))
+    await interaction.response.send_modal(HoneypotWarningEmbedModal(interaction.guild.id, interaction.user.id))
 
 
 @honeypot_group.command(name="warning_text", description="Editar el texto del aviso fijado en los canales trampa.")
 async def honeypot_warning_text_cmd(interaction: discord.Interaction) -> None:
-    await interaction.response.send_modal(HoneypotWarningModal(interaction.guild.id))
+    await interaction.response.send_modal(HoneypotWarningModal(interaction.guild.id, interaction.user.id))
 
 
 @honeypot_group.command(name="exempt_add", description="Eximir a un rol o miembro de la trampa.")
