@@ -112,8 +112,32 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertIn("pending_kick_purge_minutes", panel)
         self.assertIn("self._snapshot() != self._original_config", panel)
         self.assertIn("hp_action_storage(self.pending_action)", panel)
-        select = panel[panel.index("async def select_action"):panel.index("async def interaction_check")]
-        self.assertNotIn("hp_setting_set(", select)
+        action = panel[panel.index("class HeraldoHoneypotActionView"):panel.index("class HeraldoHoneypotParametersView")]
+        self.assertIn("async def choose(", action)
+        self.assertNotIn("hp_setting_set(", action)
+        self.assertIn("hp_save_settings(self.guild_id, changes, self.pending_trap_id)", panel)
+        self.assertIn("hp_setup_embed(guild", panel)
+
+    def test_test_panel_layout_and_navigation_are_retained(self):
+        panel = SOURCE[
+            SOURCE.index("class HeraldoHoneypotSetupView("):
+            SOURCE.index("class HoneypotPublishWarningConfirmView(")
+        ]
+        for name in ("Crear canal", "Retirar canal", "Configurar acción",
+                     "Configurar aviso", "Detalles", "Guardar cambios",
+                     "Descartar cambios", "Volver"):
+            self.assertIn('label="' + name + '"', panel)
+        self.assertNotIn('placeholder="Configurar acción (no guarda)"', panel)
+        self.assertNotIn('placeholder="Configurar duración o purga (no guarda)"', panel)
+        self.assertIn("self._snapshot() != self._original_config", panel)
+        self.assertIn("hp_save_settings(self.guild_id, changes, self.pending_trap_id)", panel)
+        self.assertIn("class HeraldoHoneypotActionView(", panel)
+        self.assertIn("class HeraldoHoneypotParametersView(", panel)
+        self.assertIn("class HeraldoHoneypotNoticeView(", SOURCE)
+        self.assertIn("class HeraldoHoneypotDetailsView(", SOURCE)
+        embed = definition("hp_setup_embed")
+        for section in ("Estado actual", "Medida aplicada", "Aviso y seguimiento", "Cambios pendientes"):
+            self.assertIn(section, embed)
 
     def test_trigger_history_is_not_described_as_captures(self):
         summary = definition("hp_config_summary")
@@ -121,13 +145,15 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertNotIn("Capturas en el historial", summary)
         self.assertIn("sin contenido del mensaje", summary)
 
-    def test_toggle_twice_discards_draft(self):
+    def test_toggle_stages_draft_without_persisting(self):
         panel = SOURCE[
             SOURCE.index("class HeraldoHoneypotSetupView("):
             SOURCE.index("class HoneypotPublishWarningConfirmView(")
         ]
-        toggle = panel[panel.index("async def toggle("):panel.index("async def edit_warning(")]
-        self.assertIn("target != honeypot_enabled(self.guild_id) else None", toggle)
+        toggle = panel[panel.index("async def toggle("):panel.index("async def edit_action(")]
+        self.assertIn("self.pending_enabled", toggle)
+        self.assertIn("self.pending_paused", toggle)
+        self.assertNotIn("hp_setting_set(", toggle)
 
     def test_notice_publication_requires_confirmation_and_rechecks(self):
         code = SOURCE[
