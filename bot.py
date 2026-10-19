@@ -278,6 +278,8 @@ DB_PATH = os.environ.get("DB_PATH", "heraldo.db")
 if __name__ == "__main__":
     from h03_startup_gate import enforce_startup as _h03_enforce_startup
     _h03_enforce_startup()
+    from h03_test_railway_release import enforce_test_boot as _h03_test_enforce_boot
+    _h03_test_enforce_boot()
 
 intents = discord.Intents.default()
 intents.members = True
