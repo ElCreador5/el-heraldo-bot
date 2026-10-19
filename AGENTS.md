@@ -46,6 +46,22 @@ A partir de ahora, para El Heraldo y cualquier herramienta que utilicemos, todos
 
 Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro agente del proyecto.
 
+## Normas Heraldo (NH) — nombre oficial y uso obligatorio (decisión del propietario, 2026-10-19)
+
+**Nombre oficial:** **Normas Heraldo**. **Abreviatura:** **NH**. Este nombre designa exclusivamente los estándares internos de desarrollo, diseño, interfaz, configuración, seguridad, funcionamiento, verificación y calidad del bot **El Heraldo**. **No** significa las reglas de convivencia de un servidor de Discord ni las políticas o acciones de moderación que el bot aplica a sus miembros.
+
+**Fuente normativa única:** «NH» es el nombre corto para invocar el **Contrato transversal de interfaz y controles de aceptación** de este archivo (`UX-01` a `UX-05`, incluida `UX-03A`) junto con las decisiones específicas vigentes de `DECISIONES.md` y las demás restricciones de este `AGENTS.md` que correspondan al trabajo. Los identificadores `UX-*` se conservan como referencias técnicas: no duplicar ni renumerar el reglamento, ni crear documentos paralelos. En caso de contradicción, contrastar las decisiones y fechas y pedir aclaración al propietario cuando sea necesario.
+
+**Comandos en lenguaje natural**, válidos para ChatGPT, Codex, Claude y agentes que lean este archivo:
+- **«Aplica NH» / «Aplica Normas Heraldo»**: aplicar los estándares al trabajo o módulo indicado en el contexto actual; revisar antes de editar, respetar lo ya funcional y añadir las regresiones pertinentes.
+- **«Aplica NH en [módulo o función]»**: limitar la aplicación y auditoría a ese alcance, incluidas sus dependencias necesarias.
+- **«Aplica NH en todo el bot»**: realizar auditoría transversal y plan de corrección por etapas de todos los módulos; documentar cobertura y pendientes. No declarar que todos cumplen las normas sin verificarlos ni realizar una reescritura masiva innecesaria.
+- **«Audita NH»**: informar cumplimiento, infracciones demostradas, cobertura de pruebas y verificaciones pendientes. La auditoría por sí sola no autoriza cambios.
+- **«Añade a NH: [nueva regla]»**: verificar compatibilidad con las decisiones existentes y, con la aprobación del propietario, registrar la norma en el apartado pertinente de este contrato, añadir o actualizar regresiones y anotar la decisión cuando cambie un acuerdo vigente.
+- **«Actualiza NH»**: modificar una regla previamente aprobada solo conforme a la nueva decisión del propietario, preservando trazabilidad y pruebas.
+
+**Límites invariables:** invocar NH no autoriza modificar, fusionar ni desplegar `main`; omitir respaldos, controles de seguridad, confirmaciones administrativas ni pruebas; acceder a datos privados; ni declarar verificación real en Discord sin realizarla. Toda implementación mantiene los requisitos de aprobación, rama, pruebas, documentación y continuidad de este proyecto.
+
 ## Contrato transversal de interfaz y controles de aceptación (obligatorio, 2026-10-19)
 
 **Alcance:** TODOS los paneles de `/setup`, embeds, vistas, modales, selectores, menús y botones del bot, incluidos módulos futuros. Regla de producto vinculante para ChatGPT, Codex, Claude y cualquier agente que escriba o audite código. No reemplaza las decisiones detalladas de `DECISIONES.md`, ni permite retirar funciones o cambiar producción. Cuando una regla general choque con una excepción específica vigente, documentar la discrepancia, verificar el código y respetar la decisión específica más reciente; preguntar al propietario si sigue siendo ambigua.
