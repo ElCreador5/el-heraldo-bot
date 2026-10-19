@@ -5056,8 +5056,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             content=None, embed=view._embed(interaction.guild), view=view,
         )
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
-    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def _save_pending_changes(self, interaction: discord.Interaction) -> None:
         if not self._pending_lines(interaction.guild):
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
@@ -5160,12 +5159,19 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             note += f" El canal se registró, pero no pudo sincronizarse el aviso: {warning}"
         await interaction.edit_original_response(content=note, embed=self._embed(interaction.guild), view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
-    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._save_pending_changes(interaction)
+
+    def _discard_draft(self) -> None:
         self.pending_trap_id = self.pending_enabled = self.pending_paused = self.pending_action = None
         self.pending_kick_purge_minutes = self.pending_ban_minutes = None
         self.pending_timeout_minutes = self.pending_purge_spec = None
         self.selected_channel_id = None
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._discard_draft()
         await self._refresh(interaction)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
@@ -5194,7 +5200,36 @@ class HeraldoHoneypotSubView(discord.ui.View):
         )
 
 
-class HeraldoHoneypotActionView(HeraldoHoneypotSubView):
+class HeraldoHoneypotDraftSubView(HeraldoHoneypotSubView):
+    """Guardar o descartar sin obligar a regresar al panel principal."""
+
+    def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
+        super().__init__(parent)
+        self.back.row = 3
+        pending = any(value is not None for value in (
+            parent.pending_trap_id, parent.pending_enabled, parent.pending_paused,
+            parent.pending_action, parent.pending_kick_purge_minutes,
+            parent.pending_ban_minutes, parent.pending_timeout_minutes,
+            parent.pending_purge_spec,
+        ))
+        self.save_changes.disabled = not pending
+        self.discard_changes.disabled = not pending
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        # La validación y escritura son exactamente las del botón principal.
+        await self.parent._save_pending_changes(interaction)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.parent._discard_draft()
+        self.parent._sync_controls()
+        await interaction.response.edit_message(
+            content=None, embed=self.parent._embed(interaction.guild), view=self.parent,
+        )
+
+
+class HeraldoHoneypotActionView(HeraldoHoneypotDraftSubView):
     """Acciones y parámetros configurables en /setup; solo Guardar persiste."""
 
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
@@ -5269,7 +5304,7 @@ class HeraldoHoneypotActionView(HeraldoHoneypotSubView):
         )
 
 
-class HeraldoHoneypotParametersView(HeraldoHoneypotSubView):
+class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
     """Selectores contextuales de la acción activa. Ninguno guarda automáticamente."""
 
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:

@@ -81,6 +81,37 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(view.pending_action)
         save.assert_not_called()
 
+    async def test_action_and_measure_have_explicit_save_and_discard(self):
+        view = self.make_view(traps={123: None}, enabled=True, action="role")
+        view.pending_action = "kick"
+        for editor_type in (b.HeraldoHoneypotActionView, b.HeraldoHoneypotParametersView):
+            editor = editor_type(view)
+            self.assertFalse(editor.save_changes.disabled)
+            self.assertFalse(editor.discard_changes.disabled)
+            self.assertEqual(editor.save_changes.style, b.discord.ButtonStyle.success)
+            self.assertEqual(editor.discard_changes.style, b.discord.ButtonStyle.danger)
+            with patch.object(view, "_save_pending_changes", new_callable=AsyncMock) as save:
+                await editor.save_changes.callback(interaction())
+                save.assert_awaited_once()
+            self.assertEqual(view.pending_action, "kick")
+
+        editor = b.HeraldoHoneypotParametersView(view)
+        with patch.object(b, "hp_setting_set") as database_write, \
+             patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()):
+            i = interaction()
+            await editor.discard_changes.callback(i)
+            database_write.assert_not_called()
+        self.assertIsNone(view.pending_action)
+        i.response.edit_message.assert_awaited_once()
+        self.assertIs(i.response.edit_message.call_args.kwargs["view"], view)
+
+    def test_submenus_disable_save_without_pending_changes(self):
+        view = self.make_view(traps={123: None}, enabled=True)
+        for editor_type in (b.HeraldoHoneypotActionView, b.HeraldoHoneypotParametersView):
+            editor = editor_type(view)
+            self.assertTrue(editor.save_changes.disabled)
+            self.assertTrue(editor.discard_changes.disabled)
+
     async def test_create_channel_only_opens_confirmation_and_rechecks_permissions(self):
         view = self.make_view(traps={123: None}, enabled=True)
         i = interaction()
