@@ -2276,7 +2276,7 @@ async def on_member_join(member: discord.Member) -> None:
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         queue_join_roles(member)
 
-    if verify_enabled(member.guild.id) and member.id != member.guild.owner_id:
+    if verify_enabled(member.guild.id) and member.id != getattr(member.guild, 'owner_id', None):
         waiting_screening = (
             join_roles_wait_screening(member.guild.id)
             and (join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id))
@@ -2489,7 +2489,7 @@ async def heraldo_member_departure(member: discord.Member) -> None:
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
     if after.bot:
         return  # los bots no pasan por el flujo de verificación
-    if after.id == after.guild.owner_id:
+    if after.id == getattr(after.guild, 'owner_id', None):
         # El propietario no tiene plazos de verificación ni debe recibir sanciones por roles.
         clear_verification_expiry(after.guild.id, after.id)
         db_clear_tentado(after.guild.id, after.id)
@@ -2733,7 +2733,7 @@ async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> t
     inconsistent: list[int] = []
     # No depender de que la caché esté completa después de un largo período desconectado.
     async for member in guild.fetch_members(limit=None):
-        if member.bot or member.id == guild.owner_id:
+        if member.bot or member.id == getattr(guild, 'owner_id', None):
             continue
         roles = {role.id for role in member.roles}
         if unverified_id not in roles:
@@ -12109,7 +12109,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
     expelled_sin_verificar: list[discord.Member] = []
 
     async for member in guild.fetch_members(limit=None):
-        if (member.bot or member.id == guild.owner_id
+        if (member.bot or member.id == getattr(guild, 'owner_id', None)
                 or condemnation_get(member.guild.id, member.id) is not None):
             continue  # propietario y condenados exentos de esta evaluación
         role_ids = {r.id for r in member.roles}

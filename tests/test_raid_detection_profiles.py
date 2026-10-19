@@ -77,6 +77,7 @@ class RaidDetectionTests(unittest.IsolatedAsyncioTestCase):
         sel = v.selectors["raid_window_seconds"]
         sel._values = ["custom"]
         i = self.i()
+        i.response.send_modal = AsyncMock()
         with patch.object(b, "guild_config_set") as write:
             await sel.callback(i)
         write.assert_not_called()
