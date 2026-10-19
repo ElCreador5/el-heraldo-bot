@@ -5424,8 +5424,10 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         if value not in {0, 5, 60, 1440, 10080, 43200}:
             await interaction.response.send_message("Duración de baneo no válida.", ephemeral=True)
             return
-        current = hp_ban_duration_minutes(self.parent.guild_id) or 0
-        self.parent.pending_ban_minutes = value if value != current else None
+        # Si Honeypot aún no tiene duración propia, elegir Permanente
+        # (0) debe producir un cambio pendiente explícito.
+        current = hp_ban_override_minutes(self.parent.guild_id)
+        self.parent.pending_ban_minutes = value if current is None or value != current else None
         await self._stage(interaction)
 
     async def select_purge(self, interaction: discord.Interaction) -> None:

@@ -149,6 +149,17 @@ class HoneypotKickPurgeSetupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(b.hp_ban_override_minutes(901), 0)
             self.assertIsNone(b.hp_ban_duration_minutes(901))
 
+    async def test_permanent_ban_requires_explicit_select_even_without_override(self):
+        parent = self.make_view(action="ban")
+        parent.pending_action = "ban"
+        with patch.object(b, "hp_setting_get", return_value=None):
+            measure = b.HeraldoHoneypotParametersView(parent)
+            i = interaction()
+            i.data = {"values": ["0"]}
+            await measure.select_ban_duration(i)
+        self.assertEqual(parent.pending_ban_minutes, 0)
+
+
 
 if __name__ == "__main__":
     unittest.main()
