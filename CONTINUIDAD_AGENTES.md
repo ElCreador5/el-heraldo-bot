@@ -1,3 +1,7 @@
+## Transferencia — Corrección Honeypot Test → main (2026-10-19)
+
+Rama de publicación **ya existente y autorizada** `release/honeypot-selective-20261018@0eb58725901c2397d3dbcde117829eb9cc92ff5a`; PR nueva #21 (UI, no Honeypot completo) abierta como borrador sobre `main@91e193d5`. Objetivo: equiparar panel productivo con Test preservando transacción/confirmaciones existentes. Cambios: `bot.py`, `test_honeypot_runtime.py`, `test_honeypot_selective_main.py`; CI python-checks SUCCESS 108 tests. Discord UI real no probado. Siguiente: validar que PR no cambia nada ajeno a UI, comprobar CI de último commit documental y base actual; fusionar PR #21 solo con checks correctos y autorización del propietario (otorgada en chat); desplegar SHA exacto manualmente en Railway producción sin alterar volumen `/data`; comprobar logs, Gateway y salud; pedir inspección visual de /setup por el propietario. El H-03 universal sigue pendiente; respaldo cifrado anterior del 18/10 recuperado por separado, no afirmar copia pre-release nueva.
+
 # Continuidad — PR #19
 
 Rama autorizada: `release/honeypot-selective-20261018`. Base de trabajo:

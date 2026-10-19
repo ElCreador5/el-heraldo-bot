@@ -1,3 +1,7 @@
+## Corrección de paridad visual Honeypot — PR #21 (2026-10-19)
+
+**IMPLEMENTADO EN CANDIDATO:** se detectó visualmente que el panel productivo de PR #19 mostraba texto largo y selectores generales mientras Test tenía embed compacto y navegación por botones. PR #21 sobre la rama selectiva ya existente traslada la interfaz de `Pruebas` sin fusionar todo Test: panel `AutoMod — Honeypot`, subpantallas Acción/Configurar medida/Aviso/Detalles, estados contextuales de Activar/Pausar, botones Retirar canal y confirmación, Guardar y Descartar. Conserva en producción el guardado transaccional `hp_save_settings`, permisos revalidados, confirmaciones de aviso y creación de canal; mantiene sin cambios la lógica de sanciones y la base SQLite. `python-checks` en `0eb58725`: SUCCESS, 108 pruebas funcionales/estáticas del candidato. Discord visual real y despliegue productivo del nuevo panel: **pendientes**. `main` aún ejecuta el panel anterior hasta fusión/despliegue autorizado.
+
 # Candidato selectivo Honeypot — PR #19
 
 Estado comprobado el 18/10/2026. Rama `release/honeypot-selective-20261018`,
