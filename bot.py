@@ -6131,6 +6131,12 @@ class HeraldoRaidSetupView(discord.ui.View):
             return False
         return True
 
+    def _sync_action_select(self) -> None:
+        """Mantiene marcada la acción del borrador; solo Guardar la hace efectiva."""
+        selected = self.pending_action if self.pending_action is not None else raid_action(self.guild_id)
+        for option in self.action_select.options:
+            option.default = option.value == selected
+
     def _content(self, guild: discord.Guild) -> str:
         items = []
         if self.pending_action is not None:
@@ -6152,6 +6158,7 @@ class HeraldoRaidSetupView(discord.ui.View):
             await interaction.response.send_message("Para usar «Condenar» primero debes configurar el rol Condenado.", ephemeral=True)
             return
         self.pending_action = value
+        self._sync_action_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     async def select_alert_role(self, interaction: discord.Interaction) -> None:
@@ -6205,11 +6212,13 @@ class HeraldoRaidSetupView(discord.ui.View):
         if self.pending_purge is not None:
             guild_config_set(self.guild_id, "raid_purge", "1" if self.pending_purge else "0")
         self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
+        self._sync_action_select()
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
+        self._sync_action_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
