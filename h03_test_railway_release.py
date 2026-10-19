@@ -207,10 +207,19 @@ def main(argv=None):
             result = finalize_release()
         else:
             result = inspect_handoff(load_active_plan(), root=state_root())
-        allowed = ("prepared", "dispatching", "submitted", "boot_admitted", "completed")
-        print("H03_RAILWAY_TEST status=" +
-              (result.upper() if result in allowed else "VERIFIED"), flush=True)
-        return 0
+        if args.action == "prepare":
+            status = "BACKUP_PREPARED_AND_RESTORED" if result is True else "BLOCKED"
+        elif args.action == "dispatch":
+            # Obtener un ID de Railway no certifica que el bot haya arrancado.
+            status = "DEPLOYMENT_SUBMITTED" if isinstance(result, str) else "BLOCKED"
+        elif args.action == "boot":
+            status = "BOOT_ADMITTED" if result is True else "BLOCKED"
+        elif args.action == "finalize":
+            status = "DEPLOYMENT_VERIFIED" if result is True else "BLOCKED"
+        else:
+            status = "STATE_" + result.upper()
+        print("H03_RAILWAY_TEST status=" + status, flush=True)
+        return 0 if status != "BLOCKED" else 1
     except Exception as exc:
         reason = str(exc) if type(exc) in (
             TestReleaseBlocked, HandoffBlocked, TestRailwayBlocked, BackupJobError
