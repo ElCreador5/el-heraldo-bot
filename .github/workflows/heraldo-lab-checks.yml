@@ -15,6 +15,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ux-contract:
+    name: ux-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-ci.txt
+            requirements-backup.txt
+      - name: Instalar dependencias de pruebas aisladas
+        run: python -m pip install -r requirements-ci.txt -r requirements-backup.txt
+      - name: Comprobar entorno de pruebas
+        run: python -m pip check
+      - name: Contrato y matriz dinámica de todos los módulos visibles de setup
+        env:
+          PYTHONPATH: "tests:."
+        run: python -m unittest discover -s tests -p 'test_ux_*.py' -v
+      - name: Regresiones conductuales de paneles, confirmaciones y editores
+        env:
+          PYTHONPATH: "tests:."
+        run: |
+          python -m unittest -v \
+            test_safety_regressions \
+            test_button_palette \
+            test_editor_drafts_behavior \
+            test_configuration_preview \
+            test_setup_editor_selectors \
+            test_reaction_options_dropdown \
+            test_honeypot_panel \
+            test_honeypot_warning_publish \
+            test_reaction_reports_ux \
+            test_fusion_preview \
+            test_message_editors \
+            test_message_automation \
+            test_report_reminders_and_date_format \
+            test_case_action_buttons
+
   offline-regressions:
     strategy:
       fail-fast: false
