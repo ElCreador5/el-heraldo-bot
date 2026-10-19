@@ -46,6 +46,47 @@ A partir de ahora, para El Heraldo y cualquier herramienta que utilicemos, todos
 
 Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro agente del proyecto.
 
+## Contrato transversal de interfaz y controles de aceptación (obligatorio, 2026-10-19)
+
+**Alcance:** TODOS los paneles de `/setup`, embeds, vistas, modales, selectores, menús y botones del bot, incluidos módulos futuros. Regla de producto vinculante para ChatGPT, Codex, Claude y cualquier agente que escriba o audite código. No reemplaza las decisiones detalladas de `DECISIONES.md`, ni permite retirar funciones o cambiar producción. Cuando una regla general choque con una excepción específica vigente, documentar la discrepancia, verificar el código y respetar la decisión específica más reciente; preguntar al propietario si sigue siendo ambigua.
+
+### UX-01 — Cambios solo tras confirmación explícita
+- Selectores, fechas, horas, menús, modales y controles que preparan configuración modifican **únicamente el borrador**. Ni SQLite ni mensajes publicados ni configuración activa se actualizan hasta **Guardar cambios** o confirmación equivalente explícita.
+- Guardar vuelve a comprobar permisos y jerarquía, estado actual, integridad de valores y versión del borrador; no informa éxito sin persistencia confirmada. Deshabilitar Guardar si no hay nada que guardar cuando sea posible.
+- **Cancelar**, **Cerrar** y **Descartar cambios** nunca guardan; descartan según su contexto y no ejecutan la acción. **Volver** navega sin guardar; se conserva el borrador durante la navegación cuando el flujo lo requiera, sin persistirlo por accidente.
+- Acciones administrativas de efecto inmediato (publicar, sancionar, crear/retirar, fusionar, purgar) exigen su propia confirmación explícita, con revalidación justo antes de ejecutar. No convertir la selección de un menú en ejecución.
+- Controlar concurrencia, caducidad, cierres, interacciones repetidas, revocación de permisos y fallos parciales.
+
+### UX-02 — Paleta de botones según acción EFECTIVA
+- `discord.ButtonStyle.success` (verde): Guardar, Confirmar acciones positivas, Publicar y Activar **cuando realmente ejecutan** una acción positiva autorizada.
+- `discord.ButtonStyle.danger` (rojo): Cancelar, Cerrar, Descartar, Eliminar, Retirar, Desactivar, sancionar y **confirmar** operaciones destructivas. Cancelar y Cerrar son rojos incluso si solo cierran el editor, conforme a la decisión del 16/10.
+- `discord.ButtonStyle.primary` (azul): Configurar, Editar y abrir un subpanel/modal o una confirmación **sin ejecutar** cambios todavía. Ejemplo: Crear canal que solo prepara confirmación.
+- `discord.ButtonStyle.secondary` (gris): Volver, Vista previa y consultas neutrales sin mutación.
+- El color debe corresponder al callback real, no solo al texto del botón. Para acciones de estado variable, actualizar el estilo dinámicamente. Los botones de enlace usan el estilo de Discord. Los selectores no tienen colores equivalentes: su comportamiento sigue UX-01.
+
+### UX-03 — Pantallas precisas y consistentes
+- Embeds en español formal, lenguaje uniforme, sin emojis decorativos (solo emojis funcionales para reacciones). Mostrar estado guardado, selección actual, opciones y cambios pendientes, distinguiéndolos visualmente.
+- No mostrar campos sin aplicación al caso, opciones ficticias, mensajes de confirmación repetidos, avisos ruidosos ni datos vacíos. Mantener el diseño actual de los expedientes cuando se modifique una función cercana.
+- Nombres de opciones comprensibles; los desplegables solo presentan acciones soportadas y aplicables, con validación de entradas personalizadas y límites de Discord.
+- Las acciones sensibles requieren vista previa fiel cuando corresponda; explicar origen/destino, orden, alcance y consecuencias reales, sin prometer operaciones que la API no realiza (por ejemplo, fusionar mensajes como traslado nativo).
+- Centralizar configuraciones administrativas en `/setup` cuando proceda en lugar de proliferar comandos slash; conservar accesos existentes hasta que el propietario autorice retirarlos.
+
+### UX-04 — Funcionamiento real y resiliencia
+- Revalidar permisos del usuario y del bot y jerarquía de roles en **cada interacción y antes de guardar/ejecutar**, incluidos canales borrados y permisos revocados; comunicar el error específico sin fingir éxito.
+- Reconocer oportunamente las interacciones (defer cuando corresponda), re-registrar vistas persistentes con identificadores válidos tras reinicios y no duplicar botones, logs ni sanciones; conservar los avisos obligatorios de verificación.
+- Preservar aislamiento por servidor, configuración SQLite vigente y funcionalidad histórica. No modificar módulos estables solo para uniformar estilos sin comprobación del comportamiento y cobertura de regresión.
+
+### UX-05 — Puerta de aceptación: NUNCA aprobar solo por apariencia
+1. **Antes:** leer `AGENTS.md`, `DECISIONES.md`, estado, pruebas y código del flujo afectado; comparar con conducta previa. Asegurar rama/SHA remoto y efecto posible de Railway Test de publicar en `Pruebas`.
+2. **Durante:** probar todos los callbacks afectados (botones, selectores y modales): abrir, editar, guardar, reabrir, cancelar, descartar, volver, permisos revocados, selección inválida, confirmación duplicada, borrador obsoleto y reinicio cuando aplique. Una selección no debe alterar SQLite; una cancelación no debe ejecutar ni persistir.
+3. **Después:** ejecutar compilación y regresiones existentes y **añadir o extender prueba que falle con el defecto corregido**. Integrar en CI; no saltarse pruebas para dar verde. Si CI no cubre la función, marcar cobertura PENDIENTE, no darla por aprobada.
+4. **Discord:** las pruebas automáticas no prueban interacciones reales; anotar `VERIFICADO EN DISCORD` solo para recorridos ejecutados en El Heraldo Test/Heraldo's Lab y documentar lo pendiente.
+5. **Informe:** indicar por funcionalidad IMPLEMENTADO / VERIFICADO AUTOMÁTICAMENTE / VERIFICADO EN DISCORD / DETECTADO / PENDIENTE, SHA, archivos, comandos, resultados, riesgos y efecto de desplegar. Si falta una prueba obligatoria, el estado es **NO APROBADO o PENDIENTE**; nunca "terminado" por suposición.
+6. **Propagación:** si se descubre un defecto de regla transversal, identificar los otros paneles susceptibles, añadir regresión general reutilizable y corregir el alcance autorizado sin reescribir funciones que ya funcionan.
+7. **Puerta técnica:** las pruebas de interfaz y de borradores deben ejecutarse dentro de GitHub Actions para `Pruebas`. Si es posible, configurar las comprobaciones como checks requeridos; sin protección efectiva de rama, CI detecta problemas pero no impide que alguien haga push. No proclamar bloqueo técnico si no se configuró realmente.
+
+**Criterio de cierre:** ninguna interfaz se declara terminada con botones muertos, guardados implícitos, cancelaciones persistentes, inconsistencia de colores, duplicados o pruebas faltantes sin registrar expresamente el problema y detener su aceptación.
+
 ## Cierre preventivo antes de agotar créditos o contexto (obligatorio)
 - **No esperar a quedarse sin créditos, tokens, mensajes, tiempo de ejecución ni contexto** para preparar el informe de continuidad. La preservación del trabajo tiene prioridad sobre empezar otra tarea.
 - Cuando el consumo sea visible, reservar margen para guardar cambios, ejecutar las verificaciones posibles, crear commits, actualizar documentos y entregar el informe; usar como referencia preventiva iniciar el cierre antes del 80 % del presupuesto consumido, sin tratarlo como un cálculo fiable cuando no se conoce el límite.
