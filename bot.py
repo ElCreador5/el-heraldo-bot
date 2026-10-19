@@ -4758,8 +4758,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             content=None, embed=view._embed(interaction.guild), view=view,
         )
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
-    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def _save_pending_changes(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
             return
@@ -4846,6 +4845,10 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             content=None, embed=self._embed(guild), view=self,
         )
 
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._save_pending_changes(interaction)
+
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_trap_id = self.pending_enabled = self.pending_paused = self.pending_action = None
@@ -4880,7 +4883,30 @@ class HeraldoHoneypotSubView(discord.ui.View):
         )
 
 
-class HeraldoHoneypotActionView(HeraldoHoneypotSubView):
+class HeraldoHoneypotDraftSubView(HeraldoHoneypotSubView):
+    """Editor con guardado explícito: reutiliza la transacción validada del panel principal."""
+
+    def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
+        super().__init__(parent)
+        self.back.row = 3
+        pending = parent._has_pending()
+        self.save_changes.disabled = not pending
+        self.discard_changes.disabled = not pending
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self.parent._save_pending_changes(interaction)
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.parent._reset_draft()
+        self.parent._sync_controls()
+        await interaction.response.edit_message(
+            content=None, embed=self.parent._embed(interaction.guild), view=self.parent,
+        )
+
+
+class HeraldoHoneypotActionView(HeraldoHoneypotDraftSubView):
     """Acciones y parámetros configurables en /setup; solo Guardar persiste."""
 
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
@@ -4955,7 +4981,7 @@ class HeraldoHoneypotActionView(HeraldoHoneypotSubView):
         )
 
 
-class HeraldoHoneypotParametersView(HeraldoHoneypotSubView):
+class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
     """Selectores contextuales de la acción activa. Ninguno guarda automáticamente."""
 
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:

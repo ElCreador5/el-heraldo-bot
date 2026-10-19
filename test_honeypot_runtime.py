@@ -149,6 +149,64 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.hp_action(self.gid), "log")
         self.assertFalse(panel._has_pending())
 
+    async def test_action_and_measure_submenus_save_and_discard_draft(self):
+        panel = self.panel()
+        editor = b.HeraldoHoneypotActionView(panel)
+        self.views.append(editor)
+        self.assertTrue(editor.save_changes.disabled)
+        self.assertTrue(editor.discard_changes.disabled)
+
+        await press(editor, "Seleccionar acción para las detecciones", self.i(["kick"]))
+        self.assertEqual(b.hp_action(self.gid), "log")
+        editor = b.HeraldoHoneypotActionView(panel)
+        self.views.append(editor)
+        self.assertFalse(editor.save_changes.disabled)
+        self.assertEqual(editor.save_changes.style, b.discord.ButtonStyle.success)
+        self.assertEqual(editor.discard_changes.style, b.discord.ButtonStyle.danger)
+
+        parameters = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(parameters)
+        await press(parameters, "Purga del expulsado", self.i(["2880"]))
+        parameters = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(parameters)
+        discard = self.i()
+        await press(parameters, "Descartar cambios", discard)
+        self.assertFalse(panel._has_pending())
+        self.assertEqual(b.hp_action(self.gid), "log")
+        self.assertIs(discard.response.edit_message.call_args.kwargs["view"], panel)
+
+        editor = b.HeraldoHoneypotActionView(panel)
+        self.views.append(editor)
+        await press(editor, "Seleccionar acción para las detecciones", self.i(["kick"]))
+        editor = b.HeraldoHoneypotActionView(panel)
+        self.views.append(editor)
+        saving = self.i()
+        await press(editor, "Guardar cambios", saving)
+        self.assertEqual(b.hp_action(self.gid), "kick")
+        self.assertFalse(panel._has_pending())
+        self.assertIs(saving.edit_original_response.call_args.kwargs["view"], panel)
+
+        editor = b.HeraldoHoneypotActionView(panel)
+        self.views.append(editor)
+        await press(editor, "Seleccionar acción para las detecciones", self.i(["ban"]))
+        parameters = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(parameters)
+        await press(parameters, "Duración del baneo", self.i(["1440"]))
+        parameters = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(parameters)
+        await press(parameters, "Guardar cambios", self.i())
+        self.assertEqual(b.hp_action(self.gid), "ban")
+        self.assertEqual(b.hp_ban_override_minutes(self.gid), 1440)
+
+    async def test_submenu_save_revalidates_permissions_before_committing(self):
+        panel = self.panel()
+        panel.pending_action = "kick"
+        editor = b.HeraldoHoneypotActionView(panel)
+        self.views.append(editor)
+        self.owner.guild_permissions.manage_guild = False
+        await press(editor, "Guardar cambios", self.i())
+        self.assertEqual(b.hp_action(self.gid), "log")
+
     async def test_remove_trap_cancel_and_stale_confirmation_never_remove(self):
         panel = self.panel()
         opening = self.i()
