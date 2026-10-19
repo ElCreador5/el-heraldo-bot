@@ -104,21 +104,66 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_draft_save_discard_and_toggle_are_real_callbacks(self):
         panel = self.panel()
-        await press(panel, "Configurar acción (no guarda)", self.i(["kick"]))
+        action_view = b.HeraldoHoneypotActionView(panel)
+        self.views.append(action_view)
+        await press(action_view, "Seleccionar acción para las detecciones", self.i(["kick"]))
         self.assertEqual(b.hp_action(self.gid), "log")
-        await press(panel, "Configurar duración o purga (no guarda)", self.i(["kick:2880"]))
+        parameters = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(parameters)
+        await press(parameters, "Purga del expulsado", self.i(["2880"]))
         await press(panel, "Descartar cambios", self.i())
         self.assertFalse(panel._has_pending())
         self.assertEqual(b.hp_action(self.gid), "log")
-        await press(panel, "Activar / Pausar", self.i())
-        await press(panel, "Activar / Pausar", self.i())
+        await press(panel, "Activar protección", self.i())
+        self.assertTrue(panel._has_pending())
+        await press(panel, "Pausar protección", self.i())
+        self.assertTrue(panel._has_pending())
+        await press(panel, "Descartar cambios", self.i())
         self.assertFalse(panel._has_pending())
-        await press(panel, "Configurar acción (no guarda)", self.i(["kick"]))
-        await press(panel, "Configurar duración o purga (no guarda)", self.i(["kick:2880"]))
+        action_view = b.HeraldoHoneypotActionView(panel)
+        self.views.append(action_view)
+        await press(action_view, "Seleccionar acción para las detecciones", self.i(["kick"]))
+        parameters = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(parameters)
+        await press(parameters, "Purga del expulsado", self.i(["2880"]))
         await press(panel, "Guardar cambios", self.i())
         self.assertEqual(b.hp_action(self.gid), "kick")
         self.assertEqual(b.hp_kick_purge_minutes(self.gid), 2880)
         self.assertFalse(panel._has_pending())
+
+    async def test_compact_panel_matches_test_actions_and_keeps_draft(self):
+        panel = self.panel()
+        self.assertEqual(panel._embed(self.guild).title, "AutoMod — Honeypot")
+        buttons = {getattr(child, "label", None) for child in panel.children}
+        self.assertTrue({"Crear canal", "Retirar canal", "Configurar acción",
+                         "Configurar aviso", "Detalles", "Guardar cambios",
+                         "Descartar cambios", "Volver"}.issubset(buttons))
+        self.assertNotIn("Editar aviso", buttons)
+        self.assertNotIn("Texto aviso", buttons)
+        action = b.HeraldoHoneypotActionView(panel)
+        self.views.append(action)
+        await press(action, "Seleccionar acción para las detecciones", self.i(["kick"]))
+        self.assertEqual(b.hp_action(self.gid), "log")
+        self.assertEqual(panel.pending_action, "kick")
+        await press(panel, "Descartar cambios", self.i())
+        self.assertEqual(b.hp_action(self.gid), "log")
+        self.assertFalse(panel._has_pending())
+
+    async def test_remove_trap_cancel_and_stale_confirmation_never_remove(self):
+        panel = self.panel()
+        opening = self.i()
+        await press(panel, "Retirar canal", opening)
+        confirm = opening.response.send_message.call_args.kwargs["view"]
+        self.views.append(confirm)
+        await press(confirm, "Cancelar", self.i())
+        self.assertIn(self.channel.id, b.hp_traps(self.gid))
+        opening = self.i()
+        await press(panel, "Retirar canal", opening)
+        confirm = opening.response.send_message.call_args.kwargs["view"]
+        self.views.append(confirm)
+        b.hp_add_trap(self.gid, 999)
+        await press(confirm, "Confirmar retirada", self.i())
+        self.assertIn(self.channel.id, b.hp_traps(self.gid))
 
     async def test_save_rechecks_permissions_and_state_after_acknowledgement(self):
         for mutate in (lambda: setattr(self.owner.guild_permissions, "manage_guild", False),
@@ -210,7 +255,9 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_publish_cancel_never_publishes_and_dismisses(self):
         panel, opening = self.panel(), self.i()
         with patch.object(b, "hp_sync_all_warnings", new=AsyncMock()) as sync:
-            await press(panel, "Publicar aviso", opening)
+            notice = b.HeraldoHoneypotNoticeView(panel)
+            self.views.append(notice)
+            await press(notice, "Publicar aviso", opening)
             confirm = opening.response.send_message.call_args.kwargs["view"]
             self.views.append(confirm)
             i = self.i()

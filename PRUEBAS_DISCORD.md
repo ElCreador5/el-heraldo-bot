@@ -1,3 +1,7 @@
+## Corrección UI Honeypot — candidata PR #21, 2026-10-19
+
+**VERIFICADO AUTOMÁTICAMENTE:** `python-checks` SUCCESS, 108 pruebas `unittest` para `0eb58725` (GitHub Actions 39207530631). Pruebas del panel actualizadas: borrador por selector contextual, descarte, revalidación de permisos, confirmación de ban, creación de canales, publicación de avisos, selección y cancelación de retirada, renderizado de embed, labels del panel. **Discord real:** todavía NO se ha abierto ni accionado el nuevo panel en producción desde esta sesión; no confundir CI o despliegue SUCCESS con comprobación visual. No se ejecutaron sanciones ni purgas de prueba.
+
 # Verificación del candidato de PR #19 — 18/10/2026
 
 ## Automatización ejecutada
