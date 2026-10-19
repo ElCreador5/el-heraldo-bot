@@ -1,3 +1,7 @@
+## Honeypot — Guardar en submenús, 2026-10-19
+
+**IMPLEMENTADO en `Pruebas@8cf69065`**: los submenús Acción y Configurar medida disponen de **Guardar cambios** (verde), **Descartar cambios** (rojo) y Volver (gris). Sin borrador, Guardar/Descartar permanecen deshabilitados. Guardar reutiliza el mismo procedimiento y validaciones del panel principal; Descartar limpia el borrador sin escribir SQLite y vuelve al panel. No cambian sanciones ni valores existentes. Regresiones de `tests/test_honeypot_panel.py` verifican callbacks, colores y ausencia de guardado implícito. GitHub Actions `39211237913` Python 3.11/3.12/3.13 SUCCESS y `39211237881` python-checks SUCCESS. **Discord real:** pendiente. Port selectivo a producción preparado mediante PR #22; no afirmar desplegado antes del deployment.
+
 ## H-03 — Adaptador Railway Test de SHA exacto y preflight opt-in (2026-10-18)
 
 **IMPLEMENTADO en Pruebas, NO activado:** cliente real `h03_railway_test_api.py` de la API GraphQL pública de Railway, limitado al proyecto/entorno/servicio de **Test** y a la rama `Pruebas`. Publica exclusivamente el commit de 40 caracteres indicado mediante `serviceInstanceDeployV2`, sin reintentos automáticos en caso de incertidumbre; comprueba posteriormente por deployment ID, `status=SUCCESS`, commitHash y servicio/entorno de Test. Los fallos de GraphQL ocultan la respuesta del proveedor y jamás registran tokens. Documentación oficial: https://docs.railway.com/integrations/api/manage-services y https://docs.railway.com/integrations/api/manage-deployments.
