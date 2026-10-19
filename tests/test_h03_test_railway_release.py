@@ -121,6 +121,21 @@ class RailwayIntegrationTests(unittest.TestCase):
             self.assertTrue(bridge.finalize_release(client=provider))
             provider.deployment_final.assert_called_once_with("deploy_1",DST)
 
+    def test_cli_reports_submission_not_success(self):
+        import io
+        from contextlib import redirect_stdout
+        output = io.StringIO()
+        with patch.object(bridge, "make_plan", return_value=self.plan), \
+             patch.object(bridge, "dispatch_release", return_value="deploy_123"), \
+             redirect_stdout(output):
+            result = bridge.main([
+                "dispatch", "--request-id", REQ,
+                "--source-revision", SRC,
+                "--target-revision", DST])
+        self.assertEqual(result, 0)
+        self.assertIn("status=DEPLOYMENT_SUBMITTED", output.getvalue())
+        self.assertNotIn("DEPLOYMENT_VERIFIED", output.getvalue())
+
     def test_finalization_never_uses_old_process(self):
         with patch.object(bridge, "check_test_environment", return_value=self.db), \
              patch.object(bridge, "load_active_plan", return_value=self.plan), \
