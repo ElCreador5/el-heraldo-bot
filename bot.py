@@ -4783,9 +4783,17 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 "Seleccione explícitamente la duración del baneo (incluido Permanente).", ephemeral=True,
             )
             return
-        if action == "role" and self.pending_action == "role" and guild.get_role(hp_punish_role_id(self.guild_id)) is None:
-            await interaction.followup.send("Configure el rol de condena antes de guardar.", ephemeral=True)
-            return
+        if action == "role" and (
+                self.pending_action == "role" or self.pending_enabled is True
+                or self.pending_paused is False):
+            role_id = hp_punish_role_id(self.guild_id)
+            role = guild.get_role(role_id) if role_id else None
+            if role is None or hp_role_problem(role, guild):
+                await interaction.followup.send(
+                    "Configure un rol de castigo válido y manejable antes de guardar.",
+                    ephemeral=True,
+                )
+                return
         channel = guild.get_channel(self.pending_trap_id) if self.pending_trap_id is not None else None
         if self.pending_trap_id is not None:
             me = guild.me
