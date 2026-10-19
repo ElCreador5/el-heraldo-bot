@@ -198,6 +198,22 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.hp_action(self.gid), "ban")
         self.assertEqual(b.hp_ban_override_minutes(self.gid), 1440)
 
+    async def test_first_ban_permanent_requires_explicit_choice(self):
+        panel = self.panel()
+        self.assertIsNone(b.hp_ban_duration_minutes(self.gid))
+        panel.pending_action = "ban"
+        measure = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(measure)
+        self.assertIn("Sin configurar", measure._embed(self.guild).description)
+        await press(measure, "Duración del baneo", self.i(["0"]))
+        self.assertEqual(panel.pending_ban_minutes, 0)
+        self.assertIsNone(b.hp_setting_get(self.gid, "honeypot_ban_minutes"))
+        measure = b.HeraldoHoneypotParametersView(panel)
+        self.views.append(measure)
+        await press(measure, "Guardar cambios", self.i())
+        self.assertEqual(b.hp_setting_get(self.gid, "honeypot_ban_minutes"), "0")
+        self.assertEqual(b.hp_action(self.gid), "ban")
+
     async def test_submenu_save_revalidates_permissions_before_committing(self):
         panel = self.panel()
         panel.pending_action = "kick"

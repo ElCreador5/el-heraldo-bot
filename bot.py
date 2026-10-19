@@ -4994,7 +4994,7 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         elif self.action == "ban":
             selected = (
                 parent.pending_ban_minutes if parent.pending_ban_minutes is not None
-                else (hp_ban_duration_minutes(parent.guild_id) or 0)
+                else hp_ban_duration_minutes(parent.guild_id)
             )
             choices = [(v, ("Permanente" if v == 0 else format_duration(v)))
                        for v in (0, 5, 60, 1440, 10080, 43200)]
@@ -5050,9 +5050,9 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
                 self.parent.pending_ban_minutes if self.parent.pending_ban_minutes is not None
                 else hp_ban_duration_minutes(guild.id)
             )
-            lines.append(
-                f"**Duración:** {format_duration(minutes) if minutes else 'Permanente'}."
-            )
+            duration = ("Sin configurar" if minutes is None else
+                        "Permanente" if minutes == 0 else format_duration(minutes))
+            lines.append(f"**Duración:** {duration}.")
             lines.append("No se aplica purga adicional al ban.")
         elif action == "timeout":
             minutes = self.parent.pending_timeout_minutes or hp_timeout_minutes(guild.id)
@@ -5101,8 +5101,8 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         if value not in {0, 5, 60, 1440, 10080, 43200}:
             await interaction.response.send_message("Duración de baneo no válida.", ephemeral=True)
             return
-        current = hp_ban_duration_minutes(self.parent.guild_id) or 0
-        self.parent.pending_ban_minutes = value if value != current else None
+        current = hp_ban_duration_minutes(self.parent.guild_id)
+        self.parent.pending_ban_minutes = value if current is None or value != current else None
         await self._stage(interaction)
 
     async def select_purge(self, interaction: discord.Interaction) -> None:
@@ -12590,6 +12590,11 @@ def hp_ban_override_minutes(guild_id: int) -> int | None:
     except (TypeError, ValueError):
         return None
     return minutes if 0 <= minutes <= 365 * 1440 else None
+
+
+def hp_ban_duration_minutes(guild_id: int) -> int | None:
+    """Duración Honeypot explícita para la interfaz; None significa sin configurar."""
+    return hp_ban_override_minutes(guild_id)
 
 
 def hp_timeout_minutes(guild_id: int) -> int:
