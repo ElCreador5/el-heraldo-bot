@@ -2276,7 +2276,7 @@ async def on_member_join(member: discord.Member) -> None:
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         queue_join_roles(member)
 
-    if verify_enabled(member.guild.id):
+    if verify_enabled(member.guild.id) and member.id != member.guild.owner_id:
         waiting_screening = (
             join_roles_wait_screening(member.guild.id)
             and (join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id))
@@ -2489,6 +2489,11 @@ async def heraldo_member_departure(member: discord.Member) -> None:
 async def on_member_update(before: discord.Member, after: discord.Member) -> None:
     if after.bot:
         return  # los bots no pasan por el flujo de verificación
+    if after.id == after.guild.owner_id:
+        # El propietario no tiene plazos de verificación ni debe recibir sanciones por roles.
+        clear_verification_expiry(after.guild.id, after.id)
+        db_clear_tentado(after.guild.id, after.id)
+        return
     if (after.guild.id, after.id) in _condemn_sync_busy:
         return
 
@@ -2636,6 +2641,10 @@ def clear_verification_expiry(guild_id: int, user_id: int) -> None:
 
 
 async def run_verification_expiry(guild_id: int, user_id: int, evaluator) -> None:
+    guild = bot.get_guild(guild_id)
+    if guild is not None and user_id == getattr(guild, "owner_id", None):
+        clear_verification_expiry(guild_id, user_id)
+        return
     key = (guild_id, user_id)
     if key in _verification_expiry_inflight:
         return
@@ -2724,7 +2733,7 @@ async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> t
     inconsistent: list[int] = []
     # No depender de que la caché esté completa después de un largo período desconectado.
     async for member in guild.fetch_members(limit=None):
-        if member.bot:
+        if member.bot or member.id == guild.owner_id:
             continue
         roles = {role.id for role in member.roles}
         if unverified_id not in roles:
@@ -2853,6 +2862,10 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     if member is None:
         db_clear_tentado(guild_id, user_id)  # ya no está, nada que hacer
         return "ausente"
+    if member.id == getattr(guild, "owner_id", None):
+        db_clear_tentado(guild_id, user_id)
+        clear_verification_expiry(guild_id, user_id)
+        return "exento"
 
     punish_id = hp_punish_role_id(guild_id)
     if punish_id and any(r.id == punish_id for r in member.roles):
@@ -2875,22 +2888,32 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
 # ---------------------------------------------------------------------------
 
 async def expel(member: discord.Member, report: bool = True) -> None:
+    if member.id == getattr(member.guild, "owner_id", None):
+        db_clear_tentado(member.guild.id, member.id)
+        clear_verification_expiry(member.guild.id, member.id)
+        return
     row = db_get(member.guild.id, member.id)
     dm_sent_before = bool(row["dm_sent"]) if row else False
     is_first_fault = not dm_sent_before
-
-    dm_ok = None  # None = no aplica (2da falta, no se intenta DM)
-    if is_first_fault:
-        dm_ok = (await send_test_removal_notice(member, "KICK") if heraldo_is_test()
-                 else await send_recovery_dm(member, report=report))
-        db_mark_dm_sent(member.guild.id, member.id)
+    test_mode = heraldo_is_test()
+    dm_ok = None
+    # Preparar el canal no entrega mensaje alguno antes de la expulsión.
+    dm_channel = await prepare_removal_dm(member) if (is_first_fault or test_mode) else None
 
     db_clear_tentado(member.guild.id, member.id)
     try:
-        await heraldo_kick(member, reason="No definió su orientación", send_notice=not is_first_fault)
+        await heraldo_kick(member, reason="No definió su orientación", send_notice=False)
         kicked = True
-    except discord.Forbidden:
+    except discord.HTTPException:
         kicked = False
+    if kicked:
+        if is_first_fault:
+            dm_ok = (await send_test_removal_notice(member, "KICK", dm_channel=dm_channel)
+                     if test_mode else await send_recovery_dm(member, report=report, dm_channel=dm_channel))
+            db_mark_dm_sent(member.guild.id, member.id)
+        elif test_mode:
+            # La segunda expulsión confirmada de Test también conserva su aviso.
+            await send_test_removal_notice(member, "KICK", dm_channel=dm_channel)
 
     if not report:
         return
@@ -2929,8 +2952,9 @@ async def expel(member: discord.Member, report: bool = True) -> None:
             pending.set()
 
 
-async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
-    """Devuelve True si el DM se envió con éxito."""
+async def send_recovery_dm(member: discord.Member, report: bool = True, *,
+                           dm_channel: discord.DMChannel | None = None) -> bool:
+    """Notificar recuperación solo después de una expulsión confirmada."""
     channel = member.guild.get_channel(get_recovery_channel_id(member.guild.id))
     invite_url = ""
     if channel is not None:
@@ -2945,9 +2969,10 @@ async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
 
     text = DM_TEXT.format(invite_url=invite_url)
     try:
-        await member.send(text)
+        target = dm_channel if dm_channel is not None else member
+        await target.send(text)
         return True
-    except discord.Forbidden:
+    except discord.HTTPException:
         return False
 
 
@@ -12084,8 +12109,9 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
     expelled_sin_verificar: list[discord.Member] = []
 
     async for member in guild.fetch_members(limit=None):
-        if member.bot or condemnation_get(member.guild.id, member.id) is not None:
-            continue  # los condenados quedan fuera de toda evaluación
+        if (member.bot or member.id == guild.owner_id
+                or condemnation_get(member.guild.id, member.id) is not None):
+            continue  # propietario y condenados exentos de esta evaluación
         role_ids = {r.id for r in member.roles}
         if get_tentado_role_id(guild.id) in role_ids:
             status = await evaluate_member(guild.id, member.id, report=False)
@@ -14820,9 +14846,18 @@ def moderation_effective_ban_minutes(guild_id: int, minutes: int | None) -> int 
     return moderation_default_ban_minutes(guild_id)
 
 
+async def prepare_removal_dm(member: discord.Member) -> discord.DMChannel | None:
+    """Abre el canal privado sin enviar contenido antes de una sanción."""
+    try:
+        return await member.create_dm()
+    except (AttributeError, discord.HTTPException):
+        return None
+
+
 async def send_test_removal_notice(member: discord.Member, action: str,
-                                   minutes: int | None = None) -> bool:
-    """Envía disculpas y un enlace de un uso antes de una medida experimental."""
+                                   minutes: int | None = None, *,
+                                   dm_channel: discord.DMChannel | None = None) -> bool:
+    """Enviar disculpas e invitación solo tras una medida confirmada por Discord."""
     if not heraldo_is_test():
         return False
     guild = member.guild
@@ -14864,7 +14899,8 @@ async def send_test_removal_notice(member: discord.Member, action: str,
         "Si tienes alguna dificultad, comunícate con los administradores del servidor."
     )
     try:
-        await member.send(message, allowed_mentions=discord.AllowedMentions.none())
+        target = dm_channel if dm_channel is not None else member
+        await target.send(message, allowed_mentions=discord.AllowedMentions.none())
         return True
     except discord.HTTPException:
         return False
@@ -14872,9 +14908,12 @@ async def send_test_removal_notice(member: discord.Member, action: str,
 
 async def heraldo_kick(member: discord.Member, *, reason: str,
                        send_notice: bool = True) -> None:
-    if send_notice and heraldo_is_test():
-        await send_test_removal_notice(member, "KICK")
+    test_notice = send_notice and heraldo_is_test()
+    dm_channel = await prepare_removal_dm(member) if test_notice else None
+    # Si Discord rechaza la expulsión, no generar invitaciones ni avisos.
     await getattr(member, "kick")(reason=reason)
+    if test_notice:
+        await send_test_removal_notice(member, "KICK", dm_channel=dm_channel)
 
 
 async def heraldo_ban(member: discord.Member, *, reason: str,
@@ -14882,8 +14921,8 @@ async def heraldo_ban(member: discord.Member, *, reason: str,
                       duration_minutes: int | None = None,
                       record_case: bool = True) -> int | None:
     effective = moderation_effective_ban_minutes(member.guild.id, duration_minutes)
-    if heraldo_is_test():
-        await send_test_removal_notice(member, "BAN", effective)
+    test_notice = heraldo_is_test()
+    dm_channel = await prepare_removal_dm(member) if test_notice else None
     await getattr(member, "ban")(reason=reason, delete_message_seconds=0)
     # Otras rutas crean su propio caso. No duplicar expedientes.
     if record_case and effective is not None:
@@ -14893,6 +14932,8 @@ async def heraldo_ban(member: discord.Member, *, reason: str,
         except Exception:
             # Discord confirmó la medida: jamás reintentar el baneo por un error en SQLite.
             traceback.print_exc()
+    if test_notice:
+        await send_test_removal_notice(member, "BAN", effective, dm_channel=dm_channel)
     return effective
 
 

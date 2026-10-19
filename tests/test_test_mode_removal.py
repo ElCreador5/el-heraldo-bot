@@ -37,10 +37,10 @@ class TestModeReasons(unittest.TestCase):
             self.assertNotIn(f"await target.{verb}(", SOURCE)
         self.assertIn("max_uses=1", segment("send_test_removal_notice"))
         self.assertIn("max_age=0", segment("send_test_removal_notice"))
-        self.assertLess(segment("heraldo_kick").index("send_test_removal_notice"),
-                        segment("heraldo_kick").index('getattr(member, "kick")'))
-        self.assertLess(segment("heraldo_ban").index("send_test_removal_notice"),
-                        segment("heraldo_ban").index('getattr(member, "ban")'))
+        self.assertLess(segment("heraldo_kick").index('getattr(member, "kick")'),
+                        segment("heraldo_kick").index("send_test_removal_notice"))
+        self.assertLess(segment("heraldo_ban").index('getattr(member, "ban")'),
+                        segment("heraldo_ban").index("send_test_removal_notice"))
 
     def test_ui_requires_configuration_confirmation(self):
         self.assertIn("confirm_configuration(", segment("HeraldoBanDurationSetupView"))
@@ -78,22 +78,61 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
         state["config"] = "0"
         self.assertIsNone(default(1))
 
-    async def test_notice_before_ban_with_expiring_case(self):
+    async def test_notice_after_ban_with_expiring_case(self):
         order = []
         ban = AsyncMock(side_effect=lambda **kw: order.append("ban"))
-        dm = AsyncMock(side_effect=lambda *a: order.append("dm"))
+        dm = AsyncMock(side_effect=lambda *a, **kw: order.append("dm"))
         create_case = MagicMock(side_effect=lambda *a, **kw: order.append("case"))
         fn = isolated("heraldo_ban", ns={
             "heraldo_is_test": lambda: True,
             "moderation_effective_ban_minutes": lambda *args: 5,
             "send_test_removal_notice": dm,
+            "prepare_removal_dm": AsyncMock(return_value=None),
             "moderation_case_create": create_case,
         })["heraldo_ban"]
         member = SimpleNamespace(guild=SimpleNamespace(id=2), id=9, ban=ban)
         duration = await fn(member, reason="Prueba")
         self.assertEqual(duration, 5)
-        self.assertEqual(order, ["dm", "ban", "case"])
+        self.assertEqual(order, ["ban", "case", "dm"])
         self.assertEqual(create_case.call_args.kwargs["duration_minutes"], 5)
+
+    async def test_failed_kick_does_not_send_dm(self):
+        class Refused(Exception):
+            pass
+        dm = AsyncMock()
+        fn = isolated("heraldo_kick", ns={
+            "heraldo_is_test": lambda: True,
+            "prepare_removal_dm": AsyncMock(return_value=None),
+            "send_test_removal_notice": dm,
+        })["heraldo_kick"]
+        with self.assertRaises(Refused):
+            await fn(SimpleNamespace(kick=AsyncMock(side_effect=Refused())), reason="Prueba")
+        dm.assert_not_awaited()
+
+    async def test_successful_kick_notifies_after_action(self):
+        order = []
+        fn = isolated("heraldo_kick", ns={
+            "heraldo_is_test": lambda: True,
+            "prepare_removal_dm": AsyncMock(return_value=None),
+            "send_test_removal_notice": AsyncMock(side_effect=lambda *a, **kw: order.append("dm")),
+        })["heraldo_kick"]
+        await fn(SimpleNamespace(kick=AsyncMock(side_effect=lambda **kw: order.append("kick"))), reason="Prueba")
+        self.assertEqual(order, ["kick", "dm"])
+
+    async def test_failed_ban_does_not_send_dm(self):
+        class Refused(Exception):
+            pass
+        dm = AsyncMock()
+        fn = isolated("heraldo_ban", ns={
+            "heraldo_is_test": lambda: True,
+            "moderation_effective_ban_minutes": lambda *a: 5,
+            "prepare_removal_dm": AsyncMock(return_value=None),
+            "send_test_removal_notice": dm,
+            "moderation_case_create": MagicMock(),
+        })["heraldo_ban"]
+        with self.assertRaises(Refused):
+            await fn(SimpleNamespace(guild=SimpleNamespace(id=1), id=2, ban=AsyncMock(side_effect=Refused())), reason="Prueba")
+        dm.assert_not_awaited()
 
     async def test_case_record_not_duplicated(self):
         create_case = MagicMock()
@@ -101,6 +140,7 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
             "heraldo_is_test": lambda: False,
             "moderation_effective_ban_minutes": lambda *args: 5,
             "send_test_removal_notice": AsyncMock(),
+            "prepare_removal_dm": AsyncMock(return_value=None),
             "moderation_case_create": create_case,
         })["heraldo_ban"]
         member = SimpleNamespace(guild=SimpleNamespace(id=2), id=9, ban=AsyncMock())

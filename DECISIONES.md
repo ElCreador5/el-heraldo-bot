@@ -1,3 +1,7 @@
+## DM condicionado a expulsión confirmada — 2026-10-19
+
+Decisión del propietario: **si Discord no completó la expulsión, no enviar DM de expulsión, ni crear una invitación de recuperación**. El orden anterior (notificar primero) queda expresamente reemplazado. Mantener el aviso necesario tras la sanción confirmada (incluidos avisos de laboratorio), sin prometer entrega si Discord ya no permite el DM. Excluir al dueño del servidor de la verificación por plazos y sus reintentos. Inicialmente implementar y probar en `Pruebas`; no desplegar `main` al establecer esta decisión.
+
 ## Raid Protection — perfiles solo como borrador (2026-10-19)
 
 El propietario aprueba modernizar el formulario Detección con cinco selectores, valores personalizados y perfiles Moderada, Equilibrada y Estricta. No se cambia la lógica de raid ni las sanciones, ni se activan perfiles al seleccionarlos; para persistir se exige Guardar y confirmación final. Evaluaciones sintéticas no prueban tasas reales de eficacia.
