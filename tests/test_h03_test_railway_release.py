@@ -80,7 +80,7 @@ class RailwayIntegrationTests(unittest.TestCase):
             backup.assert_not_called()
 
     def test_dispatch_calls_real_railway_provider_only_through_durable_gate(self):
-        provider = Mock()
+        provider = Mock(unsafe=True)
         provider.assert_source.return_value = True
         provider.deploy_exact.return_value = "deploy_1"
         with patch.object(bridge, "check_test_environment", return_value=self.db), \
