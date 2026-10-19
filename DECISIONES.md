@@ -1,3 +1,7 @@
+## Raid Protection — perfiles solo como borrador (2026-10-19)
+
+El propietario aprueba modernizar el formulario Detección con cinco selectores, valores personalizados y perfiles Moderada, Equilibrada y Estricta. No se cambia la lógica de raid ni las sanciones, ni se activan perfiles al seleccionarlos; para persistir se exige Guardar y confirmación final. Evaluaciones sintéticas no prueban tasas reales de eficacia.
+
 ## Ayuda contextual en desplegables para administradores — 2026-10-19
 
 El propietario establece que **todos los selectores y desplegables de configuración deberán orientar a quien no conoce el bot**, de forma discreta y sin competir con estados, avisos de seguridad ni confirmaciones importantes. La norma detallada y vinculante es `AGENTS.md` §UX-03A: orientación en el control, usando `placeholder` y descripciones de opciones cuando Discord las permita; en selectores nativos de roles/canales, ayuda en el propio `placeholder`. Se prohíben mensajes de ayuda repetitivos o adicionales. Aplica a menús actuales y futuros durante sus revisiones, sin alterar el guardado explícito. Esta decisión **autoriza establecer la regla**, no certifica que todos los selectores existentes ya la implementen. Solo `Pruebas`; sin cambios a `main` ni a sanciones.
