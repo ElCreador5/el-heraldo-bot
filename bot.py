@@ -6020,31 +6020,31 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
         label="Umbral de entradas",
         required=True,
         max_length=4,
-        placeholder="Ej.: 5",
+        placeholder="Ej.: 10 · ingresos que disparan la detección",
     )
     window_input = discord.ui.TextInput(
         label="Ventana de detección",
         required=True,
         max_length=24,
-        placeholder="Ej.: 30s, 1m",
+        placeholder="Ej.: 30s · tiempo para contar entradas",
     )
     age_input = discord.ui.TextInput(
         label="Edad máxima de cuenta nueva",
         required=True,
         max_length=24,
-        placeholder="Ej.: 7d · 0 = sin filtro",
+        placeholder="Ej.: 7d · 0 = no filtrar por antigüedad",
     )
     ratio_input = discord.ui.TextInput(
         label="Proporción mínima de cuentas nuevas (%)",
         required=True,
         max_length=3,
-        placeholder="Ej.: 60 · 0 = desactivada",
+        placeholder="Ej.: 60 · 0 = sin proporción mínima",
     )
     duration_input = discord.ui.TextInput(
         label="Duración de la respuesta",
         required=True,
         max_length=24,
-        placeholder="Ej.: 10m, 2h",
+        placeholder="Ej.: 15m · modo raid, no duración de sanción",
     )
 
     def __init__(self, guild_id: int) -> None:
@@ -6100,10 +6100,18 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.pending_purge: bool | None = None
 
         action_select = discord.ui.Select(
-            placeholder="Respuesta ante el raid",
+            placeholder="Acción cuando se detecte un raid; Guardar para aplicar",
             min_values=1,
             max_values=1,
-            options=[discord.SelectOption(label=label[:100], value=value, default=(value == raid_action(guild_id))) for value, label in RAID_ACTION_LABELS.items()],
+            options=[
+                discord.SelectOption(
+                    label=label,
+                    value=value,
+                    description=RAID_ACTION_HELP[value],
+                    default=(value == raid_action(guild_id)),
+                )
+                for value, label in RAID_ACTION_LABELS.items()
+            ],
             row=0,
         )
         action_select.callback = self.select_action
@@ -6111,7 +6119,7 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.add_item(action_select)
 
         role_select = discord.ui.RoleSelect(
-            placeholder="Rol a mencionar en las alertas",
+            placeholder="Rol opcional para avisos; no es el rol Condenado",
             min_values=1,
             max_values=1,
             row=1,
@@ -21056,6 +21064,13 @@ RAID_ACTION_LABELS = {
     "kick": "Expulsar",
     "ban": "Banear",
     "log": "Solo registrar (prueba segura)",
+}
+
+RAID_ACTION_HELP = {
+    "condemn": "Aplica la condena a cuentas que cumplan el filtro; requiere rol Condenado.",
+    "kick": "Expulsa las cuentas que cumplan el filtro; podrían volver a entrar.",
+    "ban": "Banea las cuentas que cumplan el filtro; requiere desbaneo para regresar.",
+    "log": "Registra sin sancionar; si está habilitada, aún puede pausar invitaciones.",
 }
 RAID_MONTH_SECONDS = 30 * 24 * 3600
 
