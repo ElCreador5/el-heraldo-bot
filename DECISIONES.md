@@ -1,3 +1,7 @@
+## Contrato transversal obligatorio de interfaz y aceptación — 2026-10-19
+
+El propietario autoriza convertir sus decisiones repetidas sobre botones, menús, borradores, colores, confirmaciones, legibilidad, permisos, persistencia y regresiones en una norma exigible por todos los agentes. La definición normativa reside en `AGENTS.md` (UX-01 a UX-05), sin duplicar su texto. Los módulos existentes se revisarán progresivamente sin reescribir funciones estables ni asumir que un test sintáctico acredita su comportamiento real. **Pruebas** únicamente; no modificar `main` ni producción. Las comprobaciones automáticas se incorporan a la suite existente de GitHub Actions. Sin tests requeridos en protección de rama, una ejecución CI no impide técnicamente pushes directos. Discord Test requiere verificación independiente.
+
 ## H-03 — Autorización explícita para adelantar la recuperación productiva (2026-10-18)
 
 **DECISIÓN VIGENTE DEL PROPIETARIO:** se revoca el aplazamiento hasta noviembre de 2026 **únicamente para realizar desde ahora la verificación independiente de la clave original y los ensayos de recuperación productiva**. Esta decisión corrige la referencia histórica al aplazamiento del 17/10 y la reiteración en la autorización de Test del 18/10. No equivale a declarar recuperada la clave, validar la copia remota ni autorizar un despliegue.
