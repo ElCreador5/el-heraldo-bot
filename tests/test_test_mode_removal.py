@@ -134,6 +134,68 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
             await fn(SimpleNamespace(guild=SimpleNamespace(id=1), id=2, ban=AsyncMock(side_effect=Refused())), reason="Prueba")
         dm.assert_not_awaited()
 
+    async def test_failed_orientation_kick_never_sends_recovery_dm(self):
+        class Refused(Exception):
+            pass
+        dm = AsyncMock()
+        notice = AsyncMock()
+        mark = MagicMock()
+        kick = AsyncMock(side_effect=Refused("Discord rechazó la expulsión"))
+        fn = isolated("expel", ns={
+            "discord": SimpleNamespace(HTTPException=Refused),
+            "db_get": lambda *args: {"dm_sent": False},
+            "db_clear_tentado": MagicMock(),
+            "db_mark_dm_sent": mark,
+            "clear_verification_expiry": MagicMock(),
+            "heraldo_is_test": lambda: False,
+            "prepare_removal_dm": AsyncMock(return_value=None),
+            "heraldo_kick": kick,
+            "send_test_removal_notice": notice,
+            "send_recovery_dm": dm,
+        })["expel"]
+        member = SimpleNamespace(id=2, guild=SimpleNamespace(id=1, owner_id=9))
+        await fn(member, report=False)
+        kick.assert_awaited_once()
+        dm.assert_not_awaited()
+        notice.assert_not_awaited()
+        mark.assert_not_called()
+
+    async def test_successful_orientation_kick_notifies_only_after_action(self):
+        events = []
+        kick = AsyncMock(side_effect=lambda **kw: events.append("kick"))
+        dm = AsyncMock(side_effect=lambda *a, **kw: events.append("dm"))
+        mark = MagicMock(side_effect=lambda *a: events.append("mark"))
+        fn = isolated("expel", ns={
+            "db_get": lambda *args: {"dm_sent": False},
+            "db_clear_tentado": MagicMock(),
+            "db_mark_dm_sent": mark,
+            "clear_verification_expiry": MagicMock(),
+            "heraldo_is_test": lambda: False,
+            "prepare_removal_dm": AsyncMock(return_value=None),
+            "heraldo_kick": kick,
+            "send_test_removal_notice": AsyncMock(),
+            "send_recovery_dm": dm,
+        })["expel"]
+        member = SimpleNamespace(id=2, guild=SimpleNamespace(id=1, owner_id=9))
+        await fn(member, report=False)
+        self.assertEqual(events, ["kick", "dm", "mark"])
+
+    async def test_second_orientation_removal_keeps_test_notice(self):
+        events = []
+        fn = isolated("expel", ns={
+            "db_get": lambda *args: {"dm_sent": True},
+            "db_clear_tentado": MagicMock(),
+            "db_mark_dm_sent": MagicMock(),
+            "clear_verification_expiry": MagicMock(),
+            "heraldo_is_test": lambda: True,
+            "prepare_removal_dm": AsyncMock(return_value=None),
+            "heraldo_kick": AsyncMock(side_effect=lambda **kw: events.append("kick")),
+            "send_test_removal_notice": AsyncMock(side_effect=lambda *a, **kw: events.append("dm")),
+            "send_recovery_dm": AsyncMock(),
+        })["expel"]
+        await fn(SimpleNamespace(id=2, guild=SimpleNamespace(id=1, owner_id=9)), report=False)
+        self.assertEqual(events, ["kick", "dm"])
+
     async def test_case_record_not_duplicated(self):
         create_case = MagicMock()
         fn = isolated("heraldo_ban", ns={

@@ -125,6 +125,15 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn((self.guild_id, self.user_id), b._verification_expiry_inflight)
         self.assertNotIn('Expulsión por', self.log.call_args.args[1])
 
+    async def test_owner_has_no_verification_expiry_or_moderation_notice(self):
+        self.guild.owner_id = self.user_id
+        await b.evaluate_verify_timeout(self.guild_id, self.user_id)
+        await b.evaluate_sin_verificado(self.guild_id, self.user_id)
+        self.member.kick.assert_not_awaited()
+        self.member.ban.assert_not_awaited()
+        self.log.assert_not_awaited()
+        self.assert_resolved()
+
     async def test_same_member_in_other_guild_is_not_blocked(self):
         other_id = 908002
         b.db_set_verify_pending(other_id, self.user_id, self.now - b.timedelta(minutes=10))
