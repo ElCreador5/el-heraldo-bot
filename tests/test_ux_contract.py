@@ -39,6 +39,25 @@ class UxContractGate(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, AGENTS)
 
+    def test_selector_help_policy_is_mandatory_and_non_intrusive(self):
+        """Evita perder la decisión de producto; no acredita su despliegue visual."""
+        self.assertIn("### UX-03A", AGENTS)
+        policy = AGENTS.split("### UX-03A", 1)[1].split("### UX-04", 1)[0]
+        for clause in (
+            "**Siempre**",
+            "placeholder",
+            "description",
+            "RoleSelect",
+            "ChannelSelect",
+            "sin experiencia",
+            "mensajes de chat/DM adicionales",
+            "confirmaciones importantes",
+            "nunca",
+            "Heraldo's Lab",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, policy)
+
     def test_cancel_close_and_back_decorators(self):
         found = {"cancel": 0, "back": 0}
         for label, style in button_decorators():
