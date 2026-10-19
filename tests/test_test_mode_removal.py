@@ -162,7 +162,7 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_successful_orientation_kick_notifies_only_after_action(self):
         events = []
-        kick = AsyncMock(side_effect=lambda **kw: events.append("kick"))
+        kick = AsyncMock(side_effect=lambda *args, **kw: events.append("kick"))
         dm = AsyncMock(side_effect=lambda *a, **kw: events.append("dm"))
         mark = MagicMock(side_effect=lambda *a: events.append("mark"))
         fn = isolated("expel", ns={
@@ -189,7 +189,7 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
             "clear_verification_expiry": MagicMock(),
             "heraldo_is_test": lambda: True,
             "prepare_removal_dm": AsyncMock(return_value=None),
-            "heraldo_kick": AsyncMock(side_effect=lambda **kw: events.append("kick")),
+            "heraldo_kick": AsyncMock(side_effect=lambda *args, **kw: events.append("kick")),
             "send_test_removal_notice": AsyncMock(side_effect=lambda *a, **kw: events.append("dm")),
             "send_recovery_dm": AsyncMock(),
         })["expel"]
