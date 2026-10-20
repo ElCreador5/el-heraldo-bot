@@ -5945,121 +5945,73 @@ async def raid_editor_authorized(interaction: discord.Interaction, guild_id: int
     return allowed
 
 
-class RaidDetectionConfirmView(discord.ui.View):
-    """Confirmación específica para el editor antiraid de main, sin otras dependencias."""
+def raid_store_detection_changes(guild_id: int, changes: dict[str, str],
+                                 original_raw: dict[str, str | None],
+                                 original_effective: dict[str, int]) -> str:
+    """Guardar el borrador antiraid en una transacción; nunca guardar en un selector.
 
-    def __init__(self, guild_id: int, owner_id: int, changes: dict[str, str]):
-        super().__init__(timeout=300)
-        self.guild_id, self.owner_id = guild_id, owner_id
-        self.changes = dict(changes)
-        self.original = {key: guild_config_get(guild_id, key) for key in changes}
-        self.resolved = False
-
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
-    async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await raid_editor_authorized(interaction, self.guild_id, self.owner_id):
-            return
-        if self.resolved:
-            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
-            return
-        if any(key not in RAID_FIELDS for key in self.changes):
-            await interaction.response.send_message("La propuesta contiene un campo no permitido.", ephemeral=True)
-            return
-        # Validar todas las cifras directamente porque la BD almacena segundos, no texto con unidades.
-        bounds = {
-            "raid_threshold": (RAID_THRESHOLD_MIN, RAID_THRESHOLD_MAX),
-            "raid_window_seconds": (RAID_WINDOW_MIN, RAID_WINDOW_MAX),
-            "raid_min_age_seconds": (0, RAID_AGE_MAX),
-            "raid_new_account_ratio": (0, 100),
-            "raid_duration_seconds": (RAID_DURATION_MIN, RAID_DURATION_MAX),
-        }
-        try:
-            proposed = {key: int(value) for key, value in self.changes.items()}
-        except (TypeError, ValueError):
-            await interaction.response.send_message("Los valores de la propuesta ya no son válidos.", ephemeral=True)
-            return
-        if any(not bounds[key][0] <= value <= bounds[key][1]
-               for key, value in proposed.items()):
-            await interaction.response.send_message("Uno de los valores está fuera de rango.", ephemeral=True)
-            return
+    Devuelve saved, unchanged, stale, invalid o error. Revisa el estado original
+    de las cinco claves en la misma transacción para evitar sobrescrituras.
+    """
+    if (not changes or set(changes) - set(RAID_FIELDS)
+            or set(original_raw) != set(RAID_FIELDS)
+            or set(original_effective) != set(RAID_FIELDS)):
+        return "invalid"
+    bounds = {
+        "raid_threshold": (RAID_THRESHOLD_MIN, RAID_THRESHOLD_MAX),
+        "raid_window_seconds": (RAID_WINDOW_MIN, RAID_WINDOW_MAX),
+        "raid_min_age_seconds": (0, RAID_AGE_MAX),
+        "raid_new_account_ratio": (0, 100),
+        "raid_duration_seconds": (RAID_DURATION_MIN, RAID_DURATION_MAX),
+    }
+    final = dict(original_effective)
+    try:
+        for key, raw in changes.items():
+            if not isinstance(raw, str) or not raw.isdecimal():
+                return "invalid"
+            final[key] = int(raw)
+        if (any(type(value) is not int or not bounds[key][0] <= value <= bounds[key][1]
+                for key, value in final.items())
+                or (final["raid_new_account_ratio"] > 0
+                    and final["raid_min_age_seconds"] <= 0)):
+            return "invalid"
+    except (TypeError, ValueError):
+        return "invalid"
+    conn = None
+    try:
         conn = db_connect()
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            original_age = raid_min_age_seconds(self.guild_id)
-            original_ratio = raid_new_account_ratio(self.guild_id)
-            final_age = proposed.get("raid_min_age_seconds", original_age)
-            final_ratio = proposed.get("raid_new_account_ratio", original_ratio)
-            if final_ratio > 0 and final_age <= 0:
+        conn.execute("BEGIN IMMEDIATE")
+        for key in RAID_FIELDS:
+            row = conn.execute(
+                "SELECT value FROM guild_settings WHERE guild_id=? AND key=?",
+                (guild_id, key),
+            ).fetchone()
+            if (row[0] if row else None) != original_raw[key]:
                 conn.rollback()
-                await interaction.response.send_message(
-                    "No se guardó: la proporción exige edad de cuenta mayor que cero.",
-                    ephemeral=True)
-                return
-            for key, old in self.original.items():
-                row = conn.execute("SELECT value FROM guild_settings WHERE guild_id=? AND key=?",
-                                   (self.guild_id, key)).fetchone()
-                if (row[0] if row else None) != old:
-                    conn.rollback()
-                    await interaction.response.send_message(
-                        "La configuración cambió en otra sesión. Abre de nuevo el editor.",
-                        ephemeral=True)
-                    return
-            for key, value in self.changes.items():
-                conn.execute(
-                    "INSERT INTO guild_settings (guild_id,key,value) VALUES (?,?,?) "
-                    "ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value",
-                    (self.guild_id, key, value))
-            conn.execute("UPDATE guild_config SET updated_at=? WHERE guild_id=?",
-                         (datetime.now(timezone.utc).isoformat(), self.guild_id))
-            conn.commit()
-        except sqlite3.Error:
+                return "stale"
+        # Solo escribir campos que cambiaron efectivamente, no los valores por defecto.
+        changed = {key: value for key, value in changes.items()
+                   if int(value) != original_effective[key]}
+        if not changed:
             conn.rollback()
-            await interaction.response.send_message(
-                "No fue posible guardar la configuración; no se aplicaron cambios.", ephemeral=True)
-            return
-        finally:
+            return "unchanged"
+        for key, value in changed.items():
+            conn.execute(
+                "INSERT INTO guild_settings (guild_id,key,value) VALUES (?,?,?) "
+                "ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value",
+                (guild_id, key, value),
+            )
+        conn.execute("UPDATE guild_config SET updated_at=? WHERE guild_id=?",
+                     (datetime.now(timezone.utc).isoformat(), guild_id))
+        conn.commit()
+        return "saved"
+    except sqlite3.Error:
+        if conn is not None:
+            conn.rollback()
+        return "error"
+    finally:
+        if conn is not None:
             conn.close()
-        self.resolved = True
-        self.stop()
-        await interaction.response.edit_message(
-            content="Configuración de Raid Protection guardada correctamente.",
-            embed=None, view=None)
-
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await raid_editor_authorized(interaction, self.guild_id, self.owner_id):
-            return
-        self.resolved = True
-        self.stop()
-        await interaction.response.edit_message(
-            content="Cambios descartados. No se ha modificado la configuración.",
-            embed=None, view=None)
-
-
-async def raid_confirm_configuration(interaction: discord.Interaction, guild_id: int,
-                                     changes: dict[str, str], owner_id: int) -> None:
-    if not await raid_editor_authorized(interaction, guild_id, owner_id):
-        return
-    if not changes:
-        await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
-        return
-    lines = []
-    for key, value in changes.items():
-        if key not in RAID_FIELDS:
-            await interaction.response.send_message("Campo de Raid Protection no permitido.", ephemeral=True)
-            return
-        original = raid_detection_values(guild_id)[key]
-        label = RAID_OPTIONS[key][0]
-        lines.append(f"**{label}**\nActual: {raid_format_choice(key, original)}"
-                     f"\nPropuesto: {raid_format_choice(key, int(value))}")
-    embed = discord.Embed(
-        title="El Heraldo · Confirmar Raid Protection",
-        description="\n\n".join(lines),
-        color=discord.Color.blurple())
-    embed.set_footer(text="Los cambios solo se guardarán al seleccionar Guardar cambios.")
-    await interaction.response.send_message(
-        embed=embed, view=RaidDetectionConfirmView(guild_id, owner_id, changes),
-        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
 RAID_PRESETS = {
@@ -6157,6 +6109,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
         super().__init__(timeout=900)
         self.parent, self.guild_id, self.owner_id = parent, parent.guild_id, parent.owner_id
         self.original = raid_detection_values(self.guild_id)
+        self.original_raw = {key: guild_config_get(self.guild_id, key) for key in RAID_FIELDS}
         self.draft = dict(self.original)
         self.page = 0
         self.selectors = {}
@@ -6188,7 +6141,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
         return ("**El Heraldo · Raid Protection · Detección**\n\n"
                 f"**Perfil:** {self.active_profile().capitalize()}\n"
                 + "\n".join(items) + "\n\n**Ayuda:** " + help_text
-                + "\n\nGuardar cambios abre una confirmación antes de modificar la configuración.")
+                + "\n\nGuardar cambios aplica la configuración y actualiza este panel.")
 
     def add_selector(self, key, row):
         title, choices, explanation = RAID_OPTIONS[key]
@@ -6294,22 +6247,35 @@ class HeraldoRaidDetectionView(discord.ui.View):
         self.stop()
 
     async def save(self, interaction):
-        changes = {k: str(value) for k, value in self.draft.items()
-                   if value != self.original[k]}
+        # Este botón es la confirmación explícita; no abrir un segundo formulario.
+        if not await self.interaction_check(interaction):
+            return
+        changes = {key: str(value) for key, value in self.draft.items()
+                   if value != self.original[key]}
         if not changes:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        if self.draft["raid_new_account_ratio"] > 0 and self.draft["raid_min_age_seconds"] == 0:
+        result = raid_store_detection_changes(
+            self.guild_id, changes, self.original_raw, self.original)
+        if result != "saved":
+            details = {
+                "invalid": "Los parámetros no son válidos; revisa los valores y el filtro de edad.",
+                "stale": "La configuración cambió en otra sesión. Abre de nuevo el editor.",
+                "unchanged": "No hay cambios pendientes.",
+                "error": "Ocurrió un error en SQLite. No se guardaron los cambios.",
+            }
             await interaction.response.send_message(
-                "No se guardó: la proporción exige una edad de cuenta mayor que cero.",
-                ephemeral=True)
+                details.get(result, "No se pudo guardar la configuración."), ephemeral=True)
             return
-        if raid_detection_values(self.guild_id) != self.original:
-            await interaction.response.send_message(
-                "La configuración cambió en otra sesión. Abre de nuevo el editor.",
-                ephemeral=True)
-            return
-        await raid_confirm_configuration(interaction, self.guild_id, changes, self.owner_id)
+        # Volver a leer lo persistido y sustituir tanto el borrador como la línea base.
+        self.original = raid_detection_values(self.guild_id)
+        self.original_raw = {key: guild_config_get(self.guild_id, key) for key in RAID_FIELDS}
+        self.draft = dict(self.original)
+        self.rebuild()
+        await interaction.response.edit_message(
+            content=self.summary() + "\n\n**Cambios guardados.**",
+            view=self,
+        )
 
 
 class HeraldoRaidSetupView(discord.ui.View):
