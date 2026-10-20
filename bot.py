@@ -125,6 +125,7 @@ import tempfile
 import time
 import traceback
 import unicodedata
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -2013,7 +2014,7 @@ async def on_ready() -> None:
         return
 
     db_init()
-    with db_connect() as conn:
+    with closing(db_connect()) as conn:
         exit_comments.init_storage(conn)
         exit_comments.purge_expired(conn)
     if not any(isinstance(v, ExitCommentDMView) for v in bot.persistent_views):
@@ -2516,14 +2517,14 @@ async def exit_comment_apply(row) -> bool:
             await original.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except (discord.HTTPException, discord.Forbidden, discord.NotFound):
         return False
-    with db_connect() as conn:
+    with closing(db_connect()) as conn:
         exit_comments.mark_applied(conn, guild_id=int(row["guild_id"]),
                                    log_message_id=int(row["log_message_id"]))
     return True
 
 
 async def exit_comment_retry() -> None:
-    with db_connect() as conn:
+    with closing(db_connect()) as conn:
         rows = exit_comments.pending_edits(conn)
     for row in rows:
         try:
@@ -2542,7 +2543,7 @@ class ExitCommentModal(discord.ui.Modal, title="Comentario de salida"):
         self.dm_message_id = dm_message_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        with db_connect() as conn:
+        with closing(db_connect()) as conn:
             row = exit_comments.find_by_dm(
                 conn, dm_message_id=self.dm_message_id, user_id=interaction.user.id)
             if row is None or not exit_comments.submit_comment(
@@ -2570,7 +2571,7 @@ class ExitCommentDMView(discord.ui.View):
                        custom_id="heraldo:exitcomment:v1")
     async def respond(self, interaction: discord.Interaction, button: discord.ui.Button):
         mid = getattr(interaction.message, "id", None)
-        with db_connect() as conn:
+        with closing(db_connect()) as conn:
             row = exit_comments.find_by_dm(
                 conn, dm_message_id=mid, user_id=interaction.user.id) if mid else None
         if row is None:
@@ -2586,7 +2587,7 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
     if (not exit_comments_enabled(guild.id) or not isinstance(channel, discord.TextChannel)
             or not exit_comment_private(channel) or guild.get_member(member.id) is not None):
         return
-    with db_connect() as conn:
+    with closing(db_connect()) as conn:
         if not exit_comments.create_pending(
                 conn, guild_id=guild.id, user_id=member.id,
                 channel_id=channel.id, log_message_id=message.id):
@@ -2598,7 +2599,7 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
             "La respuesta es voluntaria y será visible para el personal autorizado "
             "con acceso al registro privado del servidor. Puedes ignorar este mensaje.",
             view=ExitCommentDMView(), allowed_mentions=discord.AllowedMentions.none())
-        with db_connect() as conn:
+        with closing(db_connect()) as conn:
             exit_comments.attach_dm(conn, guild_id=guild.id,
                                     log_message_id=message.id, dm_message_id=sent.id)
     except discord.HTTPException:
