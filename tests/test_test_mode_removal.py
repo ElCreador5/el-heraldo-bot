@@ -51,6 +51,16 @@ class TestModeReasons(unittest.TestCase):
         self.assertLess(segment("heraldo_ban").index('getattr(member, "ban")'),
                         segment("heraldo_ban").index("send_test_removal_notice"))
 
+    def test_test_removal_invites_are_restricted_to_personality(self):
+        source = segment("send_test_removal_notice")
+        self.assertIn("allow_reentry_invite: bool = False", source)
+        self.assertIn('if allow_reentry_invite and action == "KICK":', source)
+        self.assertIn("max_uses=1", source)
+        self.assertIn("max_age=0", source)
+        self.assertIn("allow_reentry_invite=True", segment("expel"))
+        self.assertNotIn("allow_reentry_invite=True", segment("heraldo_kick"))
+        self.assertNotIn("allow_reentry_invite=True", segment("heraldo_ban"))
+
     def test_ui_requires_configuration_confirmation(self):
         self.assertIn("confirm_configuration(", segment("HeraldoBanDurationSetupView"))
         self.assertIn("confirm_configuration(", segment("HeraldoBanDurationModal"))
@@ -143,7 +153,7 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
             await fn(SimpleNamespace(guild=SimpleNamespace(id=1), id=2, ban=AsyncMock(side_effect=Refused())), reason="Prueba")
         dm.assert_not_awaited()
 
-    async def test_failed_orientation_kick_never_sends_recovery_dm(self):
+    async def test_failed_personality_kick_sends_only_planned_dm_first(self):
         class Refused(Exception):
             pass
         dm = AsyncMock()
@@ -165,11 +175,11 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
         member = SimpleNamespace(id=2, guild=SimpleNamespace(id=1, owner_id=9))
         await fn(member, report=False)
         kick.assert_awaited_once()
-        dm.assert_not_awaited()
+        dm.assert_awaited_once()
         notice.assert_not_awaited()
-        mark.assert_not_called()
+        mark.assert_called_once()
 
-    async def test_successful_orientation_kick_notifies_only_after_action(self):
+    async def test_successful_personality_kick_sends_planned_dm_first(self):
         events = []
         kick = AsyncMock(side_effect=lambda *args, **kw: events.append("kick"))
         dm = AsyncMock(side_effect=lambda *a, **kw: events.append("dm"))
@@ -187,7 +197,7 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
         })["expel"]
         member = SimpleNamespace(id=2, guild=SimpleNamespace(id=1, owner_id=9))
         await fn(member, report=False)
-        self.assertEqual(events, ["kick", "dm", "mark"])
+        self.assertEqual(events, ["dm", "mark", "kick"])
 
     async def test_second_orientation_removal_keeps_test_notice(self):
         events = []

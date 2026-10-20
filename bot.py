@@ -259,14 +259,18 @@ TEMPLATE_MONTHDAY_DEFAULT = 1
 TEMPLATE_INTERVAL_DEFAULT = 24  # horas
 
 DM_TEXT = (
-    "¡Hola! Fuiste expulsado del Paraíso porque no seleccionaste tu rol de "
-    "orientación. Al volver a entrar, busca en el canal de roles el embed que "
-    "dice \"Orientación\" y elige el que te represente — estos roles son "
-    "importantes: nos ayudan a confirmar que eres una persona real y son los "
-    "que te dan acceso al contenido del servidor. (El rol de verificación de "
-    "edad es algo aparte — ese solo confirma que eres mayor de edad, no "
-    "sustituye este paso). Si quieres volver a intentarlo, aquí tienes otra "
-    "oportunidad: {invite_url}"
+    "Aviso de Verificación de personalidad\n\n"
+    "¡Hola!\n\n"
+    "No completaste la Verificación de personalidad de {servidor} dentro del plazo establecido.\n\n"
+    "Motivo: {razon}\n\n"
+    "Por este motivo, está prevista tu expulsión del servidor.\n\n"
+    "Si deseas regresar, busca en el canal de roles el panel «{titulo_embed}» y selecciona "
+    "el rol que mejor represente cómo deseas participar en nuestra comunidad.\n\n"
+    "Estos roles nos ayudan a conocer tu interés en el servidor y pueden permitirte "
+    "acceder a distintos canales según los permisos configurados.\n\n"
+    "La verificación de edad es independiente y no se sustituye al elegir un rol de personalidad.\n\n"
+    "Invitación de regreso: {invitacion}\n\n"
+    "Gracias por tu comprensión."
 )
 
 # En Railway apunta al Volume (variable DB_PATH=/data/heraldo.db) para que los datos
@@ -2936,8 +2940,13 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     is_first_fault = not dm_sent_before
     test_mode = heraldo_is_test()
     dm_ok = None
-    # Preparar el canal no entrega mensaje alguno antes de la expulsión.
+    # Test: avisar de la prueba solo tras sanción confirmada.
+    # Oficial: avisar de una medida PREVISTA antes de expulsar, mientras existe DM.
     dm_channel = await prepare_removal_dm(member) if (is_first_fault or test_mode) else None
+    if is_first_fault and not test_mode:
+        dm_ok = await send_recovery_dm(member, report=report, dm_channel=dm_channel)
+        if dm_ok:
+            db_mark_dm_sent(member.guild.id, member.id)  # evitar otra invitación si falla el kick
 
     db_clear_tentado(member.guild.id, member.id)
     try:
@@ -2945,16 +2954,18 @@ async def expel(member: discord.Member, report: bool = True) -> None:
         kicked = True
     except discord.HTTPException:
         kicked = False
-    if kicked:
+    if kicked and test_mode:
+        await send_test_removal_notice(member, "KICK", dm_channel=dm_channel,
+                                       allow_reentry_invite=True)
         if is_first_fault:
-            dm_ok = (await send_test_removal_notice(member, "KICK", dm_channel=dm_channel)
-                     if test_mode else await send_recovery_dm(member, report=report, dm_channel=dm_channel))
             db_mark_dm_sent(member.guild.id, member.id)
-        elif test_mode:
-            # La segunda expulsión confirmada de Test también conserva su aviso.
-            await send_test_removal_notice(member, "KICK", dm_channel=dm_channel)
 
     if not report:
+        return
+    if not kicked:
+        await log_embed(member.guild, "Advertencia: Expulsión no completada",
+                        f"Discord rechazó la expulsión de {member.mention}; revisa permisos y jerarquía.",
+                        discord.Color.dark_red())
         return
 
     # El listener de salidas espera esta publicación antes de emitir un segundo log.
@@ -2991,29 +3002,43 @@ async def expel(member: discord.Member, report: bool = True) -> None:
             pending.set()
 
 
+def render_personality_recovery_dm(guild: discord.Guild, invite_url: str) -> str:
+    """Sustitución segura de variables; textos y títulos reales por servidor."""
+    template = guild_config_get(guild.id, "personality_recovery_dm_template") or DM_TEXT
+    values = {
+        "servidor": discord.utils.escape_mentions(guild.name),
+        "razon": "No definió su personalidad",
+        "titulo_embed": discord.utils.escape_mentions(get_orientation_embed_title(guild.id)),
+        "invitacion": invite_url or "No disponible; solicita una invitación al equipo.",
+        "invite_url": invite_url or "No disponible",
+    }
+    return re.sub(r"\\{(servidor|razon|titulo_embed|invitacion|invite_url)\\}",
+                  lambda match: values[match.group(1)], template)[:1900]
+
+
 async def send_recovery_dm(member: discord.Member, report: bool = True, *,
                            dm_channel: discord.DMChannel | None = None) -> bool:
-    """Notificar recuperación solo después de una expulsión confirmada."""
+    """Mensaje oficial previo de recuperación: nunca afirmar que ya se expulsó."""
     channel = member.guild.get_channel(get_recovery_channel_id(member.guild.id))
     invite_url = ""
     if channel is not None:
         try:
             invite = await channel.create_invite(
-                max_uses=1, unique=True, reason="Recuperación tras expulsión de Heraldo"
+                max_uses=1, unique=True, reason="Recuperación de personalidad de El Heraldo"
             )
             invite_url = invite.url
-        except discord.Forbidden:
+        except discord.HTTPException:
             if report:
-                await log_embed(member.guild, "Advertencia: Error de invite", "Sin permisos para crear invite de recuperación.", discord.Color.dark_red())
-
-    text = DM_TEXT.format(invite_url=invite_url)
+                await log_embed(member.guild, "Advertencia: Error de invitación",
+                                "No pude generar la invitación de recuperación.",
+                                discord.Color.dark_red())
+    text = render_personality_recovery_dm(member.guild, invite_url)
     try:
         target = dm_channel if dm_channel is not None else member
-        await target.send(text)
+        await target.send(text, allowed_mentions=discord.AllowedMentions.none())
         return True
     except discord.HTTPException:
         return False
-
 
 # ---------------------------------------------------------------------------
 # Comando manual de prueba (slash command — no requiere message_content intent)
@@ -14895,46 +14920,49 @@ async def prepare_removal_dm(member: discord.Member) -> discord.DMChannel | None
 
 async def send_test_removal_notice(member: discord.Member, action: str,
                                    minutes: int | None = None, *,
-                                   dm_channel: discord.DMChannel | None = None) -> bool:
-    """Enviar disculpas e invitación solo tras una medida confirmada por Discord."""
+                                   dm_channel: discord.DMChannel | None = None,
+                                   allow_reentry_invite: bool = False) -> bool:
+    """Aviso experimental solo tras sanción confirmada, sin link en ban/manual."""
     if not heraldo_is_test():
         return False
     guild = member.guild
-    preferred = guild.get_channel(get_recovery_channel_id(guild.id))
-    channels = ([preferred] if isinstance(preferred, discord.TextChannel) else []) + list(guild.text_channels)
     invite_url = None
-    seen = set()
-    for channel in channels:
-        if channel.id in seen:
-            continue
-        seen.add(channel.id)
-        if guild.me is None:
-            break
-        permissions = channel.permissions_for(guild.me)
-        public = channel.permissions_for(guild.default_role)
-        if not (permissions.view_channel and permissions.create_instant_invite and public.view_channel):
-            continue
-        try:
-            invite = await channel.create_invite(
-                max_uses=1, max_age=0, unique=True,
-                reason="Invitación de recuperación tras una prueba de El Heraldo",
-            )
-            invite_url = invite.url
-            break
-        except discord.HTTPException:
-            continue
+    if allow_reentry_invite and action == "KICK":
+        preferred = guild.get_channel(get_recovery_channel_id(guild.id))
+        channels = ([preferred] if isinstance(preferred, discord.TextChannel) else []) + list(guild.text_channels)
+        seen = set()
+        for channel in channels:
+            if channel.id in seen:
+                continue
+            seen.add(channel.id)
+            if guild.me is None:
+                break
+            permissions = channel.permissions_for(guild.me)
+            public = channel.permissions_for(guild.default_role)
+            if not (permissions.view_channel and permissions.create_instant_invite and public.view_channel):
+                continue
+            try:
+                invite = await channel.create_invite(
+                    max_uses=1, max_age=0, unique=True,
+                    reason="Recuperación por prueba de personalidad de El Heraldo",
+                )
+                invite_url = invite.url
+                break
+            except discord.HTTPException:
+                continue
     if action == "BAN" and minutes:
-        availability = f"Podrás utilizar el enlace tras el desbaneo temporal, previsto en {format_duration(minutes)}."
+        availability = f"Baneo experimental confirmado. Duración prevista: {format_duration(minutes)}."
     elif action == "BAN":
-        availability = "Un administrador debe levantar el baneo antes de que el enlace pueda utilizarse."
+        availability = "Baneo experimental confirmado. Debe levantarse antes de reingresar."
+    elif allow_reentry_invite:
+        availability = "Expulsión experimental de personalidad confirmada."
     else:
-        availability = "Podrás volver a ingresar después de la expulsión."
-    invite_text = (f"Invitación de un solo uso: {invite_url}" if invite_url
-                   else "No fue posible generar una invitación; solicita una al equipo del servidor.")
+        availability = "Expulsión experimental confirmada. Consulta al equipo para solicitar el regreso."
+    invite_text = f"Invitación de un solo uso: {invite_url}\\n" if invite_url else ""
     message = (
         "Estamos realizando pruebas de moderación en El Heraldo Test. "
-        "La medida forma parte de nuestras comprobaciones. Te pedimos disculpas por las molestias.\n\n"
-        f"{availability}\n{invite_text}\n\n"
+        "La medida forma parte de nuestras comprobaciones. Te pedimos disculpas por las molestias.\\n\\n"
+        f"{availability}\\n{invite_text}\\n"
         "Si tienes alguna dificultad, comunícate con los administradores del servidor."
     )
     try:
@@ -14943,7 +14971,6 @@ async def send_test_removal_notice(member: discord.Member, action: str,
         return True
     except discord.HTTPException:
         return False
-
 
 async def heraldo_kick(member: discord.Member, *, reason: str,
                        send_notice: bool = True) -> None:

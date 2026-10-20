@@ -1,3 +1,7 @@
+## NH — Excepción de DM previo y aislamiento de Test (2026-10-20)
+
+Para la expulsión automática por no definir personalidad se envía aviso **previo**, expresado como medida prevista, con invitación individual y datos reales del servidor y tarjeta. Nunca afirmar resultado antes de confirmación. En baneos y expulsiones manuales, ni Test ni oficial deben generar enlaces de reingreso. Test debe notificar sus medidas experimentales que afectan la participación, incluidos motivo, embeds y DM, sin afirmar éxito antes de Discord; se permite enlace solo en recuperación de personalidad. Los mensajes de la plantilla oficial nunca muestran disculpas experimentales.
+
 ## NH — Alcance de exenciones de verificación (2026-10-20)
 
 El propietario exime de verificación obligatoria a dueño, administradores y moderadores con permisos reales de Discord. Las exenciones afectan exclusivamente a verificación, orientación/personalidad y consecuencias de no completar el proceso: no eximen de otras sanciones. Al perder permisos, conceder un plazo completo y nuevo, sin recuperar plazos anteriores ni alterar roles ajenos. Mantener las comprobaciones antes de sancionar y después de reinicios.
