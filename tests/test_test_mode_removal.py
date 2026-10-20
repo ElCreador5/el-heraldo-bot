@@ -23,6 +23,15 @@ def isolated(*names, ns=None):
     body.extend(node(name) for name in names)
     module = ast.fix_missing_locations(ast.Module(body=body, type_ignores=[]))
     context = {} if ns is None else dict(ns)
+    # Incorporar la exención real en las evaluaciones aisladas, sin falsificar permisos.
+    checker = next((n for n in TREE.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "verification_is_exempt"), None)
+    assert checker is not None
+    helper = ast.fix_missing_locations(ast.Module(body=[
+        ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+        checker,
+    ], type_ignores=[]))
+    exec(compile(helper, "bot.py", "exec"), context)
     exec(compile(module, "bot.py", "exec"), context)
     return context
 

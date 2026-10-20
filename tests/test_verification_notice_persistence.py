@@ -97,6 +97,7 @@ class TestGuildIsolationTests(unittest.IsolatedAsyncioTestCase):
                 "get_verify_role_id": lambda _: 41,
                 "get_eval_role_ids": lambda _: set(),
                 "verify_enabled": lambda _: True,
+                "verification_is_exempt": lambda m: False,
                 "heraldo_is_test": lambda: True,
                 "os": NS(getenv=lambda name: settings["lab"]),
                 "datetime": datetime, "timezone": timezone,
