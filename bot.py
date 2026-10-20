@@ -2322,6 +2322,7 @@ async def classify_member_departure(member):
     observed = datetime.now(timezone.utc)
     if not guild.me or not guild.me.guild_permissions.view_audit_log:
         return "member_leave", None, None, "No se pudo confirmar la causa: falta acceso a la auditoría."
+    audit_checked = False
     for delay in (2, 3, 5):
         await asyncio.sleep(delay)
         try:
@@ -2331,10 +2332,13 @@ async def classify_member_departure(member):
                     if (getattr(entry.target, "id", None) == member.id
                             and abs((entry.created_at - observed).total_seconds()) <= 20):
                         return event, entry.user, entry.reason, None
+            audit_checked = True
         except discord.Forbidden:
             return "member_leave", None, None, "No se pudo confirmar la causa: acceso a auditoría denegado."
         except discord.HTTPException:
             continue
+    if not audit_checked:
+        return "member_leave", None, None, "No se pudo confirmar la causa: fallaron las consultas a la auditoría."
     return "member_leave", None, None, "Salida observada; no se encontró una expulsión o baneo en la auditoría consultada."
 
 
@@ -11054,6 +11058,7 @@ class HeraldoMemberLogSetupView(discord.ui.View):
             self.event_key = values[0]
             self.pending_enabled = None
             self.pending_channel_id = None
+            self.exit_comments_button.disabled = self.event_key != "member_leave"
         await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
 
     async def select_channel(self, interaction):

@@ -1,3 +1,9 @@
+## Encuestas voluntarias de salida — 2026-10-20
+
+**IMPLEMENTADO en `Pruebas`, sujeto a CI y Discord:** configuración separada y desactivada por defecto desde `/setup → Mensajes → Logs → Eventos de miembros → Comentarios de salida`, con Guardar/Descartar (NH); solo se solicita DM cuando la auditoría fue consultada satisfactoriamente sin encontrar un kick/ban, existe la tarjeta original y el canal de logs está restringido al personal moderador. Los errores o permisos insuficientes de auditoría cancelan la encuesta. El botón persistente de DM abre un modal voluntario (máximo 500 caracteres, siete días); SQLite asocia la solicitud por servidor, miembro, DM y tarjeta, evita duplicados y conserva respuestas pendientes de editar tras reinicios. `exit_comment_apply` edita la tarjeta, no crea registros secundarios; sin respuesta no muestra el campo «Comentario». El usuario solo puede responder a su propio DM. Las solicitudes pendientes sin respuesta se purgan después del periodo de retención. No se altera el motor de sanciones ni `main`.
+
+**Verificación real en Discord:** NO realizada. La aplicación de respuesta depende de permisos en el canal y puede quedar pendiente si este se elimina o vuelve público. El registro en SQLite se debe respaldar antes de aplicar a producción.
+
 ## NH — Excepción de DM previo y aislamiento de Test (2026-10-20)
 
 Para la expulsión automática por no definir personalidad se envía aviso **previo**, expresado como medida prevista, con invitación individual y datos reales del servidor y tarjeta. Nunca afirmar resultado antes de confirmación. En baneos y expulsiones manuales, ni Test ni oficial deben generar enlaces de reingreso. Test debe notificar sus medidas experimentales que afectan la participación, incluidos motivo, embeds y DM, sin afirmar éxito antes de Discord; se permite enlace solo en recuperación de personalidad. Los mensajes de la plantilla oficial nunca muestran disculpas experimentales.
