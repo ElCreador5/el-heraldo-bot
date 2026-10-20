@@ -23,6 +23,10 @@ def isolated(*names, ns=None):
     body.extend(node(name) for name in names)
     module = ast.fix_missing_locations(ast.Module(body=body, type_ignores=[]))
     context = {} if ns is None else dict(ns)
+    # Los casos de sanción aislados parten de personalidad activa y obligatoria.
+    # Los controles de desactivación tienen sus propias regresiones.
+    context.setdefault("orientation_enabled", lambda guild_id: True)
+    context.setdefault("personality_required", lambda guild_id: True)
     # Incorporar la exención real en las evaluaciones aisladas, sin falsificar permisos.
     checker = next((n for n in TREE.body if isinstance(n, ast.FunctionDef)
                     and n.name == "verification_is_exempt"), None)
