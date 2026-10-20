@@ -1,0 +1,29 @@
+name: Raid - validar guardado directo del candidato main
+on:
+  push:
+    branches: [Pruebas]
+    paths:
+      - .github/workflows/raid-direct-save-candidate.yml
+permissions:
+  contents: read
+jobs:
+  regression:
+    name: guardado-directo-sin-confirmacion
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 049044279236fd6bdc06f47ae7ea4f04d0f6ab6a
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Compilar
+        run: python -m py_compile bot.py test_raid_save_main.py
+      - name: Ejecutar regresiones de main y del editor de Raid Protection
+        run: python -m unittest -v test_member_logs test_member_departure_cards test_regressions test_release_report_only test_honeypot_selective_main test_honeypot_runtime test_raid_save_main
