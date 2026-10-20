@@ -1,3 +1,7 @@
+## Raid Protection — guardado directo como confirmación (2026-10-20)
+
+El propietario requiere que pulsar «Guardar cambios» sea suficiente: eliminar la confirmación posterior y actualizar inmediatamente el mismo panel con los valores guardados, sin conservar indicadores «pendiente». La pulsación de Guardar constituye la confirmación administrativa explícita; permanecerán las validaciones de permisos, conflicto concurrente, integridad SQLite, Cancelar/Descartar sin guardar y conservación del motor antiraid. Aplicado selectivamente en `main@317ed866`.
+
 ## Normas Heraldo — proceso simplificado para `main` (2026-10-20)
 
 El propietario eliminó los bloqueos administrativos que retrasaban la publicación: GitHub confirmó que «Protección de main.» conserva únicamente `deletion` y `non_fast_forward`. No se exige PR, revisión externa ni checks de estado requeridos. Una autorización expresa de producción permite actualizar `main` directamente sin pedirla otra vez por el mismo cambio. El desarrollo habitual sigue en `Pruebas` salvo decisión específica; no arrastrar funciones ajenas al parche. Se mantienen pruebas automáticas no bloqueantes, compilación, revisión de SHA/concurrencia, registro de resultado y protección proporcional para SQLite, respaldos recuperables y acciones sensibles H-03. Actualizar el código de producción puede disparar Railway automáticamente.
