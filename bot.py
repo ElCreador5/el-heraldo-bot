@@ -5931,6 +5931,387 @@ class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Dete
 
 
 
+async def raid_editor_authorized(interaction: discord.Interaction, guild_id: int,
+                                 owner_id: int) -> bool:
+    """Revalidar servidor, sesión y permisos al interactuar o confirmar."""
+    allowed = (interaction.guild is not None
+               and interaction.guild.id == guild_id
+               and interaction.user.id == owner_id
+               and bool(getattr(getattr(interaction.user, "guild_permissions", None), "manage_guild", False)))
+    if not allowed:
+        sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        await sender("Acceso denegado: se requiere Gestionar servidor y la sesión original.",
+                     ephemeral=True)
+    return allowed
+
+
+class RaidDetectionConfirmView(discord.ui.View):
+    """Confirmación específica para el editor antiraid de main, sin otras dependencias."""
+
+    def __init__(self, guild_id: int, owner_id: int, changes: dict[str, str]):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.changes = dict(changes)
+        self.original = {key: guild_config_get(guild_id, key) for key in changes}
+        self.resolved = False
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await raid_editor_authorized(interaction, self.guild_id, self.owner_id):
+            return
+        if self.resolved:
+            await interaction.response.send_message("Esta propuesta ya se resolvió.", ephemeral=True)
+            return
+        if any(key not in RAID_FIELDS for key in self.changes):
+            await interaction.response.send_message("La propuesta contiene un campo no permitido.", ephemeral=True)
+            return
+        # Validar todas las cifras directamente porque la BD almacena segundos, no texto con unidades.
+        bounds = {
+            "raid_threshold": (RAID_THRESHOLD_MIN, RAID_THRESHOLD_MAX),
+            "raid_window_seconds": (RAID_WINDOW_MIN, RAID_WINDOW_MAX),
+            "raid_min_age_seconds": (0, RAID_AGE_MAX),
+            "raid_new_account_ratio": (0, 100),
+            "raid_duration_seconds": (RAID_DURATION_MIN, RAID_DURATION_MAX),
+        }
+        try:
+            proposed = {key: int(value) for key, value in self.changes.items()}
+        except (TypeError, ValueError):
+            await interaction.response.send_message("Los valores de la propuesta ya no son válidos.", ephemeral=True)
+            return
+        if any(not bounds[key][0] <= value <= bounds[key][1]
+               for key, value in proposed.items()):
+            await interaction.response.send_message("Uno de los valores está fuera de rango.", ephemeral=True)
+            return
+        conn = db_connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            original_age = raid_min_age_seconds(self.guild_id)
+            original_ratio = raid_new_account_ratio(self.guild_id)
+            final_age = proposed.get("raid_min_age_seconds", original_age)
+            final_ratio = proposed.get("raid_new_account_ratio", original_ratio)
+            if final_ratio > 0 and final_age <= 0:
+                conn.rollback()
+                await interaction.response.send_message(
+                    "No se guardó: la proporción exige edad de cuenta mayor que cero.",
+                    ephemeral=True)
+                return
+            for key, old in self.original.items():
+                row = conn.execute("SELECT value FROM guild_settings WHERE guild_id=? AND key=?",
+                                   (self.guild_id, key)).fetchone()
+                if (row[0] if row else None) != old:
+                    conn.rollback()
+                    await interaction.response.send_message(
+                        "La configuración cambió en otra sesión. Abre de nuevo el editor.",
+                        ephemeral=True)
+                    return
+            for key, value in self.changes.items():
+                conn.execute(
+                    "INSERT INTO guild_settings (guild_id,key,value) VALUES (?,?,?) "
+                    "ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value",
+                    (self.guild_id, key, value))
+            conn.execute("UPDATE guild_config SET updated_at=? WHERE guild_id=?",
+                         (datetime.now(timezone.utc).isoformat(), self.guild_id))
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
+            await interaction.response.send_message(
+                "No fue posible guardar la configuración; no se aplicaron cambios.", ephemeral=True)
+            return
+        finally:
+            conn.close()
+        self.resolved = True
+        self.stop()
+        await interaction.response.edit_message(
+            content="Configuración de Raid Protection guardada correctamente.",
+            embed=None, view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await raid_editor_authorized(interaction, self.guild_id, self.owner_id):
+            return
+        self.resolved = True
+        self.stop()
+        await interaction.response.edit_message(
+            content="Cambios descartados. No se ha modificado la configuración.",
+            embed=None, view=None)
+
+
+async def raid_confirm_configuration(interaction: discord.Interaction, guild_id: int,
+                                     changes: dict[str, str], owner_id: int) -> None:
+    if not await raid_editor_authorized(interaction, guild_id, owner_id):
+        return
+    if not changes:
+        await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+        return
+    lines = []
+    for key, value in changes.items():
+        if key not in RAID_FIELDS:
+            await interaction.response.send_message("Campo de Raid Protection no permitido.", ephemeral=True)
+            return
+        original = raid_detection_values(guild_id)[key]
+        label = RAID_OPTIONS[key][0]
+        lines.append(f"**{label}**\nActual: {raid_format_choice(key, original)}"
+                     f"\nPropuesto: {raid_format_choice(key, int(value))}")
+    embed = discord.Embed(
+        title="El Heraldo · Confirmar Raid Protection",
+        description="\n\n".join(lines),
+        color=discord.Color.blurple())
+    embed.set_footer(text="Los cambios solo se guardarán al seleccionar Guardar cambios.")
+    await interaction.response.send_message(
+        embed=embed, view=RaidDetectionConfirmView(guild_id, owner_id, changes),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
+RAID_PRESETS = {
+    "moderada": (15, 30, 3 * 86400, 70, 600),
+    "equilibrada": (10, 30, 7 * 86400, 60, 900),
+    "estricta": (5, 10, 14 * 86400, 50, 1800),
+}
+RAID_FIELDS = (
+    "raid_threshold", "raid_window_seconds", "raid_min_age_seconds",
+    "raid_new_account_ratio", "raid_duration_seconds",
+)
+RAID_OPTIONS = {
+    "raid_threshold": ("Umbral de entradas", (5, 10, 15, 20, 25, 50, 100),
+                       "Número de entradas para disparar la detección."),
+    "raid_window_seconds": ("Ventana de detección", (5, 10, 30, 60, 120, 300, 600),
+                            "Tiempo para contar los ingresos."),
+    "raid_min_age_seconds": ("Edad máxima de cuenta nueva", (0, 3600, 43200, 86400,
+                              3*86400, 7*86400, 14*86400, 30*86400),
+                              "0 = sin filtro. Determina qué cuentas se consideran recientes."),
+    "raid_new_account_ratio": ("Proporción de cuentas nuevas", (0, 25, 40, 50, 60, 70, 80, 90),
+                               "0 = desactivada. Porcentaje mínimo de cuentas recientes."),
+    "raid_duration_seconds": ("Duración del modo raid", (60, 300, 600, 900, 1800, 3600, 7200,
+                              21600, 43200, 86400),
+                              "Duración del modo de protección, no de las sanciones."),
+}
+
+
+def raid_detection_values(guild_id):
+    return dict(zip(RAID_FIELDS, (
+        raid_threshold(guild_id), raid_window_seconds(guild_id),
+        raid_min_age_seconds(guild_id), raid_new_account_ratio(guild_id),
+        raid_duration_seconds(guild_id),
+    )))
+
+
+def raid_format_choice(key, value):
+    if key == "raid_threshold":
+        return f"{value} ingresos"
+    if key == "raid_new_account_ratio":
+        return f"{value} %" if value else "Desactivada"
+    if key == "raid_min_age_seconds" and not value:
+        return "Sin filtro"
+    return format_flex_duration(value)
+
+
+def raid_parse_choice(key, raw):
+    if key in ("raid_threshold", "raid_new_account_ratio"):
+        try:
+            result = int(raw)
+        except ValueError:
+            raise ValueError("Introduce un número entero válido.") from None
+        minimum, maximum = ((RAID_THRESHOLD_MIN, RAID_THRESHOLD_MAX)
+                            if key == "raid_threshold" else (0, 100))
+        if not minimum <= result <= maximum:
+            raise ValueError(f"El valor debe estar entre {minimum} y {maximum}.")
+        return result
+    minimum, maximum = {
+        "raid_window_seconds": (RAID_WINDOW_MIN, RAID_WINDOW_MAX),
+        "raid_min_age_seconds": (0, RAID_AGE_MAX),
+        "raid_duration_seconds": (RAID_DURATION_MIN, RAID_DURATION_MAX),
+    }[key]
+    return parse_flex_duration(raw, minimum, maximum)
+
+
+class HeraldoRaidCustomModal(discord.ui.Modal):
+    def __init__(self, editor, key):
+        super().__init__(title="Raid Protection · Personalizar")
+        self.editor, self.key = editor, key
+        label = RAID_OPTIONS[key][0]
+        current = editor.draft[key]
+        self.value_field = discord.ui.TextInput(
+            label=label[:45], max_length=32, required=True,
+            default=(str(current) if key in ("raid_threshold", "raid_new_account_ratio")
+                     else format_flex_duration(current) if current else "0"),
+            placeholder="Ej.: 15, 60 %, 30s, 5m, 2h o 7d (según el campo)",
+        )
+        self.add_item(self.value_field)
+
+    async def on_submit(self, interaction):
+        if not await self.editor.interaction_check(interaction):
+            return
+        try:
+            self.editor.draft[self.key] = raid_parse_choice(self.key, str(self.value_field).strip())
+        except ValueError as exc:
+            await interaction.response.send_message(f"No se aplicó el borrador: {exc}", ephemeral=True)
+            return
+        self.editor.rebuild()
+        await interaction.response.edit_message(content=self.editor.summary(), view=self.editor)
+
+
+class HeraldoRaidDetectionView(discord.ui.View):
+    """Dos páginas con borrador, perfiles orientativos y guardado explícito."""
+
+    def __init__(self, parent):
+        super().__init__(timeout=900)
+        self.parent, self.guild_id, self.owner_id = parent, parent.guild_id, parent.owner_id
+        self.original = raid_detection_values(self.guild_id)
+        self.draft = dict(self.original)
+        self.page = 0
+        self.selectors = {}
+        self.rebuild()
+
+    async def interaction_check(self, interaction):
+        return await raid_editor_authorized(interaction, self.guild_id, self.owner_id)
+
+    def active_profile(self):
+        for name, values in RAID_PRESETS.items():
+            if tuple(self.draft[k] for k in RAID_FIELDS) == values:
+                return name
+        return "personalizada"
+
+    def summary(self):
+        items = []
+        for key in RAID_FIELDS:
+            suffix = " (pendiente)" if self.draft[key] != self.original[key] else ""
+            items.append(f"**{RAID_OPTIONS[key][0]}:** "
+                         f"{raid_format_choice(key, self.draft[key])}{suffix}")
+        help_text = (
+            "Elige un perfil orientativo o modifica cada parámetro. "
+            "Una ventana más corta requiere entradas más concentradas."
+            if self.page == 0 else
+            "La proporción exige una edad de cuenta mayor que cero. "
+            "La duración aquí NO termina una condena o baneo. "
+            "«Solo registrar» evita sanciones, pero puede pausar invitaciones si así se configuró."
+        )
+        return ("**El Heraldo · Raid Protection · Detección**\n\n"
+                f"**Perfil:** {self.active_profile().capitalize()}\n"
+                + "\n".join(items) + "\n\n**Ayuda:** " + help_text
+                + "\n\nGuardar cambios abre una confirmación antes de modificar la configuración.")
+
+    def add_selector(self, key, row):
+        title, choices, explanation = RAID_OPTIONS[key]
+        current = self.draft[key]
+        options = [
+            discord.SelectOption(label=raid_format_choice(key, value)[:100],
+                                 value=str(value), description=explanation[:100],
+                                 default=value == current)
+            for value in choices
+        ]
+        if current not in choices:
+            options.append(discord.SelectOption(
+                label=("Actual: " + raid_format_choice(key, current))[:100],
+                value=str(current), description="Valor personalizado conservado",
+                default=True))
+        options.append(discord.SelectOption(
+            label="Personalizar…", value="custom",
+            description="Introducir otro valor sin guardarlo todavía"))
+        selector = discord.ui.Select(
+            placeholder=title + " · elige una opción", min_values=1,
+            max_values=1, options=options, row=row)
+
+        async def selected(interaction):
+            value = selector.values[0]
+            if value == "custom":
+                await interaction.response.send_modal(HeraldoRaidCustomModal(self, key))
+                return
+            self.draft[key] = int(value)
+            self.rebuild()
+            await interaction.response.edit_message(content=self.summary(), view=self)
+
+        selector.callback = selected
+        self.selectors[key] = selector
+        self.add_item(selector)
+
+    def add_button(self, label, color, handler, row):
+        button = discord.ui.Button(label=label, style=color, row=row)
+        button.callback = handler
+        self.add_item(button)
+        return button
+
+    def rebuild(self):
+        self.clear_items()
+        self.selectors = {}
+        if self.page == 0:
+            profile_select = discord.ui.Select(
+                placeholder="Sensibilidad · elige según la actividad de tu servidor",
+                options=[
+                    discord.SelectOption(
+                        label=name.capitalize(), value=name,
+                        description={
+                            "moderada": "Menos falsas alarmas; menor detección de ataques lentos.",
+                            "equilibrada": "Compromiso sugerido; ajustar con las alertas reales.",
+                            "estricta": "Reacciona antes; puede afectar entradas legítimas.",
+                        }[name], default=self.active_profile() == name)
+                    for name in RAID_PRESETS
+                ] + [discord.SelectOption(
+                    label="Personalizada", value="personalizada",
+                    description="Conservar los valores elegidos manualmente",
+                    default=self.active_profile() == "personalizada")],
+                min_values=1, max_values=1, row=0)
+            async def profile_selected(interaction):
+                key = profile_select.values[0]
+                if key in RAID_PRESETS:
+                    self.draft = dict(zip(RAID_FIELDS, RAID_PRESETS[key]))
+                self.rebuild()
+                await interaction.response.edit_message(content=self.summary(), view=self)
+            profile_select.callback = profile_selected
+            self.profile_select = profile_select
+            self.add_item(profile_select)
+            for idx, key in enumerate(RAID_FIELDS[:3], start=1):
+                self.add_selector(key, idx)
+            row = 4
+            self.add_button("Más ajustes", discord.ButtonStyle.primary, self.next_page, row)
+        else:
+            for idx, key in enumerate(RAID_FIELDS[3:]):
+                self.add_selector(key, idx)
+            row = 2
+            self.add_button("Parámetros básicos", discord.ButtonStyle.secondary, self.basic_page, row)
+        save = self.add_button("Guardar cambios", discord.ButtonStyle.success, self.save, row)
+        discard = self.add_button("Descartar cambios", discord.ButtonStyle.danger, self.discard, row)
+        save.disabled = discard.disabled = self.draft == self.original
+        self.add_button("Volver", discord.ButtonStyle.secondary, self.back, row)
+
+    async def next_page(self, interaction):
+        self.page = 1
+        self.rebuild()
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    async def basic_page(self, interaction):
+        self.page = 0
+        self.rebuild()
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    async def discard(self, interaction):
+        self.draft = dict(self.original)
+        self.rebuild()
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    async def back(self, interaction):
+        await interaction.response.edit_message(
+            content=self.parent._content(interaction.guild), view=self.parent)
+        self.stop()
+
+    async def save(self, interaction):
+        changes = {k: str(value) for k, value in self.draft.items()
+                   if value != self.original[k]}
+        if not changes:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        if self.draft["raid_new_account_ratio"] > 0 and self.draft["raid_min_age_seconds"] == 0:
+            await interaction.response.send_message(
+                "No se guardó: la proporción exige una edad de cuenta mayor que cero.",
+                ephemeral=True)
+            return
+        if raid_detection_values(self.guild_id) != self.original:
+            await interaction.response.send_message(
+                "La configuración cambió en otra sesión. Abre de nuevo el editor.",
+                ephemeral=True)
+            return
+        await raid_confirm_configuration(interaction, self.guild_id, changes, self.owner_id)
+
+
 class HeraldoRaidSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -5943,10 +6324,18 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.pending_purge: bool | None = None
 
         action_select = discord.ui.Select(
-            placeholder="Respuesta ante el raid",
+            placeholder="Acción cuando se detecte un raid; Guardar para aplicar",
             min_values=1,
             max_values=1,
-            options=[discord.SelectOption(label=label[:100], value=value, default=(value == raid_action(guild_id))) for value, label in RAID_ACTION_LABELS.items()],
+            options=[
+                discord.SelectOption(
+                    label=label,
+                    value=value,
+                    description=RAID_ACTION_HELP[value],
+                    default=(value == raid_action(guild_id)),
+                )
+                for value, label in RAID_ACTION_LABELS.items()
+            ],
             row=0,
         )
         action_select.callback = self.select_action
@@ -5954,7 +6343,7 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.add_item(action_select)
 
         role_select = discord.ui.RoleSelect(
-            placeholder="Rol a mencionar en las alertas",
+            placeholder="Rol opcional para avisos; no es el rol Condenado",
             min_values=1,
             max_values=1,
             row=1,
@@ -5967,10 +6356,18 @@ class HeraldoRaidSetupView(discord.ui.View):
         self.toggle_purge.label = "Purgar mensajes: sí" if raid_purge_enabled(guild_id) else "Purgar mensajes: no"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await raid_editor_authorized(interaction, self.guild_id, self.owner_id):
+            return False
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message("Este panel de configuración no es tuyo.", ephemeral=True)
             return False
         return True
+
+    def _sync_action_select(self) -> None:
+        """Mantiene marcada la acción del borrador; solo Guardar la hace efectiva."""
+        selected = self.pending_action if self.pending_action is not None else raid_action(self.guild_id)
+        for option in self.action_select.options:
+            option.default = option.value == selected
 
     def _content(self, guild: discord.Guild) -> str:
         items = []
@@ -5993,6 +6390,7 @@ class HeraldoRaidSetupView(discord.ui.View):
             await interaction.response.send_message("Para usar «Condenar» primero debes configurar el rol Condenado.", ephemeral=True)
             return
         self.pending_action = value
+        self._sync_action_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     async def select_alert_role(self, interaction: discord.Interaction) -> None:
@@ -6006,7 +6404,8 @@ class HeraldoRaidSetupView(discord.ui.View):
 
     @discord.ui.button(label="Detección y duración", style=discord.ButtonStyle.primary, row=2)
     async def detection(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HeraldoRaidDetectionModal(self.guild_id))
+        editor = HeraldoRaidDetectionView(self)
+        await interaction.response.edit_message(content=editor.summary(), view=editor)
 
     @discord.ui.button(label="Protección", style=discord.ButtonStyle.success, row=2)
     async def toggle_enabled(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6046,11 +6445,13 @@ class HeraldoRaidSetupView(discord.ui.View):
         if self.pending_purge is not None:
             guild_config_set(self.guild_id, "raid_purge", "1" if self.pending_purge else "0")
         self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
+        self._sync_action_select()
         await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_action = self.pending_role_id = self.pending_enabled = self.pending_invites = self.pending_purge = None
+        self._sync_action_select()
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
@@ -16762,6 +17163,12 @@ RAID_ACTION_LABELS = {
     "kick": "Expulsar",
     "ban": "Banear",
     "log": "Solo registrar (prueba segura)",
+}
+RAID_ACTION_HELP = {
+    "condemn": "Aplica la condena a cuentas que cumplan el filtro; requiere rol Condenado.",
+    "kick": "Expulsa las cuentas que cumplan el filtro; podrían volver a entrar.",
+    "ban": "Banea las cuentas que cumplan el filtro; requiere desbaneo para regresar.",
+    "log": "Registra sin sancionar; si está habilitada, aún puede pausar invitaciones.",
 }
 RAID_MONTH_SECONDS = 30 * 24 * 3600
 
