@@ -1,3 +1,9 @@
+## Actualizaciones directas y log único de expulsión — 2026-10-20
+
+**Decisión vigente del propietario (20/10/2026):** se simplifica la actualización de producción. GitHub mantiene bloqueado eliminar `main` o reescribir su historial; **ya no exige Pull Requests ni status checks bloqueantes**. Se permite publicar directamente en `main` cuando el propietario autoriza expresamente el cambio concreto, sin solicitar de nuevo la misma aprobación. Las pruebas automáticas permanecen y se ejecutan tras cada push a `main` mediante `.github/workflows/member-logs-checks.yml`; un SUCCESS técnico no equivale a una prueba de Discord. Antes de cualquier actualización, revisar SHA actual, impactos, regresiones y preservar datos: no implica habilitar activaciones H-03 ni migraciones SQLite destructivas sin garantías de recuperación. Esta decisión sustituye las prohibiciones **administrativas** antiguas de PR y checks obligatorios para cambios ordinarios de código; los controles específicos de secretos y respaldo H-03 siguen siendo independientes.
+
+**Corrección puntual de logs en producción:** tras un KICK correcto por falta de verificación, se conserva únicamente la tarjeta configurada **«Miembro expulsado»** de `on_member_remove`. Los dos mensajes genéricos «Expulsión por falta de verificación» dejan de publicarse tras el éxito. No borrar mensajes históricos ni cambiar configuración existente, sanciones, acciones «Solo registrar», errores reales ni avisos de baneo ajenos al alcance. El diagnóstico de la imagen no acredita una prueba posterior al despliegue.
+
 # Decisiones aplicables al candidato de Honeypot
 
 La autorización del propietario está en

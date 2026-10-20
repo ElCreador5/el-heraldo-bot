@@ -224,5 +224,37 @@ class OrientationDedupeBehaviorTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await check(member, "member_leave", None, None))
 
 
+
+
+class UniqueRemovalLogPolicyTests(unittest.TestCase):
+    """Una sanción confirmada produce su única tarjeta mediante on_member_remove."""
+
+    def test_successful_role_fallback_does_not_publish_second_log(self):
+        source = ast.get_source_segment(SOURCE, next(
+            x for x in TREE.body if isinstance(x, ast.AsyncFunctionDef)
+            and x.name == "evaluate_sin_verificado"))
+        self.assertIn('await member.kick(', source)
+        self.assertNotIn('"Expulsión por falta de verificación"', source)
+        self.assertIn('"Advertencia: Error al expulsar"', source)
+
+    def test_primary_timeout_does_not_publish_second_log(self):
+        source = ast.get_source_segment(SOURCE, next(
+            x for x in TREE.body if isinstance(x, ast.AsyncFunctionDef)
+            and x.name == "evaluate_verify_timeout"))
+        self.assertIn('await member.kick(', source)
+        self.assertIn('await member.ban(', source)
+        self.assertNotIn('"Expulsión por falta de verificación"', source)
+        self.assertIn('"Expulsión permanente por falta de verificación"', source)
+        self.assertIn('"Verificación vencida"', source)
+        self.assertIn('"Advertencia: Error al aplicar el timeout', source)
+
+    def test_generic_member_log_survives_and_uses_selected_event(self):
+        source = ast.get_source_segment(SOURCE, next(
+            x for x in TREE.body if isinstance(x, ast.AsyncFunctionDef)
+            and x.name == "heraldo_member_departure"))
+        self.assertIn('log_member_event_enabled(guild.id, kind)', source)
+        self.assertIn('member_departure_description(member, kind', source)
+        self.assertIn('await log_embed(', source)
+
 if __name__ == "__main__":
     unittest.main()

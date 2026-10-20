@@ -2499,11 +2499,8 @@ async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
     db_clear_sin_verificado(guild_id, user_id)
     try:
         await member.kick(reason="No completó la verificación dentro del plazo establecido.")
-        await log_embed(
-            guild, "Expulsión por falta de verificación",
-            f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
-            discord.Color.red(),
-        )
+        # Un único registro de expulsión: lo publica heraldo_member_departure
+        # desde on_member_remove, utilizando la tarjeta de miembros configurada.
     except discord.Forbidden:
         await log_embed(
             guild, "Advertencia: Error al expulsar",
@@ -9902,11 +9899,14 @@ async def evaluate_verify_timeout(guild_id: int, user_id: int) -> None:
             discord.Color.dark_red(),
         )
         return
-    await log_embed(
-        guild, "Expulsión permanente por falta de verificación" if action == "ban" else "Expulsión por falta de verificación",
-        f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
-        discord.Color.red(),
-    )
+    # La expulsión confirmada se registra una sola vez en on_member_remove.
+    # Mantener el aviso histórico de BAN y los errores para no ampliar el alcance.
+    if action == "ban":
+        await log_embed(
+            guild, "Expulsión permanente por falta de verificación",
+            f"{member.mention} (`{member.id}`) no se verificó en {timeout} s.",
+            discord.Color.red(),
+        )
 
 
 async def update_verify_panel(guild: discord.Guild) -> str:

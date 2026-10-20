@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [release/member-logs-20261008]
+    branches: [main]
 jobs:
   python-checks:
     runs-on: ubuntu-latest
