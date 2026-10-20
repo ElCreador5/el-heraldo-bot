@@ -1,0 +1,83 @@
+name: Verificacion aislada candidato Raid Protection
+on:
+  push:
+    branches: [Pruebas]
+    paths:
+      - .github/workflows/raid-candidate-main-check.yml
+permissions:
+  contents: read
+jobs:
+  validate-main-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: e607ce7af38560a694e8c2095871861f8a125178
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar y compilar la version propuesta de main
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+          python -m py_compile bot.py
+      - name: Regresiones vigentes de main sin Discord Gateway
+        run: python -m unittest test_member_logs test_member_departure_cards test_regressions test_release_report_only test_honeypot_selective_main test_honeypot_runtime -v
+      - name: Verificacion del editor de Raid y confirmacion atomica
+        run: |
+          python - <<'PY'
+          import asyncio
+          from types import SimpleNamespace as NS
+          from unittest.mock import AsyncMock
+          from test_regressions import b
+          G=983357
+          for key,value in zip(("raid_threshold","raid_window_seconds","raid_min_age_seconds","raid_new_account_ratio","raid_duration_seconds"),("12","20","604800","60","900")):
+              b.guild_config_set(G,key,value)
+          owner=NS(id=11,guild_permissions=NS(manage_guild=True))
+          guild=NS(id=G,get_role=lambda _:None)
+          def make(user=owner):
+              return NS(guild=guild,user=user,data={"values":[]},
+                        response=NS(send_message=AsyncMock(),edit_message=AsyncMock(),
+                                    send_modal=AsyncMock(),is_done=lambda:False),
+                        followup=NS(send=AsyncMock()))
+          async def run():
+              parent=b.HeraldoRaidSetupView(G,owner.id)
+              v=b.HeraldoRaidDetectionView(parent)
+              assert v.active_profile()=="personalizada"
+              assert b.raid_threshold(G)==12
+              assert await v.interaction_check(make())
+              assert not await v.interaction_check(make(NS(id=12,guild_permissions=NS(manage_guild=True))))
+              m=v.profile_select
+              m._values=["equilibrada"]
+              await m.callback(make())
+              assert v.draft["raid_threshold"]==10 and b.raid_threshold(G)==12
+              await v.next_page(make())
+              assert len(v.selectors)==2
+              await v.discard(make())
+              assert v.draft["raid_threshold"]==12
+              await v.basic_page(make())
+              v.draft["raid_threshold"]=18
+              i=make()
+              await v.save(i)
+              confirm=i.response.send_message.await_args.kwargs["view"]
+              assert isinstance(confirm,b.RaidDetectionConfirmView)
+              assert b.raid_threshold(G)==12
+              denied=make(NS(id=11,guild_permissions=NS(manage_guild=False)))
+              await confirm.save.callback(denied)
+              assert b.raid_threshold(G)==12
+              await confirm.save.callback(make())
+              assert b.raid_threshold(G)==18 and confirm.resolved
+              v=b.HeraldoRaidDetectionView(parent)
+              v.draft["raid_threshold"]=19
+              i=make()
+              await v.save(i)
+              confirm=i.response.send_message.await_args.kwargs["view"]
+              b.guild_config_set(G,"raid_threshold","17")
+              await confirm.save.callback(make())
+              assert b.raid_threshold(G)==17 and not confirm.resolved
+              assert b.raid_parse_choice("raid_window_seconds","2m")==120
+              print("Candidato: seleccion, borrador, permisos, transaccion y conflicto correctos")
+          asyncio.run(run())
+          PY
