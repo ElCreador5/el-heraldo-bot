@@ -2498,9 +2498,11 @@ def exit_comment_private(channel: discord.TextChannel) -> bool:
     # Un overwrite individual puede abrir el canal a un usuario que no tiene rol
     # de moderación. No enviar comentarios privados a un destino así configurado.
     for target, overwrite in channel.overwrites.items():
-        if not isinstance(target, discord.Member) or overwrite.view_channel is not True:
+        if overwrite.view_channel is not True or isinstance(target, discord.Role):
             continue
-        if not verification_is_exempt(target):
+        # La caché puede no resolver un usuario con acceso explícito. En caso
+        # de incertidumbre se rechaza este canal para comentarios privados.
+        if not isinstance(target, discord.Member) or not verification_is_exempt(target):
             return False
     me = guild.me
     return bool(me and all((channel.permissions_for(me).view_channel,
@@ -2596,19 +2598,30 @@ class ExitCommentModal(discord.ui.Modal, title="Comentario de salida"):
         self.dm_message_id = dm_message_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        with closing(db_connect()) as conn:
-            row = exit_comments.find_by_dm(
-                conn, dm_message_id=self.dm_message_id, user_id=interaction.user.id)
-            if row is None or not exit_comments.submit_comment(
-                    conn, dm_message_id=self.dm_message_id, user_id=interaction.user.id,
-                    comment=str(self.comment.value)):
-                await interaction.response.send_message(
-                    "Solicitud caducada o ya respondida.", ephemeral=True)
-                return
-            conn.row_factory = sqlite3.Row
-            saved = conn.execute(
-                "SELECT * FROM member_exit_comments WHERE dm_message_id=?",
-                (self.dm_message_id,)).fetchone()
+        content = str(self.comment.value).strip()
+        if not content or len(content) > exit_comments.COMMENT_LIMIT:
+            await interaction.response.send_message(
+                "Escribe un comentario de entre 1 y 500 caracteres.", ephemeral=True)
+            return
+        try:
+            with closing(db_connect()) as conn:
+                row = exit_comments.find_by_dm(
+                    conn, dm_message_id=self.dm_message_id, user_id=interaction.user.id)
+                if row is None or not exit_comments.submit_comment(
+                        conn, dm_message_id=self.dm_message_id,
+                        user_id=interaction.user.id, comment=content):
+                    await interaction.response.send_message(
+                        "Solicitud caducada o ya respondida.", ephemeral=True)
+                    return
+                conn.row_factory = sqlite3.Row
+                saved = conn.execute(
+                    "SELECT * FROM member_exit_comments WHERE dm_message_id=?",
+                    (self.dm_message_id,)).fetchone()
+        except sqlite3.Error:
+            await interaction.response.send_message(
+                "No fue posible guardar tu comentario. Inténtalo más tarde.",
+                ephemeral=True)
+            return
         success = await exit_comment_apply(saved)
         await interaction.response.send_message(
             "Comentario incorporado al registro original." if success else
@@ -2647,6 +2660,8 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
             return
     # Segunda comprobación conservadora: las expulsiones pueden aparecer tarde.
     if not await exit_comment_audit_safe(member) or guild.get_member(member.id) is not None:
+        return
+    if not exit_comments_enabled(guild.id) or not exit_comment_private(channel):
         return
     try:
         sent = await member.send(
