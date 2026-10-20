@@ -2918,14 +2918,14 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
         return "castigado"
 
     role_ids = {r.id for r in member.roles}
-    if not orientation_enabled(guild.id) or not personality_required(guild.id):
-        db_clear_tentado(guild_id, user_id)
-        return "no-obligatorio"
     if role_ids & get_eval_role_ids(guild.id):
-        db_clear_tentado(guild_id, user_id)  # se verificó a tiempo
+        db_clear_tentado(guild_id, user_id)  # conservar la confirmación de elección, sea o no obligatoria
         if report:
             await log_embed(guild, "Verificación de personalidad completada", f"{member.mention} completó su verificación de personalidad.", discord.Color.green())
         return "verificado"
+    if not orientation_enabled(guild.id) or not personality_required(guild.id):
+        db_clear_tentado(guild_id, user_id)
+        return "no-obligatorio"
 
     await expel(member, report=report)
     return "expulsado"
