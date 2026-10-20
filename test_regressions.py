@@ -109,7 +109,7 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
               patch.object(b, 'log_embed', new=AsyncMock()) as log):
             result = await b.evaluate_member(777, 99, report=True)
         self.assertEqual(result, "verificado")
-        self.assertEqual(log.await_args.args[1], "Verificación de preferencia completada")
+        self.assertEqual(log.await_args.args[1], "Verificación de personalidad completada")
 
     async def test_member_logs_disabled_until_admin_confirms(self):
         from unittest.mock import patch
