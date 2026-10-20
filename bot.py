@@ -2729,10 +2729,10 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
     if after.bot:
         return  # los bots no pasan por el flujo de verificación
     if after.id == getattr(after.guild, 'owner_id', None):
-        # El propietario no tiene plazos de verificación ni debe recibir sanciones por roles.
+        # Eximir únicamente de verificación; continuar procesando las
+        # condenas y otros cambios de roles que correspondan.
         clear_verification_expiry(after.guild.id, after.id)
         db_clear_tentado(after.guild.id, after.id)
-        return
     if (after.guild.id, after.id) in _condemn_sync_busy:
         return
 

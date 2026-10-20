@@ -46,5 +46,21 @@ class StaffExemptionTests(unittest.TestCase):
         self.assertIn("db_set_verify_pending(",code)
         self.assertIn("clear_verification_expiry(",code)
 
+    def test_owner_exemption_never_bypasses_moderation_event_handlers(self):
+        node = FUNCTIONS["on_member_update"]
+        owner = next(
+            statement for statement in node.body
+            if isinstance(statement, ast.If)
+            and "owner_id" in ast.unparse(statement.test)
+        )
+        self.assertFalse(
+            any(isinstance(step, (ast.Return, ast.Break, ast.Continue))
+                for step in owner.body),
+            "La exención del propietario no debe saltarse las condenas."
+        )
+        code = ast.get_source_segment(SOURCE, node)
+        self.assertLess(code.index("owner_id"), code.index("condemnation_get("))
+        self.assertIn("verification_is_exempt(after)", code)
+
 if __name__=="__main__":
     unittest.main()
