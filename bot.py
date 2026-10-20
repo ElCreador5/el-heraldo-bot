@@ -1638,7 +1638,7 @@ def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
 
     description = get_orientation_embed_intro(guild.id).strip()
     if not orientation_enabled(guild.id):
-        description = "**Verificación de personalidad desactivada temporalmente.**\\n\\n" + description
+        description = "**Verificación de personalidad desactivada temporalmente.**\n\n" + description
     if option_lines:
         description += "\n\n" + "\n".join(option_lines)
     description += "\n\n" + get_orientation_embed_details(guild.id).strip()
@@ -1666,21 +1666,21 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
         role = guild.get_role(int(binding["role_id"]))
         emoji = str(binding["emoji"])
         roles.append(f"{emoji} {role.mention if role else '**Rol eliminado**'}")
-    role_text = "\\n".join(roles) if roles else "**No hay roles seleccionados.**"
+    role_text = "\n".join(roles) if roles else "**No hay roles seleccionados.**"
     return (
-        f"Verificación de personalidad: **{'Activada' if enabled else 'Desactivada'}**\\n"
+        f"Verificación de personalidad: **{'Activada' if enabled else 'Desactivada'}**\n"
         f"Obligatoria: **{'Sí' if required else 'No'}** · "
-        f"Cambio de elección: **{'Permitido' if personality_allow_change(guild.id) else 'Desactivado'}**\\n"
-        f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\\n"
-        f"Tarjeta conservada: **{'Sí' if get_orientation_message_id(guild.id) else 'No'}**\\n"
-        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\\n\\n" + role_text +
-        "\\n\\n**Cómo funciona:** cada servidor ofrece roles de personalidad existentes, con emoji "
+        f"Cambio de elección: **{'Permitido' if personality_allow_change(guild.id) else 'Desactivado'}**\n"
+        f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
+        f"Tarjeta conservada: **{'Sí' if get_orientation_message_id(guild.id) else 'No'}**\n"
+        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\n\n" + role_text +
+        "\n\n**Cómo funciona:** cada servidor ofrece roles de personalidad existentes, con emoji "
         "funcional y permisos de acceso personalizables. Son una elección de participación, no una "
-        "prueba de identidad. La verificación de edad es independiente.\\n"
-        "Selecciona de 1 a 6 roles; el bot no crea ni elimina estos roles al activar o desactivar.\\n"
+        "prueba de identidad. La verificación de edad es independiente.\n"
+        "Selecciona de 1 a 6 roles; el bot no crea ni elimina estos roles al activar o desactivar.\n"
         "Si la elección es obligatoria, los miembros no exentos disponen del plazo configurado "
         "y pueden recibir un aviso preventivo con invitación antes de la expulsión. "
-        "Los moderadores y el dueño están exentos. Desactivar suspende las medidas sin borrar ajustes.\\n"
+        "Los moderadores y el dueño están exentos. Desactivar suspende las medidas sin borrar ajustes.\n"
         "Permisos: los roles pueden permitir Ver canal en canales específicos. "
         "Revisa también permisos heredados de categorías y otros roles antes de modificarlos."
     )
@@ -4441,6 +4441,35 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de personali
 
 
 
+class PersonalityRecoveryDMModal(discord.ui.Modal, title="Editar aviso de recuperación"):
+    message = discord.ui.TextInput(
+        label="Mensaje de recuperación",
+        style=discord.TextStyle.paragraph,
+        placeholder="Usa {servidor}, {razon}, {titulo_embed} y {invitacion}",
+        required=True,
+        max_length=1800,
+    )
+
+    def __init__(self, view: "HeraldoOrientationSetupView") -> None:
+        super().__init__()
+        self.setup_view = view
+        saved = guild_config_get(view.guild_id, "personality_recovery_dm_template") or DM_TEXT
+        self.message.default = (view.pending_dm_template if view.pending_dm_template is not None
+                                else saved)[:1800]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        view = self.setup_view
+        if not await configuration_access(interaction, view.guild_id, view.owner_id):
+            return
+        draft = str(self.message).strip()
+        if "{invitacion}" not in draft and "{invite_url}" not in draft:
+            await interaction.response.send_message(
+                "Incluye {invitacion} para conservar el enlace de recuperación.", ephemeral=True)
+            return
+        view.pending_dm_template = draft  # solo borrador; Guardar hará la escritura
+        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
+
+
 class HeraldoOrientationSetupView(discord.ui.View):
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -4449,6 +4478,11 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_channel_id: int | None = None
         self.pending_bindings: list[dict[str, object]] | None = None
         self.pending_enabled: bool | None = None
+        self.pending_required: bool | None = None
+        self.pending_allow_change: bool | None = None
+        self.pending_dm_template: str | None = None
+        self.toggle_required.label = "Obligatoria: Sí" if personality_required(guild_id) else "Obligatoria: No"
+        self.toggle_change.label = "Cambiar elección: Sí" if personality_allow_change(guild_id) else "Cambiar elección: No"
 
         channel_select = discord.ui.ChannelSelect(
             placeholder="Selecciona el canal de roles/personalidad",
@@ -4487,7 +4521,13 @@ class HeraldoOrientationSetupView(discord.ui.View):
             items.append("Roles → " + ", ".join(role.mention for role in roles if role is not None))
         if self.pending_enabled is not None:
             items.append(f"Personalidad → {'activa' if self.pending_enabled else 'desactivada'}")
-        return "**El Heraldo · Roles de personalidad**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
+        if self.pending_required is not None:
+            items.append(f"Obligatoria → {'Sí' if self.pending_required else 'No'}")
+        if self.pending_allow_change is not None:
+            items.append(f"Permitir cambio de elección → {'Sí' if self.pending_allow_change else 'No'}")
+        if self.pending_dm_template is not None:
+            items.append("DM de recuperación → editado")
+        return "**El Heraldo · Verificación de personalidad**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -4553,9 +4593,29 @@ class HeraldoOrientationSetupView(discord.ui.View):
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
+    @discord.ui.button(label="Obligatoria", style=discord.ButtonStyle.secondary, row=4)
+    async def toggle_required(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        current = self.pending_required if self.pending_required is not None else personality_required(self.guild_id)
+        self.pending_required = not current
+        button.label = "Obligatoria: Sí" if self.pending_required else "Obligatoria: No"
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Cambiar elección", style=discord.ButtonStyle.secondary, row=4)
+    async def toggle_change(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        current = self.pending_allow_change if self.pending_allow_change is not None else personality_allow_change(self.guild_id)
+        self.pending_allow_change = not current
+        button.label = "Cambiar elección: Sí" if self.pending_allow_change else "Cambiar elección: No"
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label="Editar DM de recuperación", style=discord.ButtonStyle.primary, row=4)
+    async def edit_dm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(PersonalityRecoveryDMModal(self))
+
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_channel_id is None and self.pending_bindings is None and self.pending_enabled is None:
+        if (self.pending_channel_id is None and self.pending_bindings is None
+                and self.pending_enabled is None and self.pending_required is None
+                and self.pending_allow_change is None and self.pending_dm_template is None):
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
 
@@ -4576,6 +4636,9 @@ class HeraldoOrientationSetupView(discord.ui.View):
         old_channel_id = get_orientation_channel_id(self.guild_id)
         old_bindings = get_orientation_bindings(self.guild_id)
         old_enabled = orientation_enabled(self.guild_id)
+        old_required = personality_required(self.guild_id)
+        old_allow_change = personality_allow_change(self.guild_id)
+        old_dm = guild_config_get(self.guild_id, "personality_recovery_dm_template")
         try:
             if self.pending_channel_id is not None:
                 guild_config_set(self.guild_id, "orientation_channel_id", str(self.pending_channel_id))
@@ -4600,6 +4663,15 @@ class HeraldoOrientationSetupView(discord.ui.View):
                     await ensure_orientation_system(guild)
                 await interaction.followup.send(f"No pude aplicar los cambios: {note}", ephemeral=True)
                 return
+            # Estos valores no se guardan hasta superar la validación del panel.
+            if self.pending_required is not None:
+                guild_config_set(self.guild_id, "personality_required", "1" if self.pending_required else "0")
+                if not self.pending_required:
+                    clear_personality_pending_for_guild(self.guild_id)
+            if self.pending_allow_change is not None:
+                guild_config_set(self.guild_id, "personality_allow_change", "1" if self.pending_allow_change else "0")
+            if self.pending_dm_template is not None:
+                guild_config_set(self.guild_id, "personality_recovery_dm_template", self.pending_dm_template)
         except (sqlite3.OperationalError, discord.HTTPException) as exc:
             await interaction.followup.send(f"No pude guardar los cambios: {exc}", ephemeral=True)
             return
@@ -4607,6 +4679,11 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_channel_id = None
         self.pending_bindings = None
         self.pending_enabled = None
+        self.pending_required = None
+        self.pending_allow_change = None
+        self.pending_dm_template = None
+        self.toggle_required.label = "Obligatoria: Sí" if personality_required(self.guild_id) else "Obligatoria: No"
+        self.toggle_change.label = "Cambiar elección: Sí" if personality_allow_change(self.guild_id) else "Cambiar elección: No"
         await interaction.edit_original_response(content=self._content(guild) + f"\n\nCambios guardados. {note}", embed=None, view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
@@ -4614,6 +4691,11 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_channel_id = None
         self.pending_bindings = None
         self.pending_enabled = None
+        self.pending_required = None
+        self.pending_allow_change = None
+        self.pending_dm_template = None
+        self.toggle_required.label = "Obligatoria: Sí" if personality_required(self.guild_id) else "Obligatoria: No"
+        self.toggle_change.label = "Cambiar elección: Sí" if personality_allow_change(self.guild_id) else "Cambiar elección: No"
         await interaction.response.edit_message(content=self._content(interaction.guild), embed=None, view=self)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
@@ -4645,6 +4727,16 @@ async def orientation_reaction_add(payload: discord.RawReactionActionEvent) -> N
         return
 
     all_orientation_ids = get_eval_role_ids(guild.id)
+    if not personality_allow_change(guild.id):
+        assigned = {int(item["role_id"]) for item in get_orientation_bindings(guild.id)}
+        if any(r.id in assigned and r.id != target_role.id for r in member.roles):
+            try:
+                message = await channel.fetch_message(payload.message_id)
+                await message.remove_reaction(payload.emoji, member)
+            except discord.HTTPException:
+                pass
+            return
+
     to_remove = [
         role for role in member.roles
         if role.id in all_orientation_ids and role.id != target_role.id and role.is_assignable()
