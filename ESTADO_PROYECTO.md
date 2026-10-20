@@ -1,3 +1,7 @@
+## NH — Formato de Verificación de personalidad (20/10/2026)
+
+**Implementado en Pruebas, pendiente de CI/Discord:** se corrige el texto predeterminado que mostraba escapes literales \n dentro de la tarjeta de personalidad. El lector de textos normaliza también los escapes heredados guardados anteriormente, tanto en introducción como descripción, sin migrar ni sobrescribir valores existentes. Mantiene título, roles, reacciones, colores y referencias de publicaciones; al sincronizar el panel existente se actualiza el embed sin crear otra tarjeta. Regresiones aisladas en \`tests/test_personality_embed_linebreaks.py\`. No declarar verificación en Discord sin prueba real.
+
 ### Seguimiento de comentarios de salida y exenciones (20/10/2026)
 
 Se añadieron regresiones ejecutables de privacidad de canales y segunda lectura de la auditoría de Discord: un acceso individual no moderador o desconocido impide las encuestas; un kick, baneo, error HTTP o falta de permisos también las impide. La solicitud se vincula a su DM y, si falla persistir esa relación, se intenta desactivar el botón sin repetir el aviso. El mantenimiento periódico recupera ediciones pendientes cada 15 minutos; las respuestas que ya se incorporaron a la tarjeta se purgan de SQLite a los 30 días, sin borrar la tarjeta. Las respuestas todavía no incorporadas se conservan para recuperación o revisión. La exención del propietario no detiene las rutas ordinarias de moderación. **Verificación en Discord: todavía no realizada.** No se modificó `main` ni se incorporaron datos privados a Git.

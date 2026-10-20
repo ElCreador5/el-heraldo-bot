@@ -175,10 +175,10 @@ ORIENTATION_EMBED_COLOR = 0x19A7E0
 ORIENTATION_EMBED_INTRO = "Selecciona el rol que te represente reaccionando con el emoji correspondiente:"
 ORIENTATION_EMBED_DETAILS = (
     "Los roles de personalidad permiten elegir cómo deseas participar en esta comunidad. "
-    "Puedes seleccionar una opción y cambiarla posteriormente si el servidor lo permite.\\n\\n"
-    "**¿Cómo funciona?**\\n"
+    "Puedes seleccionar una opción y cambiarla posteriormente si el servidor lo permite.\n\n"
+    "**¿Cómo funciona?**\n"
     "Reacciona con el emoji de la opción elegida para obtener el rol correspondiente. "
-    "Solo puedes conservar una elección a la vez.\\n\\n"
+    "Solo puedes conservar una elección a la vez.\n\n"
     "La elección expresa tu interés y puede desbloquear canales según sus permisos; "
     "no constituye una prueba de identidad ni sustituye la verificación de edad."
 )
@@ -1610,12 +1610,23 @@ def get_orientation_embed_title(guild_id: int) -> str:
     return guild_config_get(guild_id, "orientation_embed_title") or ORIENTATION_EMBED_TITLE
 
 
+def normalize_personality_embed_text(text: str) -> str:
+    """Convierte escapes heredados en saltos reales, sin tocar el texto almacenado.
+
+    Algunas tarjetas anteriores guardaron secuencias literales \n en los campos
+    personalizables. Discord no las interpreta como saltos de línea.
+    """
+    return text.replace("\\r\\n", "\n").replace("\\n", "\n")
+
+
 def get_orientation_embed_intro(guild_id: int) -> str:
-    return guild_config_get(guild_id, "orientation_embed_intro") or ORIENTATION_EMBED_INTRO
+    value = guild_config_get(guild_id, "orientation_embed_intro") or ORIENTATION_EMBED_INTRO
+    return normalize_personality_embed_text(value)
 
 
 def get_orientation_embed_details(guild_id: int) -> str:
-    return guild_config_get(guild_id, "orientation_embed_details") or ORIENTATION_EMBED_DETAILS
+    value = guild_config_get(guild_id, "orientation_embed_details") or ORIENTATION_EMBED_DETAILS
+    return normalize_personality_embed_text(value)
 
 
 def get_orientation_embed_color(guild_id: int) -> int:
