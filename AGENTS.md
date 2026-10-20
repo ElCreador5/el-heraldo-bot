@@ -25,8 +25,19 @@ Este archivo es el punto de entrada para ChatGPT, Codex, Claude y cualquier agen
 - Actualizar los tres documentos de coordinación en el mismo trabajo cuando cambie su información.
 - No registrar tokens, credenciales, IDs secretos, datos de usuarios, transcripciones privadas ni evidencias sensibles.
 - No automatizar una cuenta personal de Discord con tokens de usuario/self-bots; preferir bot oficial y cuentas de prueba autorizadas.
-- Si hay cambios concurrentes, reconciliar primero mediante commits y PR; no dar por válida una versión antigua de los documentos.
+- Si hay cambios concurrentes, reconciliar primero los commits y documentos relevantes sin sobrescribir ni forzar referencias; una PR ya no es obligatoria.
 
+
+## NH — Flujo ágil de actualizaciones directas (decisión del propietario, 2026-10-20)
+
+**Este apartado actualiza y prevalece sobre las antiguas exigencias administrativas de PR, revisión externa y checks obligatorios para actualizaciones normales del código.** El propietario optó por un flujo sencillo y directo, manteniendo controles técnicos proporcionales al riesgo.
+
+- **`main` y `Pruebas` siguen siendo las únicas ramas permanentes.** Se puede actualizar directamente `main` si el propietario autorizó expresamente el cambio concreto; no exigir otra confirmación por el mismo alcance. `Pruebas` se usa para trabajos que necesiten ensayos o para los que el propietario elija desarrollar allí.
+- **Sin PR obligatoria, sin ramas temporales ni checks requeridos como condición de publicación.** La regla activa de GitHub para `main` prohíbe borrar la rama o hacer actualizaciones no fast-forward. La ejecución automática de tests no se elimina, pero sus resultados se deben verificar, documentar y corregir si fallan; no asumir que SUCCESS significa prueba real en Discord.
+- **Mantener revisión técnica mínima:** comprobar HEAD/SHA fresco y cambios concurrentes, leer el código afectado, conservar funcionalidades y comprobar sintaxis/regresiones relevantes. Corregir defectos sin incorporar toda la rama `Pruebas` ni funciones no autorizadas.
+- **Preservar SQLite y datos privados:** una modificación de logs/interfaz sin migraciones ni cambios de esquema puede publicarse directamente; migraciones, acciones destructivas, secretos y activaciones del sistema H-03 exigen respaldo recuperable y las comprobaciones específicas correspondientes. No convertir la simplificación de GitHub en un permiso para destruir datos.
+- **Producción:** considerar el despliegue automático de Railway al escribir en `main`, comprobar el estado real del despliegue, errores y pruebas. Informar lo implementado, lo probado y cualquier límite real; no prometer comportamiento verificado en Discord antes de comprobarlo.
+- Esta decisión **no suprime** el requisito de autorización específica del propietario para cambios de producción: una autorización anterior al mismo objetivo sigue válida sin repetir preguntas. Nunca usar force push.
 
 ## Conservación de funcionalidades estables de producción (decisión del propietario, 2026-10-12)
 - Toda funcionalidad que ya funciona correctamente en `main` se conserva en `Pruebas` sin rediseño ni reimplementación innecesaria.
@@ -60,7 +71,7 @@ Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro ag
 - **«Añade a NH: [nueva regla]»**: verificar compatibilidad con las decisiones existentes y, con la aprobación del propietario, registrar la norma en el apartado pertinente de este contrato, añadir o actualizar regresiones y anotar la decisión cuando cambie un acuerdo vigente.
 - **«Actualiza NH»**: modificar una regla previamente aprobada solo conforme a la nueva decisión del propietario, preservando trazabilidad y pruebas.
 
-**Límites invariables:** invocar NH no autoriza modificar, fusionar ni desplegar `main`; omitir respaldos, controles de seguridad, confirmaciones administrativas ni pruebas; acceder a datos privados; ni declarar verificación real en Discord sin realizarla. Toda implementación mantiene los requisitos de aprobación, rama, pruebas, documentación y continuidad de este proyecto.
+**Límites invariables:** invocar NH por sí solo no autoriza cambios en `main`, pero sí puede aplicarse allí cuando el propietario lo haya autorizado; no autoriza omitir respaldos o controles **necesarios según el riesgo**, confirmaciones de configuración administrativa ni pruebas relevantes, acceder a datos privados o declarar verificación real en Discord sin realizarla. Se aplica el flujo ágil de 2026-10-20 sin volver a exigir PR ni checks bloqueantes.
 
 ## Contrato transversal de interfaz y controles de aceptación (obligatorio, 2026-10-19)
 
@@ -107,7 +118,7 @@ Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro ag
 4. **Discord:** las pruebas automáticas no prueban interacciones reales; anotar `VERIFICADO EN DISCORD` solo para recorridos ejecutados en El Heraldo Test/Heraldo's Lab y documentar lo pendiente.
 5. **Informe:** indicar por funcionalidad IMPLEMENTADO / VERIFICADO AUTOMÁTICAMENTE / VERIFICADO EN DISCORD / DETECTADO / PENDIENTE, SHA, archivos, comandos, resultados, riesgos y efecto de desplegar. Si falta una prueba obligatoria, el estado es **NO APROBADO o PENDIENTE**; nunca "terminado" por suposición.
 6. **Propagación:** si se descubre un defecto de regla transversal, identificar los otros paneles susceptibles, añadir regresión general reutilizable y corregir el alcance autorizado sin reescribir funciones que ya funcionan.
-7. **Puerta técnica:** las pruebas de interfaz y de borradores deben ejecutarse dentro de GitHub Actions para `Pruebas`. Si es posible, configurar las comprobaciones como checks requeridos; sin protección efectiva de rama, CI detecta problemas pero no impide que alguien haga push. No proclamar bloqueo técnico si no se configuró realmente.
+7. **Puerta técnica:** las pruebas de interfaz y de borradores deben ejecutarse dentro de GitHub Actions para `Pruebas`. Los checks se ejecutan como verificación informativa y no bloqueante; cualquier fallo exige revisión y corrección, pero no restablecer por defecto restricciones administrativas. No proclamar bloqueo técnico si no se configuró realmente.
 
 **Criterio de cierre:** ninguna interfaz se declara terminada con botones muertos, guardados implícitos, cancelaciones persistentes, inconsistencia de colores, duplicados o pruebas faltantes sin registrar expresamente el problema y detener su aceptación.
 

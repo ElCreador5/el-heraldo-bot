@@ -1,3 +1,9 @@
+## Normas Heraldo — proceso simplificado para `main` (2026-10-20)
+
+El propietario eliminó los bloqueos administrativos que retrasaban la publicación: GitHub confirmó que «Protección de main.» conserva únicamente `deletion` y `non_fast_forward`. No se exige PR, revisión externa ni checks de estado requeridos. Una autorización expresa de producción permite actualizar `main` directamente sin pedirla otra vez por el mismo cambio. El desarrollo habitual sigue en `Pruebas` salvo decisión específica; no arrastrar funciones ajenas al parche. Se mantienen pruebas automáticas no bloqueantes, compilación, revisión de SHA/concurrencia, registro de resultado y protección proporcional para SQLite, respaldos recuperables y acciones sensibles H-03. Actualizar el código de producción puede disparar Railway automáticamente.
+
+El 20/10/2026 se publicó en `main` la corrección aislada de logs de KICK de verificación, commit `647b9f545a9a1d974726915cfcc33d8372a122c9`, sin migrar SQLite y preservando la tarjeta única «Miembro expulsado». Las verificaciones finales y la interacción de Discord requieren consulta separada: no declarar probadas sin evidencia.
+
 ## DM condicionado a expulsión confirmada — 2026-10-19
 
 Decisión del propietario: **si Discord no completó la expulsión, no enviar DM de expulsión, ni crear una invitación de recuperación**. El orden anterior (notificar primero) queda expresamente reemplazado. Mantener el aviso necesario tras la sanción confirmada (incluidos avisos de laboratorio), sin prometer entrega si Discord ya no permite el DM. Excluir al dueño del servidor de la verificación por plazos y sus reintentos. Inicialmente implementar y probar en `Pruebas`; no desplegar `main` al establecer esta decisión.
