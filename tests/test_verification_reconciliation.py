@@ -47,6 +47,7 @@ class VerificationReconciliationTests(unittest.IsolatedAsyncioTestCase):
             "get_verify_role_id":lambda _:41,
             "get_eval_role_ids":lambda _:{42},
             "verify_enabled":lambda _:self.enabled,
+            "verification_is_exempt":lambda m:getattr(m, "staff", False),
             "heraldo_is_test":lambda:False,
             "condemnation_get":lambda gid,uid:True if uid in self.condemned else None,
             "db_get":lambda gid,uid:self.rows.get((gid,uid)),
@@ -88,6 +89,13 @@ class VerificationReconciliationTests(unittest.IsolatedAsyncioTestCase):
         self.enabled = False
         self.assertEqual(await self.fn(Guild([member(1)])), ((),(1,),()))
         self.assertFalse(self.enrolled)
+
+    async def test_staff_are_not_rearmed_or_reviewed(self):
+        protected = member(70)
+        protected.staff = True
+        ordinary = member(71)
+        self.assertEqual(await self.fn(Guild([protected, ordinary])), ((71,), (), ()))
+        self.assertEqual([uid for _,uid,_ in self.enrolled],[71])
 
     async def test_batch_guard_and_no_remote_punishment(self):
         rearmed,review,both = await self.fn(Guild([member(i) for i in range(30)]))

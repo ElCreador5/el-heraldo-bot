@@ -134,6 +134,23 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
         self.log.assert_not_awaited()
         self.assert_resolved()
 
+    async def test_moderator_permissions_cancel_both_verification_timers(self):
+        for permission in ("administrator","manage_guild","manage_messages",
+                           "moderate_members","kick_members","ban_members"):
+            with self.subTest(permission=permission):
+                self.member.guild_permissions = NS(**{permission:True})
+                await b.evaluate_verify_timeout(self.guild_id, self.user_id)
+                await b.evaluate_sin_verificado(self.guild_id, self.user_id)
+                self.member.kick.assert_not_awaited()
+                self.member.ban.assert_not_awaited()
+                self.log.assert_not_awaited()
+                self.assert_resolved()
+                self.member.guild_permissions = NS()
+                b.db_set_verify_pending(self.guild_id, self.user_id,
+                    self.now - b.timedelta(minutes=10))
+                b.db_set_sin_verificado(self.guild_id, self.user_id,
+                    self.now - b.timedelta(minutes=10))
+
     async def test_same_member_in_other_guild_is_not_blocked(self):
         other_id = 908002
         b.db_set_verify_pending(other_id, self.user_id, self.now - b.timedelta(minutes=10))

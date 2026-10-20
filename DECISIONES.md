@@ -1,3 +1,7 @@
+## NH — Alcance de exenciones de verificación (2026-10-20)
+
+El propietario exime de verificación obligatoria a dueño, administradores y moderadores con permisos reales de Discord. Las exenciones afectan exclusivamente a verificación, orientación/personalidad y consecuencias de no completar el proceso: no eximen de otras sanciones. Al perder permisos, conceder un plazo completo y nuevo, sin recuperar plazos anteriores ni alterar roles ajenos. Mantener las comprobaciones antes de sancionar y después de reinicios.
+
 ## Raid Protection — guardado directo como confirmación (2026-10-20)
 
 El propietario requiere que pulsar «Guardar cambios» sea suficiente: eliminar la confirmación posterior y actualizar inmediatamente el mismo panel con los valores guardados, sin conservar indicadores «pendiente». La pulsación de Guardar constituye la confirmación administrativa explícita; permanecerán las validaciones de permisos, conflicto concurrente, integridad SQLite, Cancelar/Descartar sin guardar y conservación del motor antiraid. Aplicado selectivamente en `main@317ed866`.

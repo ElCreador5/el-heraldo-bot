@@ -2276,7 +2276,7 @@ async def on_member_join(member: discord.Member) -> None:
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         queue_join_roles(member)
 
-    if verify_enabled(member.guild.id) and member.id != getattr(member.guild, 'owner_id', None):
+    if verify_enabled(member.guild.id) and not verification_is_exempt(member):
         waiting_screening = (
             join_roles_wait_screening(member.guild.id)
             and (join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id))
@@ -2575,6 +2575,24 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
         db_clear_verify_pending(after.guild.id, after.id)
         return
 
+    # La exención no altera las rutas de condena que se procesaron arriba.
+    if verification_is_exempt(after):
+        clear_verification_expiry(after.guild.id, after.id)
+        db_clear_tentado(after.guild.id, after.id)
+        return
+
+    # Si un moderador pierde sus permisos, iniciar un plazo NUEVO, jamás aplicar
+    # la marca antigua. No retirar ni alterar roles al reactivar la obligación.
+    if (verification_is_exempt(before) and verify_enabled(after.guild.id)
+            and not getattr(after, "pending", False)
+            and get_verify_role_id(after.guild.id) not in after_role_ids
+            and not (after_role_ids & get_eval_role_ids(after.guild.id))):
+        record = db_get(after.guild.id, after.id)
+        if record is None or record["verify_pending_at"] is None:
+            now = datetime.now(timezone.utc)
+            db_set_verify_pending(after.guild.id, after.id, now)
+            asyncio.create_task(schedule_verify_timeout(after.guild.id, after.id, now))
+
     # Flujos normales de verificación; una condena activa ya salió por arriba.
     # Join Roles que esperan Esperar aceptación de reglas se asignan al completar la pantalla.
     if (
@@ -2640,11 +2658,32 @@ def clear_verification_expiry(guild_id: int, user_id: int) -> None:
         conn.close()
 
 
+def verification_is_exempt(member: discord.Member) -> bool:
+    """Propietario y personal con permisos reales de moderación: nunca vencer verificaciones.
+
+    No usar nombres de roles ni eximir al miembro de la moderación ordinaria.
+    Los permisos efectivos de Discord reflejan también los roles configurados.
+    """
+    guild = getattr(member, "guild", None)
+    if guild is not None and member.id == getattr(guild, "owner_id", None):
+        return True
+    perms = getattr(member, "guild_permissions", None)
+    return bool(perms is not None and any(
+        getattr(perms, permission, False)
+        for permission in ("administrator", "manage_guild", "manage_messages",
+                           "moderate_members", "kick_members", "ban_members")
+    ))
+
+
 async def run_verification_expiry(guild_id: int, user_id: int, evaluator) -> None:
     guild = bot.get_guild(guild_id)
-    if guild is not None and user_id == getattr(guild, "owner_id", None):
-        clear_verification_expiry(guild_id, user_id)
-        return
+    if guild is not None:
+        member = guild.get_member(user_id)
+        if (member is not None and verification_is_exempt(member)
+                or user_id == getattr(guild, "owner_id", None)):
+            clear_verification_expiry(guild_id, user_id)
+            db_clear_tentado(guild_id, user_id)
+            return
     key = (guild_id, user_id)
     if key in _verification_expiry_inflight:
         return
@@ -2733,7 +2772,7 @@ async def reconcile_untracked_verifications_for_guild(guild: discord.Guild) -> t
     inconsistent: list[int] = []
     # No depender de que la caché esté completa después de un largo período desconectado.
     async for member in guild.fetch_members(limit=None):
-        if member.bot or member.id == getattr(guild, 'owner_id', None):
+        if member.bot or verification_is_exempt(member):
             continue
         roles = {role.id for role in member.roles}
         if unverified_id not in roles:
@@ -2862,7 +2901,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     if member is None:
         db_clear_tentado(guild_id, user_id)  # ya no está, nada que hacer
         return "ausente"
-    if member.id == getattr(guild, "owner_id", None):
+    if verification_is_exempt(member):
         db_clear_tentado(guild_id, user_id)
         clear_verification_expiry(guild_id, user_id)
         return "exento"
@@ -2888,7 +2927,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
 # ---------------------------------------------------------------------------
 
 async def expel(member: discord.Member, report: bool = True) -> None:
-    if member.id == getattr(member.guild, "owner_id", None):
+    if verification_is_exempt(member):
         db_clear_tentado(member.guild.id, member.id)
         clear_verification_expiry(member.guild.id, member.id)
         return
