@@ -1,3 +1,13 @@
+## Raid Protection — publicación selectiva oficial (2026-10-20)
+
+**IMPLEMENTADO EN PRODUCCIÓN:** GitHub `main@e607ce7af38560a694e8c2095871861f8a125178` (base `647b9f5`, actualización fast-forward); solo cambió `bot.py`. Se trasladaron el editor de cinco parámetros, niveles Moderada/Equilibrada/Estricta, valores personalizados, ayudas, selección marcada y confirmación transaccional específica para main con comprobación de propietario/permisos y concurrencia. Se preservó la corrección simultánea de logs de expulsión. No se modificó esquema SQLite, motor antiraid ni sanciones; no se fusionó Pruebas.
+
+**VERIFICADO AUTOMÁTICAMENTE:** ejecución aislada `39392746095` sobre el candidato exacto: compilación, dependencias, suite de regresiones vigente de main, controles de borrador/permisos/confirmación y SQLite desechable: SUCCESS. GitHub Actions de `main@e607ce7`: `python-checks` SUCCESS, Supabase Preview SUCCESS. Railway producción: despliegue `0de1ab67-eee4-44cf-864b-d6c94e3a68f6` SUCCESS, servicio Online, un despliegue activo y sin errores en los registros de arranque consultados.
+
+**VERIFICADO EN DISCORD:** el propietario comunicó que probó satisfactoriamente la interfaz en Discord Test. No se ha ejecutado validación interactiva independiente de la interfaz recién publicada en Discord oficial. **RESPALDOS:** antes del cambio se verificó la existencia de respaldos históricos en Supabase, pero NO se creó un respaldo nuevo ni se probó restauración de SQLite productiva en esta operación; actualización exclusivamente de interfaz sin migraciones según política NH de 2026-10-20. **RIESGO RESIDUAL:** un SUCCESS de Railway no certifica todos los botones en el servidor oficial. **OBSIDIAN:** conexión externa no comprobada; no actualizado.
+
+**SIGUIENTE ETAPA:** comparar capacidades de Pruebas frente a main antes de decidir la reconstrucción de la rama; no eliminar Pruebas sin inventario y acuerdo del propietario.
+
 ## Actualización de NH: GitHub sin PR ni checks obligatorios (2026-10-20)
 
 Confirmado con lectura de GitHub: reglas activas de `main` = únicamente `deletion` y `non_fast_forward`; `pull_request` y `required_status_checks` desactivadas. `AGENTS.md` define el proceso ágil, decisión añadida a `DECISIONES.md`; pruebas y protección de datos siguen vigentes, sin exigencias administrativas repetidas. `main@647b9f5` incluye parche aislado de registros duplicados de expulsión de verificación y activa `python-checks` en push. No confundir commit con entrega Discord validada. Esta documentación está en `Pruebas` y su escritura puede redesplegar Railway Test. Obsidian externo no accesible.
