@@ -3012,7 +3012,7 @@ def render_personality_recovery_dm(guild: discord.Guild, invite_url: str) -> str
         "invitacion": invite_url or "No disponible; solicita una invitación al equipo.",
         "invite_url": invite_url or "No disponible",
     }
-    return re.sub(r"\\{(servidor|razon|titulo_embed|invitacion|invite_url)\\}",
+    return re.sub(r"\{(servidor|razon|titulo_embed|invitacion|invite_url)\}",
                   lambda match: values[match.group(1)], template)[:1900]
 
 

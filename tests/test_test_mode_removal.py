@@ -182,7 +182,7 @@ class BanPolicyTests(unittest.IsolatedAsyncioTestCase):
     async def test_successful_personality_kick_sends_planned_dm_first(self):
         events = []
         kick = AsyncMock(side_effect=lambda *args, **kw: events.append("kick"))
-        dm = AsyncMock(side_effect=lambda *a, **kw: events.append("dm"))
+        dm = AsyncMock(side_effect=lambda *a, **kw: (events.append("dm"), True)[1])
         mark = MagicMock(side_effect=lambda *a: events.append("mark"))
         fn = isolated("expel", ns={
             "db_get": lambda *args: {"dm_sent": False},
