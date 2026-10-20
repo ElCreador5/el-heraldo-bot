@@ -6,7 +6,7 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - El Heraldo arma un respaldo de 300s (SIN_VERIFICAR_WINDOW): si esa expulsión no
      ocurre, expulsa directo, sin DM.
 
-2. VERIFICACIÓN DE ORIENTACIÓN (Tentad@ -> rol de orientación)
+2. VERIFICACIÓN DE VERIFICACIÓN DE PERSONALIDAD (Tentad@ -> rol de personalidad)
    - Tentad@ (TENTADO_ROLE_ID) se otorga al pasar la verificación de edad (botón de
      /verify).
    - El Heraldo arma un timer de 10 min (VERIFICATION_WINDOW). Si vence sin que el
@@ -157,7 +157,7 @@ CONDEMNED_EMOJI = "☠️"
 CONDEMNATION_MAX_MINUTES = 10 * 365 * 24 * 60
 VERIFICATION_WINDOW = timedelta(minutes=10)
 
-# --- Orientación / Reaction Roles ------------------------------------------
+# --- Personalidad / Reaction Roles ------------------------------------------
 # El Heraldo NO crea, renombra ni elimina roles. El administrador selecciona
 # entre 1 y 6 roles existentes; el emoji se obtiene automáticamente del propio rol.
 ORIENTATION_MIN_ROLES = 1
@@ -169,18 +169,17 @@ ORIENTATION_ROLE_DEFINITIONS = (
     ("orientation_rr_gay", "Gay", "🥒"),
     ("orientation_rr_bisex", "Bisex", "🚻"),
 )
-ORIENTATION_EMBED_TITLE = "ORIENTACIÓN"
+ORIENTATION_EMBED_TITLE = "VERIFICACIÓN DE PERSONALIDAD"
 ORIENTATION_EMBED_COLOR = 0x19A7E0
 ORIENTATION_EMBED_INTRO = "Selecciona el rol que te represente reaccionando con el emoji correspondiente:"
 ORIENTATION_EMBED_DETAILS = (
-    "Estos roles permiten definir tu orientación dentro del servidor. "
-    "Si tu preferencia cambia, puedes seleccionar otra opción.\n\n"
-    "**¿Cómo funciona?**\n"
-    "Reacciona con el emoji correspondiente para recibir el rol asociado. "
-    "Solo puedes mantener una orientación activa a la vez. Al elegir otra, "
-    "la anterior será reemplazada.\n\n"
-    "Esto certifica que eres una persona y tu participación en el servidor.\n"
-    "Si se detecta que no posees un rol de estos serás expulsado por sospecha."
+    "Los roles de personalidad permiten elegir cómo deseas participar en esta comunidad. "
+    "Puedes seleccionar una opción y cambiarla posteriormente si el servidor lo permite.\\n\\n"
+    "**¿Cómo funciona?**\\n"
+    "Reacciona con el emoji de la opción elegida para obtener el rol correspondiente. "
+    "Solo puedes conservar una elección a la vez.\\n\\n"
+    "La elección expresa tu interés y puede desbloquear canales según sus permisos; "
+    "no constituye una prueba de identidad ni sustituye la verificación de edad."
 )
 
 # --- Tarjeta de condena ----------------------------------------------------
@@ -1491,12 +1490,31 @@ def get_condenado_role_id(guild_id: int) -> int:
 
 
 def get_eval_role_ids(guild_id: int) -> set[int]:
-    """Roles seleccionados que satisfacen la verificación de orientación."""
+    """Roles seleccionados que satisfacen la verificación de personalidad."""
     return {int(item["role_id"]) for item in get_orientation_bindings(guild_id)}
 
 
 def orientation_enabled(guild_id: int) -> bool:
     return guild_config_get(guild_id, "orientation_enabled") == "1"
+
+
+def personality_required(guild_id: int) -> bool:
+    """Las instalaciones existentes conservan su obligatoriedad hasta cambiarla."""
+    return guild_config_get(guild_id, "personality_required") != "0"
+
+
+def personality_allow_change(guild_id: int) -> bool:
+    return guild_config_get(guild_id, "personality_allow_change") != "0"
+
+
+def clear_personality_pending_for_guild(guild_id: int) -> None:
+    """Suspender plazos de personalidad sin alterar roles ni otras verificaciones."""
+    conn = db_connect()
+    try:
+        conn.execute("UPDATE guild_members SET tentado_at = NULL WHERE guild_id = ?", (guild_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_orientation_channel_id(guild_id: int) -> int:
@@ -1619,6 +1637,8 @@ def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
             option_lines.append(f"{binding['emoji']}  {role.mention}")
 
     description = get_orientation_embed_intro(guild.id).strip()
+    if not orientation_enabled(guild.id):
+        description = "**Verificación de personalidad desactivada temporalmente.**\\n\\n" + description
     if option_lines:
         description += "\n\n" + "\n".join(option_lines)
     description += "\n\n" + get_orientation_embed_details(guild.id).strip()
@@ -1639,41 +1659,41 @@ def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
 
 def orientation_setup_summary(guild: discord.Guild) -> str:
     enabled = orientation_enabled(guild.id)
+    required = personality_required(guild.id)
     channel = guild.get_channel(get_orientation_channel_id(guild.id))
     roles = []
     for binding in get_orientation_bindings(guild.id):
         role = guild.get_role(int(binding["role_id"]))
         emoji = str(binding["emoji"])
         roles.append(f"{emoji} {role.mention if role else '**Rol eliminado**'}")
-
-    role_text = "\n".join(roles) if roles else "**No hay roles seleccionados.**"
+    role_text = "\\n".join(roles) if roles else "**No hay roles seleccionados.**"
     return (
-        f"Estado: **{'Activo' if enabled else 'Desactivado'}**\n"
-        f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
-        f"Tarjeta administrada: **{'Sí' if enabled else 'No'}**\n"
-        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\n\n"
-        + role_text
-        + "\n\n**Cómo funciona:** El Heraldo establece un sistema para la selección de roles "
-          "obligatorios usando **roles que ya existen en tu servidor**. Puedes seleccionar de **1 a 6** "
-          "roles; El Heraldo toma automáticamente el emoji incluido en cada rol. No crea, renombra ni elimina esos roles. "
-          "Estos roles complementan la verificación, ayudan a garantizar participación dentro del servidor "
-          "y sirven como una señal adicional de que el miembro es humano.\n\n"
-          "• Después de verificar su edad, el miembro debe seleccionar uno de los roles configurados "
-          "antes de que venza el temporizador de **10 minutos**.\n"
-          "• Si no selecciona ninguno dentro del plazo, El Heraldo lo expulsa y envía una invitación "
-          "de recuperación de **un solo uso** para darle una oportunidad de volver a ingresar.\n"
-          "• Los permisos de los roles siguen siendo completamente tuyos y pueden personalizar la vista del servidor."
+        f"Verificación de personalidad: **{'Activada' if enabled else 'Desactivada'}**\\n"
+        f"Obligatoria: **{'Sí' if required else 'No'}** · "
+        f"Cambio de elección: **{'Permitido' if personality_allow_change(guild.id) else 'Desactivado'}**\\n"
+        f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\\n"
+        f"Tarjeta conservada: **{'Sí' if get_orientation_message_id(guild.id) else 'No'}**\\n"
+        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\\n\\n" + role_text +
+        "\\n\\n**Cómo funciona:** cada servidor ofrece roles de personalidad existentes, con emoji "
+        "funcional y permisos de acceso personalizables. Son una elección de participación, no una "
+        "prueba de identidad. La verificación de edad es independiente.\\n"
+        "Selecciona de 1 a 6 roles; el bot no crea ni elimina estos roles al activar o desactivar.\\n"
+        "Si la elección es obligatoria, los miembros no exentos disponen del plazo configurado "
+        "y pueden recibir un aviso preventivo con invitación antes de la expulsión. "
+        "Los moderadores y el dueño están exentos. Desactivar suspende las medidas sin borrar ajustes.\\n"
+        "Permisos: los roles pueden permitir Ver canal en canales específicos. "
+        "Revisa también permisos heredados de categorías y otros roles antes de modificarlos."
     )
 
 
 async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     """Sincroniza la tarjeta y reacciones usando roles existentes seleccionados."""
     if not orientation_enabled(guild.id):
-        return False, "El módulo de orientación está desactivado."
+        return False, "El módulo de personalidad está desactivado."
 
     channel = guild.get_channel(get_orientation_channel_id(guild.id))
     if not isinstance(channel, discord.TextChannel):
-        return False, "No hay un canal de orientación válido configurado."
+        return False, "No hay un canal de personalidad válido configurado."
 
     me = guild.me
     if me is None:
@@ -1747,20 +1767,20 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
         except discord.NotFound:
             message = None
         except (discord.Forbidden, discord.HTTPException):
-            return False, "No pude acceder a la tarjeta de orientación guardada."
+            return False, "No pude acceder a la tarjeta de personalidad guardada."
 
     if message is None:
         try:
             message = await channel.send(embed=build_orientation_embed(guild))
         except (discord.Forbidden, discord.HTTPException):
-            return False, "No pude publicar la tarjeta de orientación."
+            return False, "No pude publicar la tarjeta de personalidad."
         guild_config_set(guild.id, "orientation_message_id", str(message.id))
         guild_config_set(guild.id, "orientation_message_channel_id", str(channel.id))
     else:
         try:
             await message.edit(embed=build_orientation_embed(guild), content=None, view=None)
         except (discord.Forbidden, discord.HTTPException):
-            return False, "No pude actualizar la tarjeta de orientación."
+            return False, "No pude actualizar la tarjeta de personalidad."
 
     try:
         await message.clear_reactions()
@@ -1769,41 +1789,23 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     except (discord.Forbidden, discord.HTTPException):
         return False, "La tarjeta existe, pero no pude sincronizar sus reacciones."
 
-    return True, f"Orientación sincronizada en {channel.mention}."
+    return True, f"Personalidad sincronizada en {channel.mention}."
 
 
 async def disable_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
-    """Desactiva el módulo sin modificar ningún rol del servidor."""
+    """Suspende el sistema sin borrar vínculos, roles ni panel administrado."""
     guild_config_set(guild.id, "orientation_enabled", "0")
-
+    clear_personality_pending_for_guild(guild.id)
+    # La tarjeta se conserva para reactivación sin reconstruir enlaces ni roles.
     message_id = get_orientation_message_id(guild.id)
-    channel_id = get_orientation_message_channel_id(guild.id)
-    channel = guild.get_channel(channel_id) if channel_id else None
+    channel = guild.get_channel(get_orientation_message_channel_id(guild.id))
     if message_id and isinstance(channel, discord.TextChannel):
         try:
             message = await channel.fetch_message(message_id)
-            await message.delete()
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            pass
-
-    guild_config_set(guild.id, "orientation_message_id", "0")
-    guild_config_set(guild.id, "orientation_message_channel_id", "0")
-    guild_config_set(guild.id, "orientation_role_bindings", "[]")
-    guild_config_set(guild.id, "orientation_created_role_ids", "[]")
-
-    # Limpia únicamente referencias antiguas de configuración. Nunca borra roles.
-    conn = db_connect()
-    conn.execute(
-        """
-        DELETE FROM guild_resources
-        WHERE guild_id = ? AND resource_type = 'role'
-          AND (config_key LIKE 'orientation_rr_%' OR config_key LIKE 'orientation_role_%')
-        """,
-        (guild.id,),
-    )
-    conn.commit()
-    conn.close()
-    return True, "Orientación desactivada. La tarjeta y sus vínculos fueron limpiados; los roles del servidor no se modificaron."
+            await message.edit(embed=build_orientation_embed(guild))
+        except discord.HTTPException:
+            return True, "Verificación desactivada y conservada; no pude actualizar la tarjeta publicada."
+    return True, "Verificación de personalidad desactivada sin borrar roles, vínculos ni tarjeta."
 
 
 def get_recovery_channel_id(guild_id: int) -> int:
@@ -1901,7 +1903,7 @@ VERIFY_DM_TITLE_DEFAULT = "HAS CRUZADO EL UMBRAL"
 VERIFY_DM_BODY_DEFAULT = (
     "Pero antes de que puedas perderte entre las puertas del paraíso, hay dos pasos que separan a los curiosos de los que realmente pertenecen:\n\n"
     "**Verifícate** en el canal de verificación — sin esto, sigues del otro lado del portón.\n\n"
-    "Luego, elige tus roles de orientación cuando nadie está mirando.\n\n"
+    "Luego, elige tus roles de personalidad cuando nadie está mirando.\n\n"
     "Cada rol abre una puerta distinta. Elige bien.\n\n"
     "¿Dudas? Revisa el canal de dudas del servidor."
 )
@@ -2067,7 +2069,7 @@ async def on_ready() -> None:
             for key, channel_id in legacy_channels.items():
                 if channel_id and guild.get_channel(channel_id) and guild_resource_get(guild.id, "channel", key) is None:
                     guild_resource_set(guild.id, "channel", key, channel_id)
-            # La orientación se reconcilia una sola vez más abajo con los otros paneles.
+            # La personalidad se reconcilia una sola vez más abajo con los otros paneles.
         except Exception:
             traceback.print_exc()
 
@@ -2421,7 +2423,7 @@ def member_departure_ban_details(
 
 # Evitar dos tarjetas por la misma expulsión de verificación, sin ocultar
 # expulsiones externas ni perder el único registro cuando falle su publicación.
-_ORIENTATION_KICK_REASON = "No definió su orientación"
+_ORIENTATION_KICK_REASON = "No definió su personalidad"
 _ORIENTATION_LOG_WINDOW = 30.0
 _orientation_kick_log_pending: dict[tuple, asyncio.Event] = {}
 _orientation_kick_log_sent: dict[tuple, float] = {}
@@ -2636,8 +2638,8 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
             asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
             print(f"{after} recibió Sin Verificar — respaldo armado.")
 
-    # IMPORTANTE: asignar el rol de verificación/orientación manualmente NO inicia
-    # el temporizador. La orientación solo nace cuando El Heraldo procesa una
+    # IMPORTANTE: asignar el rol de verificación/personalidad manualmente NO inicia
+    # el temporizador. La personalidad solo nace cuando El Heraldo procesa una
     # verificación nueva desde su botón. Esto protege a miembros antiguos y evita
     # aplicar expulsiones retroactivas al instalar o reconfigurar el bot.
 
@@ -2912,14 +2914,17 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
 
     punish_id = hp_punish_role_id(guild_id)
     if punish_id and any(r.id == punish_id for r in member.roles):
-        db_clear_tentado(guild_id, user_id)  # castigado por el honeypot: no se expulsa por falta de orientación
+        db_clear_tentado(guild_id, user_id)  # castigado por el honeypot: no se expulsa por falta de personalidad
         return "castigado"
 
     role_ids = {r.id for r in member.roles}
+    if not orientation_enabled(guild.id) or not personality_required(guild.id):
+        db_clear_tentado(guild_id, user_id)
+        return "no-obligatorio"
     if role_ids & get_eval_role_ids(guild.id):
         db_clear_tentado(guild_id, user_id)  # se verificó a tiempo
         if report:
-            await log_embed(guild, "Verificación de preferencia completada", f"{member.mention} completó su verificación de preferencia.", discord.Color.green())
+            await log_embed(guild, "Verificación de personalidad completada", f"{member.mention} completó su verificación de personalidad.", discord.Color.green())
         return "verificado"
 
     await expel(member, report=report)
@@ -2931,7 +2936,8 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
 # ---------------------------------------------------------------------------
 
 async def expel(member: discord.Member, report: bool = True) -> None:
-    if verification_is_exempt(member):
+    if (verification_is_exempt(member) or not orientation_enabled(member.guild.id)
+            or not personality_required(member.guild.id)):
         db_clear_tentado(member.guild.id, member.id)
         clear_verification_expiry(member.guild.id, member.id)
         return
@@ -2950,7 +2956,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
 
     db_clear_tentado(member.guild.id, member.id)
     try:
-        await heraldo_kick(member, reason="No definió su orientación", send_notice=False)
+        await heraldo_kick(member, reason="No definió su personalidad", send_notice=False)
         kicked = True
     except discord.HTTPException:
         kicked = False
@@ -2981,7 +2987,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
     extra.append(("Resultado", "Expulsado" if kicked else "No se pudo expulsar; revisar jerarquía"))
     embed = member_departure_embed(
         member, "member_kick", moderator=member.guild.me,
-        reason="No definió su orientación", extra=extra,
+        reason="No definió su personalidad", extra=extra,
     )
     if not kicked:
         embed.color = discord.Color.dark_red()
@@ -3139,7 +3145,7 @@ class HeraldoGeneralConfigModal(discord.ui.Modal, title="El Heraldo · Configura
         placeholder="Ejemplo: 5",
     )
     orientation_timeout = discord.ui.TextInput(
-        label="Tiempo de orientación (minutos)",
+        label="Tiempo de personalidad (minutos)",
         required=False,
         max_length=6,
         placeholder="Ejemplo: 10",
@@ -4373,7 +4379,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         )
 
 
-class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientación"):
+class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de personalidad"):
     title_input = discord.ui.TextInput(
         label="Título",
         required=True,
@@ -4445,7 +4451,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_enabled: bool | None = None
 
         channel_select = discord.ui.ChannelSelect(
-            placeholder="Selecciona el canal de roles/orientación",
+            placeholder="Selecciona el canal de roles/personalidad",
             channel_types=[discord.ChannelType.text],
             min_values=1,
             max_values=1,
@@ -4480,8 +4486,8 @@ class HeraldoOrientationSetupView(discord.ui.View):
             roles = [guild.get_role(int(item["role_id"])) for item in self.pending_bindings]
             items.append("Roles → " + ", ".join(role.mention for role in roles if role is not None))
         if self.pending_enabled is not None:
-            items.append(f"Orientación → {'activa' if self.pending_enabled else 'desactivada'}")
-        return "**El Heraldo · Roles de orientación**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
+            items.append(f"Personalidad → {'activa' if self.pending_enabled else 'desactivada'}")
+        return "**El Heraldo · Roles de personalidad**\n\n" + orientation_setup_summary(guild) + _pending_config_text(items)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -4560,7 +4566,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
         if prospective_enabled:
             channel = guild.get_channel(prospective_channel_id)
             if not isinstance(channel, discord.TextChannel):
-                await interaction.response.send_message("Selecciona primero un canal de orientación.", ephemeral=True)
+                await interaction.response.send_message("Selecciona primero un canal de personalidad.", ephemeral=True)
                 return
             if not (ORIENTATION_MIN_ROLES <= len(prospective_bindings) <= ORIENTATION_MAX_ROLES):
                 await interaction.response.send_message("Selecciona primero entre 1 y 6 roles.", ephemeral=True)
@@ -4645,11 +4651,11 @@ async def orientation_reaction_add(payload: discord.RawReactionActionEvent) -> N
     ]
     try:
         if to_remove:
-            await member.remove_roles(*to_remove, reason="El Heraldo: cambio de orientación")
+            await member.remove_roles(*to_remove, reason="El Heraldo: cambio de personalidad")
         if target_role not in member.roles:
-            await member.add_roles(target_role, reason="El Heraldo: Reaction Role de orientación")
+            await member.add_roles(target_role, reason="El Heraldo: Reaction Role de personalidad")
 
-        # Orientación admite una sola elección. Se retiran las demás reacciones del
+        # Personalidad admite una sola elección. Se retiran las demás reacciones del
         # usuario para que mensaje, roles y estado visible siempre coincidan.
         message = await channel.fetch_message(payload.message_id)
         chosen = str(payload.emoji).replace("\ufe0f", "")
@@ -4663,8 +4669,8 @@ async def orientation_reaction_add(payload: discord.RawReactionActionEvent) -> N
     except (discord.Forbidden, discord.HTTPException):
         await log_embed(
             guild,
-            "Advertencia: Error de orientación",
-            f"No pude sincronizar el rol de orientación de {member.mention}. Revisa la jerarquía de roles.",
+            "Advertencia: Error de personalidad",
+            f"No pude sincronizar el rol de personalidad de {member.mention}. Revisa la jerarquía de roles.",
             discord.Color.orange(),
         )
 
@@ -4688,7 +4694,7 @@ async def orientation_reaction_remove(payload: discord.RawReactionActionEvent) -
     if role is None or role not in member.roles:
         return
     try:
-        await member.remove_roles(role, reason="El Heraldo: reacción de orientación retirada")
+        await member.remove_roles(role, reason="El Heraldo: reacción de personalidad retirada")
     except (discord.Forbidden, discord.HTTPException):
         pass
 
@@ -4707,7 +4713,7 @@ async def orientation_role_deleted(role: discord.Role) -> None:
 
     if remaining:
         ok, note = await ensure_orientation_system(role.guild)
-        title = "Orientación actualizada" if ok else "Advertencia: Orientación necesita atención"
+        title = "Personalidad actualizada" if ok else "Advertencia: Personalidad necesita atención"
         description = (
             f"Se eliminó el rol **{role.name}**. El Heraldo retiró su vínculo y su reacción; "
             "no creó ningún rol nuevo.\n\n" + note
@@ -4715,7 +4721,7 @@ async def orientation_role_deleted(role: discord.Role) -> None:
         color = discord.Color.green() if ok else discord.Color.orange()
     else:
         await disable_orientation_system(role.guild)
-        title = "Advertencia: Orientación desactivada"
+        title = "Advertencia: Personalidad desactivada"
         description = (
             f"Se eliminó **{role.name}**, que era el último rol vinculado. "
             "El módulo se desactivó porque necesita al menos un rol existente."
@@ -5814,7 +5820,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
 
     role_defs = (
         ("sin_verificar", "Sin Verificar"),
-        ("tentado", "Verificación / orientación"),
+        ("tentado", "Verificación / personalidad"),
         ("condenado", "Condenado"),
     )
     for key, label in role_defs:
@@ -7201,7 +7207,7 @@ async def open_default_message_studio(
 LOG_TEMPLATE_CATEGORIES = {
     "general": ("General", "Logs que no pertenecen a otra categoría."),
     "members": ("Miembros", "Salidas, expulsiones, baneos y advertencias."),
-    "verification": ("Verificación", "Verificación, orientación y accesos."),
+    "verification": ("Verificación", "Verificación, personalidad y accesos."),
     "condemnation": ("Condenas", "Condenas, liberaciones y perdones."),
     "honeypot": ("Honeypot", "Disparos, pausas y acciones del honeypot."),
     "raid": ("Raid Protection", "Detección y acciones de protección contra raids."),
@@ -7227,7 +7233,7 @@ LOG_EVENT_CATALOG = {
         ("channel_merge_partial", "Advertencia: Fusión de canales parcial"),
     ],
     "verification": [
-        ("verified_path", "Verificación de preferencia completada"),
+        ("verified_path", "Verificación de personalidad completada"),
         ("age_verification", "Verificación de edad completada"),
         ("verification_expired", "Verificación vencida"),
         ("verification_kick", "Expulsión por falta de verificación"),
@@ -10530,11 +10536,11 @@ class HeraldoVerificationHubView(discord.ui.View):
             view=HeraldoVerificationSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Verificación de preferencia", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="Verificación de personalidad", style=discord.ButtonStyle.primary, row=0)
     async def preference_verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
-            content="**El Heraldo · Verification · Verificación de preferencia**\n\n" + orientation_setup_summary(interaction.guild),
+            content="**El Heraldo · Verification · Verificación de personalidad**\n\n" + orientation_setup_summary(interaction.guild),
             embed=None,
             view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
         )
@@ -10781,7 +10787,7 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
 
 
-# Reaction Roles general: independiente del panel obligatorio de orientación.
+# Reaction Roles general: independiente del panel obligatorio de personalidad.
 def reaction_role_panels(guild_id: int) -> list[dict]:
     try:
         raw = json.loads(guild_config_get(guild_id, "reaction_role_panels") or "[]")
@@ -11779,7 +11785,7 @@ class HeraldoSetupView(discord.ui.View):
         ("role_connections", "Role Connections", "Conexiones de roles (pendiente)"),
         ("logging", "Logs", "Eventos y canales de registros"),
         ("messages", "Mensajes", "Plantillas y mensajes predeterminados"),
-        ("verification", "Verification", "Verificación y orientación"),
+        ("verification", "Verification", "Verificación y personalidad"),
         ("language", "Idioma", "Configuración del idioma (pendiente)"),
         ("date_format", "Formato de fecha", "Fechas y horas en los mensajes del bot"),
     )
@@ -12128,7 +12134,7 @@ async def heraldo_config(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         "**Configuración general de El Heraldo**\n\n"
         f"Creación automática de recursos: **{estado}**.\n"
-        "La configuración de canales, roles, verificación, orientación, tiempos, permisos y demás opciones se realiza mediante `/setup`.",
+        "La configuración de canales, roles, verificación, personalidad, tiempos, permisos y demás opciones se realiza mediante `/setup`.",
         ephemeral=True,
     )
 
@@ -12201,7 +12207,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
         title="Chequeo masivo completado",
         description=(
             f"**{verified}** verificado(s) a tiempo.\n"
-            f"**{len(expelled)}** expulsado(s) por falta de rol de orientación.\n"
+            f"**{len(expelled)}** expulsado(s) por falta de rol de personalidad.\n"
             f"**{len(expelled_sin_verificar)}** expulsado(s) por no verificarse (Sin Verificar)."
         ),
         color=discord.Color.blurple(),
@@ -12224,7 +12230,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
             name = label if len(blocks) == 1 else f"{label} ({i}/{len(blocks)})"
             embed.add_field(name=name, value=block, inline=False)
 
-    add_mention_fields(embed, expelled, "Expulsados — sin rol de orientación")
+    add_mention_fields(embed, expelled, "Expulsados — sin rol de personalidad")
     add_mention_fields(embed, expelled_sin_verificar, "Expulsados — no se verificaron")
 
     channel = guild.get_channel(get_log_channel_id(guild.id))
@@ -12235,7 +12241,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
             print("Sin permisos para escribir en el canal de logs")
 
     await interaction.followup.send(
-        f"Listo — {verified} verificado(s), {len(expelled)} expulsado(s) (orientación), "
+        f"Listo — {verified} verificado(s), {len(expelled)} expulsado(s) (personalidad), "
         f"{len(expelled_sin_verificar)} expulsado(s) (Sin Verificar).",
         ephemeral=True,
     )
@@ -12451,7 +12457,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         await interaction.followup.send("¡Ya estás verificado!", ephemeral=True)
         return
     if role_ids & get_eval_role_ids(guild.id):
-        await interaction.followup.send("Ya completaste la selección de orientación.", ephemeral=True)
+        await interaction.followup.send("Ya completaste la selección de personalidad.", ephemeral=True)
         return
 
     problem = verify_role_problem(role, guild)
@@ -12494,16 +12500,18 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
 
-    # Orientación por preferencias: solo se inicia desde ESTE evento de verificación.
+    # Personalidad por personalidads: solo se inicia desde ESTE evento de verificación.
     # Nunca se arma al detectar roles en miembros antiguos. Si el servidor no configuró
-    # roles de orientación, no existe obligación ni expulsión por preferencias.
+    # roles de personalidad, no existe obligación ni expulsión por personalidads.
     orientation_roles = get_eval_role_ids(guild.id)
-    if orientation_roles and not ({r.id for r in member.roles} & orientation_roles):
+    if (orientation_enabled(guild.id) and personality_required(guild.id)
+            and not verification_is_exempt(member) and orientation_roles
+            and not ({r.id for r in member.roles} & orientation_roles)):
         now = datetime.now(timezone.utc)
         db_set_tentado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_check(guild.id, member.id, now))
-        # Log de "Orientación iniciada" desactivado temporalmente.
-        # La orientación y su temporizador siguen funcionando con normalidad.
+        # Log de "Personalidad iniciada" desactivado temporalmente.
+        # La personalidad y su temporizador siguen funcionando con normalidad.
     else:
         db_clear_tentado(member.guild.id, member.id)
 
@@ -12560,7 +12568,7 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
     role_ids = {r.id for r in member.roles}
     if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
         clear_verification_expiry(guild_id, user_id)
-        return  # se verificó a tiempo (o un admin le dio un rol de orientación)
+        return  # se verificó a tiempo (o un admin le dio un rol de personalidad)
 
     action = get_verify_action(guild.id)
     if action == "none":
@@ -12987,7 +12995,7 @@ async def verify_config(
     if proposed_timeout > get_sin_verificado_window(guild.id).total_seconds():
         warnings.append("El respaldo de Sin Verificar puede actuar antes que este timeout.")
     if proposed_role_id != get_tentado_role_id(guild.id):
-        warnings.append("La orientación solo se programa para el rol Tentad@.")
+        warnings.append("La personalidad solo se programa para el rol Tentad@.")
     if warnings:
         await interaction.followup.send("Advertencias sobre la propuesta:\n" + "\n".join(warnings), ephemeral=True)
 
@@ -17822,7 +17830,9 @@ async def _release_condemned_member_inner(
     # Si entre los roles originales estaban los de verificación, vuelven a su flujo normal
     # desde cero; mientras la condena estuvo activa nunca corrió ninguna evaluación.
     restored_ids = {r.id for r in restore}
-    if get_tentado_role_id(member.guild.id) in restored_ids:
+    if (orientation_enabled(member.guild.id) and personality_required(member.guild.id)
+            and not verification_is_exempt(member)
+            and get_tentado_role_id(member.guild.id) in restored_ids):
         now = datetime.now(timezone.utc)
         db_set_tentado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_check(member.guild.id, member.id, now))
