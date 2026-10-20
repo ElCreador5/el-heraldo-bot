@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 COMMENT_LIMIT = 500
 RESPONSE_DAYS = 7
 PENDING_RETENTION_DAYS = 30
+APPLIED_RETENTION_DAYS = 30
 
 
 def utcnow() -> datetime:
@@ -101,12 +102,12 @@ def submit_comment(conn: sqlite3.Connection, *, dm_message_id: int,
 
 
 def mark_applied(conn: sqlite3.Connection, *, guild_id: int,
-                 log_message_id: int) -> bool:
+                 log_message_id: int, now: datetime | None = None) -> bool:
     cur = conn.execute(
         """UPDATE member_exit_comments SET applied_at=?
            WHERE guild_id=? AND log_message_id=?
              AND comment IS NOT NULL AND applied_at IS NULL""",
-        (_iso(utcnow()), guild_id, log_message_id),
+        (_iso(now or utcnow()), guild_id, log_message_id),
     )
     return cur.rowcount == 1
 
@@ -119,10 +120,20 @@ def pending_edits(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def purge_expired(conn: sqlite3.Connection, *, now: datetime | None = None) -> int:
-    cutoff = _iso((now or utcnow()) - timedelta(days=PENDING_RETENTION_DAYS))
+    """Retirar solicitudes sin respuesta y copias de comentarios ya publicados.
+
+    Los comentarios que todavía no se han incorporado NO se borran: requieren
+    recuperación o revisión administrativa para evitar pérdidas silenciosas.
+    Las tarjetas originales de Discord no se modifican al purgar SQLite.
+    """
+    current = now or utcnow()
+    abandoned = _iso(current - timedelta(days=PENDING_RETENTION_DAYS))
+    applied = _iso(current - timedelta(days=APPLIED_RETENTION_DAYS))
     cur = conn.execute(
         """DELETE FROM member_exit_comments
-           WHERE comment IS NULL AND expires_at < ?""",
-        (cutoff,),
+           WHERE (comment IS NULL AND expires_at < ?)
+              OR (comment IS NOT NULL AND applied_at IS NOT NULL
+                  AND applied_at < ?)""",
+        (abandoned, applied),
     )
     return cur.rowcount

@@ -57,6 +57,15 @@ class ExitCommentsStoreTests(unittest.TestCase):
                 m.submit_comment(self.db, dm_message_id=20, user_id=2,
                                  comment=value, now=self.now)
 
+    def test_purge_removes_applied_copies_after_thirty_days(self):
+        self.create(log=50)
+        m.attach_dm(self.db, guild_id=1, log_message_id=50, dm_message_id=51)
+        m.submit_comment(self.db, dm_message_id=51, user_id=2,
+                         comment="Respuesta", now=self.now)
+        m.mark_applied(self.db, guild_id=1, log_message_id=50, now=self.now)
+        self.assertEqual(m.purge_expired(self.db, now=self.now + timedelta(days=29)), 0)
+        self.assertEqual(m.purge_expired(self.db, now=self.now + timedelta(days=31)), 1)
+
     def test_purge_does_not_remove_submitted_evidence(self):
         self.create(log=10)
         self.create(log=11)

@@ -50,6 +50,21 @@ class ExitCommentsFlowTests(unittest.TestCase):
         self.assertNotIn("channel.send(", editor)
         self.assertIn("exit_comments.mark_applied", editor)
 
+    def test_retry_cleanup_and_private_overwrite_guard(self):
+        audit = source("exit_comment_audit_safe")
+        self.assertIn("await asyncio.sleep(4)", audit)
+        self.assertIn("guild.audit_logs(", audit)
+        self.assertIn("except (discord.Forbidden, discord.HTTPException)", audit)
+        sender = source("exit_comment_request")
+        self.assertIn("exit_comment_audit_safe(member)", sender)
+        self.assertIn("await sent.edit(view=None)", sender)
+        guard = source("exit_comment_private")
+        self.assertIn("channel.overwrites.items()", guard)
+        self.assertIn("verification_is_exempt(target)", guard)
+        loop = source("exit_comment_maintenance_loop")
+        self.assertIn("exit_comments.purge_expired(conn)", loop)
+        self.assertIn("await exit_comment_retry()", loop)
+
     def test_nh_explicit_save_and_discard(self):
         view = source("ExitCommentSetupView")
         self.assertIn('label="Guardar cambios"', view)
@@ -64,6 +79,7 @@ class ExitCommentsFlowTests(unittest.TestCase):
         self.assertIn("exit_comments.init_storage(conn)", on_ready)
         self.assertIn("bot.add_view(ExitCommentDMView())", on_ready)
         self.assertIn("await exit_comment_retry()", on_ready)
+        self.assertIn("exit_comment_maintenance_loop.start()", on_ready)
         self.assertIn("log_member_event_enabled", source("heraldo_member_departure"))
 
 

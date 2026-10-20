@@ -2177,6 +2177,8 @@ async def on_ready() -> None:
     message_automation_engine.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
+    if not exit_comment_maintenance_loop.is_running():
+        exit_comment_maintenance_loop.start()
     # H-03: diario externo desactivado salvo autorización y preflight productivos.
     # Nunca crea un segundo bot ni accede al Gateway desde el proceso de backup.
     try:
@@ -2493,11 +2495,43 @@ def exit_comment_private(channel: discord.TextChannel) -> bool:
                    ("administrator", "manage_guild", "manage_messages",
                     "moderate_members", "kick_members", "ban_members")):
             return False
+    # Un overwrite individual puede abrir el canal a un usuario que no tiene rol
+    # de moderación. No enviar comentarios privados a un destino así configurado.
+    for target, overwrite in channel.overwrites.items():
+        if not isinstance(target, discord.Member) or overwrite.view_channel is not True:
+            continue
+        if not verification_is_exempt(target):
+            return False
     me = guild.me
     return bool(me and all((channel.permissions_for(me).view_channel,
                              channel.permissions_for(me).send_messages,
                              channel.permissions_for(me).embed_links,
                              channel.permissions_for(me).read_message_history)))
+
+
+async def exit_comment_audit_safe(member: discord.Member) -> bool:
+    """Segunda lectura tras el evento: no inferir salida voluntaria por un único sondeo.
+
+    Discord no ofrece un evento que pruebe directamente una salida voluntaria;
+    ante cualquier consulta fallida o sanción reciente se cancela la encuesta.
+    """
+    guild = member.guild
+    if not guild.me or not guild.me.guild_permissions.view_audit_log:
+        return False
+    # Dar margen a que Discord publique entradas de auditoría diferidas.
+    await asyncio.sleep(4)
+    observed = datetime.now(timezone.utc)
+    try:
+        for action in (discord.AuditLogAction.ban, discord.AuditLogAction.kick):
+            async for entry in guild.audit_logs(
+                limit=50, action=action, after=observed - timedelta(seconds=95)
+            ):
+                if (getattr(entry.target, "id", None) == member.id
+                        and abs((entry.created_at - observed).total_seconds()) < 95):
+                    return False
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+    return True
 
 
 async def exit_comment_apply(row) -> bool:
@@ -2516,7 +2550,11 @@ async def exit_comment_apply(row) -> bool:
         addition = "\n> **Comentario:** " + comment
         if len(old) + len(addition) > 4096:
             return False
-        if "**Comentario:**" not in old:
+        if addition not in old:
+            # No reemplazar campos existentes ni asumir que otro «Comentario»
+            # pertenece a esta respuesta.
+            if "**Comentario:**" in old:
+                return False
             embed.description = old + addition
             await original.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except (discord.HTTPException, discord.Forbidden, discord.NotFound):
@@ -2535,6 +2573,17 @@ async def exit_comment_retry() -> None:
             await exit_comment_apply(row)
         except Exception:
             traceback.print_exc()
+
+
+@tasks.loop(minutes=15)
+async def exit_comment_maintenance_loop() -> None:
+    # Ninguna respuesta no aplicada se elimina automáticamente.
+    try:
+        with closing(db_connect()) as conn:
+            exit_comments.purge_expired(conn)
+        await exit_comment_retry()
+    except (sqlite3.Error, discord.HTTPException):
+        print("Advertencia: mantenimiento de comentarios pendiente de reintento.")
 
 
 class ExitCommentModal(discord.ui.Modal, title="Comentario de salida"):
@@ -2596,6 +2645,9 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
                 conn, guild_id=guild.id, user_id=member.id,
                 channel_id=channel.id, log_message_id=message.id):
             return
+    # Segunda comprobación conservadora: las expulsiones pueden aparecer tarde.
+    if not await exit_comment_audit_safe(member) or guild.get_member(member.id) is not None:
+        return
     try:
         sent = await member.send(
             "Has abandonado **" + discord.utils.escape_mentions(guild.name) + "**. "
@@ -2603,11 +2655,27 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
             "La respuesta es voluntaria y será visible para el personal autorizado "
             "con acceso al registro privado del servidor. Puedes ignorar este mensaje.",
             view=ExitCommentDMView(), allowed_mentions=discord.AllowedMentions.none())
-        with closing(db_connect()) as conn:
-            exit_comments.attach_dm(conn, guild_id=guild.id,
-                                    log_message_id=message.id, dm_message_id=sent.id)
     except discord.HTTPException:
-        pass
+        return  # DM bloqueado: no reintentar una solicitud incierta.
+
+    linked = False
+    for retry in range(3):
+        try:
+            with closing(db_connect()) as conn:
+                linked = exit_comments.attach_dm(
+                    conn, guild_id=guild.id, log_message_id=message.id,
+                    dm_message_id=sent.id)
+            break
+        except sqlite3.OperationalError:
+            if retry < 2:
+                await asyncio.sleep(0.4)
+    if not linked:
+        # No dejar un botón visible que inevitablemente no pueda recuperar
+        # la solicitud. No enviar nunca un segundo DM por esta incidencia.
+        try:
+            await sent.edit(view=None)
+        except discord.HTTPException:
+            pass
 
 
 @bot.listen("on_member_remove")
