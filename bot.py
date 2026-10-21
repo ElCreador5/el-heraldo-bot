@@ -3938,7 +3938,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             select.callback = self._make_callback(key, label)
             self.add_item(select)
 
-        # La fila 3 admite cinco botones: los tres creadores + Guardar + Descartar.
+        # Fila 3: crear recursos. Fila 4: Guardar, Descartar y Volver.
         for key, label, default_name in definitions:
             create_button = discord.ui.Button(
                 label=f"Crear {label}",
@@ -4053,7 +4053,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             )
         return callback
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not self.pending_roles:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
@@ -4070,7 +4070,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_roles.clear()
         await interaction.response.edit_message(
@@ -4078,7 +4078,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 

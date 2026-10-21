@@ -97,7 +97,10 @@ class NHButtonsNavigation(unittest.TestCase):
             with self.subTest(view=name):
                 self.assertEqual(actual, rows)
                 self.assertTrue(all(count <= 5 for count in actual.values()))
-        self.assertEqual(buttons("HeraldoRoleSetupView")["back"], ("Volver", 3))
+        self.assertEqual(buttons("HeraldoRoleSetupView")["back"], ("Volver", 4))
+        role_positions = buttons("HeraldoRoleSetupView")
+        self.assertEqual(role_positions["save_changes"][1], 4)
+        self.assertEqual(role_positions["discard_changes"][1], 4)
         self.assertEqual(buttons("HeraldoJoinRolesSetupView")["back"], ("Volver", 1))
 
     def test_other_labels_of_personality_preserved(self):
