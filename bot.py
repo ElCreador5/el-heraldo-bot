@@ -4078,7 +4078,7 @@ class HeraldoRoleSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -4199,7 +4199,7 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
             view=HeraldoJoinRolesSyncView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -4390,7 +4390,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
             view=self,
         )
 
-    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -4528,7 +4528,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         self.pending_remove_after = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -4632,7 +4632,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         join_role_selector_defaults(self, get_join_bot_role_ids(self.guild_id))
         await interaction.response.edit_message(content="**El Heraldo · Join Roles · Roles para bots**\n\n" + join_roles_bots_summary(interaction.guild), view=self)
 
-    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -4698,7 +4698,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         self.pending_excluded = None
         await interaction.response.edit_message(content="**El Heraldo · Join Roles · Sincronización**\n\n" + join_roles_sync_summary(interaction.guild), view=self)
 
-    @discord.ui.button(label="Join Roles", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content="**El Heraldo · Join Roles**\n\n" + join_roles_summary(interaction.guild),
@@ -4948,7 +4948,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
-    @discord.ui.button(label="Configurar tiempos", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Configurar tiempos", style=discord.ButtonStyle.secondary, row=3)
     async def configure_times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if any(value is not None for value in (
                 self.pending_channel_id, self.pending_bindings, self.pending_enabled,
@@ -5786,7 +5786,11 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 "Hay cambios pendientes. Guárdelos o descártelos antes de volver.", ephemeral=True,
             )
             return
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content="**El Heraldo · AutoMod**\n\nConfigura las protecciones automáticas del servidor.",
+            embed=None,
+            view=HeraldoAutomodSetupView(self.guild_id, self.owner_id),
+        )
 
 
 class HeraldoHoneypotSubView(discord.ui.View):
@@ -7175,7 +7179,11 @@ class HeraldoRaidSetupView(discord.ui.View):
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content="**El Heraldo · AutoMod**\n\nConfigura las protecciones automáticas del servidor.",
+            embed=None,
+            view=HeraldoAutomodSetupView(self.guild_id, self.owner_id),
+        )
 
 
 class VerifyDmEditorContentModal(discord.ui.Modal):
@@ -8970,7 +8978,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
             return
         await interaction.response.send_modal(HeraldoAttachRoleModal(self.guild_id, self.owner_id, self.selected))
 
-    @discord.ui.button(label="Publicar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label="Publicar", style=discord.ButtonStyle.success, row=4)
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button):
         template = self._current()
         channel = interaction.guild.get_channel(self.channel_id) if self.channel_id else None
@@ -9009,7 +9017,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
     async def variables(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("Variables: {usuario}, {usuario_id}, {servidor}, {servidor_id}, {canal} y {fecha} (UTC). Se resuelven al publicar; las menciones automáticas están desactivadas. JSON admite content y hasta diez embeds con campos, autor, pie, imagen y miniatura.", ephemeral=True)
 
-    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=3)
     async def preview(self, interaction, button):
         current = self._current()
         if not current:
@@ -9024,7 +9032,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
 
-    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=3)
+    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=4)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         template = self._current()
         if not template:
@@ -9034,7 +9042,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
             "delete", {"name": self.selected},
             "Solicitas eliminar **" + discord.utils.escape_markdown(self.selected) + "**. Esta acción requiere confirmación.")
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(
             content=heraldo_messages_setup_content(), embed=None,
@@ -9482,7 +9490,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -11068,7 +11076,7 @@ class HeraldoModerationSetupView(discord.ui.View):
         view = HeraldoBanDurationSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view.content(), view=view)
 
-    @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
@@ -12209,7 +12217,7 @@ class HeraldoReactionRolesSetupView(discord.ui.View):
     async def existing(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoReactionExistingModal(self.guild_id, self.owner_id))
 
-    @discord.ui.button(label="Volver a /setup", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
