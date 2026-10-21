@@ -773,6 +773,71 @@ def guild_resource_set(guild_id: int, resource_type: str, config_key: str, resou
         conn.close()
 
 
+def verification_atomic_setup_save(
+    guild_id: int,
+    expected_settings: dict[str, str | None],
+    changes: dict[str, str | None],
+    expected_resources: dict[tuple[str, str], int | None] | None = None,
+    resources: dict[tuple[str, str], int] | None = None,
+) -> bool:
+    """Guardar todo el borrador NH en una transacción CAS sin sobrescribir otra sesión.
+
+    False significa que el estado cambió: nada de la propuesta se guardó.
+    No ejecuta llamadas a Discord mientras la transacción está abierta.
+    """
+    conn = db_connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for key, original in expected_settings.items():
+            row = conn.execute(
+                "SELECT value FROM guild_settings WHERE guild_id=? AND key=?",
+                (guild_id, key),
+            ).fetchone()
+            if (row[0] if row else None) != original:
+                conn.rollback()
+                return False
+        for (resource_type, key), original in (expected_resources or {}).items():
+            row = conn.execute(
+                "SELECT resource_id FROM guild_resources "
+                "WHERE guild_id=? AND resource_type=? AND config_key=?",
+                (guild_id, resource_type, key),
+            ).fetchone()
+            if (int(row[0]) if row else None) != original:
+                conn.rollback()
+                return False
+        for (resource_type, key), resource_id in (resources or {}).items():
+            conn.execute(
+                "DELETE FROM guild_resources WHERE guild_id=? AND resource_type=? "
+                "AND resource_id=? AND config_key<>?",
+                (guild_id, resource_type, int(resource_id), key),
+            )
+            conn.execute(
+                "INSERT INTO guild_resources(guild_id,resource_type,config_key,resource_id) "
+                "VALUES(?,?,?,?) ON CONFLICT(guild_id,resource_type,config_key) "
+                "DO UPDATE SET resource_id=excluded.resource_id",
+                (guild_id, resource_type, key, int(resource_id)),
+            )
+        for key, value in changes.items():
+            if value is None:
+                conn.execute("DELETE FROM guild_settings WHERE guild_id=? AND key=?",
+                             (guild_id, key))
+            else:
+                conn.execute(
+                    "INSERT INTO guild_settings(guild_id,key,value) VALUES(?,?,?) "
+                    "ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value",
+                    (guild_id, key, str(value)),
+                )
+        conn.execute("UPDATE guild_config SET updated_at=? WHERE guild_id=?",
+                     (datetime.now(timezone.utc).isoformat(), guild_id))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def guild_is_initialized(guild_id: int) -> bool:
     conn = db_connect()
     row = conn.execute(
@@ -3125,20 +3190,20 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
         db_clear_tentado(guild_id, user_id)
         return "no-obligatorio"
 
-    await expel(member, report=report)
-    return "expulsado"
+    kicked = await expel(member, report=report)
+    return "expulsado" if kicked else "pendiente"
 
 
 # ---------------------------------------------------------------------------
 # Expulsión + DM condicional
 # ---------------------------------------------------------------------------
 
-async def expel(member: discord.Member, report: bool = True) -> None:
+async def expel(member: discord.Member, report: bool = True) -> bool:
     if (verification_is_exempt(member) or not orientation_enabled(member.guild.id)
             or not personality_required(member.guild.id)):
         db_clear_tentado(member.guild.id, member.id)
         clear_verification_expiry(member.guild.id, member.id)
-        return
+        return False
     row = db_get(member.guild.id, member.id)
     dm_sent_before = bool(row["dm_sent"]) if row else False
     is_first_fault = not dm_sent_before
@@ -3152,12 +3217,14 @@ async def expel(member: discord.Member, report: bool = True) -> None:
         if dm_ok:
             db_mark_dm_sent(member.guild.id, member.id)  # evitar otra invitación si falla el kick
 
-    db_clear_tentado(member.guild.id, member.id)
     try:
         await heraldo_kick(member, reason="No definió su personalidad", send_notice=False)
         kicked = True
     except discord.HTTPException:
         kicked = False
+    if kicked:
+        # No resolver el plazo hasta que Discord haya confirmado la expulsión.
+        db_clear_tentado(member.guild.id, member.id)
     if kicked and test_mode:
         await send_test_removal_notice(member, "KICK", dm_channel=dm_channel,
                                        allow_reentry_invite=True)
@@ -3165,12 +3232,13 @@ async def expel(member: discord.Member, report: bool = True) -> None:
             db_mark_dm_sent(member.guild.id, member.id)
 
     if not report:
-        return
+        return kicked
     if not kicked:
         await log_embed(member.guild, "Advertencia: Expulsión no completada",
-                        f"Discord rechazó la expulsión de {member.mention}; revisa permisos y jerarquía.",
+                        f"Discord rechazó la expulsión de {member.mention}; revisa permisos y jerarquía. "
+                        "El plazo pendiente se conserva para reintentar.",
                         discord.Color.dark_red())
-        return
+        return False
 
     # El listener de salidas espera esta publicación antes de emitir un segundo log.
     log_key = orientation_kick_log_key(member)
@@ -3204,6 +3272,7 @@ async def expel(member: discord.Member, report: bool = True) -> None:
         if kicked:
             _orientation_kick_log_pending.pop(log_key, None)
             pending.set()
+    return kicked
 
 
 def render_personality_recovery_dm(guild: discord.Guild, invite_url: str) -> str:
@@ -4739,6 +4808,15 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_required: bool | None = None
         self.pending_allow_change: bool | None = None
         self.pending_dm_template: str | None = None
+        self._original = self._snapshot()
+
+    def _snapshot(self) -> dict[str, str | None]:
+        return {key: guild_config_get(self.guild_id, key) for key in (
+            "orientation_channel_id", "orientation_role_bindings",
+            "orientation_created_role_ids", "orientation_enabled",
+            "personality_required", "personality_allow_change",
+            "personality_recovery_dm_template")}
+
         self.toggle_required.label = "Expulsar si no elige: Sí" if personality_required(guild_id) else "Expulsar si no elige: No"
         self.toggle_change.label = "Cambiar elección: Sí (recomendado)" if personality_allow_change(guild_id) else "Cambiar elección: No"
 
@@ -4902,78 +4980,105 @@ class HeraldoOrientationSetupView(discord.ui.View):
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if (self.pending_channel_id is None and self.pending_bindings is None
-                and self.pending_enabled is None and self.pending_required is None
-                and self.pending_allow_change is None and self.pending_dm_template is None):
+        if all(value is None for value in (
+                self.pending_channel_id, self.pending_bindings, self.pending_enabled,
+                self.pending_required, self.pending_allow_change, self.pending_dm_template)):
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return
         guild = interaction.guild
-        prospective_channel_id = self.pending_channel_id or get_orientation_channel_id(self.guild_id)
-        prospective_bindings = self.pending_bindings if self.pending_bindings is not None else get_orientation_bindings(self.guild_id)
-        prospective_enabled = self.pending_enabled if self.pending_enabled is not None else orientation_enabled(self.guild_id)
-        if prospective_enabled:
-            channel = guild.get_channel(prospective_channel_id)
-            if not isinstance(channel, discord.TextChannel):
-                await interaction.response.send_message("Selecciona primero un canal de personalidad.", ephemeral=True)
+        channel_id = self.pending_channel_id or get_orientation_channel_id(self.guild_id)
+        bindings = self.pending_bindings if self.pending_bindings is not None else get_orientation_bindings(self.guild_id)
+        enabled = self.pending_enabled if self.pending_enabled is not None else orientation_enabled(self.guild_id)
+        old_enabled = orientation_enabled(self.guild_id)
+        if enabled:
+            channel = guild.get_channel(channel_id)
+            me = guild.me
+            if not isinstance(channel, discord.TextChannel) or me is None:
+                await interaction.response.send_message(
+                    "El canal de personalidad no existe. No se guardó nada.", ephemeral=True)
                 return
-            if not (ORIENTATION_MIN_ROLES <= len(prospective_bindings) <= ORIENTATION_MAX_ROLES):
-                await interaction.response.send_message("Selecciona primero entre 1 y 6 roles.", ephemeral=True)
+            perms = channel.permissions_for(me)
+            if not (perms.view_channel and perms.send_messages and perms.embed_links
+                    and perms.add_reactions and perms.read_message_history
+                    and perms.manage_messages and me.guild_permissions.manage_roles):
+                await interaction.response.send_message(
+                    "Faltan permisos del bot para publicar, gestionar reacciones o roles. "
+                    "No se guardó nada.", ephemeral=True)
                 return
+            if not ORIENTATION_MIN_ROLES <= len(bindings) <= ORIENTATION_MAX_ROLES:
+                await interaction.response.send_message(
+                    "Selecciona de 1 a 6 roles. No se guardó nada.", ephemeral=True)
+                return
+            seen_roles, seen_emoji = set(), set()
+            for binding in bindings:
+                role_id, emoji = int(binding["role_id"]), _orientation_emoji_key(str(binding["emoji"]))
+                role = guild.get_role(role_id)
+                if (role is None or not emoji or role_id in seen_roles or emoji in seen_emoji
+                        or verify_role_problem(role, guild)):
+                    await interaction.response.send_message(
+                        "Hay roles o emojis duplicados, no administrables o peligrosos. "
+                        "No se guardó nada.", ephemeral=True)
+                    return
+                seen_roles.add(role_id)
+                seen_emoji.add(emoji)
+        changes: dict[str, str | None] = {}
+        if self.pending_channel_id is not None:
+            changes["orientation_channel_id"] = str(self.pending_channel_id)
+        if self.pending_bindings is not None:
+            changes["orientation_role_bindings"] = json.dumps(self.pending_bindings, ensure_ascii=False)
+            changes["orientation_created_role_ids"] = "[]"
+        if self.pending_enabled is not None:
+            changes["orientation_enabled"] = "1" if self.pending_enabled else "0"
+        if self.pending_required is not None:
+            changes["personality_required"] = "1" if self.pending_required else "0"
+        if self.pending_allow_change is not None:
+            changes["personality_allow_change"] = "1" if self.pending_allow_change else "0"
+        if self.pending_dm_template is not None:
+            changes["personality_recovery_dm_template"] = self.pending_dm_template
 
         await interaction.response.defer(ephemeral=True)
-        old_channel_id = get_orientation_channel_id(self.guild_id)
-        old_bindings = get_orientation_bindings(self.guild_id)
-        old_enabled = orientation_enabled(self.guild_id)
-        old_required = personality_required(self.guild_id)
-        old_allow_change = personality_allow_change(self.guild_id)
-        old_dm = guild_config_get(self.guild_id, "personality_recovery_dm_template")
         try:
-            if self.pending_channel_id is not None:
-                guild_config_set(self.guild_id, "orientation_channel_id", str(self.pending_channel_id))
-            if self.pending_bindings is not None:
-                set_orientation_bindings(self.guild_id, self.pending_bindings)
-                guild_config_set(self.guild_id, "orientation_created_role_ids", "[]")
-            if self.pending_enabled is not None:
-                guild_config_set(self.guild_id, "orientation_enabled", "1" if self.pending_enabled else "0")
-
-            if prospective_enabled:
+            applied = verification_atomic_setup_save(self.guild_id, self._original, changes)
+        except sqlite3.Error:
+            await interaction.followup.send("Falló SQLite. No se guardó el borrador.", ephemeral=True)
+            return
+        if not applied:
+            await interaction.followup.send(
+                "La configuración cambió en otra sesión; reabre el editor. No sobrescribí cambios.",
+                ephemeral=True)
+            return
+        try:
+            if enabled:
                 ok, note = await ensure_orientation_system(guild)
             elif old_enabled:
                 ok, note = await disable_orientation_system(guild)
             else:
                 ok, note = True, "Configuración guardada."
-
-            if not ok:
-                guild_config_set(self.guild_id, "orientation_channel_id", str(old_channel_id or 0))
-                set_orientation_bindings(self.guild_id, old_bindings)
-                guild_config_set(self.guild_id, "orientation_enabled", "1" if old_enabled else "0")
-                if old_enabled:
-                    await ensure_orientation_system(guild)
-                await interaction.followup.send(f"No pude aplicar los cambios: {note}", ephemeral=True)
-                return
-            # Estos valores no se guardan hasta superar la validación del panel.
-            if self.pending_required is not None:
-                guild_config_set(self.guild_id, "personality_required", "1" if self.pending_required else "0")
-                if not self.pending_required:
-                    clear_personality_pending_for_guild(self.guild_id)
-            if self.pending_allow_change is not None:
-                guild_config_set(self.guild_id, "personality_allow_change", "1" if self.pending_allow_change else "0")
-            if self.pending_dm_template is not None:
-                guild_config_set(self.guild_id, "personality_recovery_dm_template", self.pending_dm_template)
-        except (sqlite3.OperationalError, discord.HTTPException) as exc:
-            await interaction.followup.send(f"No pude guardar los cambios: {exc}", ephemeral=True)
+        except (sqlite3.Error, discord.HTTPException):
+            ok, note = False, "Discord o SQLite no pudo sincronizar la tarjeta."
+        if not ok:
+            try:
+                restored = verification_atomic_setup_save(
+                    self.guild_id, changes, {key: self._original[key] for key in changes})
+            except sqlite3.Error:
+                restored = False
+            await interaction.followup.send(
+                "La sincronización falló: " + note + (
+                    " Se restauraron las opciones previas." if restored
+                    else " No fue posible recuperar automáticamente el estado; revisa el panel."
+                ), ephemeral=True)
             return
-
-        self.pending_channel_id = None
-        self.pending_bindings = None
-        self.pending_enabled = None
-        self.pending_required = None
-        self.pending_allow_change = None
-        self.pending_dm_template = None
+        if self.pending_required is False:
+            clear_personality_pending_for_guild(self.guild_id)
+        self.pending_channel_id = self.pending_bindings = self.pending_enabled = None
+        self.pending_required = self.pending_allow_change = self.pending_dm_template = None
+        self._original = self._snapshot()
         self.toggle_required.label = "Expulsar si no elige: Sí" if personality_required(self.guild_id) else "Expulsar si no elige: No"
         self.toggle_change.label = "Cambiar elección: Sí (recomendado)" if personality_allow_change(self.guild_id) else "Cambiar elección: No"
-        await interaction.edit_original_response(content=self._content(guild) + f"\n\nCambios guardados. {note}", embed=None, view=self)
+        await interaction.edit_original_response(
+            content=self._content(guild) + f"\n\nCambios guardados. {note}", embed=None, view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6258,6 +6363,18 @@ class HeraldoVerificationSetupView(discord.ui.View):
         self.pending_sin_role_id: int | None = None
         self.pending_channel_id: int | None = None
         self.pending_enabled: bool | None = None
+        self._refresh_origins()
+
+    def _refresh_origins(self) -> None:
+        self.original_settings = {
+            key: guild_config_get(self.guild_id, key)
+            for key in ("verify_role_id", "verify_channel_id", "verify_enabled")
+        }
+        self.original_resources = {
+            ("role", "tentado"): guild_resource_get(self.guild_id, "role", "tentado"),
+            ("role", "sin_verificar"): guild_resource_get(self.guild_id, "role", "sin_verificar"),
+            ("channel", "verification"): guild_resource_get(self.guild_id, "channel", "verification"),
+        }
 
         role_select = discord.ui.RoleSelect(
             placeholder="Seleccionar rol que se otorga al verificarse",
@@ -6495,26 +6612,83 @@ class HeraldoVerificationSetupView(discord.ui.View):
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_role_id is None and self.pending_sin_role_id is None and self.pending_channel_id is None and self.pending_enabled is None:
+        if all(value is None for value in (
+                self.pending_role_id, self.pending_sin_role_id,
+                self.pending_channel_id, self.pending_enabled)):
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        if self.pending_role_id is not None:
-            guild_config_set(self.guild_id, "verify_role_id", str(self.pending_role_id))
-            guild_resource_set(self.guild_id, "role", "tentado", self.pending_role_id)
-        if self.pending_sin_role_id is not None:
-            guild_resource_set(self.guild_id, "role", "sin_verificar", self.pending_sin_role_id)
-        if self.pending_channel_id is not None:
-            channel = interaction.guild.get_channel(self.pending_channel_id)
-            if isinstance(channel, discord.TextChannel):
-                await _setup_apply_system_channel(interaction.guild, "verification", channel, publish_messages=True)
-        if self.pending_enabled is not None:
-            if self.pending_enabled and not guild_config_get(self.guild_id, "verify_panel_ref"):
-                await interaction.followup.send("No activé la verificación: primero publica el panel.", ephemeral=True)
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return
+        guild = interaction.guild
+        me = guild.me
+        role_id = self.pending_role_id or get_verify_role_id(self.guild_id)
+        role = guild.get_role(role_id)
+        if self.pending_role_id is not None or self.pending_enabled is True:
+            if role is None or verify_role_problem(role, guild):
+                await interaction.response.send_message(
+                    "El rol de verificación ya no es seguro o administrable. No se guardó nada.",
+                    ephemeral=True)
                 return
-            guild_config_set(self.guild_id, "verify_enabled", "1" if self.pending_enabled else "0")
+        if self.pending_sin_role_id is not None:
+            sin_role = guild.get_role(self.pending_sin_role_id)
+            if (sin_role is None or me is None or not me.guild_permissions.manage_roles
+                    or sin_role.is_default() or sin_role.managed or sin_role >= me.top_role):
+                await interaction.response.send_message(
+                    "El rol Sin Verificar ya no es administrable. No se guardó nada.",
+                    ephemeral=True)
+                return
+        channel = None
+        if self.pending_channel_id is not None:
+            channel = guild.get_channel(self.pending_channel_id)
+            perms = channel.permissions_for(me) if isinstance(channel, discord.TextChannel) and me else None
+            if perms is None or not (perms.view_channel and perms.send_messages
+                                     and perms.read_message_history):
+                await interaction.response.send_message(
+                    "El canal ya no está disponible o faltan permisos de publicación. No se guardó nada.",
+                    ephemeral=True)
+                return
+        if self.pending_enabled is True and not guild_config_get(self.guild_id, "verify_panel_ref"):
+            await interaction.response.send_message(
+                "Publica primero el panel de verificación para activar el sistema. No se guardó nada.",
+                ephemeral=True)
+            return
+        changes: dict[str, str] = {}
+        resources: dict[tuple[str, str], int] = {}
+        if self.pending_role_id is not None:
+            changes["verify_role_id"] = str(self.pending_role_id)
+            resources[("role", "tentado")] = self.pending_role_id
+        if self.pending_sin_role_id is not None:
+            resources[("role", "sin_verificar")] = self.pending_sin_role_id
+        if self.pending_channel_id is not None:
+            changes["verify_channel_id"] = str(self.pending_channel_id)
+            resources[("channel", "verification")] = self.pending_channel_id
+        if self.pending_enabled is not None:
+            changes["verify_enabled"] = "1" if self.pending_enabled else "0"
+        await interaction.response.defer(ephemeral=True)
+        try:
+            applied = verification_atomic_setup_save(
+                self.guild_id, self.original_settings, changes,
+                self.original_resources, resources)
+        except (sqlite3.Error, ValueError) as exc:
+            await interaction.followup.send(
+                f"No pude guardar la configuración: {type(exc).__name__}. No se aplicó el borrador.",
+                ephemeral=True)
+            return
+        if not applied:
+            await interaction.followup.send(
+                "La configuración cambió en otra sesión. Abre nuevamente el editor; no sobrescribí nada.",
+                ephemeral=True)
+            return
         self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
-        await interaction.edit_original_response(content=self._content(interaction.guild) + "\n\nCambios guardados.", view=self)
+        self._refresh_origins()
+        note = "Cambios guardados."
+        if channel is not None:
+            try:
+                await _setup_publish_verification_panel(guild, channel)
+            except discord.HTTPException:
+                note = ("Configuración guardada, pero Discord rechazó actualizar la tarjeta. "
+                        "Reintenta Publicar / actualizar. El panel anterior no se considera actualizado.")
+        await interaction.edit_original_response(content=self._content(guild) + "\n\n" + note, view=self)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -12695,16 +12869,9 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
                 expelled.append(member)
             await asyncio.sleep(1)  # evitar ráfagas contra el rate limit de Discord
         elif get_sin_verificado_role_id(guild.id) in role_ids:
-            db_clear_sin_verificado(member.guild.id, member.id)
-            try:
-                await heraldo_kick(member, reason="No se verificó")
-                expelled_sin_verificar.append(member)
-            except discord.Forbidden:
-                await log_embed(
-                    guild, "Advertencia: Error al expulsar",
-                    f"Sin permisos para expulsar a {member.mention} (Sin Verificar) — revisa jerarquía de roles.",
-                    discord.Color.dark_red(),
-                )
+            # NH: «Sin Verificar» nunca crea una segunda sanción directa.
+            # Solo el evaluador principal consulta el plazo y la acción vigente.
+            await evaluate_verify_timeout(guild.id, member.id)
             await asyncio.sleep(1)
 
     embed = discord.Embed(
