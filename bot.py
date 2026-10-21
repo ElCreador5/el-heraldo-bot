@@ -4945,6 +4945,18 @@ class HeraldoOrientationSetupView(discord.ui.View):
     async def edit_card(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(OrientationEmbedModal(interaction.guild))
 
+    @discord.ui.button(label="Configurar tiempos", style=discord.ButtonStyle.secondary, row=2)
+    async def configure_times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if any(value is not None for value in (
+                self.pending_channel_id, self.pending_bindings, self.pending_enabled,
+                self.pending_required, self.pending_allow_change,
+                self.pending_dm_template)):
+            await interaction.response.send_message(
+                "Guarda o descarta los cambios pendientes antes de editar los plazos.",
+                ephemeral=True)
+            return
+        await interaction.response.send_modal(PersonalityVerificationTimeModal(self.guild_id))
+
     @discord.ui.button(label="Cambiar elección", style=discord.ButtonStyle.secondary, row=3)
     async def toggle_change(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = self.pending_allow_change if self.pending_allow_change is not None else personality_allow_change(self.guild_id)
@@ -4959,21 +4971,9 @@ class HeraldoOrientationSetupView(discord.ui.View):
         button.label = "Expulsar si no elige: Sí" if self.pending_required else "Expulsar si no elige: No"
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label="Editar DM de recuperación", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label="Editar DM de recuperación", style=discord.ButtonStyle.primary, row=4)
     async def edit_dm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(PersonalityRecoveryDMModal(self))
-
-    @discord.ui.button(label="Configurar tiempos", style=discord.ButtonStyle.secondary, row=3)
-    async def configure_times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if any(value is not None for value in (
-                self.pending_channel_id, self.pending_bindings, self.pending_enabled,
-                self.pending_required, self.pending_allow_change,
-                self.pending_dm_template)):
-            await interaction.response.send_message(
-                "Guarda o descarta los cambios pendientes antes de editar los plazos.",
-                ephemeral=True)
-            return
-        await interaction.response.send_modal(PersonalityVerificationTimeModal(self.guild_id))
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

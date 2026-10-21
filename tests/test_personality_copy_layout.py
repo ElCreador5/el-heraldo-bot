@@ -31,9 +31,9 @@ class PersonalityCopyLayoutTests(unittest.TestCase):
                 if isinstance(d,ast.Call) and isinstance(d.func,ast.Attribute) and d.func.attr=="button":
                     args={kw.arg:kw.value for kw in d.keywords}
                     b.append((fn.name,ast.literal_eval(args["row"]),ast.literal_eval(args["label"]),args["style"].attr))
-        self.assertEqual([x[0] for x in b],["back","activate","deactivate","edit_card",
-             "toggle_change","toggle_required","edit_dm","configure_times","save_changes","discard_changes"])
-        self.assertEqual([x[1] for x in b],[2,2,2,2,3,3,3,3,4,4])
+        self.assertEqual([x[0] for x in b],["back","activate","deactivate","edit_card","configure_times",
+             "toggle_change","toggle_required","edit_dm","save_changes","discard_changes"])
+        self.assertEqual([x[1] for x in b],[2,2,2,2,2,3,3,4,4,4])
         self.assertEqual(next(x[3] for x in b if x[0]=="save_changes"),"success")
         self.assertEqual(next(x[3] for x in b if x[0]=="discard_changes"),"danger")
         self.assertIn("Editar DM de recuperación",[x[2] for x in b])
@@ -42,4 +42,16 @@ class PersonalityCopyLayoutTests(unittest.TestCase):
         self.assertIn("not personality_required(member.guild.id)",expel)
         self.assertLess(expel.index("await send_recovery_dm"),expel.index("await heraldo_kick"))
         self.assertIn("max_uses=1",body("send_recovery_dm"))
+    def test_exact_button_labels_are_preserved(self):
+        view=get("HeraldoOrientationSetupView")
+        actual={n.name:ast.literal_eval(next(kw.value for deco in n.decorator_list if isinstance(deco,ast.Call) and isinstance(deco.func,ast.Attribute) and deco.func.attr=="button" for kw in deco.keywords if kw.arg=="label")) for n in view.body if isinstance(n,ast.AsyncFunctionDef) and any(isinstance(d,ast.Call) and isinstance(d.func,ast.Attribute) and d.func.attr=="button" for d in n.decorator_list)}
+        self.assertEqual(actual,{
+            "back":"Volver","activate":"Activar","deactivate":"Desactivar",
+            "edit_card":"Editar embed","toggle_change":"Cambiar elección",
+            "toggle_required":"Expulsar si no elige","edit_dm":"Editar DM de recuperación",
+            "configure_times":"Configurar tiempos",
+            "save_changes":"Guardar cambios","discard_changes":"Descartar cambios"
+        })
+        self.assertIn("Cambiar elección: Sí (recomendado)",body("HeraldoOrientationSetupView"))
+        self.assertIn("Expulsar si no elige: Sí",body("HeraldoOrientationSetupView"))
 if __name__=="__main__":unittest.main()
