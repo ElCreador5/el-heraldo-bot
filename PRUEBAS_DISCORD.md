@@ -1,3 +1,7 @@
+## NH — Texto explicativo y distribución de personalidad (2026-10-20)
+
+Decisión: los roles expresan cómo desea participar un miembro, que obtiene una elección mediante la reacción con el emoji del rol y puede cambiarla solo si se permiten cambios; permisos pueden desbloquear canales y la elección no verifica identidad/edad. Si la función está activada y es obligatoria, una falta al vencer el plazo genera expulsión automática con intento de DM previo e invitación de un solo uso para dar oportunidad de reingreso. No afecta la regla sin invitaciones para baneos o expulsiones manuales. En el panel: fila superior Volver/Activar/Desactivar/Editar embed; siguiente Cambiar elección/Expulsar si no elige/Editar DM; última Guardar/Descartar, sin eliminar borradores ni confirmaciones NH. Verificaciones Discord aún pendientes.
+
 ## NH — Formato de Verificación de personalidad (20/10/2026)
 
 **Implementado en Pruebas, pendiente de CI/Discord:** se corrige el texto predeterminado que mostraba escapes literales \n dentro de la tarjeta de personalidad. El lector de textos normaliza también los escapes heredados guardados anteriormente, tanto en introducción como descripción, sin migrar ni sobrescribir valores existentes. Mantiene título, roles, reacciones, colores y referencias de publicaciones; al sincronizar el panel existente se actualiza el embed sin crear otra tarjeta. Regresiones aisladas en \`tests/test_personality_embed_linebreaks.py\`. No declarar verificación en Discord sin prueba real.
