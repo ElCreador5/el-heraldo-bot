@@ -32,8 +32,8 @@ class PersonalityCopyLayoutTests(unittest.TestCase):
                     args={kw.arg:kw.value for kw in d.keywords}
                     b.append((fn.name,ast.literal_eval(args["row"]),ast.literal_eval(args["label"]),args["style"].attr))
         self.assertEqual([x[0] for x in b],["back","activate","deactivate","edit_card",
-             "toggle_change","toggle_required","edit_dm","save_changes","discard_changes"])
-        self.assertEqual([x[1] for x in b],[2,2,2,2,3,3,3,4,4])
+             "toggle_change","toggle_required","edit_dm","configure_times","save_changes","discard_changes"])
+        self.assertEqual([x[1] for x in b],[2,2,2,2,3,3,3,3,4,4])
         self.assertEqual(next(x[3] for x in b if x[0]=="save_changes"),"success")
         self.assertEqual(next(x[3] for x in b if x[0]=="discard_changes"),"danger")
         self.assertIn("Editar DM de recuperación",[x[2] for x in b])
