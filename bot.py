@@ -3419,83 +3419,104 @@ def verification_duration_label(seconds: int) -> str:
     return f"{days} d" + (f" {hours} h" if hours else "") + (f" {mins} min" if mins else "")
 
 
-def verification_time_summary(guild_id: int) -> str:
-    """Resumen común de plazos en los tres accesos de /setup."""
+def age_time_summary(guild_id: int) -> str:
     return (
-        "**Plazos de verificación**\n"
-        f"Edad: **{verification_duration_label(get_verify_timeout(guild_id))}** · "
-        f"Personalidad: **{verification_duration_label(int(get_orientation_window(guild_id).total_seconds()))}**\n"
-        f"Respaldo «Sin Verificar»: "
-        f"**{verification_duration_label(int(get_sin_verificado_window(guild_id).total_seconds()))}**\n"
-        "Estos plazos son independientes. Cambiar uno no restablece los demás."
+        "**Plazos de edad**\n"
+        f"Verificación: **{verification_duration_label(get_verify_timeout(guild_id))}** · "
+        f"Respaldo Sin Verificar: "
+        f"**{verification_duration_label(int(get_sin_verificado_window(guild_id).total_seconds()))}**"
     )
 
 
-class HeraldoGeneralConfigModal(discord.ui.Modal, title="Plazos de verificación"):
+def personality_time_summary(guild_id: int) -> str:
+    return (
+        "**Plazo de personalidad:** "
+        f"{verification_duration_label(int(get_orientation_window(guild_id).total_seconds()))}"
+    )
+
+
+def verification_hub_content(guild_id: int) -> str:
+    return (
+        "**El Heraldo · Verificación**\n\n"
+        "Selecciona el módulo que deseas configurar. Los plazos son independientes.\n\n"
+        + age_time_summary(guild_id) + "\n\n" + personality_time_summary(guild_id)
+    )
+
+
+class AgeVerificationTimeModal(discord.ui.Modal, title="Plazos de verificación de edad"):
     verify_timeout = discord.ui.TextInput(
-        label="Verificación de edad (minutos)",
-        required=True,
-        max_length=6,
-        placeholder="Ejemplo: 5 · desde que entra",
-    )
-    orientation_timeout = discord.ui.TextInput(
-        label="Verificación de personalidad (minutos)",
-        required=True,
-        max_length=6,
-        placeholder="Ejemplo: 10 · después de edad",
-    )
+        label="Verificación de edad (minutos)", required=True,
+        max_length=6, placeholder="Ejemplo: 5")
     sin_verificar_timeout = discord.ui.TextInput(
-        label="Respaldo Sin Verificar (minutos)",
-        required=True,
-        max_length=6,
-        placeholder="Ejemplo: 5 · seguridad adicional",
-    )
+        label="Respaldo Sin Verificar (minutos)", required=True,
+        max_length=6, placeholder="Ejemplo: 5")
 
     def __init__(self, guild_id: int) -> None:
         super().__init__()
         self.guild_id = guild_id
-        # Los valores antiguos pueden contener segundos; el formulario presenta
-        # minutos enteros, pero si no se modifican, conserva el valor exacto.
-        self.initial_values = (
+        self.initial = (
             str(max(1, (get_verify_timeout(guild_id) + 59) // 60)),
-            str(max(1, (int(get_orientation_window(guild_id).total_seconds()) + 59) // 60)),
             str(max(1, (int(get_sin_verificado_window(guild_id).total_seconds()) + 59) // 60)),
         )
-        self.verify_timeout.default = self.initial_values[0]
-        self.orientation_timeout.default = self.initial_values[1]
-        self.sin_verificar_timeout.default = self.initial_values[2]
+        self.verify_timeout.default, self.sin_verificar_timeout.default = self.initial
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await configuration_access(interaction, self.guild_id):
             return
         fields = (
             ("verify_timeout", str(self.verify_timeout).strip()),
-            ("orientation_timeout_seconds", str(self.orientation_timeout).strip()),
             ("sin_verificado_timeout_seconds", str(self.sin_verificar_timeout).strip()),
         )
-        changes: dict[str, str] = {}
+        changes = {}
         try:
-            for (key, value), initial in zip(fields, self.initial_values):
+            for (key, value), initial in zip(fields, self.initial):
                 minutes = int(value)
-                if not (1 <= minutes <= 28 * 24 * 60):
+                if not 1 <= minutes <= 40320:
                     raise ValueError
                 if value != initial:
                     changes[key] = str(minutes * 60)
         except ValueError:
             await interaction.response.send_message(
-                "Introduce plazos de 1 a 40 320 minutos (28 días). "
-                "Se aceptan únicamente minutos enteros mayores que cero.",
-                ephemeral=True,
-            )
+                "Escribe minutos enteros de 1 a 40 320 (28 días). No se guardó nada.",
+                ephemeral=True)
             return
         if not changes:
-            await interaction.response.send_message(
-                "No has modificado los plazos. Los valores anteriores se conservan.",
-                ephemeral=True,
-            )
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        # Revisar y pulsar Guardar cambios; abrir el modal jamás persiste cambios.
         await confirm_configuration(interaction, self.guild_id, changes)
+
+
+class PersonalityVerificationTimeModal(discord.ui.Modal, title="Plazo de verificación de personalidad"):
+    orientation_timeout = discord.ui.TextInput(
+        label="Verificación de personalidad (minutos)", required=True,
+        max_length=6, placeholder="Ejemplo: 10")
+
+    def __init__(self, guild_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        seconds = int(get_orientation_window(guild_id).total_seconds())
+        self.initial = str(max(1, (seconds + 59) // 60))
+        self.orientation_timeout.default = self.initial
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await configuration_access(interaction, self.guild_id):
+            return
+        value = str(self.orientation_timeout).strip()
+        try:
+            minutes = int(value)
+            if not 1 <= minutes <= 40320:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                "Escribe minutos enteros de 1 a 40 320 (28 días). No se guardó nada.",
+                ephemeral=True)
+            return
+        if value == self.initial:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id,
+                                    {"orientation_timeout_seconds": str(minutes * 60)})
+
 
 HERALDO_CHANNEL_DEFINITIONS = {
     "logs": ("Logs", "El Heraldo"),
@@ -4846,7 +4867,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             items.append(f"Permitir cambio de elección → {'Sí' if self.pending_allow_change else 'No'}")
         if self.pending_dm_template is not None:
             items.append("DM de recuperación → editado")
-        return "**El Heraldo · Verificación de personalidad**\n\n" + orientation_setup_summary(guild) + "\n\n" + verification_time_summary(guild.id) + _pending_config_text(items)
+        return "**El Heraldo · Verificación de personalidad**\n\n" + orientation_setup_summary(guild) + "\n\n" + personality_time_summary(guild.id) + _pending_config_text(items)
 
     async def select_channel(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -4900,7 +4921,15 @@ class HeraldoOrientationSetupView(discord.ui.View):
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        if any(value is not None for value in (
+                self.pending_channel_id, self.pending_bindings, self.pending_enabled,
+                self.pending_required, self.pending_allow_change, self.pending_dm_template)):
+            await interaction.response.send_message(
+                "Guarda o descarta los cambios pendientes antes de volver.", ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=verification_hub_content(self.guild_id), embed=None,
+            view=HeraldoVerificationHubView(self.guild_id, self.owner_id))
 
     @discord.ui.button(label="Activar", style=discord.ButtonStyle.success, row=2)
     async def activate(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -4944,7 +4973,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
                 "Guarda o descarta los cambios pendientes antes de editar los plazos.",
                 ephemeral=True)
             return
-        await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
+        await interaction.response.send_modal(PersonalityVerificationTimeModal(self.guild_id))
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6326,7 +6355,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
             items.append(f"Canal de verificación → {channel.mention if channel else self.pending_channel_id}")
         if self.pending_enabled is not None:
             items.append(f"Verificación automática → {'activa' if self.pending_enabled else 'desactivada'}")
-        return "**El Heraldo · Verificación de edad**\n\n" + verify_config_summary(guild) + "\n\n" + verification_time_summary(guild.id) + _pending_config_text(items)
+        return "**El Heraldo · Verificación de edad**\n\n" + verify_config_summary(guild) + "\n\n" + age_time_summary(guild.id) + _pending_config_text(items)
 
     async def select_role(self, interaction: discord.Interaction) -> None:
         values = interaction.data.get("values") if interaction.data else []
@@ -6509,7 +6538,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
                 "Guarda o descarta los cambios pendientes antes de editar los plazos.",
                 ephemeral=True)
             return
-        await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
+        await interaction.response.send_modal(AgeVerificationTimeModal(self.guild_id))
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6541,7 +6570,15 @@ class HeraldoVerificationSetupView(discord.ui.View):
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        if any(value is not None for value in (
+                self.pending_role_id, self.pending_sin_role_id,
+                self.pending_channel_id, self.pending_enabled)):
+            await interaction.response.send_message(
+                "Guarda o descarta los cambios pendientes antes de volver.", ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=verification_hub_content(self.guild_id), embed=None,
+            view=HeraldoVerificationHubView(self.guild_id, self.owner_id))
 
 
 class HeraldoRaidDetectionModal(discord.ui.Modal, title="Raid Protection · Detección"):
@@ -10965,7 +11002,7 @@ class HeraldoVerificationHubView(discord.ui.View):
     async def age_verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
-            content="**El Heraldo · Verification · Verificación de edad**\n\n" + verify_config_summary(interaction.guild),
+            content=HeraldoVerificationSetupView(self.guild_id, self.owner_id)._content(interaction.guild),
             embed=None,
             view=HeraldoVerificationSetupView(self.guild_id, self.owner_id),
         )
@@ -10974,14 +11011,10 @@ class HeraldoVerificationHubView(discord.ui.View):
     async def preference_verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         await interaction.edit_original_response(
-            content="**El Heraldo · Verification · Verificación de personalidad**\n\n" + orientation_setup_summary(interaction.guild),
+            content=HeraldoOrientationSetupView(self.guild_id, self.owner_id)._content(interaction.guild),
             embed=None,
             view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
         )
-
-    @discord.ui.button(label="Tiempos", style=discord.ButtonStyle.secondary, row=1)
-    async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -12394,7 +12427,7 @@ class HeraldoSetupView(discord.ui.View):
             content = heraldo_messages_setup_content()
             view = HeraldoMessagesSetupView(self.guild_id, self.owner_id)
         elif selected == "verification":
-            content = "**El Heraldo · Verificación**\n\nConfigura los sistemas de verificación.\n\n" + verification_time_summary(self.guild_id)
+            content = verification_hub_content(self.guild_id)
             view = HeraldoVerificationHubView(self.guild_id, self.owner_id)
         elif selected == "language":
             content = (
