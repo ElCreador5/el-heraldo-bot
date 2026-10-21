@@ -1770,6 +1770,9 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
             return False, f"El emoji **{emoji}** está repetido. Cada rol necesita uno distinto."
         if not role.is_assignable():
             return False, f"No puedo asignar {role.mention}. Coloca el rol de El Heraldo por encima de ese rol."
+        unsafe = verify_role_problem(role, guild)
+        if unsafe:
+            return False, f"El rol de personalidad {role.mention} no es seguro para elección pública: {unsafe}."
         seen_roles.add(role_id)
         seen_emojis.add(emoji_key)
         managed_roles.append((role, emoji))
@@ -4809,6 +4812,13 @@ class HeraldoOrientationSetupView(discord.ui.View):
         if blocked:
             await interaction.response.send_message("No puedo administrar estos roles: " + ", ".join(blocked), ephemeral=True)
             return
+        unsafe = [role.mention for role in roles if verify_role_problem(role, guild)]
+        if unsafe:
+            await interaction.response.send_message(
+                "Estos roles otorgan permisos no aptos para elección pública: " + ", ".join(unsafe),
+                ephemeral=True,
+            )
+            return
 
         used: set[str] = set()
         bindings: list[dict[str, object]] = []
@@ -5001,6 +5011,30 @@ async def orientation_reaction_add(payload: discord.RawReactionActionEvent) -> N
     if target_role is None or not isinstance(channel, discord.TextChannel):
         return
 
+    # Una reacción no debe saltarse la edad, una condena ni la seguridad
+    # de los roles de autoservicio, aunque el canal sea visible.
+    current_ids = {role.id for role in member.roles}
+    age_pending = (verify_enabled(guild.id) and not verification_is_exempt(member)
+                   and get_verify_role_id(guild.id) not in current_ids)
+    punish_role = hp_punish_role_id(guild.id)
+    condemned = (condemnation_get(guild.id, member.id) is not None
+                 or bool(punish_role and punish_role in current_ids))
+    unsafe_role = verify_role_problem(target_role, guild) is not None
+    if age_pending or condemned or unsafe_role:
+        try:
+            message = await channel.fetch_message(payload.message_id)
+            await message.remove_reaction(payload.emoji, member)
+        except discord.HTTPException:
+            pass
+        if unsafe_role:
+            await log_embed(
+                guild, "Advertencia: Rol de personalidad no seguro",
+                "Uno de los roles de personalidad permite permisos inapropiados "
+                "para asignación pública. Revise los roles configurados.",
+                discord.Color.orange(),
+            )
+        return
+
     all_orientation_ids = get_eval_role_ids(guild.id)
     if not personality_allow_change(guild.id):
         assigned = {int(item["role_id"]) for item in get_orientation_bindings(guild.id)}
@@ -5059,6 +5093,10 @@ async def orientation_reaction_remove(payload: discord.RawReactionActionEvent) -
         return
     role = orientation_role_for_emoji(guild, str(payload.emoji))
     if role is None or role not in member.roles:
+        return
+    # Un usuario no puede sortear la opción «Cambiar elección: No»
+    # quitando una reacción para después elegir un rol diferente.
+    if not personality_allow_change(guild.id):
         return
     try:
         await member.remove_roles(role, reason="El Heraldo: reacción de personalidad retirada")
@@ -12922,10 +12960,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
         )
         await interaction.followup.send("¡Ya estás verificado!", ephemeral=True)
         return
-    if role_ids & get_eval_role_ids(guild.id):
-        await interaction.followup.send("Ya completaste la selección de personalidad.", ephemeral=True)
-        return
-
+    # Tener personalidad no sustituye el botón de verificación de edad.
     problem = verify_role_problem(role, guild)
     if problem:
         await interaction.followup.send("Advertencia: La verificación está mal configurada. Avisa a un administrador.", ephemeral=True)
@@ -13032,9 +13067,9 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
         return
 
     role_ids = {r.id for r in member.roles}
-    if get_verify_role_id(guild.id) in role_ids or role_ids & get_eval_role_ids(guild.id):
+    if get_verify_role_id(guild.id) in role_ids:
         clear_verification_expiry(guild_id, user_id)
-        return  # se verificó a tiempo (o un admin le dio un rol de personalidad)
+        return  # únicamente el rol de edad satisface esta verificación
 
     action = get_verify_action(guild.id)
     if action == "none":
