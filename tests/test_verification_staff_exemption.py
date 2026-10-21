@@ -41,7 +41,8 @@ class StaffExemptionTests(unittest.TestCase):
             self.assertIn("verification_is_exempt(",ast.get_source_segment(SOURCE,FUNCTIONS[name]),name)
         code=ast.get_source_segment(SOURCE,FUNCTIONS["on_member_update"])
         self.assertLess(code.index("verification_is_exempt(after)"),
-                        code.index("db_set_sin_verificado("))
+                        code.index("if get_sin_verificado_role_id("))
+        self.assertNotIn("schedule_sin_verificado_check",code)
         self.assertIn("verification_is_exempt(before)",code)
         self.assertIn("db_set_verify_pending(",code)
         self.assertIn("clear_verification_expiry(",code)

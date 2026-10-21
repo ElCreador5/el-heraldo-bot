@@ -89,9 +89,9 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         # contrato NH: no persistir al abrir ni enviar el formulario.
         b.guild_config_set(901, 'verify_timeout', '60')
         b.guild_config_set(901, 'orientation_timeout_seconds', '600')
+        b.guild_config_set(901, 'sin_verificado_timeout_seconds', '420')
         age = b.AgeVerificationTimeModal(901)
         age.verify_timeout._value = '7'
-        age.sin_verificar_timeout._value = str(age.sin_verificar_timeout.default)
         a = interaction()
         await age.on_submit(a)
         self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '60')
@@ -100,6 +100,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         await view.save.callback(interaction())
         self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '420')
         self.assertEqual(b.guild_config_get(901, 'orientation_timeout_seconds'), '600')
+        self.assertEqual(b.guild_config_get(901, 'sin_verificado_timeout_seconds'), '420')
 
         personality = b.PersonalityVerificationTimeModal(901)
         personality.orientation_timeout._value = '8'

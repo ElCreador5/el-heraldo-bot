@@ -2898,23 +2898,13 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
                 after,
                 reason="Sin Verificar no aplica a un miembro ya verificado",
             )
-        else:
-            now = datetime.now(timezone.utc)
-            db_set_sin_verificado(after.guild.id, after.id, now)
-            asyncio.create_task(schedule_sin_verificado_check(after.guild.id, after.id, now))
-            print(f"{after} recibió Sin Verificar — respaldo armado.")
+        # El rol identifica a quien aún no se verificó; no crea otro plazo.
+        # Solo verify_pending_at controla la caducidad de edad cuando está activa.
 
     # IMPORTANTE: asignar el rol de verificación/personalidad manualmente NO inicia
     # el temporizador. La personalidad solo nace cuando El Heraldo procesa una
     # verificación nueva desde su botón. Esto protege a miembros antiguos y evita
     # aplicar expulsiones retroactivas al instalar o reconfigurar el bot.
-
-
-async def schedule_sin_verificado_check(guild_id: int, user_id: int, marked_at: datetime) -> None:
-    delay = (marked_at + get_sin_verificado_window(guild_id) - datetime.now(timezone.utc)).total_seconds()
-    if delay > 0:
-        await asyncio.sleep(delay)
-    await evaluate_sin_verificado(guild_id, user_id)
 
 
 _verification_expiry_inflight: set[tuple[int, int]] = set()
@@ -2964,59 +2954,6 @@ async def run_verification_expiry(guild_id: int, user_id: int, evaluator) -> Non
         await evaluator(guild_id, user_id)
     finally:
         _verification_expiry_inflight.discard(key)
-
-
-async def evaluate_sin_verificado(guild_id: int, user_id: int) -> None:
-    await run_verification_expiry(guild_id, user_id, _evaluate_sin_verificado_inner)
-
-
-async def _evaluate_sin_verificado_inner(guild_id: int, user_id: int) -> None:
-    """Respaldo independiente solo cuando no existe una verificación principal."""
-    if condemnation_get(guild_id, user_id) is not None:
-        clear_verification_expiry(guild_id, user_id)
-        return
-    row = db_get(guild_id, user_id)
-    if row is None:
-        return
-    if row['verify_pending_at'] is not None and verify_enabled(guild_id):
-        # El respaldo no puede acortar el plazo ni sustituir ban/solo registrar
-        # por una expulsión. Ya se posee el bloqueo compartido.
-        await _evaluate_verify_timeout_inner(guild_id, user_id)
-        return
-    if row['sin_verificado_at'] is None:
-        return
-    deadline = datetime.fromisoformat(row['sin_verificado_at']) + get_sin_verificado_window(guild_id)
-    if datetime.now(timezone.utc) < deadline:
-        return
-    guild = bot.get_guild(guild_id)
-    if guild is None:
-        return
-    member = guild.get_member(user_id)
-    if member is None:
-        clear_verification_expiry(guild_id, user_id)
-        return
-
-    role_ids = {r.id for r in member.roles}
-    if (get_sin_verificado_role_id(guild_id) not in role_ids
-            or get_verify_role_id(guild_id) in role_ids or role_ids & get_eval_role_ids(guild_id)):
-        clear_verification_expiry(guild_id, user_id)
-        return
-
-    try:
-        await heraldo_kick(member, reason="No completó la verificación dentro del plazo establecido.")
-    except discord.HTTPException:
-        await log_embed(
-            guild, "Advertencia: Error al expulsar",
-            f"Discord rechazó la expulsión de {member.mention}. Compruebe los permisos y la jerarquía de roles. La verificación continúa pendiente.",
-            discord.Color.dark_red(),
-        )
-        return
-    clear_verification_expiry(guild_id, user_id)
-    await log_embed(
-        guild, "Expulsión por falta de verificación",
-        f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
-        discord.Color.red(),
-    )
 
 
 async def schedule_check(guild_id: int, user_id: int, tentado_at: datetime) -> None:
@@ -3113,9 +3050,8 @@ async def check_pending_verifications() -> None:
         conn = db_connect()
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            "SELECT guild_id, user_id, tentado_at, sin_verificado_at, verify_pending_at FROM guild_members "
-            "WHERE tentado_at IS NOT NULL OR sin_verificado_at IS NOT NULL "
-            "OR verify_pending_at IS NOT NULL"
+            "SELECT guild_id, user_id, tentado_at, verify_pending_at FROM guild_members "
+            "WHERE tentado_at IS NOT NULL OR verify_pending_at IS NOT NULL"
         ).fetchall()
     except Exception:
         print("Error: Falló la lectura de verificaciones pendientes:")
@@ -3132,8 +3068,6 @@ async def check_pending_verifications() -> None:
             if guild is None:
                 if row["tentado_at"] is not None:
                     db_clear_tentado(row["guild_id"], row["user_id"])
-                if row["sin_verificado_at"] is not None:
-                    db_clear_sin_verificado(row["guild_id"], row["user_id"])
                 if row["verify_pending_at"] is not None:
                     db_clear_verify_pending(row["guild_id"], row["user_id"])
                 continue
@@ -3142,11 +3076,6 @@ async def check_pending_verifications() -> None:
                 tentado_at = datetime.fromisoformat(row["tentado_at"])
                 if now >= tentado_at + get_orientation_window(guild.id):
                     await evaluate_member(guild.id, row["user_id"])
-
-            if row["sin_verificado_at"] is not None:
-                sin_verificado_at = datetime.fromisoformat(row["sin_verificado_at"])
-                if now >= sin_verificado_at + get_sin_verificado_window(guild.id):
-                    await evaluate_sin_verificado(guild.id, row["user_id"])
 
             if row["verify_pending_at"] is not None:
                 verify_pending_at = datetime.fromisoformat(row["verify_pending_at"])
@@ -3421,10 +3350,8 @@ def verification_duration_label(seconds: int) -> str:
 
 def age_time_summary(guild_id: int) -> str:
     return (
-        "**Plazos de edad**\n"
-        f"Verificación: **{verification_duration_label(get_verify_timeout(guild_id))}** · "
-        f"Respaldo Sin Verificar: "
-        f"**{verification_duration_label(int(get_sin_verificado_window(guild_id).total_seconds()))}**"
+        "**Plazo de verificación de edad:** "
+        f"**{verification_duration_label(get_verify_timeout(guild_id))}**"
     )
 
 
@@ -3443,47 +3370,35 @@ def verification_hub_content(guild_id: int) -> str:
     )
 
 
-class AgeVerificationTimeModal(discord.ui.Modal, title="Plazos de verificación de edad"):
+class AgeVerificationTimeModal(discord.ui.Modal, title="Plazo de verificación de edad"):
     verify_timeout = discord.ui.TextInput(
         label="Verificación de edad (minutos)", required=True,
-        max_length=6, placeholder="Ejemplo: 5")
-    sin_verificar_timeout = discord.ui.TextInput(
-        label="Respaldo Sin Verificar (minutos)", required=True,
         max_length=6, placeholder="Ejemplo: 5")
 
     def __init__(self, guild_id: int) -> None:
         super().__init__()
         self.guild_id = guild_id
-        self.initial = (
-            str(max(1, (get_verify_timeout(guild_id) + 59) // 60)),
-            str(max(1, (int(get_sin_verificado_window(guild_id).total_seconds()) + 59) // 60)),
-        )
-        self.verify_timeout.default, self.sin_verificar_timeout.default = self.initial
+        self.initial = str(max(1, (get_verify_timeout(guild_id) + 59) // 60))
+        self.verify_timeout.default = self.initial
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await configuration_access(interaction, self.guild_id):
             return
-        fields = (
-            ("verify_timeout", str(self.verify_timeout).strip()),
-            ("sin_verificado_timeout_seconds", str(self.sin_verificar_timeout).strip()),
-        )
-        changes = {}
+        value = str(self.verify_timeout).strip()
         try:
-            for (key, value), initial in zip(fields, self.initial):
-                minutes = int(value)
-                if not 1 <= minutes <= 40320:
-                    raise ValueError
-                if value != initial:
-                    changes[key] = str(minutes * 60)
+            minutes = int(value)
+            if not 1 <= minutes <= 40320:
+                raise ValueError
         except ValueError:
             await interaction.response.send_message(
                 "Escribe minutos enteros de 1 a 40 320 (28 días). No se guardó nada.",
                 ephemeral=True)
             return
-        if not changes:
+        if value == self.initial:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
-        await confirm_configuration(interaction, self.guild_id, changes)
+        await confirm_configuration(interaction, self.guild_id,
+                                    {"verify_timeout": str(minutes * 60)})
 
 
 class PersonalityVerificationTimeModal(discord.ui.Modal, title="Plazo de verificación de personalidad"):
@@ -13541,10 +13456,7 @@ async def verify_config(
 
     await confirm_configuration(interaction, guild.id, changes)
     warnings: list[str] = []
-    proposed_timeout = timeout_seconds if timeout_seconds is not None else get_verify_timeout(guild.id)
     proposed_role_id = rol.id if rol is not None else get_verify_role_id(guild.id)
-    if proposed_timeout > get_sin_verificado_window(guild.id).total_seconds():
-        warnings.append("El respaldo de Sin Verificar puede actuar antes que este timeout.")
     if proposed_role_id != get_tentado_role_id(guild.id):
         warnings.append("La personalidad solo se programa para el rol Tentad@.")
     if warnings:
@@ -18387,10 +18299,15 @@ async def _release_condemned_member_inner(
         now = datetime.now(timezone.utc)
         db_set_tentado(member.guild.id, member.id, now)
         asyncio.create_task(schedule_check(member.guild.id, member.id, now))
-    if get_sin_verificado_role_id(member.guild.id) in restored_ids:
+    if (verify_enabled(member.guild.id)
+            and not verification_is_exempt(member)
+            and get_sin_verificado_role_id(member.guild.id) in restored_ids
+            and get_verify_role_id(member.guild.id) not in {r.id for r in member.roles}
+            and not ({r.id for r in member.roles} & get_eval_role_ids(member.guild.id))):
+        # Un rol Sin Verificar restaurado recibe el plazo principal completo.
         now = datetime.now(timezone.utc)
-        db_set_sin_verificado(member.guild.id, member.id, now)
-        asyncio.create_task(schedule_sin_verificado_check(member.guild.id, member.id, now))
+        db_set_verify_pending(member.guild.id, member.id, now)
+        asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
 
     pending_role_details = ", ".join(str(rid) for rid in missing_role_ids[:15])
     if lost > 15:
