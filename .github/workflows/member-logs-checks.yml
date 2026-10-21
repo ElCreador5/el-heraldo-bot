@@ -19,5 +19,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Validar dependencias
         run: pip check
+      - name: Comprobar rutas Volver y filas NH UX-03B
+        run: python -m unittest discover -s tests -p 'test_ux_main_release.py' -v
       - name: Regresiones de logs
         run: python -m unittest test_member_logs test_member_departure_cards test_regressions test_release_report_only test_honeypot_selective_main test_honeypot_runtime test_raid_save_main -v
