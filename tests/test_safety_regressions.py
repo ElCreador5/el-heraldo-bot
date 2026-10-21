@@ -85,16 +85,30 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(not e.footer.text for e in result['embeds']))
 
     async def test_setup_times_are_only_saved_after_confirmation(self):
+        # Ambos editores tienen tiempos independientes y usan el mismo
+        # contrato NH: no persistir al abrir ni enviar el formulario.
         b.guild_config_set(901, 'verify_timeout', '60')
-        modal = b.HeraldoGeneralConfigModal(901)
-        modal.verify_timeout._value = '7'
-        modal.orientation_timeout._value = '8'
-        modal.sin_verificar_timeout._value = '9'
-        i = interaction()
-        await modal.on_submit(i)
+        b.guild_config_set(901, 'orientation_timeout_seconds', '600')
+        age = b.AgeVerificationTimeModal(901)
+        age.verify_timeout._value = '7'
+        age.sin_verificar_timeout._value = str(age.sin_verificar_timeout.default)
+        a = interaction()
+        await age.on_submit(a)
         self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '60')
-        view = i.response.send_message.call_args.kwargs['view']
+        self.assertEqual(b.guild_config_get(901, 'orientation_timeout_seconds'), '600')
+        view = a.response.send_message.call_args.kwargs['view']
         await view.save.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '420')
+        self.assertEqual(b.guild_config_get(901, 'orientation_timeout_seconds'), '600')
+
+        personality = b.PersonalityVerificationTimeModal(901)
+        personality.orientation_timeout._value = '8'
+        p = interaction()
+        await personality.on_submit(p)
+        self.assertEqual(b.guild_config_get(901, 'orientation_timeout_seconds'), '600')
+        view = p.response.send_message.call_args.kwargs['view']
+        await view.save.callback(interaction())
+        self.assertEqual(b.guild_config_get(901, 'orientation_timeout_seconds'), '480')
         self.assertEqual(b.guild_config_get(901, 'verify_timeout'), '420')
 
     async def test_setup_modal_with_revoked_permission_never_saves(self):
