@@ -151,25 +151,27 @@ class CustodioSetupView(discord.ui.View):
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     async def check_rules(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        """Consulta manual del reglamento, sin ejecución de inteligencia artificial."""
+        await interaction.response.defer()
         token = os.environ.get("DISCORD_TOKEN", "")
         try:
             snapshot = await load_server_rules(self.guild_id, token)
         except (RulesUnavailable, ValueError) as exc:
             reason = exc.reason if isinstance(exc, RulesUnavailable) else "token_unavailable"
+            details = {
+                "screening_disabled_or_unknown": "Active las Reglas del servidor en Discord antes de configurar Custodio.",
+                "screening_disabled": "Active las Reglas del servidor en Discord antes de configurar Custodio.",
+                "rules_empty": "Las Reglas del servidor están vacías. Defina las reglas en Discord.",
+                "verification_unavailable": "Discord no permitió consultar las reglas. No se pueden aprobar ni interpretar.",
+            }
+            explanation = details.get(reason, "No fue posible verificar las reglas oficiales de Discord.")
             await interaction.edit_original_response(
-                content="No fue posible consultar reglas del servidor (" + reason +
-                        "). Las preferencias no se modificaron.",
+                content=self.summary() + "\\n\\n**Reglas del servidor no disponibles.** " + explanation,
                 view=self, embed=None,
             )
             return
-        await interaction.edit_original_response(
-            content=self.summary() + "\n\n"
-                    f"**reglas del servidor:** activadas; {snapshot.count} reglas leídas. "
-                    f"Revisión: {snapshot.revision[:12]}. "
-                    "La API de Discord puede cambiar sin previo aviso.",
-            view=self, embed=None,
-        )
+        view = CustodioRulesView(self, snapshot)
+        await interaction.edit_original_response(content=view.summary(), view=view, embed=None)
 
     async def open_rule_actions(self, interaction: discord.Interaction):
         """Abre las plantillas por categoría sin guardar ni sancionar."""
@@ -366,4 +368,61 @@ class CustodioReportChannelConfirmView(discord.ui.View):
         await interaction.response.edit_message(
             content=self.parent.summary() + "\n\nNo se creó ningún canal.",
             view=self.parent, embed=None,
+        )
+
+
+class CustodioRulesView(discord.ui.View):
+    """Consulta de reglas obtenidas: IA explícitamente desactivada por defecto."""
+
+    def __init__(self, parent: CustodioSetupView, snapshot):
+        super().__init__(timeout=300)
+        self.parent = parent
+        self.snapshot = snapshot
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await self.parent.access_check(interaction, self.parent.guild_id, self.parent.owner_id)
+
+    def summary(self) -> str:
+        rules = "\\n".join(
+            f"**{index}.** {rule[:600]}" + ("…" if len(rule) > 600 else "")
+            for index, rule in enumerate(self.snapshot.rules, 1)
+        )
+        # Mensajes de Discord tienen un límite de 2000 caracteres.
+        if len(rules) > 1300:
+            rules = rules[:1290].rsplit("\\n", 1)[0] + "\\n… Consulte las restantes en Discord."
+        return (
+            "**Modo Custodio · Reglas del servidor**\\n\\n"
+            f"**Estado:** activadas · **Reglas:** {self.snapshot.count}\\n"
+            f"**Revisión:** {self.snapshot.revision[:12]}\\n\\n"
+            + rules + "\\n\\n"
+            "**Análisis de ambigüedades:** no configurado. "
+            "La IA solo se ejecutará mediante una acción administrativa manual "
+            "cuando se disponga de un modelo comprobado. "
+            "Ninguna regla se modifica ni se sanciona desde este panel."
+        )
+
+    @discord.ui.button(label="Analizar reglas", style=discord.ButtonStyle.secondary, row=0)
+    async def analyze_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from custodio_ai_config import CustodioAIConfig, prepare_rule_analysis
+        # Nunca se pasa texto a un servicio externo; IA permanece apagada.
+        result = prepare_rule_analysis(
+            config=CustodioAIConfig(), rules_active=True,
+            administrator_requested=True, text="\\n".join(self.snapshot.rules),
+        )
+        if result["status"] != "manual_review":
+            raise RuntimeError("El modo seguro de IA no se ha respetado")
+        await interaction.response.edit_message(
+            content=self.summary() + "\\n\\n**Análisis pendiente:** "
+                    "todavía no hay modelo gratuito instalado y verificado. "
+                    "Puede revisar las ambigüedades manualmente; "
+                    "no se ha enviado ningún texto a una IA.",
+            view=self, embed=None,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=0)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        self.parent._sync_controls()
+        await interaction.response.edit_message(
+            content=self.parent.summary(), view=self.parent, embed=None,
         )
