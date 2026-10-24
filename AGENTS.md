@@ -87,7 +87,7 @@ Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro ag
 - Controlar concurrencia, caducidad, cierres, interacciones repetidas, revocación de permisos y fallos parciales.
 
 ### UX-02 — Paleta de botones según acción EFECTIVA
-- `discord.ButtonStyle.success` (verde): Guardar, Confirmar acciones positivas, Publicar y Activar **cuando realmente ejecutan** una acción positiva autorizada.
+- `discord.ButtonStyle.success` (verde): Guardar, **Confirmar cambios** después de una propuesta revisada, Confirmar acciones positivas, Publicar y Activar **cuando realmente ejecutan** una acción autorizada. En la confirmación de retirada de canal trampa, **Confirmar cambios es verde**; el control previo **Retirar canal** continúa rojo. Las confirmaciones tituladas `Eliminar`, `Banear` o similares conservan el rojo de operación destructiva.
 - `discord.ButtonStyle.danger` (rojo): Cancelar, Cerrar, Descartar, Eliminar, Retirar, Desactivar, sancionar y **confirmar** operaciones destructivas. Cancelar y Cerrar son rojos incluso si solo cierran el editor, conforme a la decisión del 16/10.
 - `discord.ButtonStyle.primary` (azul): Configurar, Editar y abrir un subpanel/modal o una confirmación **sin ejecutar** cambios todavía. Ejemplo: Crear canal que solo prepara confirmación.
 - `discord.ButtonStyle.secondary` (gris): Volver, Vista previa y consultas neutrales sin mutación.
