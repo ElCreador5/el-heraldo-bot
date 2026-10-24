@@ -35,6 +35,7 @@ class RulesSnapshotTests(unittest.TestCase):
 
     def test_each_guild_is_scoped_and_invalid_guild_is_rejected(self):
         self.assertEqual(make_snapshot(guild_id=456).guild_id, 456)
+        self.assertNotEqual(make_snapshot(guild_id=456).revision, make_snapshot(guild_id=123).revision)
         with self.assertRaises(ValueError):
             make_snapshot(guild_id=0)
 
@@ -106,6 +107,13 @@ class ReviewPlanTests(unittest.TestCase):
                 plan = plan_review(self.rules, self.rules.revision, 456, "v1", result, mode="assist")
                 self.assertEqual(plan.state, "review")
                 self.assertEqual(plan.action, "notify_staff")
+
+    def test_observe_does_not_notify_on_classifier_failure(self):
+        for result in (None, {"outcome": ["malformed"], "rule_numbers": [1]}):
+            with self.subTest(result=result):
+                plan = plan_review(self.rules, self.rules.revision, 456, "v1", result)
+                self.assertEqual(plan.state, "observe")
+                self.assertEqual(plan.action, "record_only")
 
     def test_invalid_mode_and_message_identity_are_rejected(self):
         with self.assertRaises(ValueError):
