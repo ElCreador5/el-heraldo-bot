@@ -118,13 +118,16 @@ class NHButtonRuntimeNavigation(unittest.IsolatedAsyncioTestCase):
             with self.subTest(view=view_type.__name__):
                 view = view_type(998812, 10)
                 interaction = NS(guild=NS(id=998812), response=NS(
-                    edit_message=AsyncMock(), send_message=AsyncMock()))
+                    edit_message=AsyncMock(), send_message=AsyncMock(), defer=AsyncMock()),
+                    edit_original_response=AsyncMock())
                 if isinstance(view, b.HeraldoHoneypotSetupView):
                     with patch.object(view, "_pending_lines", return_value=[]):
                         await view.back.callback(interaction)
+                    interaction.response.defer.assert_awaited_once()
+                    call = interaction.edit_original_response.call_args
                 else:
                     await view.back.callback(interaction)
-                call = interaction.response.edit_message.call_args
+                    call = interaction.response.edit_message.call_args
                 self.assertIsInstance(call.kwargs["view"], b.HeraldoAutomodSetupView)
                 self.assertIsNone(call.kwargs.get("embed"))
 
