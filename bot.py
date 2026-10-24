@@ -4667,8 +4667,9 @@ class HeraldoHoneypotSetupView(discord.ui.View):
 
     @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.primary, row=1)
     async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         if self._has_pending():
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Guarde o descarte sus cambios pendientes antes de crear otro canal.", ephemeral=True,
             )
             return
@@ -4680,19 +4681,19 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 (item for item in guild.text_channels if item.name.casefold() == "honeypot"), None,
             )
         if channel and channel.id in hp_traps(self.guild_id):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "El canal Honeypot ya está registrado. No se creará otro.", ephemeral=True,
             )
             return
         if channel is not None and hp_protected_channel_reason(channel):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "El canal encontrado está reservado para otro módulo.", ephemeral=True,
             )
             return
         if channel is None:
             me = guild.me
             if me is None or not me.guild_permissions.manage_channels:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "El bot necesita Gestionar canales para crear Honeypot.", ephemeral=True,
                 )
                 return
@@ -4701,8 +4702,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             if channel is not None else
             "¿Confirma crear y registrar un nuevo canal Honeypot?"
         )
-        await interaction.response.send_message(
-            message, ephemeral=True,
+        await interaction.edit_original_response(
+            content=message, embed=self._embed(guild),
             view=HoneypotCreateChannelConfirmView(self, interaction, channel.id if channel else None),
         )
 
@@ -5343,16 +5344,16 @@ class HoneypotCreateChannelConfirmView(discord.ui.View):
         self.original_traps = set(hp_traps(panel.guild_id))
         self.finished = False
 
-    async def _dismiss(self, interaction: discord.Interaction) -> None:
-        try:
-            await interaction.delete_original_response()
-        except discord.HTTPException:
-            try:
-                await interaction.edit_original_response(content="Confirmación cerrada.", view=None)
-            except discord.HTTPException:
-                pass
+    async def _dismiss(self, interaction: discord.Interaction, note: str = "Revise la configuración antes de reintentar.") -> None:
+        """Devolver la misma tarjeta a su editor, sin borrar mensajes."""
+        self.panel._original_traps = set(hp_traps(self.panel.guild_id))
+        self.panel._original_config = self.panel._snapshot()
+        self.panel.original_enabled = honeypot_enabled(self.panel.guild_id)
+        self.panel.original_paused = honeypot_paused(self.panel.guild_id)
+        self.panel.original_action = hp_action(self.panel.guild_id)
+        await self.panel._refresh(interaction, note)
 
-    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self.panel.interaction_check(interaction):
             return
@@ -5376,6 +5377,15 @@ class HoneypotCreateChannelConfirmView(discord.ui.View):
             await interaction.followup.send("El estado cambió. Reabra el panel.", ephemeral=True)
             await self._dismiss(interaction)
             return
+        first_trap = not hp_traps(self.panel.guild_id)
+        fallback_action = None
+        if first_trap:
+            fallback_action, problem = hp_initial_activation_plan(
+                guild, actor_permissions=interaction.user.guild_permissions,
+            )
+            if problem:
+                await self._dismiss(interaction, problem + " No se creó ni registró el canal.")
+                return
         me = guild.me
         channel = guild.get_channel(self.existing_channel_id) if self.existing_channel_id else None
         if self.existing_channel_id is not None and not isinstance(channel, discord.TextChannel):
@@ -5438,49 +5448,45 @@ class HoneypotCreateChannelConfirmView(discord.ui.View):
             await self._dismiss(interaction)
             return
         try:
+            if first_trap:
+                hp_save_settings(guild.id, {
+                    "honeypot_enabled": "0", "honeypot_paused": "0",
+                    "honeypot_warning_enabled": "1",
+                })
             note = await _setup_apply_system_channel(guild, "honeypot", channel, publish_messages=True)
             hp_setting_set(guild.id, "honeypot_channel_create_pending", "")
+            if first_trap:
+                if note == "Canal Honeypot establecido y tarjeta sincronizada.":
+                    changes = {"honeypot_enabled": "1", "honeypot_paused": "0"}
+                    if fallback_action is not None:
+                        changes["honeypot_action"] = hp_action_storage(fallback_action)
+                    hp_save_settings(guild.id, changes)
+                    note += " Honeypot activado automáticamente."
+                    if fallback_action is not None:
+                        note += " Medida inicial: Solo registrar, sin sanciones."
+                else:
+                    note += " La protección permanece desactivada hasta reparar el aviso."
         except Exception:
             await interaction.followup.send(
                 "La vinculación del canal falló. Compruebe su estado en /setup.", ephemeral=True,
             )
             await self._dismiss(interaction)
             return
-        self.panel._original_traps = set(hp_traps(self.panel.guild_id))
-        self.panel._original_config = self.panel._snapshot()
         self.panel.last_publication_status = note
-        try:
-            if self.panel._origin_interaction is not None:
-                await self.panel._origin_interaction.edit_original_response(
-                    content=None, embed=self.panel._embed(guild), view=self.panel,
-                )
-            else:
-                await self.panel_interaction.message.edit(
-                content=None, embed=self.panel._embed(guild), view=self.panel,
-            )
-        except (discord.HTTPException, AttributeError):
-            try:
-                await self.panel_interaction.edit_original_response(
-                    content=None, embed=self.panel._embed(guild), view=self.panel,
-                )
-            except discord.HTTPException:
-                await interaction.followup.send(
-                    "El canal se configuró, pero el panel no pudo actualizarse.", ephemeral=True,
-                )
-        await self._dismiss(interaction)
+        await self._dismiss(interaction, note)
 
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         if not await self.panel.interaction_check(interaction):
             return
-        await interaction.response.defer()
-        if not await hp_config_interaction_allowed(interaction, self.panel.guild_id, self.panel.owner_id):
-            return
         if self.finished:
+            await self._dismiss(interaction, "Esta confirmación ya se resolvió.")
             return
         self.finished = True
         self.stop()
-        await self._dismiss(interaction)
+        await self._dismiss(interaction, "Creación o registro descartados. Sin cambios.")
+
 
 
 

@@ -199,7 +199,9 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertIn("self.original_traps", code)
         self.assertIn("guild.create_text_channel(", code)
         self.assertIn("_setup_apply_system_channel(", code)
-        self.assertIn("Cancelar", code)
+        self.assertIn("Descartar cambios", code)
+        self.assertIn("hp_initial_activation_plan", code)
+        self.assertIn("hp_save_settings(guild.id, changes)", code)
 
     def test_notice_modals_only_prepare_confirmation(self):
         text = SOURCE[

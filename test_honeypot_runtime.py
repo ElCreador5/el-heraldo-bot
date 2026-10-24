@@ -377,7 +377,7 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
             confirm = b.HoneypotCreateChannelConfirmView(panel, self.i(), None)
             self.views.append(confirm)
             self.guild.me.guild_permissions.manage_channels = False
-            await press(confirm, "Cancelar" if cancel else "Confirmar", self.i())
+            await press(confirm, "Descartar cambios" if cancel else "Confirmar cambios", self.i())
             self.guild.create_text_channel.assert_not_awaited()
 
     async def test_slash_confirm_revalidates_and_cancel_does_not_persist(self):
@@ -409,7 +409,7 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.views.extend(views)
         with patch.object(b, "_setup_apply_system_channel", new=AsyncMock(side_effect=bind)), \
              patch.object(b, "hp_protected_channel_reason", return_value=None):
-            await asyncio.gather(*(press(view, "Confirmar", self.i()) for view in views))
+            await asyncio.gather(*(press(view, "Confirmar cambios", self.i()) for view in views))
         self.guild.create_text_channel.assert_awaited_once()
         self.assertEqual(set(b.hp_traps(self.gid)), {self.channel.id})
 
