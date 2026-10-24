@@ -39,6 +39,12 @@ class FakeChannel:
         )
 
 
+class FakeMember:
+    def __init__(self, ident, permissions=None):
+        self.id = ident
+        self.guild_permissions = permissions
+
+
 class FakeGuild:
     def __init__(self, guild_id=1, *, manage_channels=True):
         self.id = guild_id
@@ -49,7 +55,7 @@ class FakeGuild:
             manage_channels=manage_channels, view_channel=True, send_messages=True,
             embed_links=True, read_message_history=True,
         )
-        self.me = SimpleNamespace(id=201, guild_permissions=bot_perms)
+        self.me = FakeMember(201, bot_perms)
         self.text_channels = []
         self.create_count = 0
 
@@ -73,7 +79,7 @@ class ReportChannelTests(IsolatedAsyncioTestCase):
         self.get = lambda guild, key: self.settings.get((guild, key))
         self.set = lambda guild, key, value: self.settings.__setitem__((guild, key), value)
         self.patch_channel = patch("custodio_reports.discord.TextChannel", FakeChannel)
-        self.patch_member = patch("custodio_reports.discord.Member", type("FakeMember", (), {}))
+        self.patch_member = patch("custodio_reports.discord.Member", FakeMember)
         self.patch_channel.start()
         self.patch_member.start()
 
