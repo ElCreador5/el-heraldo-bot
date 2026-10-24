@@ -419,6 +419,23 @@ class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
         resource.assert_called_once_with(901, "channel", "honeypot", 42)
         notice.assert_awaited_once_with(channel)
 
+    async def test_failed_initial_notice_does_not_automatically_enable_honeypot(self):
+        traps = {}
+        guild, channel = NS(id=901), NS(id=42, mention="<#42>")
+        with (
+            patch.object(b, "guild_resource_set"),
+            patch.object(b, "hp_traps", side_effect=lambda gid: dict(traps)),
+            patch.object(b, "hp_add_trap", side_effect=lambda gid, cid: traps.update({cid: None})),
+            patch.object(b, "hp_initial_activation_plan", return_value=("log", None)),
+            patch.object(b, "hp_setting_set") as setting,
+            patch.object(b, "hp_sync_warning", new=AsyncMock(return_value="faltan permisos")),
+        ):
+            note = await b._setup_apply_system_channel(guild, "honeypot", channel)
+        self.assertEqual(traps, {42: None})
+        self.assertNotIn("activada automáticamente", note)
+        self.assertIn("no activada", note)
+        self.assertNotIn("honeypot_enabled", [call.args[1] for call in setting.call_args_list])
+
     async def test_second_system_channel_never_reactivates_paused_protection(self):
         traps = {41: None}
         guild, channel = NS(id=901), NS(id=42, mention="<#42>")
