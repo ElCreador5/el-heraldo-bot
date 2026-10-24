@@ -184,9 +184,11 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             await view.create_channel.callback(i)
         i.guild.create_text_channel.assert_not_awaited()
         add.assert_not_called()
-        proposed = i.followup.send.call_args.kwargs["view"]
+        proposed = i.edit_original_response.call_args.kwargs["view"]
         self.assertIsInstance(proposed, b.HoneypotTrapActionConfirmView)
         self.assertTrue(proposed.from_setup)
+        self.assertIs(proposed.parent, view)
+        i.followup.send.assert_not_awaited()
         self.assertEqual(proposed.confirm.style, b.discord.ButtonStyle.success)
         self.assertEqual(proposed.cancel.style, b.discord.ButtonStyle.danger)
         denied = interaction()
@@ -209,9 +211,11 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             patch.object(b, "_setup_apply_system_channel", new=AsyncMock()) as apply,
         ):
             await view.create_channel.callback(i)
-            proposed = i.followup.send.call_args.kwargs["view"]
+            proposed = i.edit_original_response.call_args.kwargs["view"]
             self.assertEqual(proposed.action, "add")
             self.assertTrue(proposed.from_setup)
+            self.assertIs(proposed.parent, view)
+            i.followup.send.assert_not_awaited()
             apply.assert_not_awaited()
         self.assertEqual(proposed.channel_id, 777)
 
@@ -268,83 +272,141 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
 
 class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
     make_view = HoneypotPanelTests.make_view
-    async def test_removal_is_draft_then_green_confirmation_on_same_panel(self):
+    async def test_retire_opens_confirmation_immediately_and_only_removes_its_channel(self):
         traps = {123: None}
         state = {"enabled": True}
         channel = MagicMock(spec=b.discord.TextChannel)
         channel.id, channel.mention = 123, "<#123>"
-        async def access(*args, **kwargs):
-            return True
-        def setting(gid, key, value):
-            if key == "honeypot_enabled":
-                state["enabled"] = value == "1"
         with (
             patch.object(b, "hp_traps", side_effect=lambda gid: dict(traps)),
             patch.object(b, "honeypot_enabled", side_effect=lambda gid: state["enabled"]),
-            patch.object(b, "hp_remove_trap", side_effect=lambda gid, cid: traps.pop(cid)),
-            patch.object(b, "hp_setting_set", side_effect=setting) as save,
-            patch.object(b, "configuration_access", side_effect=access),
+            patch.object(b, "hp_remove_trap", side_effect=lambda gid, cid: traps.pop(cid)) as delete,
+            patch.object(b, "hp_setting_set",
+                         side_effect=lambda gid, key, val: state.update(enabled=val == "1")) as save,
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "log_embed", new=AsyncMock()) as logger,
             patch.object(b, "hp_setup_embed",
-                         side_effect=lambda guild, pending=None: b.discord.Embed(description=f"Canales trampa: {len(traps)}")),
+                         side_effect=lambda guild, pending=None: b.discord.Embed(description=f"Trampas: {len(traps)}")),
         ):
             view = b.HeraldoHoneypotSetupView(901, 10)
-            select = interaction()
-            select.data = {"values": ["123"]}
-            select.guild.get_channel = lambda _id: channel
-            select.response.is_done = lambda: select.response.defer.await_count > 0
-            await view.select_trap(select)
-            remove = interaction()
-            remove.guild.get_channel = lambda _id: channel
-            remove.response.is_done = lambda: remove.response.defer.await_count > 0
-            await view.remove_channel.callback(remove)
-            self.assertEqual(view.pending_remove_trap_id, 123)
-            self.assertEqual(len(traps), 1, "Retirar canal antes de Guardar modificó SQLite")
-            save.assert_not_called()
-            remove.followup.send.assert_not_awaited()
-
-            draft = interaction()
-            draft.guild.get_channel = lambda _id: channel
-            await view.save_changes.callback(draft)
+            view.pending_action = "timeout"  # Nunca debe guardarse con la retirada.
+            view.selected_channel_id = 123
+            i = interaction()
+            i.guild.get_channel = lambda _id: channel
+            await view.remove_channel.callback(i)
             self.assertEqual(len(traps), 1)
-            draft.followup.send.assert_not_awaited()
-            confirmation = draft.edit_original_response.call_args.kwargs["view"]
-            self.assertIsInstance(confirmation, b.HoneypotRemovalSaveConfirmView)
-            self.assertEqual(confirmation.confirm.style, b.discord.ButtonStyle.success)
-            # La confirmación NO duplica Descartar/Volver; pertenecen al editor.
+            delete.assert_not_called()
+            save.assert_not_called()
+            i.followup.send.assert_not_awaited()
+            proposal = i.edit_original_response.call_args.kwargs["view"]
+            self.assertIsInstance(proposal, b.HoneypotRemovalSaveConfirmView)
+            self.assertEqual(proposal.channel_id, 123)
             self.assertEqual(
-                [item.label for item in confirmation.children
+                [item.label for item in proposal.children
                  if isinstance(item, b.discord.ui.Button)],
-                ["Confirmar cambios"],
+                ["Confirmar cambios", "Descartar cambios"],
             )
-
+            self.assertEqual(proposal.confirm.style, b.discord.ButtonStyle.success)
+            self.assertEqual(proposal.discard.style, b.discord.ButtonStyle.danger)
             accepted = interaction()
             accepted.guild.get_channel = lambda _id: channel
             accepted.response.is_done = lambda: accepted.response.defer.await_count > 0
-            await confirmation.confirm.callback(accepted)
+            await proposal.confirm.callback(accepted)
             self.assertEqual(traps, {})
             self.assertFalse(state["enabled"])
-            save.assert_any_call(901, "honeypot_enabled", "0")
+            save.assert_called_once_with(901, "honeypot_enabled", "0")
+            delete.assert_called_once_with(901, 123)
+            logger.assert_awaited_once()
+            self.assertEqual(view.pending_action, "timeout")
             accepted.followup.send.assert_not_awaited()
             rendered = accepted.edit_original_response.call_args.kwargs
             self.assertIs(rendered["view"], view)
-            self.assertEqual(rendered["view"].discard_changes.label, "Descartar cambios")
-            self.assertEqual(rendered["view"].back.label, "Volver")
-            self.assertEqual(rendered["view"].discard_changes.style, b.discord.ButtonStyle.danger)
-            self.assertIn("Canales trampa: 0", rendered["embed"].description)
+            self.assertIn("Trampas: 0", rendered["embed"].description)
             self.assertIn("Canales trampa configurados: 0", rendered["content"])
 
-    async def test_discard_trap_removal_leaves_original_configuration(self):
+    async def test_discard_retirement_does_not_modify_traps_or_other_drafts(self):
         view = self.make_view(traps={123: None}, enabled=True)
-        channel = MagicMock(spec=b.discord.TextChannel)
-        channel.id, channel.mention = 123, "<#123>"
-        view.pending_remove_trap_id = 123
-        with patch.object(b, "hp_remove_trap") as delete, patch.object(b, "hp_setting_set") as save, \
-             patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()):
+        view.pending_action = "timeout"
+        view.selected_channel_id = 123
+        confirmation = b.HoneypotRemovalSaveConfirmView(view, 123)
+        with (
+            patch.object(b, "hp_remove_trap") as delete,
+            patch.object(b, "hp_setting_set") as save,
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()),
+        ):
             i = interaction()
-            await view.discard_changes.callback(i)
-        self.assertIsNone(view.pending_remove_trap_id)
+            i.response.is_done = lambda: i.response.defer.await_count > 0
+            await confirmation.discard.callback(i)
+            i.followup.send.assert_not_awaited()
+            self.assertIs(i.edit_original_response.call_args.kwargs["view"], view)
+        self.assertEqual(view.pending_action, "timeout")
         delete.assert_not_called()
         save.assert_not_called()
+
+    async def test_first_saved_channel_activates_in_the_existing_panel(self):
+        traps = {}
+        state = {"enabled": False, "paused": True, "action": "role"}
+        channel = MagicMock(spec=b.discord.TextChannel)
+        channel.id, channel.mention = 51, "<#51>"
+        channel.permissions_for.return_value = NS(
+            view_channel=True, send_messages=True, manage_messages=True,
+        )
+        i = interaction()
+        i.guild.get_channel = lambda cid: channel if cid == 51 else None
+        i.response.is_done = lambda: i.response.defer.await_count > 0
+        def save(gid, key, val):
+            if key == "honeypot_enabled":
+                state["enabled"] = val == "1"
+            if key == "honeypot_paused":
+                state["paused"] = val == "1"
+            if key == "honeypot_action":
+                state["action"] = val
+        with (
+            patch.object(b, "hp_traps", side_effect=lambda gid: dict(traps)),
+            patch.object(b, "hp_add_trap", side_effect=lambda gid, cid: traps.update({cid: None})) as add,
+            patch.object(b, "honeypot_enabled", side_effect=lambda gid: state["enabled"]),
+            patch.object(b, "honeypot_paused", side_effect=lambda gid: state["paused"]),
+            patch.object(b, "hp_action", side_effect=lambda gid: state["action"]),
+            patch.object(b, "hp_initial_activation_plan", return_value=("log", None)),
+            patch.object(b, "hp_protected_channel_reason", return_value=None),
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "hp_setting_set", side_effect=save) as setting,
+            patch.object(b, "hp_sync_warning", new=AsyncMock(return_value=None)),
+            patch.object(b, "hp_setup_embed",
+                         side_effect=lambda guild, pending=None: b.discord.Embed(description=f"Trampas: {len(traps)}")),
+        ):
+            view = b.HeraldoHoneypotSetupView(901, 10)
+            view.pending_trap_id = 51
+            await view.save_changes.callback(i)
+            add.assert_called_once_with(901, 51)
+            setting.assert_any_call(901, "honeypot_enabled", "1")
+            setting.assert_any_call(901, "honeypot_paused", "0")
+            setting.assert_any_call(901, "honeypot_action", "log")
+            self.assertTrue(state["enabled"])
+            self.assertFalse(state["paused"])
+            self.assertIsNone(view.pending_trap_id)
+            self.assertEqual(view.toggle.label, "Pausar protección")
+            self.assertIn("activado automáticamente", i.edit_original_response.call_args.kwargs["content"])
+            self.assertIs(i.edit_original_response.call_args.kwargs["view"], view)
+            i.followup.send.assert_not_awaited()
+
+    def test_first_activation_falls_back_only_when_no_explicit_action_exists(self):
+        guild = MagicMock(spec=b.discord.Guild)
+        guild.id = 901
+        guild.get_role.return_value = None
+        with patch.object(b, "hp_action", return_value="role"), \
+             patch.object(b, "hp_punish_role_id", return_value=0), \
+             patch.object(b, "hp_setting_get", return_value=None):
+            self.assertEqual(b.hp_initial_activation_plan(guild), ("log", None))
+            override, problem = b.hp_initial_activation_plan(guild, requested_action="role")
+            self.assertIsNone(override)
+            self.assertIn("rol de castigo", problem)
+        with patch.object(b, "hp_action", return_value="role"), \
+             patch.object(b, "hp_punish_role_id", return_value=0), \
+             patch.object(b, "hp_setting_get", return_value="role"):
+            override, problem = b.hp_initial_activation_plan(guild)
+            self.assertIsNone(override)
+            self.assertIn("rol de castigo", problem)
 
     def test_removal_cannot_reimport_legacy_channel_when_zero(self):
         import sqlite3
