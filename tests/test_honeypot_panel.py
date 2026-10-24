@@ -209,7 +209,8 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(i2.response.send_modal.call_args.args[0], b.HoneypotWarningEmbedModal)
 
 
-class HoneypotRemovalBehaviorTests(HoneypotPanelTests):
+class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
+    make_view = HoneypotPanelTests.make_view
     async def test_removal_is_draft_then_green_confirmation_on_same_panel(self):
         traps = {123: None}
         state = {"enabled": True}
