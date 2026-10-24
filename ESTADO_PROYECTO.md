@@ -1,3 +1,6 @@
+## Pie único de identidad del laboratorio — 2026-10-24
+**Candidato a publicar en `Pruebas`**: sello obligatorio `El Heraldo's Labs 🧪` y `{servericon}` en el pie de todos los embeds; soporte de plantillas múltiples, ediciones, DMs de origen conocido, mensajes exclusivamente multimedia y pistas en editores. No modifica SQLite ni el nombre de servidores. Validaciones y estado de Railway Test deben observarse después de publicar. `main` no se toca.
+
 ## Continuación #23 — ACK de todo /setup y pies de servidor (2026-10-24, RD)
 
 Base real recuperada de GitHub: `Pruebas@f50c8224cdd16f07c05ae748ed6220c574ce1597` y `main@41f55654a92fa44c350d2a33d261979bf595deb2`. Se leyó Issue #23 y sus ocho comentarios; el respaldo productivo y sus dos restauraciones ya constan acreditados en `ISSUE23_RESPALDO.md`. No se repitió ese trabajo ni se modificó producción.

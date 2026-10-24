@@ -1,3 +1,6 @@
+## Continuidad — marca universal de footer en Test (2026-10-24)
+Objetivo autorizado: en `Pruebas` todos los embeds deben llevar texto `El Heraldo's Labs 🧪` e icono real del servidor cuando exista, sin cambiar los valores de `{servidor}` usados fuera del footer. Se adapta el sello global, las plantillas tipo `TemplateEmbeds`, los mensajes de verificación, los editores y las regresiones; respetar archivos/datos de prueba. Consultar el nuevo NH UX-03C y CI de la rama. No incorporar la etiqueta de Test en `main`. Prueba visual en Discord pendiente hasta ejecutarse.
+
 ## Traspaso actual #23 — todo /setup, 2026-10-24 RD
 
 Base `Pruebas@f50c8224`; `main@41f55654` intacta. El propietario confirmó el retraso y «Interaction failed» en TODOS los módulos aunque después se ejecuta la acción. La entrega incorpora ACK transversal de sesiones administrativas (con excepción de apertura de modales), rechazo de clics repetidos, recuperación segura de paneles caducados, concurrencia de Honeypot y cobertura de pies/contexto/límites. El aviso del panel de Verificación eliminado pasa a estado informativo, sin recrearlo ni borrar su referencia. Detalles y alcance: [[ESTADO_PROYECTO]].

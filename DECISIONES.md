@@ -1,3 +1,6 @@
+## Identidad visual fija en El Heraldo Test — 2026-10-24
+Se autoriza la aplicación a `Pruebas` de la política obligatoria de footer aprobada para producción, con **única excepción**: el nombre mostrado en cada footer será **El Heraldo's Labs 🧪** y nunca el nombre real del servidor. El icono seguirá usando `{servericon}` (servidor que origina el mensaje, cuando tenga icono). Las notas de pie personalizadas permanecen como detalle, se ofrecen pistas de `{servidor}` y `{servericon}` en los editores, y se respetan los límites de Discord. El valor `{servidor}` en otros campos sigue siendo el nombre real del servidor. No alterar bases, datos, sanciones ni código de `main`. Ver NH UX-03C.
+
 ## Honeypot — primera trampa se activa y Retirar abre confirmación directa (2026-10-24)
 
 **Decisión nueva del propietario:** al guardar por primera vez un canal trampa existente o confirmar la primera creación/registro desde `/setup`, Honeypot debe quedar **activado automáticamente**. Elegir en un desplegable no persiste. Una trampa adicional no cambia el estado elegido posteriormente con Activar/Pausar/Reanudar. Se comprobarán las medidas guardadas y permisos de la activación; si no existe medida explícita ni rol de castigo válido, el inicio automático usará **Solo registrar**, sin sanciones, y lo mostrará. Una medida explícita inválida no se activa silenciosamente.

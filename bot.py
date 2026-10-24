@@ -1715,8 +1715,8 @@ def get_orientation_embed_color(guild_id: int) -> int:
 
 
 def get_orientation_embed_footer(guild: discord.Guild) -> str:
-    """El pie de personalidad identifica siempre al servidor actual."""
-    return guild.name
+    """La personalidad de Test lleva la marca del laboratorio, no el nombre real."""
+    return LAB_FOOTER_TEXT
 
 
 def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
@@ -2027,9 +2027,8 @@ def get_verify_dm_field_name(guild_id: int | None = None) -> str:
     return _guild_or_legacy_setting(guild_id, "verify_dm_field_name", VERIFY_DM_FIELD_NAME_DEFAULT)
 
 def get_verify_dm_footer(guild_id: int | None = None) -> str:
-    """Pie de identidad dinámico. La configuración histórica permanece sin reescribirse."""
-    guild = bot.get_guild(guild_id) if guild_id is not None else None
-    return guild.name if guild is not None else "El Heraldo"
+    """Identidad fija del laboratorio; conserva cualquier configuración histórica."""
+    return LAB_FOOTER_TEXT
 
 def get_verify_dm_color(guild_id: int | None = None) -> str:
     return _guild_or_legacy_setting(guild_id, "verify_dm_color", VERIFY_DM_COLOR_DEFAULT)
@@ -2061,8 +2060,8 @@ def build_verification_welcome_embed(
         value=render_vars(get_verify_dm_body(guild_id), ctx, 1024),
         inline=False,
     )
-    footer_icon = render_url_var(get_verify_dm_footer_icon(guild_id), ctx)
-    footer_text = effective_guild.name if effective_guild is not None else "El Heraldo"
+    footer_icon = str(effective_guild.icon.url) if effective_guild is not None and effective_guild.icon else ""
+    footer_text = LAB_FOOTER_TEXT
     if footer_icon:
         embed.set_footer(text=footer_text, icon_url=footer_icon)
     else:
@@ -7488,7 +7487,7 @@ class VerifyDmEditorVisualModal(discord.ui.Modal):
             default=get_verify_dm_footer_icon(guild_id),
             required=False,
             max_length=500,
-            placeholder="https://… o {servericon}",
+            placeholder="{servericon} = icono real del servidor (obligatorio)",
         )
         self.add_item(self.footer_icon)
 
@@ -7609,6 +7608,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
             default=guild_config_get(guild_id, "suggestion_panel_footer") or SUGGESTION_PANEL_FOOTER_DEFAULT,
             required=False,
             max_length=2048,
+            placeholder="{servidor} → Labs 🧪; {servericon} → icono",
         )
         self.button_input = discord.ui.TextInput(
             label="Texto del botón",
@@ -8441,6 +8441,7 @@ class LogTemplateContentModal(discord.ui.Modal):
             default=log_template_get(guild_id, category, "footer", event_key),
             required=False,
             max_length=2048,
+            placeholder="{servidor} → Labs 🧪; {servericon} → icono",
         )
         self.fields_input = discord.ui.TextInput(
             label="Campos · Nombre | Valor | inline",
@@ -9020,8 +9021,10 @@ def heraldo_template_payload(template, guild, member=None, channel=None):
             footer = dict(data.get("footer") or {})
             footer["text"] = server_footer_text(guild.name, footer.get("text", ""))
             server_icon = getattr(guild, "icon", None)
-            if server_icon and not footer.get("icon_url"):
+            if server_icon:
                 footer["icon_url"] = str(server_icon.url)
+            else:
+                footer.pop("icon_url", None)
             data["footer"] = footer
             prepared.append(data)
         message_payload.validate({"embeds": prepared})
@@ -19840,7 +19843,7 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
         label="Pie del embed",
         required=False,
         max_length=2048,
-        placeholder="Admite variables: {servidor}, {servericon}…",
+        placeholder="{servidor} → Labs 🧪; {servericon} → icono",
     )
     button_label_input = discord.ui.TextInput(label="Texto del botón", required=False, max_length=80)
 
@@ -20910,6 +20913,7 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         label="Pie del embed (opcional)",
         required=False,
         max_length=2048,
+        placeholder="{servidor} → Labs 🧪; {servericon} → icono",
     )
 
     def __init__(self, guild_id: int) -> None:
@@ -23509,13 +23513,15 @@ bot.tree.add_command(list_group)
 # ---------------------------------------------------------------------------
 # 11. RESPUESTAS SIEMPRE EN EMBED, CON FOOTER {servidor}{servericon}
 # ---------------------------------------------------------------------------
-# Todo lo que El Heraldo envía o edita (respuestas a comandos, follow-ups, mensajes a canales y DMs)
-# pasa por aquí: el texto plano se convierte en embed y todo embed sin pie recibe el footer global
-# (nombre del servidor + su icono). Los embeds que ya traen un pie propio (el DM de verificación o el
-# aviso del honeypot, si lo configuraste) lo conservan. Los mensajes con solo archivos no se tocan.
-# Se engancha en discord.py una sola vez, así que no hay que tocar cada comando.
+# Versión TEST: todos los embeds llevan la marca fija «El Heraldo's Labs 🧪»,
+# nunca el nombre real de la comunidad como identidad del footer. Se conserva
+# el icono real del servidor ({servericon}) y cualquier nota personalizada.
+# Las respuestas, DM con origen conocido, ediciones, plantillas y multimedia
+# comparten el mismo contrato; las variables del resto del mensaje no cambian.
 
-GLOBAL_FOOTER_TEXT = "{servidor}"
+LAB_FOOTER_TEXT = "El Heraldo's Labs 🧪"
+LAB_FOOTER_EDITOR_HINT = "{servidor} → Labs 🧪; {servericon} → icono"
+GLOBAL_FOOTER_TEXT = LAB_FOOTER_TEXT
 GLOBAL_FOOTER_ICON = "{servericon}"
 EMBED_DEFAULT_COLOR = 0xE7CF7F  # color de los embeds que nacen de texto plano (❌ rojo, ✅ verde, ⚠️ naranja)
 
@@ -23526,45 +23532,51 @@ _interaction_guilds: dict[str, int] = {}  # token de interacción -> guild_id (p
 def heraldo_footer(guild: discord.Guild | None) -> tuple[str, str]:
     """(texto, icono) del footer global, resueltos con el sistema de variables."""
     if guild is None:
-        return (bot.user.name if bot.user else "El Heraldo"), ""
+        return LAB_FOOTER_TEXT, ""
     ctx = VarContext(guild)
     return render_vars(GLOBAL_FOOTER_TEXT, ctx, 2048, plain=True), render_url_var(GLOBAL_FOOTER_ICON, ctx)
 
 
 def server_footer_text(server_name: str, detail: str = "") -> str:
-    """Identifica el servidor una sola vez sin destruir el pie informativo.
+    """Identidad fija de Test; nombre real solo se utiliza para retirar pies antiguos.
 
-    Se aplica en el momento del envío; no modifica plantillas ni SQLite.
+    Conserva el detalle de cada embed sin truncamientos silenciosos ni cambios
+    en plantillas persistidas. Es idempotente en envíos y ediciones repetidos.
     """
-    name = str(server_name).strip()[:2048]
-    detail = str(detail or "").strip()
-    if not name:
-        return detail[:2048]
-    if name.casefold() in {part.strip().casefold() for part in detail.split(" · ")}:
-        return detail
-    if not detail:
+    name = LAB_FOOTER_TEXT
+    old_name = str(server_name or "").strip()
+    raw_parts = [part.strip() for part in str(detail or "").split(" · ")]
+    # Evitar que las plantillas antiguas introduzcan el nombre real del servidor.
+    excluded = {name.casefold(), "{servidor}", "${servidor}"}
+    if old_name:
+        excluded.add(old_name.casefold())
+    parts = [part for part in raw_parts if part and part.casefold() not in excluded]
+    extra = " · ".join(parts)
+    if not extra:
         return name
-    prefix = f"{name} · "
-    if len(prefix) + len(detail) > 2048:
-        raise ValueError("El pie con el nombre del servidor supera 2048 caracteres. Reduzca el pie personalizado; no se recortó su información.")
-    return prefix + detail
+    footer = f"{name} · {extra}"
+    if len(footer) > 2048:
+        raise ValueError(
+            "El pie con la identidad de El Heraldo's Labs 🧪 supera 2048 caracteres. "
+            "Reduzca el detalle personalizado; no se recortó su información."
+        )
+    return footer
 
 
 def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Embed:
-    """Sella todos los embeds con el servidor correcto y conserva pies funcionales."""
+    """Impone Labs en el texto y el icono de la comunidad real si está disponible."""
     detail = embed.footer.text or ""
     if guild is None:
-        if not detail:
-            fallback, icon = heraldo_footer(None)
-            if fallback:
-                embed.set_footer(text=fallback, icon_url=icon or None)
+        desired = server_footer_text("", detail)
+        if desired != detail or getattr(embed.footer, "icon_url", None):
+            embed.set_footer(text=desired, icon_url=None)
         return embed
     desired = server_footer_text(guild.name, detail)
-    existing_icon = getattr(embed.footer, "icon_url", None)
     guild_icon = getattr(guild, "icon", None)
     server_icon = str(guild_icon.url) if guild_icon else None
-    if desired != detail or (not detail and desired):
-        embed.set_footer(text=desired, icon_url=existing_icon or server_icon)
+    # El icono configurado no sustituye al icono del servidor de origen.
+    if desired != detail or getattr(embed.footer, "icon_url", None) != server_icon:
+        embed.set_footer(text=desired, icon_url=server_icon)
     return embed
 
 
@@ -23606,6 +23618,12 @@ def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
         kw.pop("embeds", None)  # embeds=[] no puede coexistir con el embed nuevo.
         kw["embed"] = stamp_embed(_content_embed(content), guild)
         return empty, kw
+    if (kw.get("file") not in (None, _MISSING) or
+            kw.get("files") or kw.get("attachments")):
+        # Adjuntos exclusivamente multimedia: pie sin añadir texto artificial.
+        kw = dict(kw)
+        kw.pop("embeds", None)
+        kw["embed"] = stamp_embed(discord.Embed(), guild)
     return content, kw
 
 
@@ -24070,10 +24088,10 @@ class EmbedAuthorFooterModal(discord.ui.Modal):
             max_length=500, placeholder="https://… o {servericon}")
         self.e_footer = discord.ui.TextInput(
             label="Pie del embed", default=data.get("footer", ""), required=False, max_length=2048,
-            placeholder="Vacío = pie del servidor")
+            placeholder="{servidor} → Labs 🧪; {servericon} → icono")
         self.e_footer_icon = discord.ui.TextInput(
             label="Icono del pie (URL o variable)", default=data.get("footer_icon", ""), required=False,
-            max_length=500, placeholder="https://… o {servericon}")
+            max_length=500, placeholder="{servericon} = icono real del servidor (obligatorio)")
         self.e_content = discord.ui.TextInput(
             label="Texto fuera del embed (menciones)", style=discord.TextStyle.paragraph,
             default=data.get("content", ""), required=False, max_length=2000,

@@ -34,7 +34,13 @@ class VisualModal(discord.ui.Modal):
         for key, label, value, limit in definitions[mode]:
             if len(value) > limit:
                 raise ValueError('Este valor supera la capacidad del formulario de Discord. Edítelo mediante JSON para conservarlo completo.')
+            hint = (
+                "{servidor} → Labs 🧪; {servericon} → icono" if key == 'footer'
+                else "{servericon} = icono del servidor (obligatorio)" if key == 'footer_icon'
+                else None
+            )
             item = discord.ui.TextInput(label=label, default=value, max_length=limit, required=False,
+                                        placeholder=hint,
                                         style=discord.TextStyle.paragraph if key in ('content', 'description', 'value') else discord.TextStyle.short)
             self.inputs[key] = item
             self.add_item(item)
