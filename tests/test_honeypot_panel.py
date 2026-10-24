@@ -314,6 +314,33 @@ class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
                 finally:
                     read.close()
 
+    def test_panel_count_matches_saved_traps_for_zero_one_two_three(self):
+        guild = NS(id=901)
+        for quantity in range(4):
+            with self.subTest(quantity=quantity):
+                traps = {300 + j: None for j in range(quantity)}
+                with (
+                    patch.object(b, "hp_traps", return_value=traps),
+                    patch.object(b, "honeypot_enabled", return_value=quantity > 0),
+                    patch.object(b, "honeypot_paused", return_value=False),
+                    patch.object(b, "hp_action", return_value="log"),
+                    patch.object(b, "hp_warning_enabled", return_value=False),
+                    patch.object(b, "hp_warning_style", return_value="text"),
+                    patch.object(b, "hp_exempt_ids", return_value=set()),
+                    patch.object(b, "hp_total_triggers", return_value=0),
+                    patch.object(b, "hp_retention_minutes", return_value=43200),
+                ):
+                    embed = b.hp_setup_embed(guild)
+                state = embed.fields[0].value
+                self.assertIn(f"**Canales trampa:** {quantity}", state)
+                for j in range(quantity):
+                    self.assertIn(f"<#{300 + j}>", state)
+                self.assertEqual(state.count("<#"), quantity)
+                if quantity == 0:
+                    self.assertIn("Ninguno configurado", state)
+                    self.assertIn("Desactivado", state)
+
+
     def test_zero_traps_are_explicit_in_panel(self):
         guild = NS(id=901)
         with (
