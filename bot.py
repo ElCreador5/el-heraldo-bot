@@ -9540,6 +9540,11 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoCasesSetupView", lambda: HeraldoCasesSetupView(guild_id, 0)),
         ("HeraldoCondemnationSetupView", lambda: HeraldoCondemnationSetupView(guild_id, 0)),
         ("HeraldoAutomodSetupView", lambda: HeraldoAutomodSetupView(guild_id, 0)),
+        ("CustodioSetupView", lambda: __import__("custodio_setup").CustodioSetupView(
+            guild_id, 0, get_setting=guild_config_get,
+            save_atomic=verification_atomic_setup_save,
+            access_check=configuration_access,
+            parent_factory=lambda: HeraldoAutomodSetupView(guild_id, 0))),
         ("HeraldoVerificationHubView", lambda: HeraldoVerificationHubView(guild_id, 0)),
         ("HeraldoLoggingSetupView", lambda: HeraldoLoggingSetupView(guild_id, 0)),
         ("HeraldoReactionRolesSetupView", lambda: HeraldoReactionRolesSetupView(guild_id, 0)),
