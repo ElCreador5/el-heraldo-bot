@@ -23408,7 +23408,7 @@ async def variable_autocomplete(
 
 
 variables_command.autocomplete("texto")(variable_autocomplete)
-for _param in ("titulo", "campo", "mensaje", "footer", "icono_footer"):
+for _param in ("titulo", "campo", "mensaje", "icono_footer"):
     verify_dm_texts.autocomplete(_param)(variable_autocomplete)
 
 

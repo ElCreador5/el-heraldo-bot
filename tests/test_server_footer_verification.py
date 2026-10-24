@@ -116,6 +116,10 @@ class ServerFooterTests(unittest.TestCase):
         self.assertNotIn("guild_config_set(", source)
         self.assertIn("await confirm_configuration(", source)
 
+    def test_removed_parameter_is_not_registered_for_autocomplete(self):
+        self.assertIn('("titulo", "campo", "mensaje", "icono_footer")', SOURCE)
+        self.assertNotIn('("titulo", "campo", "mensaje", "footer", "icono_footer")', SOURCE)
+
     def test_global_brand_footer_still_uses_server_and_preserves_informative_footer(self):
         self.assertIn('GLOBAL_FOOTER_TEXT = "{servidor}"', SOURCE)
         self.assertIn('GLOBAL_FOOTER_ICON = "{servericon}"', SOURCE)
