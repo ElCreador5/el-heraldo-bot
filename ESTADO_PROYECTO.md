@@ -1,3 +1,7 @@
+## Verificación de edad — formato @miembro confirmado (2026-10-24)
+
+**IMPLEMENTADO en Pruebas, pendiente de CI y Discord:** «Verificación de edad completada» usa la mención nativa member.mention, sin el sufijo de ID entre paréntesis. Sustituye el formato de apodo en texto plano incorporado en 621ac205 y responde a la imagen aprobada. La trazabilidad e IDs de expedientes/reportes permanecen. Regresión actualizada en tests/test_verification_log_identity.py. Sin cambios de sanciones, SQLite ni main. Discord puede no resolver menciones si su cliente no dispone del miembro en caché. Obsidian: conexión no disponible.
+
 ## Verificación de edad — nombre visible sin ID superfluo (2026-10-24)
 
 **IMPLEMENTADO en Pruebas (pendiente verificar CI y Discord):** la tarjeta de «Verificación de edad completada» muestra el nombre visible del miembro escapado, sin mención ni ID numérico repetido. Se conserva la identificación técnica y los IDs mostrados cuando son útiles en expedientes, reportes y evidencias. Cambios mínimos en `bot.py` y regresión `tests/test_verification_log_identity.py`. No se han cambiado las sanciones, persistencia, notificaciones de verificación ni `main`. **PENDIENTE:** ejecutar CI y comprobar visualmente el log en Heraldo's Lab; auditar otras tarjetas individualmente antes de uniformarlas. Obsidian: sin conexión disponible.

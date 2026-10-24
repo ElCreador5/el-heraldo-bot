@@ -13242,7 +13242,7 @@ async def handle_verify_click(interaction: discord.Interaction) -> None:
 
     await log_embed(
         guild, "Verificación de edad completada",
-        f"{discord.utils.escape_markdown(discord.utils.escape_mentions(member.display_name))} se verificó correctamente.",
+        f"{member.mention} se verificó correctamente.",
         discord.Color.green(),
     )
 

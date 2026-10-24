@@ -1,3 +1,7 @@
+## Verificación de edad — aclaración final de identidad visible (2026-10-24)
+
+Después del commit 621ac205 (nombre plano), el propietario confirmó mediante imagen y un «sí» que desea mención nativa visual @apodo, nunca un ID entre paréntesis. Se modifica solo el registro «Verificación de edad completada» para usar member.mention y se ajusta su regresión AST; el ID sigue presente internamente, con IDs explícitos conservados en expedientes y reportes. Pruebas es la única rama autorizada; main sin tocar. Comprobar CI y visualmente en Heraldo's Lab antes de afirmar funcionamiento. Resolución de menciones depende del cliente Discord, y Obsidian no está conectado.
+
 ## Verificación de edad — ajuste de identidad visible (2026-10-24)
 
 Requisito del propietario: nombre visible de miembro en eventos rutinarios; ID conservado en expedientes, reportes y evidencias que requieran identificación inequívoca. Cambio selectivo de `bot.py` para «Verificación de edad completada», con `tests/test_verification_log_identity.py` y decisión en `DECISIONES.md`. Estado al preparar commit: `Pruebas@e73f71110b87b3993de7a92a0799d7e8daf17a7b`; CI y Discord pendientes, Railway Test no comprobado. No modificar `main` sin aprobación. Obsidian no disponible.

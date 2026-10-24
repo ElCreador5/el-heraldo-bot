@@ -1,3 +1,7 @@
+## Log de verificación de edad — mención @apodo sin paréntesis (2026-10-24)
+
+**Regresiones definidas, resultado CI pendiente:** tests/test_verification_log_identity.py verifica la mención nativa, sin ID extra entre paréntesis, y el envío en el embed. **Verificación en Discord: NO REALIZADA.** En Heraldo's Lab completar verificación, comprobar nombre como @apodo sin ID adicional y revisar posible fallo de resolución debido a caché de Discord. No introducir sanciones ni tocar servidores productivos.
+
 ## Registro de verificación de edad — identidad legible (2026-10-24)
 
 **Regresión añadida, pendiente de ejecución remota:** `tests/test_verification_log_identity.py`, para exigir el nombre visible y descartar mención, ID y etiquetas `@everyone` sin escapar en «Verificación de edad completada». **Verificación en Discord: NO REALIZADA.** En Heraldo's Lab, completar una verificación de edad y comprobar que el canal de registros muestra el apodo sin números ni ping; verificar además que los expedientes y reportes que precisan ID lo conservan. No usar servidores productivos ni deducir resultados de Railway SUCCESS.

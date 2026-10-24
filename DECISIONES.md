@@ -1,3 +1,7 @@
+## Formato de la verificación de edad — mención sin ID repetido (2026-10-24)
+
+**Aclaración posterior del propietario, prevalece para esta tarjeta:** el registro «Verificación de edad completada» debe mostrar la mención nativa del miembro como @apodo, seguida de «se verificó correctamente.», sin paréntesis ni ID numérico adicional. El identificador subyacente de la mención permanece para que Discord identifique al miembro; no se imprime de nuevo. Esto sustituye el formato de apodo en texto plano de la decisión anterior solo para esta tarjeta. Mantener IDs explícitos cuando son necesarios en expedientes, reportes, condenas y evidencias. La resolución de la mención en cada cliente depende de Discord; no prometer siempre el apodo si falta caché.
+
 ## Identificadores en registros de usuarios (2026-10-24)
 
 **Decisión del propietario:** mostrar preferentemente el apodo visible del miembro en el servidor (y, si no existe, su nombre de usuario). Omitir IDs numéricos y menciones innecesarias en mensajes rutinarios, como «Verificación de edad completada». **Mantener el ID cuando facilite identificación inequívoca, investigación o trazabilidad**, particularmente en expedientes, reportes y evidencias administrativas; no eliminar sus claves internas ni referencias persistidas. Escapar nombres suministrados por usuarios para impedir formato o menciones accidentales. La aplicación global a otros registros queda pendiente de revisión específica, sin rediseños masivos.

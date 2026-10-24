@@ -1,10 +1,8 @@
-"""Regresión del nombre mostrado en el registro de verificación de edad."""
+"""Regresión del formato de la mención de usuario en verificación de edad."""
 import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-
-import discord
 
 SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
 
@@ -22,35 +20,60 @@ def completed_age_log_message_expression():
         and node.args[1].value == "Verificación de edad completada"
     ]
     if len(matches) != 1:
-        raise AssertionError(f"Se esperaba un registro de edad completada, encontrados: {len(matches)}")
+        raise AssertionError(
+            f"Se esperaba un registro de edad completada, encontrados: {len(matches)}"
+        )
     return matches[0]
 
 
 class AgeVerificationIdentityLogTests(unittest.TestCase):
-    def test_display_name_without_mention_or_discord_id(self):
+    def test_native_mention_not_duplicate_id_or_plain_name(self):
         expression = completed_age_log_message_expression()
         source = ast.unparse(expression)
-        self.assertIn("member.display_name", source)
-        self.assertNotIn("member.mention", source)
+        self.assertIn("member.mention", source)
         self.assertNotIn("member.id", source)
-        self.assertIn("escape_mentions", source)
-        self.assertIn("escape_markdown", source)
+        self.assertNotIn("member.display_name", source)
 
-    def test_visible_name_is_escaped_without_notifying_members(self):
+    def test_message_without_parentheses_or_repeated_identifier(self):
         expression = completed_age_log_message_expression()
-        name = "Mod **Ejemplo** @everyone"
-        member = SimpleNamespace(display_name=name, mention="<@987654321>", id=987654321)
-        value = eval(
-            compile(ast.fix_missing_locations(ast.Expression(body=expression)), "<age-verification-log>", "eval"),
-            {"discord": discord, "member": member},
+        member = SimpleNamespace(
+            display_name="Félix",
+            mention="<@987654321>",
+            id=987654321,
         )
-        self.assertIn("Mod", value)
-        self.assertIn("Ejemplo", value)
-        self.assertIn("se verificó correctamente.", value)
-        self.assertNotIn("987654321", value)
-        self.assertNotIn("<@", value)
-        self.assertNotIn("@everyone", value)
-        self.assertNotIn("**Ejemplo**", value)
+        actual = eval(
+            compile(
+                ast.fix_missing_locations(ast.Expression(body=expression)),
+                "<age-verification-log>",
+                "eval",
+            ),
+            {"member": member},
+        )
+        self.assertEqual(actual, "<@987654321> se verificó correctamente.")
+        self.assertEqual(actual.count(str(member.id)), 1)
+        self.assertNotIn("(", actual)
+        self.assertNotIn(")", actual)
+
+    def test_log_sends_embed_not_content_mention(self):
+        tree = ast.parse(SOURCE)
+        functions = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "log_embed"
+        ]
+        self.assertEqual(len(functions), 1)
+        sends = [
+            node
+            for node in ast.walk(functions[0])
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "send"
+        ]
+        self.assertTrue(sends)
+        for call in sends:
+            keys = {keyword.arg for keyword in call.keywords}
+            self.assertIn("embed", keys)
+            self.assertNotIn("content", keys)
 
 
 if __name__ == "__main__":
