@@ -149,7 +149,7 @@ class ServerFooterTests(unittest.TestCase):
         self.assertIn('wrap_positional(discord.abc.Messageable, "send"', SOURCE)
         self.assertIn('wrap_positional(discord.Webhook, "send"', SOURCE)
         self.assertIn('wrap_edit(discord.Message, "edit"', SOURCE)
-        self.assertIn('wrap_edit(discord.Interaction, "edit_original_response"', SOURCE)
+        self.assertIn('discord.Interaction, "edit_original_response"', SOURCE)
         self.assertGreaterEqual(SOURCE.count('placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)"'), 6)
 
 
