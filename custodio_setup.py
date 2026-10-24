@@ -66,6 +66,11 @@ class CustodioSetupView(discord.ui.View):
         report_button.callback = self.request_report_channel
         self.add_item(report_button)
 
+        actions_button = discord.ui.Button(
+            label="Acciones por tipo", style=discord.ButtonStyle.primary, row=1)
+        actions_button.callback = self.open_rule_actions
+        self.add_item(actions_button)
+
         save_button = discord.ui.Button(
             label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
         save_button.callback = self.save_changes
@@ -152,6 +157,14 @@ class CustodioSetupView(discord.ui.View):
                     f"Revisión: {snapshot.revision[:12]}. "
                     "La API de Discord puede cambiar sin previo aviso.",
             view=self, embed=None,
+        )
+
+    async def open_rule_actions(self, interaction: discord.Interaction):
+        """Abre las plantillas por categoría sin guardar ni sancionar."""
+        from custodio_rule_actions_setup import CustodioRuleActionsView
+        view = CustodioRuleActionsView(self)
+        await interaction.response.edit_message(
+            content=view.summary(), view=view, embed=None,
         )
 
     async def request_report_channel(self, interaction: discord.Interaction):
