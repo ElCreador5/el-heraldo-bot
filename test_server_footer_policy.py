@@ -135,6 +135,16 @@ class ServerFooterTests(unittest.TestCase):
         finally:
             self.env["bot"].guilds = []
 
+    def test_media_only_message_receives_footer_without_fabricating_text(self):
+        guild = FakeGuild("Multimedia", "https://example.org/media.png")
+        files = [object()]
+        content, result = self.env["_embedify"](None, {"files": files}, guild, None)
+        self.assertIsNone(content)
+        self.assertIs(result["files"], files)
+        self.assertIsNone(result["embed"].description)
+        self.assertEqual(result["embed"].footer.text, guild.name)
+        self.assertEqual(result["embed"].footer.icon_url, guild.icon.url)
+
     def test_direct_user_dm_with_known_server_is_stamped(self):
         for call in (
             "owner.send(embed=stamp_embed(embed.copy(), guild))",

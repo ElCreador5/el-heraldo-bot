@@ -16425,7 +16425,8 @@ async def send_migrated_message(
         if len(description) > 3900:
             description = description[:3890] + "…"
 
-        # Mensaje únicamente multimedia: no crear el embed de migración.
+        # Mensaje únicamente multimedia: sin texto de migración; el enganche
+        # global añade solamente el footer obligatorio del servidor.
         if not description and attachments:
             if files:
                 try:
@@ -18214,8 +18215,9 @@ bot.tree.add_command(list_group)
 # pasan por este punto: el texto plano se convierte en embed y SIEMPRE se incorpora la
 # identidad de ese servidor en el footer. Los textos de pie personalizados se mantienen
 # como información adicional; no sustituyen el nombre ni el icono real del servidor.
-# Los mensajes con solo archivos no se tocan y no se inventa un servidor cuando un
-# DM carece de contexto identificable. Enganche central de discord.py.
+# Los mensajes exclusivamente multimedia reciben un embed mínimo con el footer,
+# sin descripción añadida; nunca se inventa el servidor de un DM sin contexto.
+# Enganche central de discord.py.
 
 GLOBAL_FOOTER_TEXT = "{servidor}"
 GLOBAL_FOOTER_ICON = "{servericon}"
@@ -18293,6 +18295,11 @@ def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     if isinstance(content, str) and content.strip():
         kw["embed"] = stamp_embed(_content_embed(content), guild)
         return empty, kw
+    # Un mensaje formado solo por archivos también necesita el pie obligatorio.
+    # No se inventa una descripción: se conserva intacta la publicación multimedia.
+    if (kw.get("file") not in (None, _MISSING) or
+            kw.get("files") or kw.get("attachments")):
+        kw["embed"] = stamp_embed(discord.Embed(), guild)
     return content, kw
 
 
