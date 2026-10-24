@@ -1,3 +1,7 @@
+## Custodio — resultados CI y runtime Test (2026-10-23 RD / 2026-10-24 UTC)
+
+CI `40058608076` del SHA `bbb6c272839b5be96abd9ef81a8350a2b3d60052`: SUCCESS para UX-contract y offline-regressions Python 3.11/3.12/3.13. Inicialmente falló un test de Custodio al acceder a .label en discord.ui.Select; corregido y vuelto a verificar. Railway Test despliegue `ebe2285a-9d26-4971-8c0b-8e8df55778f4`: SUCCESS, Gateway conectado, autoprueba /setup correcta en Heraldo's Lab. **NO VERIFICADO INTERACTIVAMENTE:** Confirmar creación del canal, privacidad real, Cancelar, reintento y publicación de tarjetas. No se creó canal en Discord en esta fase; código usa sólo metadatos de evidencia, no conserva el mensaje original. El motor de observación continúa sin activación.
+
 ## Custodio — pruebas de reportes y clasificación SFW/NSFW (2026-10-23 RD)
 
 **AÑADIDOS:** `tests/test_custodio_reports_context.py` verifica creación privada, rol @everyone denegado, rol de moderación permitido, miembros ordinarios excluidos, idempotencia/solicitudes simultáneas, recuperación de canal tras fallo SQLite, error de permisos y rechazo de canales públicos o con acceso directo a miembros ordinarios. Prueba tarjeta de metadatos sin texto y rechazo de referencias incorrectas. También clasifica guild/canal SFW, NSFW y desconocido; no interpreta NSFW como permiso para ignorar reglas. Contrato de `/setup` ajustado en `tests/test_custodio_preferences_setup.py` para nuevo botón y navegación.

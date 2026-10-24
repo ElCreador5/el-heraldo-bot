@@ -1,3 +1,9 @@
+## Custodio — CI y Railway Test verificados (2026-10-23 RD / 2026-10-24 UTC)
+
+**IMPLEMENTADO en Pruebas:** canal privado de reportes por confirmación, botón específico bajo AutoMod → Modo Custodio, metadatos de evidencia y clasificación por indicadores de edad de servidor/canal, sin analizar mensajes ni sancionar. Commit de código `bbb6c272839b5be96abd9ef81a8350a2b3d60052`. El CI `40058608076` concluyó SUCCESS (contrato NH y regressions 3.11, 3.12, 3.13), tras corregir test que esperaba label de un Select.
+
+**DESPLIEGUE TEST:** Railway Lab worker quedó fijado al SHA `bbb6c272` y generó despliegue `ebe2285a-9d26-4971-8c0b-8e8df55778f4` SUCCESS. El bot conectó Gateway; los logs muestran dos autopruebas /setup correctas y ninguna fallida, incluida Heraldo's Lab. Volumen existente preservado; no se ejecutó CREATE del canal, no se enviaron reportes ni se activó análisis. `main` intacta; no se modificaron servicios oficiales. **PENDIENTE:** probar confirmación, permisos y Cancelar mediante interacción real en Heraldo's Lab. **OBSIDIAN:** no conectado.
+
 ## Custodio — canal privado de reportes y contexto por servidor (2026-10-23 RD)
 
 **IMPLEMENTADO únicamente en Pruebas:** `custodio_reports.py` aporta creación idempotente de `reportes📢` bajo confirmación administrativa desde `custodio_setup.py`, con controles de permisos y privacidad, recuperación de canal vinculado si hubo interrupción, y validación de canal existente. `custodio_context.py` clasifica por indicadores oficiales SFW/NSFW del servidor/canal, sin acceder a mensajes y sin desplazar Server Rules individuales. La tarjeta de observación `ObservationEvidence` aporta metadatos (ID/enlace, reglas/revisión, fecha, huella opcional, clasificación) sin archivar texto privado o de canales restringidos. Solo propuesta de evidencia en código; NO está conectada a eventos, ni se generan reportes reales todavía. La creación no se ejecuta en arranque ni al abrir /setup.
