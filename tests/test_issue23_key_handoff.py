@@ -7,6 +7,10 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import socket
+import threading
+from http.server import BaseHTTPRequestHandler
+from urllib.request import urlopen
 from zipfile import ZipFile
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -18,6 +22,28 @@ spec.loader.exec_module(handoff)
 
 
 class KeyHandoffTests(unittest.TestCase):
+    def test_browser_preconnection_does_not_block_page(self):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'synthetic')
+        server = handoff.local_server(Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        preconnection = socket.create_connection(server.server_address, timeout=2)
+        try:
+            url = 'http://127.0.0.1:' + str(server.server_port)
+            with urlopen(url, timeout=2) as response:
+                self.assertEqual(response.read(), b'synthetic')
+        finally:
+            preconnection.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
     def fixture(self, environment='heraldo-production'):
         key = os.urandom(32)
         database = b'synthetic test data'

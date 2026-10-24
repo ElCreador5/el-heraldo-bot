@@ -8,7 +8,7 @@ import ctypes
 from ctypes import wintypes
 from datetime import datetime, timezone
 import hashlib
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import os
@@ -99,6 +99,12 @@ PAGE = '''<!doctype html><html lang="es"><meta charset="utf-8"><title>El Heraldo
 <script nonce="TOKEN">document.querySelector('form').onsubmit=async e=>{e.preventDefault();let input=document.querySelector('#key'),key=input.value.trim();input.value='';let button=document.querySelector('button');button.disabled=true;try{let r=await fetch('/recover',{method:'POST',headers:{'Content-Type':'application/json','X-Local-Key':'TOKEN'},body:JSON.stringify({key})});key='';let v=await r.json();document.querySelector('#status').textContent=v.ok?'VERIFICADO. La clave autentica una copia productiva y quedó protegida por Windows. Puede cerrar esta página y avisar a ChatGPT.':'No se ha aceptado la clave. Compruebe que es la clave del respaldo productivo.';if(!v.ok)button.disabled=false;}catch{document.querySelector('#status').textContent='No se pudo completar. Avise a ChatGPT.';button.disabled=false;}finally{key='';}};</script></html>'''
 
 
+def local_server(handler):
+    server = ThreadingHTTPServer(('127.0.0.1', 0), handler)
+    server.daemon_threads = True
+    return server
+
+
 def main():
     helper = Path(__file__).resolve().parents[2] / 'backup-tools'
     sys.path.insert(0, str(helper))
@@ -123,6 +129,10 @@ def main():
     token = secrets.token_urlsafe(32)
 
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(15)
+
         def log_message(self, *args):
             pass
 
@@ -171,7 +181,9 @@ def main():
             if ok:
                 threading.Thread(target=server.shutdown, daemon=True).start()
 
-    server = HTTPServer(('127.0.0.1', 0), Handler)
+    # Los navegadores pueden abrir sockets anticipados sin enviar peticion.
+    # Un socket asi no debe bloquear ni la pagina ni la entrega de la clave.
+    server = local_server(Handler)
     server.host = '127.0.0.1:' + str(server.server_port)
     (root / 'ready.json').write_text(json.dumps({'url': 'http://' + server.host + '/key/' + token}))
     print('ISSUE23_KEY_PAGE_READY directory=' + str(root), flush=True)

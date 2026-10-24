@@ -21,7 +21,11 @@ from sqlite_recovery import create_backup, validate_backup
 
 ROOT = Path('/data/.heraldo-issue23-https')
 PROFILES = {
-    'test': (job.TEST_IDS, 'worker-volume', 'heraldo-test'),
+    # main aun no define backup_job.TEST_IDS. El ejecutor debe funcionar sobre
+    # el codigo productivo existente, antes de integrar cualquier funcionalidad.
+    'test': (('747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61',
+              '71b77daf-9092-4af0-913f-32c57367fff3',
+              '13a555fc-7ddd-4712-a9bc-e88509e18b2b'), 'worker-volume', 'heraldo-test'),
     'production': (job.PRODUCTION_IDS, 'heraldo-data', 'heraldo-production'),
 }
 
@@ -148,6 +152,11 @@ def launch():
         print('ISSUE23_HTTPS status=BLOCKED reason=' + safe, flush=True)
     finally:
         # Variables used solely by this child must not activate daily H-03.
+        if os.environ.get('ISSUE23_BACKUP_SCOPE') == 'production':
+            for key in ('SUPABASE_BACKUP_URL', 'SUPABASE_BACKUP_PUBLISHABLE_KEY',
+                        'SUPABASE_BACKUP_EMAIL', 'SUPABASE_BACKUP_PASSWORD',
+                        'SUPABASE_BACKUP_USER_ID', 'HERALDO_BACKUP_ENCRYPTION_KEY'):
+                os.environ.pop(key, None)
         for key in ('ISSUE23_BACKUP_SCOPE', 'ISSUE23_BACKUP_REQUEST',
                     'ISSUE23_BACKUP_EXPECTED_REVISION'):
             os.environ.pop(key, None)

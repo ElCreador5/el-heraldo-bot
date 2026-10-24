@@ -1,6 +1,10 @@
 """Guardas del respaldo puntual: sin datos reales ni credenciales."""
 import io
 import os
+from pathlib import Path
+import runpy
+import sys
+from types import SimpleNamespace
 from contextlib import redirect_stdout
 from unittest.mock import patch
 import unittest
@@ -10,6 +14,22 @@ import issue23_https_backup as once
 
 
 class HttpsBackupTests(unittest.TestCase):
+    def test_temporary_production_secrets_do_not_reach_bot_process(self):
+        env = self.env('production')
+        env.update(HERALDO_BACKUP_ENCRYPTION_KEY='synthetic',
+                   SUPABASE_BACKUP_PASSWORD='synthetic')
+        with patch.dict(os.environ, env), patch.object(once, 'run_once', return_value='verified_and_restored'), \
+                patch.object(once.os, 'execv'), redirect_stdout(io.StringIO()):
+            once.launch()
+            self.assertNotIn('HERALDO_BACKUP_ENCRYPTION_KEY', os.environ)
+            self.assertNotIn('SUPABASE_BACKUP_PASSWORD', os.environ)
+
+    def test_import_works_with_production_backup_job_without_test_ids(self):
+        production = SimpleNamespace(PRODUCTION_IDS=once.job.PRODUCTION_IDS)
+        with patch.dict(sys.modules, {'backup_job': production}):
+            namespace = runpy.run_path(str(Path(once.__file__)), run_name='compatibility_check')
+        self.assertEqual(namespace['PROFILES']['production'], once.PROFILES['production'])
+
     def test_test_bucket_is_separate_from_production(self):
         self.assertEqual(once.bucket_for('heraldo-test'), 'heraldo-test-sqlite-backups')
         self.assertEqual(once.bucket_for('heraldo-production'), 'heraldo-sqlite-backups')
