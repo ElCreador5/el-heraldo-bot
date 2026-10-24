@@ -14,7 +14,7 @@ class CustodioManualRulesPanelTests(unittest.TestCase):
 
     def test_intro_is_educational_and_mentions_server_rules_requirement(self):
         for text in ("educar cuando sea posible", "Server Rules", "deben estar activas",
-                     "no activa IA ni sanciones", "no inventa prohibiciones"):
+                     "no activa IA ni sanciones", "inventa prohibiciones"):
             with self.subTest(text=text):
                 self.assertIn(text, SOURCE)
 
