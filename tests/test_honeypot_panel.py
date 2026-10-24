@@ -209,5 +209,127 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(i2.response.send_modal.call_args.args[0], b.HoneypotWarningEmbedModal)
 
 
+class HoneypotRemovalBehaviorTests(HoneypotPanelTests):
+    async def test_removal_is_draft_then_green_confirmation_on_same_panel(self):
+        traps = {123: None}
+        state = {"enabled": True}
+        channel = MagicMock(spec=b.discord.TextChannel)
+        channel.id, channel.mention = 123, "<#123>"
+        async def access(*args, **kwargs):
+            return True
+        def setting(gid, key, value):
+            if key == "honeypot_enabled":
+                state["enabled"] = value == "1"
+        with (
+            patch.object(b, "hp_traps", side_effect=lambda gid: dict(traps)),
+            patch.object(b, "honeypot_enabled", side_effect=lambda gid: state["enabled"]),
+            patch.object(b, "hp_remove_trap", side_effect=lambda gid, cid: traps.pop(cid)),
+            patch.object(b, "hp_setting_set", side_effect=setting) as save,
+            patch.object(b, "configuration_access", side_effect=access),
+            patch.object(b, "hp_setup_embed",
+                         side_effect=lambda guild, pending=None: b.discord.Embed(description=f"Canales trampa: {len(traps)}")),
+        ):
+            view = b.HeraldoHoneypotSetupView(901, 10)
+            select = interaction()
+            select.data = {"values": ["123"]}
+            select.guild.get_channel = lambda _id: channel
+            select.response.is_done = lambda: select.response.defer.await_count > 0
+            await view.select_trap(select)
+            remove = interaction()
+            remove.guild.get_channel = lambda _id: channel
+            remove.response.is_done = lambda: remove.response.defer.await_count > 0
+            await view.remove_channel.callback(remove)
+            self.assertEqual(view.pending_remove_trap_id, 123)
+            self.assertEqual(len(traps), 1, "Retirar canal antes de Guardar modificó SQLite")
+            save.assert_not_called()
+            remove.followup.send.assert_not_awaited()
+
+            draft = interaction()
+            draft.guild.get_channel = lambda _id: channel
+            await view.save_changes.callback(draft)
+            self.assertEqual(len(traps), 1)
+            draft.followup.send.assert_not_awaited()
+            confirmation = draft.edit_original_response.call_args.kwargs["view"]
+            self.assertIsInstance(confirmation, b.HoneypotRemovalSaveConfirmView)
+            self.assertEqual(confirmation.confirm.style, b.discord.ButtonStyle.success)
+
+            accepted = interaction()
+            accepted.guild.get_channel = lambda _id: channel
+            accepted.response.is_done = lambda: accepted.response.defer.await_count > 0
+            await confirmation.confirm.callback(accepted)
+            self.assertEqual(traps, {})
+            self.assertFalse(state["enabled"])
+            save.assert_any_call(901, "honeypot_enabled", "0")
+            accepted.followup.send.assert_not_awaited()
+            rendered = accepted.edit_original_response.call_args.kwargs
+            self.assertIs(rendered["view"], view)
+            self.assertIn("Canales trampa: 0", rendered["embed"].description)
+            self.assertIn("Canales trampa configurados: 0", rendered["content"])
+
+    async def test_discard_trap_removal_leaves_original_configuration(self):
+        view = self.make_view(traps={123: None}, enabled=True)
+        channel = MagicMock(spec=b.discord.TextChannel)
+        channel.id, channel.mention = 123, "<#123>"
+        view.pending_remove_trap_id = 123
+        with patch.object(b, "hp_remove_trap") as delete, patch.object(b, "hp_setting_set") as save, \
+             patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()):
+            i = interaction()
+            await view.discard_changes.callback(i)
+        self.assertIsNone(view.pending_remove_trap_id)
+        delete.assert_not_called()
+        save.assert_not_called()
+
+    def test_removal_cannot_reimport_legacy_channel_when_zero(self):
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "honeypot.db"
+            conn = sqlite3.connect(database)
+            conn.executescript("""
+                CREATE TABLE honeypot_channels (channel_id INTEGER PRIMARY KEY, warning_message_id INTEGER);
+                CREATE TABLE guild_honeypot_channels (
+                    guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
+                    warning_message_id INTEGER, PRIMARY KEY(guild_id, channel_id));
+                CREATE TABLE guild_settings (
+                    guild_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT,
+                    PRIMARY KEY(guild_id, key));
+                INSERT INTO honeypot_channels VALUES (123, NULL);
+            """)
+            conn.commit()
+            conn.close()
+            with patch.object(b, "db_connect", side_effect=lambda: sqlite3.connect(database)), \
+                 patch.object(b, "legacy_fallback_allowed", return_value=True):
+                self.assertEqual(set(b.hp_traps(901)), {123})
+                b.hp_remove_trap(901, 123)
+                self.assertEqual(b.hp_traps(901), {}, "La última trampa fue importada de nuevo")
+                self.assertEqual(b.hp_traps(901), {})
+                read = sqlite3.connect(database)
+                try:
+                    self.assertEqual(read.execute(
+                        "SELECT value FROM guild_settings WHERE guild_id = ? "
+                        "AND key = 'honeypot_legacy_traps_migrated'", (901,)
+                    ).fetchone()[0], "1")
+                finally:
+                    read.close()
+
+    def test_zero_traps_are_explicit_in_panel(self):
+        guild = NS(id=901)
+        with (
+            patch.object(b, "hp_traps", return_value={}),
+            patch.object(b, "honeypot_enabled", return_value=False),
+            patch.object(b, "honeypot_paused", return_value=False),
+            patch.object(b, "hp_action", return_value="log"),
+            patch.object(b, "hp_warning_enabled", return_value=False),
+            patch.object(b, "hp_exempt_ids", return_value=set()),
+            patch.object(b, "hp_total_triggers", return_value=0),
+            patch.object(b, "hp_retention_minutes", return_value=43200),
+        ):
+            embed = b.hp_setup_embed(guild)
+        self.assertIn("**Canales trampa:** 0 · Ninguno configurado", embed.fields[0].value)
+        self.assertNotIn("<#", embed.fields[0].value)
+
+
+
 if __name__ == "__main__":
     unittest.main()
