@@ -1,3 +1,7 @@
+## Retirada Honeypot: confirmación compacta (2026-10-24)
+
+El propietario acepta que, después de **Confirmar cambios**, se regrese automáticamente al panel de configuración anterior, actualizado. La vista intermedia de confirmación de retirada ahora muestra únicamente **Confirmar cambios** en verde: **Descartar cambios** y **Volver** siguen disponibles en el editor principal, no duplicados en la confirmación. Prueba de regresión agregada para comprobar ambos estados de interfaz y su transición sin nuevos mensajes. **Pendiente:** ejecutar prueba interactiva en Discord Test; el éxito de Railway no equivale a esta aceptación.
+
 ## Aclaración NH: guardado directo SOLO de Activar/Pausar/Reanudar (2026-10-24)
 
 El propietario autoriza esos botones de estado para guardar inmediatamente únicamente lo que indican, sin Guardar cambios, sin confirmar de nuevo ni persistir otros borradores. En `Pruebas` se ajusta Honeypot: activar requiere trampa ya registrada y acción válida; pausar/reanudar aplica su propio estado, conserva los borradores y actualiza la tarjeta. Los tests nuevos cubren el aislamiento de opciones pendientes y que una trampa sin guardar no activa protección.
