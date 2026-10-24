@@ -123,7 +123,8 @@ class ServerFooterTests(unittest.TestCase):
     def test_global_brand_footer_still_uses_server_and_preserves_informative_footer(self):
         self.assertIn('GLOBAL_FOOTER_TEXT = "{servidor}"', SOURCE)
         self.assertIn('GLOBAL_FOOTER_ICON = "{servericon}"', SOURCE)
-        self.assertIn("if not embed.footer.text:", snippet("stamp_embed"))
+        self.assertIn("server_footer_text(guild.name, detail)", snippet("stamp_embed"))
+        self.assertIn("if guild is None:", snippet("stamp_embed"))
 
 
 if __name__ == "__main__":

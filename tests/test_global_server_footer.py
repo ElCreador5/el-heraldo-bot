@@ -122,7 +122,7 @@ class ServerFooterTests(unittest.TestCase):
             "timezone": timezone,
             "heraldo_template_view": lambda template: None,
         })
-        template = {"embeds": [{"title": "Uno", "description": "x" * 5995}]}
+        template = {"embeds": [{"description": "x" * 4000}, {"description": "y" * 1998}]}
         with self.assertRaisesRegex(ValueError, "6000"):
             env["heraldo_template_payload"](template, server("Laboratorio"))
         self.assertNotIn("footer", template["embeds"][0])
