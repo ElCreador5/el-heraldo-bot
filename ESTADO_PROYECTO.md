@@ -1,3 +1,21 @@
+## Modo Custodio: lectura real a ciegas (2026-10-23 RD / 2026-10-24 UTC)
+
+Prueba ciega autorizada en Heraldo's Lab (servidor 1557230352802644040). El propietario NO entregó el texto a ChatGPT.
+
+Implementado en Pruebas: tools/custodio_rules_probe.py (5c175ce3) y tests/test_custodio_rules_probe.py (56f71528).
+
+Discord real: GET del servidor HTTP 200 con MEMBER_VERIFICATION_GATE_ENABLED=true; GET de member-verification HTTP 200 con 1 campo TERMS y 12 reglas recuperadas de values.
+
+Railway Test worker deployment 148dd771-d592-423c-a193-9a1c169e3a76, commit 56f71528, SUCCESS, Gateway conectado.
+
+Sonda ejecutada una sola vez por preDeployCommand; después se restauró preDeployCommand=[] y sleepApplication=true.
+
+Sin cambios del reglamento, sanciones, SQLite, bot de producción ni main. Las 12 reglas de laboratorio, no mensajes de usuarios, figuran en logs temporales de Railway Test, no en GitHub.
+
+API de member-verification no documentada oficialmente y potencialmente inestable; NO se ha creado un motor Custodio, ni sincronización automática, ni sanciones.
+
+Pruebas unitarias locales: 3/3; CI Mensajes SUCCESS; CI general estaba en progreso al inicio del cierre. No se probaron interacciones en Discord. Obsidian externo no conectado.
+
 ## Publicación parcial verificada y puerta de datos — 2026-10-24
 
 **PRODUCCIÓN:** GitHub `main@41f55654a92fa44c350d2a33d261979bf595deb2` incorpora solo texto de Verificación de personalidad, título preciso, plazo dinámico en resumen, normalización visual de escapes heredados sin reescribir SQLite y regresiones `tests/test_personality_copy_main.py` en CI. El CI `40046510765` terminó SUCCESS (sintaxis, dependencias, NH UX-03B, personalidad y logs). Railway producción desplegó exactamente el SHA en `54910927-bada-45ce-96c9-ef8cb4a81a84` SUCCESS; el Gateway conectó y los logs registraron autoprueba de /setup correcta. **Discord interacciones reales:** no ejecutadas por el asistente. **Datos:** volumen `heraldo-data` sigue montado en `/data`, sin migraciones ni escrituras deliberadas.
