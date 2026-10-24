@@ -1,3 +1,9 @@
+## Custodio — preferencias y ejemplos de foros (2026-10-23 RD)
+
+**Cobertura prevista:** `tests/test_custodio_preferences_setup.py` controla defaults seguros, ausencia de sanciones, aislamiento por servidor, panel sin escrituras al abrir, preparación de borradores y selección CAS; también confirma la navegación /setup → AutoMod → Custodio. `tests/test_custodio_benchmark.py` evalúa 16 ejemplos sintéticos y cómputo de falsos positivos, sin capturas de personas reales. **VERIFICACIÓN AUTOMÁTICA:** consultar workflow del SHA vigente antes de declarar SUCCESS. **VERIFICACIÓN DISCORD INTERACTIVA:** pendiente; no se han hecho clicks reales en los nuevos controles. **API REAL:** se conserva la prueba anterior de lectura a ciegas de 12 Server Rules, pero la nueva UI no ha sido probada en Discord.
+
+**NO REALIZADO:** entrenamiento/fine-tuning de modelo, descarga de bases de datos de foros, supervisión continua, acciones disciplinarias, migraciones SQLite ni despliegue a main. Cualquier dato público utilizado en futuro deberá respetar licencias, minimización, contexto y separación entrenamiento/test.
+
 ## #23 — preflight de almacenamiento y ejecutor (2026-10-23 RD / 2026-10-24 UTC)
 
 - CLI autenticada; SSH de producción rechazado por el entorno en ssh.railway.com:22, sin ejecutar el payload en el servicio.

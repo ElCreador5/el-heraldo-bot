@@ -1,3 +1,9 @@
+## Custodio — /setup preparado y evaluación contextual sin sanciones (2026-10-23 RD)
+
+**IMPLEMENTADO en Pruebas (pendiente de aceptación real Discord):** `custodio_preferences.py` fija defaults observe/balanced/eligible/notificaciones off y bloquea variantes no desarrolladas; `custodio_setup.py` define panel de configuración con sensibilidad seleccionable, consulta de Server Rules, vista previa, doble confirmación y comparación transaccional CAS usando `verification_atomic_setup_save`. `bot.py` enlaza AutoMod → Modo Custodio y añade su autoprueba al arranque. Ningún mensaje del servidor se monitoriza aún. Guardar no activa supervisión ni sanciones; el administrador deberá confirmarlo en Discord para persistir valores, no se escriben a SQLite por este commit.
+
+**INVESTIGACIÓN:** `custodio_benchmark.py` registra tres fuentes públicas con licencia (Civil Comments CC0, Wikipedia Talk CC0, Multilingual HateCheck español CC BY 4.0) y 16 casos sintéticos de debate/contexto en español con métricas de falsos positivos; los comentarios externos no se descargaron y no se entrenó modelo. **RIESGOS/PENDIENTES:** CI del nuevo HEAD, verificación visual/interactiva, estructura de retención, permisos/intents, fiabilidad del endpoint Member Verification retirado de la API pública, motor contextual sin proveedor definido. En Railway Test puede seguir corriendo un commit anterior fijado; no asumir que push implica despliegue. `main` sin cambios. Obsidian no conectado.
+
 ## #23 — sesión CLI resuelta; acceso SSH denegado (2026-10-23 RD / 2026-10-24 UTC)
 
 El propietario completó el inicio de sesión oficial desde su PowerShell. `railway whoami --json` ya reconoce la cuenta desde el agente. No repetir OAuth. La conexión SSH de solo lectura a producción termina antes de alcanzar el contenedor con `ssh: connect to host ssh.railway.com port 22: Permission denied`. No se ha creado un respaldo nuevo ni actualizado main.

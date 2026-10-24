@@ -1,3 +1,9 @@
+## Custodio — traspaso de configuración Observar y corpus público (2026-10-23 RD)
+
+Propietario confirmó modo `observe`, sensibilidad `balanced`, alcance `eligible`, avisos de cambios apagados y cero sanciones. Rama de desarrollo `Pruebas`. Archivos creados: `custodio_preferences.py`, `custodio_setup.py`, `custodio_benchmark.py`, `tests/test_custodio_preferences_setup.py`, `tests/test_custodio_benchmark.py`. `bot.py` modificado solo para mostrar Modo Custodio desde AutoMod y registrar la vista en autoprueba. Preferencias guardables con doble confirmación CAS, iniciales desactivadas; ningún mensaje se analiza ni se envía a tercero, y cero sanciones. Investigación verificada: Civil Comments CC0, Wikipedia Talk CC0, Multilingual HateCheck español CC BY 4.0; 16 casos sintéticos creados, ninguna conversación pública descargada ni entrenamiento efectuado.
+
+**ESTADO:** comprobar CI del HEAD final; nueva UI no verificada en Discord. Producción `main` intacta. Railway Test worker puede tener source pin anterior y no desplegar automáticamente Pruebas; verificar antes de atribuir operatividad. Faltan motor contextual, evaluación real con casos licenciados, revisión de privacidad/costos, lectura continuada de reglas, permisos/intents y validaciones de interfaz. Obsidian externo no conectado. No hay trabajo local sin guardar.
+
 ## #23 — continuación tras OAuth (2026-10-23 RD / 2026-10-24 UTC)
 
 La autenticación CLI ya funciona. NO generar más códigos de acceso. El bloqueo vigente es TCP/SSH a ssh.railway.com:22 (Permission denied desde el entorno), no Supabase ni la autorización del propietario.

@@ -1,3 +1,9 @@
+## Modo Custodio — preferencias aprobadas y corpus de referencia (2026-10-23 RD)
+
+**DECISIÓN:** modo `observe` (Observar), sensibilidad `balanced` (Equilibrada), alcance `eligible` (canales elegibles/autorizados), avisos de cambios de normas desactivados. No autorizar sanciones automáticas, IA externa ni supervisión de mensajes hasta su implementación y aceptación. La pantalla de /setup ofrece solo opciones realmente seguras; Guardar prepara valores mediante confirmación administrativa, Cancelar/Descartar no escribe. Defaults no son prueba de que un servidor haya guardado su configuración.
+
+**Investigación pública para futura inteligencia contextual:** usar como referencias etiquetadas Civil Comments (CC0, https://www.tensorflow.org/datasets/catalog/civil_comments), Wikipedia Talk Labels: Toxicity (CC0, https://figshare.com/articles/dataset/Wikipedia_Talk_Labels_Toxicity/4563973) y Multilingual HateCheck en español (CC BY 4.0, https://huggingface.co/datasets/Paul/hatecheck-spanish). Primero análisis de licencias, sesgos y datos personales; después evaluación fuera de línea. No volcar comentarios de foros sin permiso ni entrenamiento autónomo con mensajes de Discord. Las reglas oficiales de cada servidor son la autoridad; internet solo aporta casos, no nuevas prohibiciones.
+
 ## Modo Custodio — diseño y límites (2026-10-23)
 
 **Acordado por el propietario:** nombre Modo Custodio; debe leer automáticamente las Server Rules oficiales del servidor y exigir que estén activadas, sin obligar a reescribir el reglamento en /setup. La lectura real de laboratorio recuperó 12 reglas mediante la API de Member Verification, que no tiene contrato público estable.
