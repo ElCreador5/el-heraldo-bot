@@ -1,3 +1,10 @@
+## #23 — preflight de almacenamiento y ejecutor (2026-10-23 RD / 2026-10-24 UTC)
+
+- CLI autenticada; SSH de producción rechazado por el entorno en ssh.railway.com:22, sin ejecutar el payload en el servicio.
+- Bucket productivo public=false leído por conector; identidad técnica verificada; descarga histórica autenticada con checksum correcto y acceso anónimo/público rechazados. No se creó una generación nueva.
+- tests/test_issue23_backup_runner.py: 5/5 correctas (hash de ayudantes modificado, actualización de SHA/generación/volumen, prueba privada contra objeto existente, acceso público y checksum incorrecto). Compilación y diff check correctos.
+- El ejecutor tools/run_issue23_backup.py requiere el PowerShell del propietario para llegar por SSH al volumen; resultado real, restauración fresca, CI del nuevo SHA e interacciones Discord siguen por verificar. Detalle operativo en [[ESTADO_PROYECTO]].
+
 ## Encargo #23 — verificación de candidato (2026-10-23 RD / 2026-10-24 UTC)
 
 - Nuevas regresiones en test_personality_deadline_runtime.py: chequeo antes del plazo, ampliación de plazo, marca rearmada, rol sin reloj, sanción de edad en curso, dos evaluaciones simultáneas, KICK fallido con reintento y construcción real de ambos selectores sin escribir configuración.

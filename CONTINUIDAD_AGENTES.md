@@ -1,3 +1,9 @@
+## #23 — continuación tras OAuth (2026-10-23 RD / 2026-10-24 UTC)
+
+La autenticación CLI ya funciona. NO generar más códigos de acceso. El bloqueo vigente es TCP/SSH a ssh.railway.com:22 (Permission denied desde el entorno), no Supabase ni la autorización del propietario.
+
+Ejecutor manual mínimo listo: tools/run_issue23_backup.py, usando backup-tools/transfer-venv/Scripts/python.exe desde el PowerShell normal del propietario. No ejecutar pr19_production_backup.py directamente con sus constantes históricas. El nuevo ejecutor usa una generación fija y rechaza intentos ambiguos/repetidos. Tras obtener ISSUE23_BACKUP VERIFIED, comprobar el nuevo recibo privado issue23-final-verification.json, descargar de nuevo el ciphertext externo y acreditar restauración/hash/fecha antes de cualquier cambio en main. Los resultados históricos no satisfacen esa puerta. Estado detallado y limitaciones: [[ESTADO_PROYECTO]]; cinco regresiones: [[PRUEBAS_DISCORD]].
+
 ## Continuación del encargo #23 (2026-10-23 RD / 2026-10-24 UTC)
 
 Trabajo directo en Pruebas, sin crear ramas/PR. Reconciliados los commits concurrentes de Custodio hasta bfc24ad; el código de Custodio se conserva. Detalles de implementación y bloqueo: [[ESTADO_PROYECTO]]; evidencia de pruebas: [[PRUEBAS_DISCORD]].

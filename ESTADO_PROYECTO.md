@@ -1,3 +1,11 @@
+## #23 — sesión CLI resuelta; acceso SSH denegado (2026-10-23 RD / 2026-10-24 UTC)
+
+El propietario completó el inicio de sesión oficial desde su PowerShell. `railway whoami --json` ya reconoce la cuenta desde el agente. No repetir OAuth. La conexión SSH de solo lectura a producción termina antes de alcanzar el contenedor con `ssh: connect to host ssh.railway.com port 22: Permission denied`. No se ha creado un respaldo nuevo ni actualizado main.
+
+Preflight externo comprobado: Supabase Storage heraldo-sqlite-backups tiene public=false; la identidad técnica histórica sigue autenticándose y descarga su objeto histórico con checksum correcto. Las dos rutas de descarga sin autorización lo rechazan. Esto acredita acceso/custodia disponibles, NO actualidad del respaldo. La clave existente es legible y no se imprimió ni sustituyó.
+
+Ejecutor preparado en tools/run_issue23_backup.py para usarlo UNA VEZ desde el PowerShell del propietario (fuera de este aislamiento): reutiliza pr19_production_backup.py/transfer_secure.py locales con hashes exactos, fija producción a 41f55654, generación issue23-20261024-41f55654, valida ACL privada, identidad y privacidad, copia online con sqlite_recovery.create_backup, cifra, sube sin sobrescribir, descarga, descifra y restaura aislada, compara integridad/FK/esquema/recuentos/contenido y rechaza clave incorrecta/manipulación. Exige identidad del volumen; no detiene el bot, cambia secretos, despliega, restaura la base activa ni borra generaciones. Destino/clave privados ya existentes, fuera de Git. Si hay generación parcial, se detiene para revisar recibos antes de reintentar. La verificación del agente sigue pendiente hasta recibir y comprobar el recibo real. Cinco regresiones sintéticas y compilación correctas. No atribuirlas a un respaldo real.
+
 ## Encargo #23 — candidato selectivo y bloqueo de acceso (2026-10-23 RD / 2026-10-24 UTC)
 
 Base reconciliada primero con e9f9f5a y después con `Pruebas@bfc24ad` (se conservan los 11 commits concurrentes de Custodio, sin modificar su código). El commit local antiguo ad84a1a ya estaba aplicado en remoto; Git lo omitió al reconciliar, sin pérdida de código. No se crearon ramas ni PR.
