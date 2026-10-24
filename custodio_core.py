@@ -148,8 +148,10 @@ def plan_review(
     severity = model_result.get("severity", "medium")
     summary = model_result.get("summary", "")
     if (
-        outcome not in VALID_OUTCOMES
+        not isinstance(outcome, str)
+        or outcome not in VALID_OUTCOMES
         or not isinstance(numbers, (tuple, list))
+        or len(numbers) > MAX_RULES
         or not all(type(n) is int and 1 <= n <= snapshot.count for n in numbers)
         or not isinstance(severity, str)
         or severity not in VALID_SEVERITIES
