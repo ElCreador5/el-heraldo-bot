@@ -2,6 +2,8 @@
 
 El respaldo productivo esta verificado. Las regresiones automaticas y el arranque de Test no sustituyen interacciones reales. Issue #23 exige validar en Lab antes del port; AGENTS UX-05 exige registrar lo no probado y detener su aceptacion. No hay herramienta disponible para manejar los clics de Discord; no usar tokens de una cuenta personal.
 
+Preparado para el recorrido: codigo Test `a64afe9d55d9771ea4a3db4121aa40a6ae1cf54c`, deployment `82e887b3-88f4-4f16-bc63-ac7fa4383b35` SUCCESS, Gateway conectado el 24/10/2026 a las 08:04:27 RD. CI general 3.11/3.12/3.13, UX, Mensajes y candidato selectivo SUCCESS. Revisar de nuevo el SHA si otro agente actualiza Test.
+
 Ejecutar un recorrido de aceptacion **solo con El Heraldo Test en Heraldo's Lab**. Registrar fecha y commit desplegado de Test, observado en Railway, junto a cada resultado. Conservar los valores iniciales y no usar usuarios productivos como objetivos.
 
 | Area | Recorrido real | Estado |
