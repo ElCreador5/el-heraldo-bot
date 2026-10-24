@@ -1,3 +1,9 @@
+## Aclaración NH: guardado directo SOLO de Activar/Pausar/Reanudar (2026-10-24)
+
+El propietario autoriza esos botones de estado para guardar inmediatamente únicamente lo que indican, sin Guardar cambios, sin confirmar de nuevo ni persistir otros borradores. En `Pruebas` se ajusta Honeypot: activar requiere trampa ya registrada y acción válida; pausar/reanudar aplica su propio estado, conserva los borradores y actualiza la tarjeta. Los tests nuevos cubren el aislamiento de opciones pendientes y que una trampa sin guardar no activa protección.
+
+**Pendiente:** CI y prueba real de botones en Discord Test con canal ya registrado, activación, pausa, reanudación, panel antiguo, rol/permisos inválidos y otros borradores simultáneos. Revisar excepciones a la regla en los demás módulos de setup antes de declarar alcance transversal aprobado. Nada publicado a producción por esta aclaración.
+
 ## Honeypot y contrato transversal de borradores — 24/10/2026
 
 **Observado por el propietario en Discord Test:** los botones de `/setup` vuelven a responder correctamente en la versión `64537919` (sin inventar una prueba exhaustiva por módulo). Nueva incidencia real al retirar un canal Honeypot: `Confirmar cambios` rojo y tarjeta original mostrando contador/lista antiguos después de confirmar, aunque se informa desactivación por quedar sin trampas.
