@@ -1,3 +1,11 @@
+## Honeypot y contrato transversal de borradores — 24/10/2026
+
+**Observado por el propietario en Discord Test:** los botones de `/setup` vuelven a responder correctamente en la versión `64537919` (sin inventar una prueba exhaustiva por módulo). Nueva incidencia real al retirar un canal Honeypot: `Confirmar cambios` rojo y tarjeta original mostrando contador/lista antiguos después de confirmar, aunque se informa desactivación por quedar sin trampas.
+
+**Corrección de desarrollo en `Pruebas` (aún pendiente de CI y aceptación posterior):** seleccionar un canal no escribe SQLite; `Retirar canal` prepara el borrador; `Guardar cambios` abre confirmación verde **en la misma tarjeta** porque retirar la última trampa puede desactivar la protección; Confirmar ejecuta una única retirada, actualiza el panel con los registros persistidos y muestra 0 · Ninguno configurado al terminar. Cancelar/Descartar no escriben. Se impide reimportar una trampa heredada tras una retirada real, mediante marca guardada atómicamente por guild. Otros cambios ordinarios de Honeypot se guardan directamente en la tarjeta. La cobertura transversal de otros settings seguirá el mismo principio conforme a NH; no se declara auditada toda ruta profunda por esta sola corrección.
+
+**PENDIENTE:** ejecutar CI SHA vigente, desplegar en Railway Test y probar en Discord selección → Guardar → Confirmar / Descartar, con 1 y varios canales, contador visible sin recargar, cancelación, permisos, doble clic y reinicio. Ningún ensayo destructivo en `main`.
+
 ## Entrega transversal /setup — 2026-10-24 (Pruebas)
 
 **Implementación:** `setup_interactions.py`, `honeypot_interactions.py`, hooks de `bot.py`; nuevos tests `test_setup_interaction_runtime.py` y `test_honeypot_concurrency.py`, ampliación de `test_global_server_footer.py`. El CI UX ejecuta expresamente estas regresiones; la matriz general las recoge en Python 3.11/3.12/3.13.
