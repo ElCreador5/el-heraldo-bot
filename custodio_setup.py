@@ -62,14 +62,26 @@ class CustodioSetupView(discord.ui.View):
         self.add_item(check_button)
 
         report_button = discord.ui.Button(
-            label="Crear canal de reportes", style=discord.ButtonStyle.primary, row=1)
+            label="Reportes", style=discord.ButtonStyle.primary, row=3)
         report_button.callback = self.request_report_channel
         self.add_item(report_button)
 
         actions_button = discord.ui.Button(
-            label="Acciones por tipo", style=discord.ButtonStyle.primary, row=1)
+            label="Acciones", style=discord.ButtonStyle.primary, row=1)
         actions_button.callback = self.open_rule_actions
         self.add_item(actions_button)
+
+        for caption, description, placement in (
+            ("Detección", "Detección de texto, imágenes similares, saturación y patrones colectivos. Pendiente de conexión con detectores verificables.", 1),
+            ("Exenciones", "Exenciones por roles, reglas y canales. El propietario y los moderadores no reciben sanciones automáticas. Configuración avanzada pendiente.", 3),
+            ("Integraciones", "Advertencias centralizadas, Condenas y revisiones. Las conexiones disciplinarias todavía no están activadas.", 3),
+        ):
+            nav = discord.ui.Button(label=caption, style=discord.ButtonStyle.secondary, row=placement)
+            async def open_section(interaction: discord.Interaction, text=description, heading=caption):
+                view = CustodioInformationView(self, heading, text)
+                await interaction.response.edit_message(content=view.summary(), view=view, embed=None)
+            nav.callback = open_section
+            self.add_item(nav)
 
         save_button = discord.ui.Button(
             label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
@@ -426,3 +438,29 @@ class CustodioRulesView(discord.ui.View):
         await interaction.response.edit_message(
             content=self.parent.summary(), view=self.parent, embed=None,
         )
+
+
+class CustodioInformationView(discord.ui.View):
+    """Submenú informativo hasta que sus controles estén implementados."""
+
+    def __init__(self, parent: CustodioSetupView, title: str, information: str):
+        super().__init__(timeout=300)
+        self.parent = parent
+        self.title = title
+        self.information = information
+
+    def summary(self):
+        return (
+            f"**El Heraldo · AutoMod · Modo Custodio · {self.title}**\\n\\n"
+            f"{self.information}\\n\\n"
+            "No hay cambios que guardar ni acciones automáticas activas en este apartado."
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await self.parent.access_check(interaction, self.parent.guild_id, self.parent.owner_id)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        self.parent._sync_controls()
+        await interaction.response.edit_message(content=self.parent.summary(), view=self.parent, embed=None)
