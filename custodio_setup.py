@@ -203,10 +203,14 @@ class CustodioSetupView(discord.ui.View):
             )
             return
         if existing:
-            await interaction.response.send_message(
-                "Ya existe una referencia a un canal de reportes. "
-                "No se creará otro automáticamente. Revise el canal existente.",
-                ephemeral=True,
+            view = CustodioInformationView(
+                self, "Reportes",
+                "El canal privado de reportes ya está vinculado. "
+                "No se crearán canales duplicados. La supervisión y "
+                "la publicación automática de observaciones permanecen desactivadas.",
+            )
+            await interaction.response.edit_message(
+                content=view.summary(), view=view, embed=None,
             )
             return
         view = CustodioReportChannelConfirmView(self)
