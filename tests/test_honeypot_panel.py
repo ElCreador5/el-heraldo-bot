@@ -127,7 +127,7 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             await view.create_channel.callback(i)
         i.guild.create_text_channel.assert_not_awaited()
         add.assert_not_called()
-        proposed = i.response.send_message.call_args.kwargs["view"]
+        proposed = i.followup.send.call_args.kwargs["view"]
         self.assertIsInstance(proposed, b.HoneypotTrapActionConfirmView)
         self.assertTrue(proposed.from_setup)
         self.assertEqual(proposed.confirm.style, b.discord.ButtonStyle.success)
@@ -152,7 +152,7 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             patch.object(b, "_setup_apply_system_channel", new=AsyncMock()) as apply,
         ):
             await view.create_channel.callback(i)
-            proposed = i.response.send_message.call_args.kwargs["view"]
+            proposed = i.followup.send.call_args.kwargs["view"]
             self.assertEqual(proposed.action, "add")
             self.assertTrue(proposed.from_setup)
             apply.assert_not_awaited()

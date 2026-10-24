@@ -5,6 +5,7 @@ Estas pruebas inspeccionan métodos reales y simulan el descarte sin conectar al
 import ast
 import asyncio
 import unittest
+from honeypot_interactions import honeypot_operation
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -73,7 +74,7 @@ class HoneypotAckTests(unittest.TestCase):
                            names=[ast.alias(name="annotations")], level=0),
             node,
         ], type_ignores=[])
-        scope = {}
+        scope = {"honeypot_operation": honeypot_operation}
         exec(compile(ast.fix_missing_locations(isolated), "<isolated>", "exec"), scope)
         events = []
         class Response:
@@ -83,7 +84,7 @@ class HoneypotAckTests(unittest.TestCase):
             async def send(self, text, *, ephemeral=False):
                 events.append(("feedback", text, ephemeral))
         interaction = SimpleNamespace(response=Response(), followup=Followup(), guild=SimpleNamespace())
-        parent = SimpleNamespace(_pending_lines=lambda guild: [])
+        parent = SimpleNamespace(guild_id=901, _pending_lines=lambda guild: [])
         asyncio.run(scope["_save_pending_changes"](parent, interaction))
         self.assertEqual(events[0], "ack")
         self.assertEqual(events[1], ("feedback", "No hay cambios pendientes.", True))

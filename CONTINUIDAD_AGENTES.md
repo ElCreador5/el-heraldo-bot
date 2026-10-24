@@ -1,3 +1,11 @@
+## Traspaso actual #23 — todo /setup, 2026-10-24 RD
+
+Base `Pruebas@f50c8224`; `main@41f55654` intacta. El propietario confirmó el retraso y «Interaction failed» en TODOS los módulos aunque después se ejecuta la acción. La entrega incorpora ACK transversal de sesiones administrativas (con excepción de apertura de modales), rechazo de clics repetidos, recuperación segura de paneles caducados, concurrencia de Honeypot y cobertura de pies/contexto/límites. El aviso del panel de Verificación eliminado pasa a estado informativo, sin recrearlo ni borrar su referencia. Detalles y alcance: [[ESTADO_PROYECTO]].
+
+Verificación local final: 820 tests de componentes correctos, una omisión heredada; 39 regresiones originales y 118 del candidato selectivo correctas; sintaxis, dependencias y diff correctos. El candidato se generó sobre main sin publicar. Se preparó CI explícito del protocolo de interacción para todos los módulos.
+
+Al guardar este punto, CI remota y nuevo despliegue Test todavía por comprobar. El navegador disponible muestra el login de Discord: no hay aceptación real. Mantener pendientes [[ISSUE23_ACEPTACION_LAB]] y registrar el SHA realmente desplegado. Tras publicar, comprobar GitHub/Railway exactos y abrir un /setup NUEVO en Lab. No pedir claves ya recuperadas ni repetir respaldo/investigaciones cerradas. Producción no autorizada hasta cerrar la aceptación y frescura del respaldo.
+
 ## Honeypot — ACK temprano de botones (2026-10-24)
 
 Rama de desarrollo `Pruebas`; objetivo evitar «Interaction failed» seguido de cambios tardíos. Código propuesto modifica solo los callbacks del panel Honeypot, selectores, publicación y confirmación de canales: `interaction.response.defer()` antes de SQLite, `interaction.edit_original_response` y `followup.send` posteriores. Las reglas existentes de Guardar/Descartar, permisos, controles obsoletos y no duplicación deben permanecer. Ver `tests/test_honeypot_interaction_ack.py`. **Estado de la revisión previa a CI:** sin comprobación interactiva, sin cambios a main, sin alterar SQLite o variables de Railway. No aceptar deploy SUCCESS como prueba de latencia; comprobar clics reales en Lab.

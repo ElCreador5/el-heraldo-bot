@@ -47,6 +47,9 @@ jobs:
             test_configuration_preview \
             test_setup_editor_selectors \
             test_reaction_options_dropdown \
+            test_setup_interaction_runtime \
+            test_honeypot_concurrency \
+            test_global_server_footer \
             test_honeypot_panel \
             test_honeypot_warning_publish \
             test_reaction_reports_ux \

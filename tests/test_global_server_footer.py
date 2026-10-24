@@ -83,10 +83,40 @@ class ServerFooterTests(unittest.TestCase):
         f = isolate("server_footer_text")["server_footer_text"]
         self.assertEqual(f("Comunidad", "Expediente · Comunidad"), "Expediente · Comunidad")
         self.assertEqual(f("Comunidad", "Comunidad · Expediente"), "Comunidad · Expediente")
-        text = f("Comunidad", "a" * 2048)
-        self.assertEqual(len(text), 2048)
-        self.assertTrue(text.startswith("Comunidad · "))
-        self.assertIn("a", text)
+        with self.assertRaisesRegex(ValueError, "2048"):
+            f("Comunidad", "a" * 2048)
+        self.assertEqual(f("Lab", "Colaboradores activos"), "Lab · Colaboradores activos")
+
+    def test_unknown_dm_does_not_borrow_even_the_only_cached_guild(self):
+        env = isolate("heraldo_footer", env={
+            "bot": SimpleNamespace(guilds=[server("Comunidad privada")],
+                                   user=SimpleNamespace(name="El Heraldo")),
+        })
+        self.assertEqual(env["heraldo_footer"](None), ("El Heraldo", ""))
+
+    def test_hook_copies_embeds_per_destination_and_preserves_limit_data(self):
+        from test_safety_regressions import b
+        embed = b.discord.Embed(description="Texto", color=123)
+        embed.set_footer(text="Expediente 42")
+        _, first = b._embedify(None, {"embed": embed}, server("Alfa"), None)
+        _, second = b._embedify(None, {"embed": embed}, server("Beta"), None)
+        self.assertEqual(first["embed"].footer.text, "Alfa · Expediente 42")
+        self.assertEqual(second["embed"].footer.text, "Beta · Expediente 42")
+        self.assertEqual(embed.footer.text, "Expediente 42")
+        full = b.discord.Embed(description="x" * 4000)
+        full.add_field(name="Campo", value="y" * 1024)
+        full.add_field(name="Campo", value="z" * 950)
+        with self.assertRaisesRegex(ValueError, "6000"):
+            b._embedify(None, {"embed": full}, server("Comunidad de laboratorio"), None)
+        self.assertIsNone(full.footer.text)
+
+    def test_text_editor_clearing_embeds_does_not_send_conflicting_arguments(self):
+        from test_safety_regressions import b
+        content, payload = b._embedify("Borrador preparado", {"embeds": []}, server("Lab"), None)
+        self.assertIsNone(content)
+        self.assertNotIn("embeds", payload)
+        self.assertEqual(payload["embed"].description, "Borrador preparado")
+        self.assertEqual(payload["embed"].footer.text, "Lab")
 
     def test_message_templates_apply_brand_per_guild_before_discord(self):
         discord = SimpleNamespace(Embed=FakeEmbed,

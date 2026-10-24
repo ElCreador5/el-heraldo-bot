@@ -1,6 +1,18 @@
+## Entrega transversal de /setup — 24/10/2026 (RD)
+
+El código posterior a `f50c8224` corrige el ACK transversal de todas las sesiones de `/setup`, concurrencia y rutas de footer. El código de referencia anterior que se conserva debajo es histórico: comprobar el SHA desplegado antes de ejecutar. Estado de aceptación **PENDIENTE**, aunque las regresiones pasen. El candidato selectivo de #23 se ha regenerado y sus 118 pruebas pasaron; todavía no se ha publicado en `main`.
+
+| Área | Recorrido real adicional | Estado |
+| --- | --- | --- |
+| Todo `/setup` | Abrir una sesión NUEVA con El Heraldo Test en Heraldo's Lab; recorrer todas las opciones visibles y sus submenús; Volver debe retornar al nivel anterior sin «Interaction failed». | PENDIENTE |
+| Formularios y guardados | Abrir/cerrar formularios de varios módulos; preparar/cancelar/guardar/restaurar un cambio seguro; no consumir el ACK necesario para mostrar el modal. | PENDIENTE |
+| Honeypot | Guardar/Descartar, acción/medida, selectores, aviso y cancelación; clics rápidos durante trabajo pendiente deben dar feedback y ejecutar una sola acción. Evitar sanciones reales. | PENDIENTE |
+| Pies por guild | Verificación, Personalidad, Mensajes, Moderación, Condenas, Raid, Honeypot, Sugerencias, logs y DMs; nombre real de cada servidor, conservando metadatos funcionales. | PENDIENTE |
+| Panel caducado | Usar un panel anterior al reinicio: debe ofrecer sesión nueva o indicar caducidad, sin ejecutar su acción antigua ni afirmar recuperación del borrador. | PENDIENTE |
+
 # Aceptacion interactiva pendiente del encargo #23
 
-El respaldo productivo esta verificado. Las regresiones automaticas y el arranque de Test no sustituyen interacciones reales. Issue #23 exige validar en Lab antes del port; AGENTS UX-05 exige registrar lo no probado y detener su aceptacion. No hay herramienta disponible para manejar los clics de Discord; no usar tokens de una cuenta personal.
+El respaldo productivo esta verificado. Las regresiones automaticas y el arranque de Test no sustituyen interacciones reales. Issue #23 exige validar en Lab antes del port; AGENTS UX-05 exige registrar lo no probado y detener su aceptacion. El navegador disponible muestra el inicio de sesión de Discord; no hay sesión de prueba accesible. No usar tokens de una cuenta personal.
 
 Preparado para el recorrido: codigo Test `a64afe9d55d9771ea4a3db4121aa40a6ae1cf54c`, deployment `82e887b3-88f4-4f16-bc63-ac7fa4383b35` SUCCESS, Gateway conectado el 24/10/2026 a las 08:04:27 RD. CI general 3.11/3.12/3.13, UX, Mensajes y candidato selectivo SUCCESS. Revisar de nuevo el SHA si otro agente actualiza Test.
 

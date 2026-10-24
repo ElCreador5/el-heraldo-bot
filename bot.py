@@ -116,6 +116,8 @@ import json
 import message_payload
 import message_components
 import evidence_archive
+import setup_interactions
+from honeypot_interactions import honeypot_operation, serialize_honeypot_warning
 import io
 import os
 import re
@@ -2701,9 +2703,10 @@ class ExitCommentModal(discord.ui.Modal, title="Comentario de salida"):
         self.dm_message_id = dm_message_id
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
         content = str(self.comment.value).strip()
         if not content or len(content) > exit_comments.COMMENT_LIMIT:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Escribe un comentario de entre 1 y 500 caracteres.", ephemeral=True)
             return
         try:
@@ -2713,7 +2716,7 @@ class ExitCommentModal(discord.ui.Modal, title="Comentario de salida"):
                 if row is None or not exit_comments.submit_comment(
                         conn, dm_message_id=self.dm_message_id,
                         user_id=interaction.user.id, comment=content):
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         "Solicitud caducada o ya respondida.", ephemeral=True)
                     return
                 conn.row_factory = sqlite3.Row
@@ -2721,12 +2724,15 @@ class ExitCommentModal(discord.ui.Modal, title="Comentario de salida"):
                     "SELECT * FROM member_exit_comments WHERE dm_message_id=?",
                     (self.dm_message_id,)).fetchone()
         except sqlite3.Error:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "No fue posible guardar tu comentario. Inténtalo más tarde.",
                 ephemeral=True)
             return
+        interaction.extras["heraldo_source_guild"] = bot.get_guild(saved["guild_id"])
+        if interaction.extras["heraldo_source_guild"] is not None:
+            _interaction_guilds[interaction.token] = saved["guild_id"]
         success = await exit_comment_apply(saved)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Comentario incorporado al registro original." if success else
             "Comentario recibido. Su incorporación al registro está pendiente.",
             ephemeral=True)
@@ -2768,10 +2774,10 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
         return
     try:
         sent = await member.send(
-            "Has abandonado **" + discord.utils.escape_mentions(guild.name) + "**. "
+            embed=stamp_embed(_content_embed("Has abandonado **" + discord.utils.escape_mentions(guild.name) + "**. "
             "Si deseas compartir el motivo de tu salida, utiliza Dejar comentario. "
             "La respuesta es voluntaria y será visible para el personal autorizado "
-            "con acceso al registro privado del servidor. Puedes ignorar este mensaje.",
+            "con acceso al registro privado del servidor. Puedes ignorar este mensaje."), guild),
             view=ExitCommentDMView(), allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
         return  # DM bloqueado: no reintentar una solicitud incierta.
@@ -5552,6 +5558,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             content=note, embed=self._embed(interaction.guild), view=self,
         )
 
+    @honeypot_operation
     async def select_trap(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         values = interaction.data.get("values") if interaction.data else []
@@ -5579,7 +5586,9 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         await self._refresh(interaction)
 
     @discord.ui.button(label="Crear canal", style=discord.ButtonStyle.primary, row=1)
+    @honeypot_operation
     async def create_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         guild = interaction.guild
         configured_id = get_guild_channel_id(self.guild_id, "honeypot")
         existing = guild.get_channel(configured_id) if configured_id else None
@@ -5587,18 +5596,18 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             existing = next((c for c in guild.text_channels if c.name.casefold() == "honeypot"), None)
         if isinstance(existing, discord.TextChannel):
             if existing.id in hp_traps(self.guild_id):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"{existing.mention} ya figura como canal trampa. No se creará otro.",
                     ephemeral=True,
                 )
                 return
             reason = hp_protected_channel_reason(existing)
             if reason:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"No puede utilizarse ese canal: {reason}.", ephemeral=True,
                 )
                 return
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Confirme el registro de {existing.mention} como canal trampa. No se creará otro canal.",
                 view=HoneypotTrapActionConfirmView(
                     self.guild_id, self.owner_id, "add", existing.id, from_setup=True,
@@ -5606,7 +5615,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 ephemeral=True,
             )
             return
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Confirme la creación y registro de un nuevo canal Honeypot. "
             "Esta acción crea el canal inmediatamente al confirmar; no depende de Guardar cambios.",
             view=HoneypotTrapActionConfirmView(self.guild_id, self.owner_id, "create", from_setup=True),
@@ -5614,29 +5623,32 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         )
 
     @discord.ui.button(label="Retirar canal", style=discord.ButtonStyle.danger, row=1)
+    @honeypot_operation
     async def remove_channel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         traps = hp_traps(self.guild_id)
         selected = self.selected_channel_id
         if selected is None and len(traps) == 1:
             selected = next(iter(traps))
         if selected not in traps:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Seleccione un canal trampa registrado antes de retirarlo.", ephemeral=True,
             )
             return
         channel = interaction.guild.get_channel(selected)
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Ese canal ya no existe. Actualice la configuración.", ephemeral=True,
             )
             return
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"¿Confirma retirar {channel.mention} del Honeypot? El canal no se borrará.",
             view=HoneypotTrapActionConfirmView(self.guild_id, self.owner_id, "remove", selected),
             ephemeral=True,
         )
 
     @discord.ui.button(label="Activar protección", style=discord.ButtonStyle.success, row=1)
+    @honeypot_operation
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         enabled, paused = self._effective_state()
@@ -5658,6 +5670,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         await self._refresh(interaction)
 
     @discord.ui.button(label="Configurar acción", style=discord.ButtonStyle.primary, row=2)
+    @honeypot_operation
     async def edit_action(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         view = HeraldoHoneypotActionView(self)
@@ -5666,6 +5679,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         )
 
     @discord.ui.button(label="Configurar aviso", style=discord.ButtonStyle.primary, row=2)
+    @honeypot_operation
     async def edit_notice(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         view = HeraldoHoneypotNoticeView(self)
@@ -5674,6 +5688,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         )
 
     @discord.ui.button(label="Detalles", style=discord.ButtonStyle.primary, row=2)
+    @honeypot_operation
     async def details(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         view = HeraldoHoneypotDetailsView(self)
@@ -5681,10 +5696,13 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             content=None, embed=view._embed(interaction.guild), view=view,
         )
 
+    @honeypot_operation
     async def _save_pending_changes(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         if not self._pending_lines(interaction.guild):
             await interaction.followup.send("No hay cambios pendientes.", ephemeral=True)
+            return
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
             return
         if (honeypot_enabled(self.guild_id) != self.original_enabled
                 or honeypot_paused(self.guild_id) != self.original_paused
@@ -5749,7 +5767,6 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         warning = None
         if channel is not None:
             hp_add_trap(self.guild_id, channel.id)
-            warning = await hp_sync_warning(channel)
         if self.pending_enabled is not None:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
         if self.pending_paused is not None:
@@ -5779,12 +5796,15 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.original_action = hp_action(self.guild_id)
         self.original_traps = set(hp_traps(self.guild_id))
         self._sync_controls()
+        if channel is not None:
+            warning = await hp_sync_warning(channel)
         note = "Cambios guardados."
         if warning:
             note += f" El canal se registró, pero no pudo sincronizarse el aviso: {warning}"
         await interaction.edit_original_response(content=note, embed=self._embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
+    @honeypot_operation
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._save_pending_changes(interaction)
 
@@ -5795,11 +5815,13 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.selected_channel_id = None
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=3)
+    @honeypot_operation
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self._discard_draft()
         await self._refresh(interaction)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @honeypot_operation
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         if self._pending_lines(interaction.guild):
@@ -5823,6 +5845,7 @@ class HeraldoHoneypotSubView(discord.ui.View):
         return await configuration_access(interaction, self.parent.guild_id, self.parent.owner_id)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    @honeypot_operation
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         self.parent._sync_controls()
@@ -5847,11 +5870,13 @@ class HeraldoHoneypotDraftSubView(HeraldoHoneypotSubView):
         self.discard_changes.disabled = not pending
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    @honeypot_operation
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         # La validación y escritura son exactamente las del botón principal.
         await self.parent._save_pending_changes(interaction)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
+    @honeypot_operation
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         self.parent._discard_draft()
@@ -5908,6 +5933,7 @@ class HeraldoHoneypotActionView(HeraldoHoneypotDraftSubView):
             color=discord.Color.blurple(),
         )
 
+    @honeypot_operation
     async def choose(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         values = interaction.data.get("values", []) if interaction.data else []
@@ -5930,6 +5956,7 @@ class HeraldoHoneypotActionView(HeraldoHoneypotDraftSubView):
         )
 
     @discord.ui.button(label="Configurar medida", style=discord.ButtonStyle.primary, row=1)
+    @honeypot_operation
     async def parameters(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         view = HeraldoHoneypotParametersView(self.parent)
@@ -6034,6 +6061,7 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
             content=None, embed=updated._embed(interaction.guild), view=updated,
         )
 
+    @honeypot_operation
     async def select_kick_purge(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         value = int(interaction.data["values"][0])
@@ -6044,6 +6072,7 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         self.parent.pending_kick_purge_minutes = value if value != saved else None
         await self._stage(interaction)
 
+    @honeypot_operation
     async def select_timeout(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         value = int(interaction.data["values"][0])
@@ -6055,6 +6084,7 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         )
         await self._stage(interaction)
 
+    @honeypot_operation
     async def select_ban_duration(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         value = int(interaction.data["values"][0])
@@ -6067,6 +6097,7 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         self.parent.pending_ban_minutes = value if current is None or value != current else None
         await self._stage(interaction)
 
+    @honeypot_operation
     async def select_purge(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         value = interaction.data["values"][0]
@@ -6136,6 +6167,7 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
             return False
 
     @discord.ui.button(label="Confirmar publicación", style=discord.ButtonStyle.success)
+    @honeypot_operation
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         # Aceptar la pulsación ANTES de consultar SQLite o permisos por canal (< 3 s).
         await interaction.response.defer()
@@ -6255,14 +6287,17 @@ class HeraldoHoneypotNoticeView(HeraldoHoneypotSubView):
         )
 
     @discord.ui.button(label="Editar texto", style=discord.ButtonStyle.primary, row=0)
+    @honeypot_operation
     async def text_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningModal(self.parent.guild_id))
 
     @discord.ui.button(label="Editar diseño", style=discord.ButtonStyle.primary, row=0)
+    @honeypot_operation
     async def visual_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HoneypotWarningEmbedModal(self.parent.guild_id))
 
     @discord.ui.button(label="Publicar aviso", style=discord.ButtonStyle.success, row=1)
+    @honeypot_operation
     async def publish_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         if self.parent._pending_lines(interaction.guild):
@@ -6325,6 +6360,7 @@ class HeraldoHoneypotDetailsView(HeraldoHoneypotSubView):
         return embed
 
     @discord.ui.button(label="Ver historial", style=discord.ButtonStyle.secondary, row=0)
+    @honeypot_operation
     async def history(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await honeypot_history.callback(interaction, cantidad=10)
 
@@ -9312,6 +9348,32 @@ async def heraldo_message_components_dispatch(interaction: discord.Interaction):
         return
     if not interaction.response.is_done():
         await heraldo_message_role_action(interaction, int(parts[2]), int(parts[3]), parts[4])
+
+
+@bot.listen("on_interaction")
+async def heraldo_expired_panel_reply(interaction: discord.Interaction):
+    if interaction.type not in (discord.InteractionType.component, discord.InteractionType.modal_submit):
+        return
+    # El despacho de View se agenda antes del listener; no competir con su ACK/modal.
+    await asyncio.sleep(0)
+    if interaction.extras.get(setup_interactions.STARTED_KEY) or interaction.response.is_done():
+        return
+    custom_id = str((interaction.data or {}).get("custom_id", ""))
+    if custom_id.startswith(("ehmsg:", "ehx:")):
+        return  # Componentes persistentes atendidos por sus listeners específicos.
+    message = interaction.message
+    if message is None or bot.user is None or message.author.id != bot.user.id:
+        return
+    can_configure = (interaction.guild is not None and
+                     getattr(getattr(interaction.user, "guild_permissions", None), "manage_guild", False))
+    await interaction.response.send_message(
+        "Este panel caducó o se abrió antes del último reinicio. "
+        + ("Puede continuar desde esta nueva sesión de /setup. Los borradores anteriores no se recuperan."
+           if can_configure else "Solicite un panel vigente al personal del servidor.")
+        + " No se ejecutó la acción del botón anterior.",
+        view=HeraldoSetupView(interaction.guild.id, interaction.user.id) if can_configure else None,
+        ephemeral=True,
+    )
 
 
 
@@ -13392,7 +13454,7 @@ async def update_verify_panel(guild: discord.Guild) -> str:
         )
         return "El panel publicado ya muestra los textos nuevos."
     except discord.NotFound:
-        return "Advertencia: El panel ya no existe (¿lo borraron?); publícalo de nuevo con /verify."
+        return "Panel de verificación no disponible: el mensaje anterior fue eliminado. Use /verify para publicarlo."
     except (discord.HTTPException, ValueError) as e:
         return f"Advertencia: No pude actualizar el panel publicado: `{e}`. Publícalo de nuevo con /verify."
 
@@ -16758,6 +16820,7 @@ def hp_warning_embed(channel: discord.abc.GuildChannel | None = None) -> discord
     )
 
 
+@serialize_honeypot_warning
 async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
     """Publica/actualiza (o borra) el aviso fijado de un canal trampa. Devuelve un
     texto de error o None si todo fue bien."""
@@ -16783,8 +16846,8 @@ async def hp_sync_warning(channel: discord.TextChannel) -> str | None:
                 await existing.pin()
             return None
         message = await channel.send(embed=hp_warning_embed(channel))
-        await message.pin()
         hp_set_warning_message(channel.guild.id, channel.id, message.id)
+        await message.pin()
         # Quita el mensaje de sistema "X ha fijado un mensaje".
         async for m in channel.history(limit=5):
             if m.type == discord.MessageType.pins_add:
@@ -20380,6 +20443,7 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
     @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.danger)
+    @honeypot_operation
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         if not await self.interaction_check(interaction):
@@ -20391,6 +20455,17 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
         me = guild.me
         channel = guild.get_channel(self.channel_id) if self.channel_id is not None else None
         if self.action == "create":
+            configured_id = get_guild_channel_id(guild.id, "honeypot")
+            existing = guild.get_channel(configured_id) if configured_id else None
+            if existing is None:
+                existing = next((c for c in getattr(guild, "text_channels", [])
+                                 if c.name.casefold() == "honeypot"), None)
+            if existing is not None:
+                await interaction.followup.send(
+                    "El canal Honeypot ya existe. Abra de nuevo el panel para registrarlo o consultarlo.",
+                    ephemeral=True,
+                )
+                return
             if not interaction.user.guild_permissions.manage_channels or (
                 me is None or not me.guild_permissions.manage_channels
             ):
@@ -23192,8 +23267,6 @@ _interaction_guilds: dict[str, int] = {}  # token de interacción -> guild_id (p
 
 def heraldo_footer(guild: discord.Guild | None) -> tuple[str, str]:
     """(texto, icono) del footer global, resueltos con el sistema de variables."""
-    if guild is None and len(bot.guilds) == 1:
-        guild = bot.guilds[0]
     if guild is None:
         return (bot.user.name if bot.user else "El Heraldo"), ""
     ctx = VarContext(guild)
@@ -23209,12 +23282,14 @@ def server_footer_text(server_name: str, detail: str = "") -> str:
     detail = str(detail or "").strip()
     if not name:
         return detail[:2048]
-    if name.casefold() in detail.casefold():
-        return detail[:2048]
+    if name.casefold() in {part.strip().casefold() for part in detail.split(" · ")}:
+        return detail
     if not detail:
         return name
     prefix = f"{name} · "
-    return prefix + detail[:max(0, 2048 - len(prefix))]
+    if len(prefix) + len(detail) > 2048:
+        raise ValueError("El pie con el nombre del servidor supera 2048 caracteres. Reduzca el pie personalizado; no se recortó su información.")
+    return prefix + detail
 
 
 def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Embed:
@@ -23259,13 +23334,18 @@ def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     has_embed = embed not in (None, _MISSING)
     has_embeds = embeds not in (None, _MISSING) and len(embeds) > 0
     if has_embed or has_embeds:
+        kw = dict(kw)
         if has_embed:
-            stamp_embed(embed, guild)
+            kw["embed"] = stamp_embed(embed.copy(), guild)
         if has_embeds:
-            for e in embeds:
-                stamp_embed(e, guild)
+            kw["embeds"] = [stamp_embed(e.copy(), guild) for e in embeds]
+        prepared = [kw["embed"]] if has_embed else kw["embeds"]
+        if sum(len(e) for e in prepared) > 6000:
+            raise ValueError("El contenido con el pie del servidor supera 6000 caracteres. Reduzca el embed antes de enviarlo; no se recortó su información.")
         return content, kw
     if isinstance(content, str) and content.strip():
+        kw = dict(kw)
+        kw.pop("embeds", None)  # embeds=[] no puede coexistir con el embed nuevo.
         kw["embed"] = stamp_embed(_content_embed(content), guild)
         return empty, kw
     return content, kw
@@ -23275,7 +23355,11 @@ def _guild_for(obj) -> discord.Guild | None:
     guild = getattr(obj, "guild", None)
     if guild is None:
         guild = getattr(getattr(obj, "channel", None), "guild", None)
-    return guild
+    return guild or setup_interactions.source_guild.get()
+
+
+def _interaction_source_guild(interaction):
+    return interaction.guild or interaction.extras.get("heraldo_source_guild") or setup_interactions.source_guild.get()
 
 
 def _install_embed_hooks() -> None:
@@ -23298,10 +23382,7 @@ def _install_embed_hooks() -> None:
         orig = getattr(cls, name)
 
         async def wrapper(self, content=_MISSING if empty is _MISSING else None, **kw):
-            try:
-                content, kw = _embedify(content, kw, guild_of(self), empty)
-            except Exception:
-                traceback.print_exc()
+            content, kw = _embedify(content, kw, guild_of(self), empty)
             return await orig(self, content, **kw)
 
         wrapper.__name__ = name
@@ -23311,18 +23392,15 @@ def _install_embed_hooks() -> None:
     def wrap_edit(cls, name, guild_of):
         orig = getattr(cls, name)
 
-        async def wrapper(self, **kw):
-            try:
-                content = kw.pop("content", _MISSING)
-                if content is not _MISSING and content is not None:
-                    content, kw = _embedify(content, kw, guild_of(self), None)
-                else:
-                    _, kw = _embedify(None, kw, guild_of(self), None)
-                if content is not _MISSING:
-                    kw["content"] = content
-            except Exception:
-                traceback.print_exc()
-            return await orig(self, **kw)
+        async def wrapper(self, *args, **kw):
+            content = kw.pop("content", _MISSING)
+            if content is not _MISSING and content is not None:
+                content, kw = _embedify(content, kw, guild_of(self), None)
+            else:
+                _, kw = _embedify(None, kw, guild_of(self), None)
+            if content is not _MISSING:
+                kw["content"] = content
+            return await orig(self, *args, **kw)
 
         wrapper.__name__ = name
         wrapper.__doc__ = orig.__doc__
@@ -23330,19 +23408,22 @@ def _install_embed_hooks() -> None:
 
     def webhook_guild(self):
         gid = _interaction_guilds.get(getattr(self, "token", None))
-        return bot.get_guild(gid) if gid else None
+        return (bot.get_guild(gid) if gid else None) or _guild_for(self)
 
-    wrap_positional(discord.InteractionResponse, "send_message", lambda s: s._parent.guild, None)
-    wrap_edit(discord.InteractionResponse, "edit_message", lambda s: s._parent.guild)
+    wrap_positional(discord.InteractionResponse, "send_message", lambda s: _interaction_source_guild(s._parent), None)
+    wrap_edit(discord.InteractionResponse, "edit_message", lambda s: _interaction_source_guild(s._parent))
     wrap_positional(discord.Webhook, "send", webhook_guild, _MISSING)
+    wrap_edit(discord.Webhook, "edit_message", webhook_guild)
     wrap_positional(discord.abc.Messageable, "send", _guild_for, None)
+    wrap_edit(discord.PartialMessage, "edit", _guild_for)
     wrap_edit(discord.Message, "edit", _guild_for)
     wrap_edit(discord.WebhookMessage, "edit", _guild_for)
     wrap_edit(discord.InteractionMessage, "edit", _guild_for)
-    wrap_edit(discord.Interaction, "edit_original_response", lambda s: s.guild)
+    wrap_edit(discord.Interaction, "edit_original_response", lambda s: _interaction_source_guild(s))
 
 
 _install_embed_hooks()
+setup_interactions.install(discord)
 
 
 # ---------------------------------------------------------------------------
