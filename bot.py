@@ -8797,6 +8797,20 @@ def heraldo_template_payload(template, guild, member=None, channel=None):
                "canal": getattr(channel, "name", "canal"),
                "fecha": datetime.now(timezone.utc).isoformat(timespec="minutes")}
     content, embeds = message_payload.render(template, context)
+    if embeds:
+        # El pie obligatorio se valida ANTES de publicar para no exceder el límite
+        # conjunto de 6000 caracteres ni alterar el contenido almacenado.
+        prepared = []
+        for raw in embeds:
+            data = dict(raw)
+            footer = dict(data.get("footer") or {})
+            footer["text"] = server_footer_text(guild.name, footer.get("text", ""))
+            if guild.icon and not footer.get("icon_url"):
+                footer["icon_url"] = str(guild.icon.url)
+            data["footer"] = footer
+            prepared.append(data)
+        message_payload.validate({"embeds": prepared})
+        embeds = prepared
     return {"content": content, "embeds": message_payload.TemplateEmbeds(discord.Embed.from_dict(e) for e in embeds),
             "view": heraldo_template_view(dict(template, _guild_id=guild.id)),
             "allowed_mentions": discord.AllowedMentions.none()}
@@ -14051,7 +14065,7 @@ def template_report_embed(template: discord.Template, was_dirty: bool | None, tr
     embed.add_field(name="Última sincronización", value=discord.utils.format_dt(synced_at, "f"), inline=True)
     embed.add_field(name="Usos", value=str(template.uses), inline=True)
     embed.add_field(name="Disparada por", value=trigger, inline=True)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+    embed.set_footer(text=f"{guild.name} · El Heraldo")
     return embed
 
 
@@ -14328,7 +14342,7 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
     embed.add_field(name="Mensajes", value=f"{messages:,}", inline=True)
     embed.add_field(name="Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
     embed.add_field(name="Roles", value=roles_text, inline=False)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+    embed.set_footer(text=f"{guild.name} · El Heraldo")
 
     await interaction.response.send_message(embed=embed)
 
@@ -14442,7 +14456,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         timestamp=datetime.now(timezone.utc),
     )
     embed.set_thumbnail(url=winner.display_avatar.url)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+    embed.set_footer(text=f"{guild.name} · El Heraldo")
     try:
         await channel.send(embed=embed)
     except discord.HTTPException as e:
@@ -23169,11 +23183,37 @@ def heraldo_footer(guild: discord.Guild | None) -> tuple[str, str]:
     return render_vars(GLOBAL_FOOTER_TEXT, ctx, 2048, plain=True), render_url_var(GLOBAL_FOOTER_ICON, ctx)
 
 
+def server_footer_text(server_name: str, detail: str = "") -> str:
+    """Identifica el servidor una sola vez sin destruir el pie informativo.
+
+    Se aplica en el momento del envío; no modifica plantillas ni SQLite.
+    """
+    name = str(server_name).strip()[:2048]
+    detail = str(detail or "").strip()
+    if not name:
+        return detail[:2048]
+    if name.casefold() in detail.casefold():
+        return detail[:2048]
+    if not detail:
+        return name
+    prefix = f"{name} · "
+    return prefix + detail[:max(0, 2048 - len(prefix))]
+
+
 def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Embed:
-    if not embed.footer.text:
-        text, icon = heraldo_footer(guild)
-        if text:
-            embed.set_footer(text=text, icon_url=icon or None)
+    """Sella todos los embeds con el servidor correcto y conserva pies funcionales."""
+    detail = embed.footer.text or ""
+    if guild is None:
+        if not detail:
+            fallback, icon = heraldo_footer(None)
+            if fallback:
+                embed.set_footer(text=fallback, icon_url=icon or None)
+        return embed
+    desired = server_footer_text(guild.name, detail)
+    existing_icon = getattr(embed.footer, "icon_url", None)
+    server_icon = str(guild.icon.url) if guild.icon else None
+    if desired != detail or (not detail and desired):
+        embed.set_footer(text=desired, icon_url=existing_icon or server_icon)
     return embed
 
 
@@ -23193,8 +23233,8 @@ def _content_embed(content: str) -> discord.Embed:
 def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     """Devuelve (content, kw) con el texto convertido a embed y todos los embeds con footer."""
     if isinstance(kw.get("embeds"), message_payload.TemplateEmbeds):
-        # Las plantillas validan su propio contenido, diseño y límite total de 6000.
-        # Convertir texto o añadir pies aquí rompería esos límites y el modo texto.
+        # Las plantillas ya incluyen el pie de servidor y están validadas contra
+        # el límite global de 6000 antes de llegar al hook; conservar su diseño.
         return content, kw
     embed = kw.get("embed")
     embeds = kw.get("embeds")

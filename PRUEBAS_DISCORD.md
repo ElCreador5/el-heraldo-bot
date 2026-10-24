@@ -1,3 +1,9 @@
+## NH — pie de servidor transversal (2026-10-24)
+
+**Implementado en `Pruebas`, comprobaciones por ejecutar:** `server_footer_text` y `stamp_embed` centralizados: conservan pie informativo, añaden nombre real por guild, previenen duplicación, usan icono actual si no existe otro. Eliminar literales fijos en tres embeds. Mensajes con plantillas JSON pasan por marca del servidor y validación conjunta antes de publicar; contenido fuera de presupuesto 6000 se rechaza, sin mutación de la plantilla almacenada. DMs sin servidor atribuible no se adjudican arbitrariamente a otra comunidad. El pie de confirmación funcional debe mantenerse.
+
+**Regresión nueva:** `tests/test_global_server_footer.py` (dos guilds e iconos, límites, idempotencia, pie funcional, plantilla original intacta, ausencia de pies fijos). **Discord real pendiente:** comprobar en Heraldo's Lab Verificación, Personalidad, Raid, Honeypot, Mensajes (incluidas plantillas), Moderation, Condenas, sugerencias y DMs con contexto de servidor; no usar usuarios reales ajenos al laboratorio.
+
 ## Pie de verificación automático por servidor — 2026-10-24
 
 **Observación real del propietario:** en Discord Test, `DM de verificación · Contenido` exigía `Pie del embed`, y el código tenía por defecto un nombre de servidor fijo. **Corrección implementada en código de `Pruebas`, aún pendiente de CI y comprobación interactiva:** quitar ese campo del modal; pie de DM dinámico basado en la guild de la verificación; icono predeterminado `{servericon}`; tarjeta y editor de personalidad con mismo criterio; `/verify_dm_texts` sin parámetro de pie y con confirmación antes de guardar. Los valores históricos SQLite permanecen, pero no anulan el pie automático del DM ni de personalidad.

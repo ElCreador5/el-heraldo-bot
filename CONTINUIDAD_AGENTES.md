@@ -1,3 +1,7 @@
+## Coordinación — globalización de identidad por servidor en embeds, 2026-10-24
+
+Propietario exige footer de nombre de servidor en **todos** los módulos y embeds, sin limitarse a Verificación. Corrección transversal `Pruebas`: `stamp_embed` ahora antepone el nombre de guild a los pies informativos, sin duplicarlo; pies fijos de perfiles, plantilla y Miembro de la Semana sustituidos por nombre dinámico; plantillas Mensajes pre-validadas con el pie antes de `send` para respetar 6000 caracteres y conservar datos; sin guild comprobable no atribuir servidor por conjetura. No escribir SQLite, no cambiar `main`, no fusionar ramas. En Test se requieren CI y prueba visual de módulos; incorporar al port selectivo #23 posteriormente.
+
 ## Pie automático en Verificación/Personalidad — 2026-10-24
 
 Corrección selectiva en `Pruebas` a raíz de captura de aceptación Lab: eliminar entrada obligatoria de pie en editor del DM de verificación, usar nombre actual del servidor por DM y por tarjeta de personalidad, manteniendo icono del servidor automático por defecto. Se conservan las claves antiguas SQLite (ya no son fuente del pie de estos embeds) y la personalización explícita del icono del DM. El comando legado `/verify_dm_texts` deja de exigir el pie y propone confirmación Guardar; sin cambio de `main`. Nueva prueba `tests/test_server_footer_verification.py`. **Estado:** pendiente de CI y redeploy Test; aún no equivale a aceptación de la funcionalidad #23. `main@41f55654` no fue modificado.

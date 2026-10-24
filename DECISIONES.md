@@ -1,3 +1,9 @@
+## NH — nombre automático del servidor en todos los embeds (2026-10-24)
+
+**Alcance solicitado por el propietario:** no limitarlo al DM ni a Personalidad. Todos los módulos deben mostrar el nombre del servidor emisor en el pie del embed. El pie global se aplica también a embeds con pie funcional ya existente: si el nombre del servidor ya aparece no se repite; si falta se antepone, conservando la información útil y el icono propio. Se sustituyen tres pies fijos de módulos de plantilla/perfil/Miembro de la Semana. Las plantillas enriquecidas de Mensajes se identifican **antes de enviarse**, conservan su contenido original y se revalidan ante el límite total Discord de 6000 caracteres; si la plantilla está al máximo, se rechaza con error validado antes de enviar, sin truncar el mensaje en silencio. Nunca se fuerza un nombre de servidor arbitrario a un DM sin contexto de guild verificable. No se borran configuraciones históricas ni datos.
+
+**Desarrollo:** solamente `Pruebas`; `main` requiere integración selectiva y aceptación Discord autorizada conforme al encargo #23. No presentar CI o Gateway como clics verificados.
+
 ## Pie de los embeds: identidad automática del servidor — 2026-10-24
 
 **Decisión del propietario (prueba interactiva):** el pie de marca debe reflejar automáticamente el nombre del servidor donde funciona El Heraldo, sin pedir al administrador el texto manualmente. En la edición de DM de verificación y tarjeta de personalidad se elimina el campo de pie, y se resuelve la identidad del servidor al construir cada tarjeta (y su icono cuando corresponda). La plantilla configurable del icono del DM se conserva: el valor predeterminado nuevo es `{servericon}`. Los pies que contienen información funcional (estado, motivo, paginación) conservan dicha información. No sobrescribir ni borrar valores históricos de configuración SQLite solo por esta normalización.
