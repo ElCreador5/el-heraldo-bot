@@ -35,7 +35,7 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         i = interaction()
         # En discord.py, response.is_done() pasa a True tras defer().
         # El mock de la interacción no cambia ese estado automáticamente.
-        i.response.is_done.side_effect = lambda: i.response.defer.await_count > 0
+        i.response.is_done = lambda: i.response.defer.await_count > 0
         with patch.object(b, "hp_setup_embed", return_value=b.discord.Embed(title="Prueba")):
             await view.toggle.callback(i)
         self.assertIsNone(view.pending_enabled)
