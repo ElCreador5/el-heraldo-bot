@@ -29,7 +29,7 @@ class SpanishInterfaceTests(unittest.TestCase):
 
     def test_custodio_displays_rules_in_spanish(self):
         self.assertNotIn('label="Consultar Server Rules"', CUSTODIO)
-        self.assertIn('label="Consultar reglas del servidor"', CUSTODIO)
+        self.assertIn('label="Reglas del servidor"', CUSTODIO)
         self.assertIn("reglas del servidor aprobadas", RULES)
 
 
