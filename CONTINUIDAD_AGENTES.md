@@ -1,3 +1,7 @@
+## Pie automático en Verificación/Personalidad — 2026-10-24
+
+Corrección selectiva en `Pruebas` a raíz de captura de aceptación Lab: eliminar entrada obligatoria de pie en editor del DM de verificación, usar nombre actual del servidor por DM y por tarjeta de personalidad, manteniendo icono del servidor automático por defecto. Se conservan las claves antiguas SQLite (ya no son fuente del pie de estos embeds) y la personalización explícita del icono del DM. El comando legado `/verify_dm_texts` deja de exigir el pie y propone confirmación Guardar; sin cambio de `main`. Nueva prueba `tests/test_server_footer_verification.py`. **Estado:** pendiente de CI y redeploy Test; aún no equivale a aceptación de la funcionalidad #23. `main@41f55654` no fue modificado.
+
 ## #23 - respaldo productivo HTTPS recuperado y verificado (2026-10-24, RD)
 
 RESPALDO REAL COMPLETADO: snapshot online de main@41f55654 a las 07:53:44 RD, AES-GCM y subida HTTPS al bucket privado externo heraldo-sqlite-backups. Descarga independiente y restauracion offline en dos SQLite aisladas en memoria verificadas a las 07:54:43 RD: integridad, FK, esquema, recuentos, contenido, SHA/manifiesto/fecha correctos; clave incorrecta y manipulacion rechazadas, descarga anonima/publica denegada. Objeto cifrado: 267497 bytes. No se restauro la base activa. Recibo administrativo y plan de recuperacion: [[ISSUE23_RESPALDO]].

@@ -1,3 +1,9 @@
+## Pie de los embeds: identidad automática del servidor — 2026-10-24
+
+**Decisión del propietario (prueba interactiva):** el pie de marca debe reflejar automáticamente el nombre del servidor donde funciona El Heraldo, sin pedir al administrador el texto manualmente. En la edición de DM de verificación y tarjeta de personalidad se elimina el campo de pie, y se resuelve la identidad del servidor al construir cada tarjeta (y su icono cuando corresponda). La plantilla configurable del icono del DM se conserva: el valor predeterminado nuevo es `{servericon}`. Los pies que contienen información funcional (estado, motivo, paginación) conservan dicha información. No sobrescribir ni borrar valores históricos de configuración SQLite solo por esta normalización.
+
+**Alcance inicial autorizado en `Pruebas`:** DM de verificación, editor de personalidad, y comando legado `/verify_dm_texts`. El pie global de embeds sin pie propio ya usa `{servidor}` / `{servericon}`. Otros pies de plantillas específicas requieren auditoría antes de imponer cambios globales que podrían borrar información útil.
+
 ## Formato de la verificación de edad — mención sin ID repetido (2026-10-24)
 
 **Aclaración posterior del propietario, prevalece para esta tarjeta:** el registro «Verificación de edad completada» debe mostrar la mención nativa del miembro como @apodo, seguida de «se verificó correctamente.», sin paréntesis ni ID numérico adicional. El identificador subyacente de la mención permanece para que Discord identifique al miembro; no se imprime de nuevo. Esto sustituye el formato de apodo en texto plano de la decisión anterior solo para esta tarjeta. Mantener IDs explícitos cuando son necesarios en expedientes, reportes, condenas y evidencias. La resolución de la mención en cada cliente depende de Discord; no prometer siempre el apodo si falta caché.

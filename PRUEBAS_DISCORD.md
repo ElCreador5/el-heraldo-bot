@@ -1,3 +1,9 @@
+## Pie de verificación automático por servidor — 2026-10-24
+
+**Observación real del propietario:** en Discord Test, `DM de verificación · Contenido` exigía `Pie del embed`, y el código tenía por defecto un nombre de servidor fijo. **Corrección implementada en código de `Pruebas`, aún pendiente de CI y comprobación interactiva:** quitar ese campo del modal; pie de DM dinámico basado en la guild de la verificación; icono predeterminado `{servericon}`; tarjeta y editor de personalidad con mismo criterio; `/verify_dm_texts` sin parámetro de pie y con confirmación antes de guardar. Los valores históricos SQLite permanecen, pero no anulan el pie automático del DM ni de personalidad.
+
+**Cobertura automática añadida:** `tests/test_server_footer_verification.py` (dos servidores independientes, iconos, fallback sin guild, modal sin campo, comando legado sin escritura directa, pie global no destructivo). **Prueba Discord Test:** pendiente de redeploy del SHA nuevo. Probar previsualización y DM efectivo en Heraldo's Lab tras el despliegue, con nombre de servidor correcto; comprobar Cancelar no guarda. No marcar botones verificados por éxito de Railway.
+
 ## #23 - respaldo productivo HTTPS recuperado y verificado (2026-10-24, RD)
 
 RESPALDO REAL COMPLETADO: snapshot online de main@41f55654 a las 07:53:44 RD, AES-GCM y subida HTTPS al bucket privado externo heraldo-sqlite-backups. Descarga independiente y restauracion offline en dos SQLite aisladas en memoria verificadas a las 07:54:43 RD: integridad, FK, esquema, recuentos, contenido, SHA/manifiesto/fecha correctos; clave incorrecta y manipulacion rechazadas, descarga anonima/publica denegada. Objeto cifrado: 267497 bytes. No se restauro la base activa. Recibo administrativo y plan de recuperacion: [[ISSUE23_RESPALDO]].

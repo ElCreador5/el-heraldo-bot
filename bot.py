@@ -1713,8 +1713,8 @@ def get_orientation_embed_color(guild_id: int) -> int:
 
 
 def get_orientation_embed_footer(guild: discord.Guild) -> str:
-    configured = guild_config_get(guild.id, "orientation_embed_footer")
-    return configured if configured is not None else f"{guild.name} {datetime.now(STREAK_TZ).year} ©"
+    """El pie de personalidad identifica siempre al servidor actual."""
+    return guild.name
 
 
 def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
@@ -2011,9 +2011,9 @@ VERIFY_DM_BODY_DEFAULT = (
     "¿Dudas? Revisa el canal de dudas del servidor."
 )
 VERIFY_DM_FIELD_NAME_DEFAULT = "Este no es un lugar cualquiera"
-VERIFY_DM_FOOTER_DEFAULT = "Paraíso Morboso"
+VERIFY_DM_FOOTER_DEFAULT = "{servidor}"
 VERIFY_DM_COLOR_DEFAULT = "4F5BDC"
-VERIFY_DM_FOOTER_ICON_DEFAULT = "https://media.discordapp.net/attachments/1548766637866360852/1548771260476162189/39d74668-f12d-4979-bcc3-9b6826f2e8d5.png?ex=6ac49d63&is=6ac34be3&hm=b939835c020aeea2d422d7057213117b1744d4f95d37d180e8f"
+VERIFY_DM_FOOTER_ICON_DEFAULT = "{servericon}"
 
 def get_verify_dm_title(guild_id: int | None = None) -> str:
     return _guild_or_legacy_setting(guild_id, "verify_dm_title", VERIFY_DM_TITLE_DEFAULT)
@@ -2025,7 +2025,9 @@ def get_verify_dm_field_name(guild_id: int | None = None) -> str:
     return _guild_or_legacy_setting(guild_id, "verify_dm_field_name", VERIFY_DM_FIELD_NAME_DEFAULT)
 
 def get_verify_dm_footer(guild_id: int | None = None) -> str:
-    return _guild_or_legacy_setting(guild_id, "verify_dm_footer", VERIFY_DM_FOOTER_DEFAULT)
+    """Pie de identidad dinámico. La configuración histórica permanece sin reescribirse."""
+    guild = bot.get_guild(guild_id) if guild_id is not None else None
+    return guild.name if guild is not None else "El Heraldo"
 
 def get_verify_dm_color(guild_id: int | None = None) -> str:
     return _guild_or_legacy_setting(guild_id, "verify_dm_color", VERIFY_DM_COLOR_DEFAULT)
@@ -2058,7 +2060,7 @@ def build_verification_welcome_embed(
         inline=False,
     )
     footer_icon = render_url_var(get_verify_dm_footer_icon(guild_id), ctx)
-    footer_text = render_vars(get_verify_dm_footer(guild_id), ctx, 2048)
+    footer_text = effective_guild.name if effective_guild is not None else "El Heraldo"
     if footer_icon:
         embed.set_footer(text=footer_text, icon_url=footer_icon)
     else:
@@ -4747,12 +4749,6 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de personali
         required=True,
         max_length=7,
     )
-    footer_input = discord.ui.TextInput(
-        label="Footer",
-        required=False,
-        max_length=2048,
-    )
-
     def __init__(self, guild: discord.Guild) -> None:
         super().__init__()
         self.guild_id = guild.id
@@ -4760,14 +4756,12 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de personali
         self.intro_input.default = get_orientation_embed_intro(guild.id)
         self.details_input.default = get_orientation_embed_details(guild.id)
         self.color_input.default = f"{get_orientation_embed_color(guild.id):06X}"
-        self.footer_input.default = get_orientation_embed_footer(guild)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         title = str(self.title_input).strip()
         intro = str(self.intro_input).strip()
         details = str(self.details_input).strip()
         color = str(self.color_input).strip().lstrip("#")
-        footer = str(self.footer_input).strip()
 
         if not title or not intro or not details:
             await interaction.response.send_message(
@@ -4782,7 +4776,7 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de personali
             )
             return
 
-        await confirm_configuration(interaction, self.guild_id, {'orientation_embed_title': title, 'orientation_embed_intro': intro, 'orientation_embed_details': details, 'orientation_embed_color': color.upper(), 'orientation_embed_footer': footer})
+        await confirm_configuration(interaction, self.guild_id, {'orientation_embed_title': title, 'orientation_embed_intro': intro, 'orientation_embed_details': details, 'orientation_embed_color': color.upper()})
 
 
 
@@ -7229,12 +7223,6 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             required=True,
             max_length=4000,
         )
-        self.footer_input = discord.ui.TextInput(
-            label="Pie del embed",
-            default=get_verify_dm_footer(guild_id),
-            required=True,
-            max_length=2048,
-        )
         self.color_input = discord.ui.TextInput(
             label="Color HEX",
             default=get_verify_dm_color(guild_id),
@@ -7246,7 +7234,6 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             self.title_input,
             self.field_input,
             self.body_input,
-            self.footer_input,
             self.color_input,
         ):
             self.add_item(item)
@@ -7264,7 +7251,6 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             "verify_dm_title": self.title_input.value.strip(),
             "verify_dm_field_name": self.field_input.value.strip(),
             "verify_dm_body": self.body_input.value.strip(),
-            "verify_dm_footer": self.footer_input.value.strip(),
             "verify_dm_color": color.upper(),
         }
         if not all(values.values()):
@@ -13495,15 +13481,14 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
 
 @bot.tree.command(
     name="verify_dm_texts",
-    description="Editar el DM de bienvenida, parte por parte y en orden.",
+    description="Editar el DM de bienvenida; el pie identifica automáticamente al servidor.",
 )
-@discord.app_commands.describe(
-    titulo="1/6 · Título principal del embed (máx. 256 caracteres).",
-    campo="2/6 · Nombre del campo del embed (máx. 256 caracteres).",
-    mensaje="3/6 · Contenido del mensaje; puedes usar Markdown y menciones de canales.",
-    footer="4/6 · Texto del pie del embed (máx. 2048 caracteres).",
-    color="5/6 · Color HEX de 6 caracteres, por ejemplo 4F5BDC.",
-    icono_footer="6/6 · URL de la imagen pequeña que aparece junto al footer.",
+@app_commands.describe(
+    titulo="1/5 · Título del embed (máx. 256 caracteres).",
+    campo="2/5 · Nombre del campo (máx. 256 caracteres).",
+    mensaje="3/5 · Contenido del mensaje; admite Markdown y menciones.",
+    color="4/5 · Color HEX de 6 caracteres, por ejemplo 4F5BDC.",
+    icono_footer="5/5 · Icono opcional; utiliza {servericon} para mostrar el del servidor.",
 )
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
@@ -13512,76 +13497,48 @@ async def verify_dm_texts(
     titulo: str,
     campo: str,
     mensaje: str,
-    footer: str,
     color: str,
     icono_footer: str,
 ) -> None:
-    """Editor directo del DM: Discord muestra las 6 partes en este mismo orden."""
+    """Editor directo: el pie se calcula por servidor; guardar exige confirmación."""
     titulo = titulo.strip()
     campo = campo.strip()
     mensaje = mensaje.strip()
-    footer = footer.strip()
     color = color.strip().lstrip("#")
     icono_footer = icono_footer.strip()
-
-    if not titulo or not campo or not mensaje or not footer or not color or not icono_footer:
+    if not titulo or not campo or not mensaje or not color:
         await interaction.response.send_message(
-            "Error: No guardé nada: todas las partes del embed son obligatorias.",
+            "Error: El título, el campo, el mensaje y el color son obligatorios.",
             ephemeral=True,
         )
         return
-
-    if len(titulo) > 256:
-        await interaction.response.send_message("Error: El título no puede superar 256 caracteres.", ephemeral=True)
-        return
-    if len(campo) > 256:
-        await interaction.response.send_message("Error: El nombre del campo no puede superar 256 caracteres.", ephemeral=True)
-        return
-    if len(mensaje) > 4000:
-        await interaction.response.send_message("Error: El mensaje no puede superar 4000 caracteres.", ephemeral=True)
-        return
-    if len(footer) > 2048:
-        await interaction.response.send_message("Error: El footer no puede superar 2048 caracteres.", ephemeral=True)
+    if len(titulo) > 256 or len(campo) > 256 or len(mensaje) > 4000:
+        await interaction.response.send_message(
+            "Error: Un campo supera el límite de caracteres de Discord.", ephemeral=True,
+        )
         return
     if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
         await interaction.response.send_message(
-            "Error: El color debe ser HEX de 6 caracteres, por ejemplo `4F5BDC` o `#4F5BDC`.",
-            ephemeral=True,
+            "Error: El color debe tener 6 caracteres HEX.", ephemeral=True,
         )
         return
-    if len(icono_footer) > 500:
-        await interaction.response.send_message("Error: La URL del icono del footer es demasiado larga.", ephemeral=True)
-        return
-    if not re.match(r"^https?://", icono_footer, re.IGNORECASE) and not VAR_PATTERN.search(icono_footer):
+    if len(icono_footer) > 500 or (
+        icono_footer and not re.match(r"^https?://", icono_footer, re.IGNORECASE)
+        and not VAR_PATTERN.search(icono_footer)
+    ):
         await interaction.response.send_message(
-            "Error: El icono del footer debe ser una URL válida (`https://…`) o una variable como `{servericon}`.",
+            "Error: El icono debe ser una URL válida o una variable como {servericon}.",
             ephemeral=True,
         )
         return
-
     values = {
         "verify_dm_title": titulo,
         "verify_dm_field_name": campo,
         "verify_dm_body": mensaje,
-        "verify_dm_footer": footer,
         "verify_dm_color": color.upper(),
         "verify_dm_footer_icon": icono_footer,
     }
-    for key, value in values.items():
-        guild_config_set(interaction.guild.id, key, value)
-
-    await interaction.response.send_message(
-        "**DM de bienvenida actualizado correctamente.**\n"
-        "Las próximas primeras verificaciones recibirán esta nueva versión.\n\n"
-        "Usa `/verify_dm_preview` para verla en el canal de logs.",
-        ephemeral=True,
-    )
-    await log_embed(
-        interaction.guild,
-        "DM de bienvenida actualizado",
-        f"{interaction.user.mention} actualizó las 6 partes del embed de primera verificación.",
-        discord.Color.blurple(),
-    )
+    await confirm_configuration(interaction, interaction.guild.id, values)
 
 
 @bot.tree.command(name="verify_dm_preview", description="Mostrar en el canal de logs una vista previa del DM de bienvenida.")
