@@ -5662,9 +5662,14 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 "Ese canal ya no existe. Actualice la configuración.", ephemeral=True,
             )
             return
-        # Retirar primero prepara un borrador; nada se escribe al elegir el canal.
-        self.pending_remove_trap_id = selected
-        await self._refresh(interaction)
+        # La confirmación ocupa el MISMO mensaje, sin Guardar cambios intermedio.
+        await interaction.edit_original_response(
+            content=f"¿Confirma retirar {channel.mention} del Honeypot? El canal no se borrará."
+                    + (" Se desactivará la protección al quedar sin trampas."
+                       if len(traps) == 1 and honeypot_enabled(self.guild_id) else ""),
+            embed=self._embed(interaction.guild),
+            view=HoneypotRemovalSaveConfirmView(self, selected),
+        )
 
     @discord.ui.button(label="Activar protección", style=discord.ButtonStyle.success, row=1)
     @honeypot_operation
@@ -5916,16 +5921,6 @@ class HeraldoHoneypotSetupView(discord.ui.View):
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     @honeypot_operation
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_remove_trap_id is not None:
-            # Una retirada podría desactivar la protección. Confirmación sobre
-            # la MISMA tarjeta, sin mensajes adicionales.
-            await interaction.response.defer()
-            await interaction.edit_original_response(
-                content="Confirme la retirada del canal trampa. El canal de Discord se conservará.",
-                embed=self._embed(interaction.guild),
-                view=HoneypotRemovalSaveConfirmView(self),
-            )
-            return
         await self._save_pending_changes(interaction)
 
     def _discard_draft(self) -> None:
@@ -5958,12 +5953,15 @@ class HeraldoHoneypotSetupView(discord.ui.View):
 
 
 class HoneypotRemovalSaveConfirmView(discord.ui.View):
-    """Confirmación breve: solo Confirmar; al ejecutar vuelve al editor original."""
+    """Retirada individual: Confirmar/Descartar sin guardar otros borradores."""
 
-    def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
+    def __init__(self, parent: HeraldoHoneypotSetupView, channel_id: int) -> None:
         super().__init__(timeout=300)
         self.parent = parent
         self.guild_id, self.owner_id = parent.guild_id, parent.owner_id
+        self.channel_id = channel_id
+        self.original_traps = set(hp_traps(self.guild_id))
+        self.finished = False
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
@@ -5971,7 +5969,60 @@ class HoneypotRemovalSaveConfirmView(discord.ui.View):
     @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
     @honeypot_operation
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self.parent._save_pending_changes(interaction)
+        await interaction.response.defer()
+        if not await self.interaction_check(interaction):
+            return
+        if self.finished:
+            await self.parent._refresh(interaction, "Esta solicitud ya fue resuelta.")
+            return
+        traps = hp_traps(self.guild_id)
+        if set(traps) != self.original_traps or self.channel_id not in traps:
+            await self.parent._refresh(
+                interaction, "La lista de canales trampa cambió. Revísela antes de retirar.",
+            )
+            return
+        channel = interaction.guild.get_channel(self.channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            await self.parent._refresh(
+                interaction, "El canal ya no existe. Actualice la configuración.",
+            )
+            return
+        old_warning_id = traps.get(self.channel_id)
+        hp_remove_trap(self.guild_id, self.channel_id)
+        auto_disabled = not hp_traps(self.guild_id) and honeypot_enabled(self.guild_id)
+        if auto_disabled:
+            hp_setting_set(self.guild_id, "honeypot_enabled", "0")
+        self.finished = True
+        self.stop()
+        self.parent.original_traps = set(hp_traps(self.guild_id))
+        self.parent.original_enabled = honeypot_enabled(self.guild_id)
+        if self.parent.selected_channel_id == self.channel_id:
+            self.parent.selected_channel_id = None
+        warning_problem = False
+        if old_warning_id:
+            try:
+                await (await channel.fetch_message(old_warning_id)).delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                warning_problem = True
+        note = f"Canal retirado. Canales trampa configurados: {len(hp_traps(self.guild_id))}."
+        if auto_disabled:
+            note += " Honeypot desactivado: no quedan canales trampa."
+        if warning_problem:
+            note += " No se pudo retirar el aviso anterior del canal."
+        await self.parent._refresh(interaction, note)
+        await log_embed(
+            interaction.guild, "Canal trampa quitado",
+            f"{interaction.user.mention} confirmó la retirada de {channel.mention}.",
+        )
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
+    @honeypot_operation
+    async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        self.finished = True
+        self.stop()
+        # Cancelar solo esta retirada, no descartar borradores anteriores.
+        await self.parent._refresh(interaction, "Retirada descartada. No se modificó el canal.")
 
 
 class HeraldoHoneypotSubView(discord.ui.View):
