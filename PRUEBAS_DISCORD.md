@@ -4,7 +4,8 @@
 - Suites específicas: 57/57 correctas; tras reparar construcción del panel, 21/21 correctas incluyendo matriz de paneles de /setup.
 - Candidato selectivo construido desde main@41f55654: 118/118 correctas, incluidas test_regressions y test_member_logs propios de main. No ejecuta Gateway; usa SQLite sintética.
 - Suite general local Windows: 708 ejecutadas, 12 fallos, 122 errores y 13 omisiones. Predominan restricciones POSIX/fcntl/getuid, ACL de temporales y SQLite abierta en limpieza. No equivale a regresión Linux aprobada ni se han ocultado pruebas. Compilación y pip check correctos en el entorno con dependencias existentes.
-- CI del SHA final: consultar después de push; el workflow issue23-selective-checks prueba separadamente el port sobre producción. La CI Linux de base e9f9f5a terminó SUCCESS (40049704649; Mensajes 40049704617).
+- CI del código 03089769: general 40050971416 SUCCESS en Python 3.11/3.12/3.13 y UX; Mensajes 40050971458 SUCCESS; candidato selectivo 40050971350 SUCCESS. Logs de 3.12 confirman 729 + 35 + 4 pruebas correctas. El workflow issue23-selective-checks prueba separadamente el port sobre producción. La CI Linux de base e9f9f5a terminó SUCCESS (40049704649; Mensajes 40049704617).
+- Runtime Test: eb780cea-248a-4520-81df-318db584bf19 SUCCESS en SHA 03089769, Gateway y autoprueba /setup en Lab correctos. No equivale a callbacks humanos reales.
 - Discord real de este lote, respaldo nuevo/descifrado/restauración de producción: NO REALIZADOS. El estado y bloqueo exactos están en [[ESTADO_PROYECTO]]. No confundir el respaldo histórico del 18/10 ni la autoprueba /setup con estas verificaciones.
 
 ## Custodio — pruebas de núcleo, sin acciones Discord (2026-10-23)
