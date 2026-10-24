@@ -112,6 +112,14 @@ class ReportChannelTests(IsolatedAsyncioTestCase):
             await create_private_report_channel(self.guild, self.get, self.set)
         self.assertEqual(self.guild.create_count, 1)
 
+    async def test_new_channel_with_unapproved_member_overwrite_is_rejected(self):
+        channel, _ = await create_private_report_channel(self.guild, self.get, self.set)
+        stranger = FakeMember(999)
+        channel.overwrites[stranger] = discord.PermissionOverwrite(view_channel=True)
+        with self.assertRaises(ReportChannelError):
+            await create_private_report_channel(self.guild, self.get, self.set)
+        self.assertEqual(self.guild.create_count, 1)
+
     async def test_crash_between_creation_and_saving_recovers_safe_channel(self):
         class FailureOnce:
             def __init__(self):
