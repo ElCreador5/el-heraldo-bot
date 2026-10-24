@@ -1,3 +1,6 @@
+## Interfaz íntegramente en español — 2026-10-24
+Se establece como norma obligatoria el español en todas las interfaces, registros y mensajes redactados por el bot en `main` y `Pruebas`. Se traducen etiquetas heredadas del módulo Roles de ingreso y se preservan nombres de comandos establecidos, claves de SQLite, variables e identificadores técnicos. El idioma de botones nativos del cliente Discord depende de la configuración del usuario. Ver NH UX-03D.
+
 ## Pie de servidor obligatorio en todos los embeds — 2026-10-24
 
 **Decisión vigente del propietario:** los embeds enviados por El Heraldo en contexto de un servidor deberán mostrar en el footer su nombre (`{servidor}`) y su icono (`{servericon}`, si el servidor tiene icono). La regla rige para módulos, `/setup`, DMs contextualizados, registros, avisos, sanciones y plantillas personalizadas. Los footers de texto previamente guardados se conservan como texto adicional; ninguna personalización puede sustituir el icono del servidor. Cada editor de pie mostrará pistas de ambas variables. No se reescribe SQLite ni se alteran configuraciones guardadas. Cobertura técnica en NH UX-03C.
