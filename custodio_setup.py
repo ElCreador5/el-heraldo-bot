@@ -99,7 +99,9 @@ class CustodioSetupView(discord.ui.View):
             "",
             "**Cambios pendientes:** " + (
                 f"Sensibilidad → {DISPLAY[KEY_SENSITIVITY][self.pending_sensitivity]}"
-                if self.pending_sensitivity != existing.sensitivity else "Ninguno."
+                if self.pending_sensitivity != existing.sensitivity
+                else "Preferencias predeterminadas sin guardar."
+                if self._raw_changes() else "Ninguno."
             ),
             "",
             "Esta pantalla prepara preferencias. La lectura y supervisión continua de mensajes "
