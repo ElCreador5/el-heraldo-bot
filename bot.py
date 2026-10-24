@@ -14888,12 +14888,13 @@ def hp_traps(guild_id: int) -> dict[int, int | None]:
                     "INSERT OR IGNORE INTO guild_honeypot_channels (guild_id, channel_id, warning_message_id) VALUES (?, ?, ?)",
                     (guild_id, channel_id, warning_message_id),
                 )
-            conn.execute(
-                "INSERT INTO guild_settings (guild_id, key, value) VALUES (?, 'honeypot_legacy_traps_migrated', '1') "
-                "ON CONFLICT(guild_id, key) DO UPDATE SET value = '1'",
-                (guild_id,),
-            )
-            conn.commit()
+            if rows:
+                conn.execute(
+                    "INSERT INTO guild_settings (guild_id, key, value) VALUES (?, 'honeypot_legacy_traps_migrated', '1') "
+                    "ON CONFLICT(guild_id, key) DO UPDATE SET value = '1'",
+                    (guild_id,),
+                )
+                conn.commit()
     conn.close()
     return {row[0]: row[1] for row in rows}
 
