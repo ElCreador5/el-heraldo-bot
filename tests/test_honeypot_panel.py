@@ -33,28 +33,85 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(view.back.style, b.discord.ButtonStyle.secondary)
 
         i = interaction()
-        # En discord.py, response.is_done() pasa a True tras defer().
-        # El mock de la interacción no cambia ese estado automáticamente.
         i.response.is_done = lambda: i.response.defer.await_count > 0
-        with patch.object(b, "hp_setup_embed", return_value=b.discord.Embed(title="Prueba")):
+        paused = {"value": False}
+        with (
+            patch.object(b, "honeypot_paused", side_effect=lambda guild: paused["value"]),
+            patch.object(b, "hp_setting_set",
+                         side_effect=lambda gid, key, value: paused.update(value=value == "1")) as save,
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed(title="Prueba")),
+        ):
             await view.toggle.callback(i)
         self.assertIsNone(view.pending_enabled)
-        self.assertTrue(view.pending_paused)
+        self.assertIsNone(view.pending_paused)
+        save.assert_called_once_with(901, "honeypot_paused", "1")
         self.assertEqual(view.toggle.label, "Reanudar protección")
         self.assertEqual(view.toggle.style, b.discord.ButtonStyle.success)
         i.edit_original_response.assert_awaited_once()
         i.response.defer.assert_awaited_once()
+        i.followup.send.assert_not_awaited()
 
-    async def test_paused_protection_can_be_resumed_as_draft_only(self):
-        view = self.make_view(traps={123: None}, enabled=True, paused=True)
+    async def test_paused_protection_is_resumed_immediately_without_saving_other_drafts(self):
+        view = self.make_view(traps={123: None}, enabled=True, paused=True, action="log")
         self.assertEqual(view.toggle.label, "Reanudar protección")
+        view.pending_action = "kick"
+        view.pending_trap_id = 9001
+        state = {"paused": True}
         i = interaction()
-        with patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()), \
-             patch.object(b, "hp_setting_set") as save:
+        i.response.is_done = lambda: i.response.defer.await_count > 0
+        def write(gid, key, value):
+            self.assertEqual(key, "honeypot_paused")
+            state["paused"] = value == "1"
+        with (
+            patch.object(b, "honeypot_paused", side_effect=lambda guild: state["paused"]),
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "hp_setting_set", side_effect=write) as save,
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()),
+        ):
+            await view.toggle.callback(i)
+        save.assert_called_once_with(901, "honeypot_paused", "0")
+        self.assertIsNone(view.pending_paused)
+        self.assertEqual(view.pending_action, "kick")
+        self.assertEqual(view.pending_trap_id, 9001)
+        self.assertEqual(view.toggle.label, "Pausar protección")
+        i.followup.send.assert_not_awaited()
+
+    async def test_activate_saves_own_state_only(self):
+        view = self.make_view(traps={123: None}, enabled=False, action="log")
+        state = {"enabled": False}
+        i = interaction()
+        i.response.is_done = lambda: i.response.defer.await_count > 0
+        with (
+            patch.object(b, "honeypot_enabled", side_effect=lambda guild: state["enabled"]),
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "hp_setting_set",
+                         side_effect=lambda gid, key, val: state.update(enabled=val == "1")) as save,
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()),
+        ):
+            await view.toggle.callback(i)
+        save.assert_called_once_with(901, "honeypot_enabled", "1")
+        self.assertIsNone(view.pending_enabled)
+        self.assertEqual(view.toggle.label, "Pausar protección")
+        i.followup.send.assert_not_awaited()
+
+    async def test_activation_never_commits_unsaved_trap(self):
+        view = self.make_view(traps={}, enabled=False, action="log")
+        view.pending_trap_id = 9001
+        i = interaction()
+        i.response.is_done = lambda: i.response.defer.await_count > 0
+        with (
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "hp_setting_set") as save,
+            patch.object(b, "hp_add_trap") as add,
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()),
+        ):
             await view.toggle.callback(i)
         save.assert_not_called()
-        self.assertFalse(view.pending_paused)
-        self.assertEqual(view.toggle.label, "Pausar protección")
+        add.assert_not_called()
+        self.assertEqual(view.pending_trap_id, 9001)
+        self.assertIn("Guarde primero", i.edit_original_response.call_args.kwargs["content"])
+        i.followup.send.assert_not_awaited()
 
     async def test_selection_of_registered_channel_does_not_stage_duplicate(self):
         view = self.make_view(traps={123: None}, enabled=False)
