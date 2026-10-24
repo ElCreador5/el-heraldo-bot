@@ -44,8 +44,7 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             notice = b.HeraldoHoneypotNoticeView(parent)
             self.assertEqual(notice.publish_warning.label, "Publicar aviso")
             self.assertEqual(notice.publish_warning.style, b.discord.ButtonStyle.success)
-            self.assertEqual(notice.text_warning.style, b.discord.ButtonStyle.primary)
-            self.assertEqual(notice.visual_warning.style, b.discord.ButtonStyle.primary)
+            self.assertFalse(any(item.label in ("Editar texto", "Editar diseño") for item in notice.children))
             await notice.publish_warning.callback(i)
             confirmation = i.followup.send.call_args.kwargs["view"]
             self.assertIsInstance(confirmation, b.HoneypotPublishWarningConfirmView)
@@ -56,6 +55,36 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(i.followup.send.call_args.kwargs["wait"])
             self.assertIs(confirmation.panel_interaction, i)
             self.assertIsInstance(confirmation.panel_view, b.HeraldoHoneypotNoticeView)
+
+    async def test_direct_editor_submits_save_and_publish_with_original_fields(self):
+        i = interaction()
+        editor = b.HoneypotWarningEmbedModal(901, publish_from_setup=True)
+        editor.title_input._value = "Aviso"
+        editor.description_input._value = "No escribas aquí"
+        editor.color_input._value = "F1C40F"
+        editor.image_input._value = ""
+        editor.footer_input._value = "Regla de la comunidad"
+        with patch.object(b, "confirm_configuration", new=AsyncMock()) as confirm:
+            await editor.on_submit(i)
+        confirm.assert_awaited_once()
+        args, kwargs = confirm.call_args
+        self.assertIs(args[0], i)
+        self.assertEqual(args[1], 901)
+        self.assertEqual(args[2]["honeypot_warning_title"], "Aviso")
+        self.assertEqual(args[2]["honeypot_warning_description"], "No escribas aquí")
+        self.assertEqual(args[2]["honeypot_warning_style"], "custom")
+        self.assertEqual(args[2]["honeypot_warning_enabled"], "1")
+        self.assertTrue(kwargs["publish_honeypot_notice"])
+
+    def test_existing_confirmation_reused_for_publication(self):
+        with patch.object(b, "hp_notice_snapshot", return_value=("original",)), \
+             patch.object(b, "hp_traps", return_value={101: None}):
+            confirm = b.ConfigurationConfirmView(
+                901, 10, {}, publish_honeypot_notice=True
+            )
+        self.assertEqual(confirm.save.label, "Guardar y publicar aviso")
+        self.assertTrue(confirm.publish_honeypot_notice)
+        self.assertEqual(confirm.notice_traps, {101})
 
     async def test_no_traps_does_not_offer_publication(self):
         i, traps, settings, _, get_traps, enabled, _ = self._setup(traps={})

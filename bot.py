@@ -5738,10 +5738,10 @@ class HeraldoHoneypotSetupView(discord.ui.View):
     @discord.ui.button(label="Configurar aviso", style=discord.ButtonStyle.primary, row=2)
     @honeypot_operation
     async def edit_notice(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer()
-        view = HeraldoHoneypotNoticeView(self)
-        await interaction.edit_original_response(
-            content=None, embed=view._embed(interaction.guild), view=view,
+        # Abrir directamente el editor completo en el MISMO panel de /setup.
+        # Un modal debe ser la primera respuesta: NO diferir previamente.
+        await interaction.response.send_modal(
+            HoneypotWarningEmbedModal(self.guild_id, publish_from_setup=True)
         )
 
     @discord.ui.button(label="Detalles", style=discord.ButtonStyle.primary, row=2)
@@ -6442,21 +6442,13 @@ class HeraldoHoneypotNoticeView(HeraldoHoneypotSubView):
                 f"**Canales trampa:** {len(traps)}\n"
                 f"**Avisos publicados registrados:** {registered}/{len(traps)}\n"
                 + (f"**Última operación:** {last_status}\n" if last_status else "")
-                + "\nEdite el texto o diseño con confirmación independiente. "
-                "**Publicar aviso** publicará o actualizará el aviso guardado "
-                "en los canales trampa tras su confirmación."
+                + "\nEl editor completo se abre directamente desde **Configurar aviso**. "
+                "Su confirmación permite guardar y publicar el aviso sin duplicarlo."
             ), color=discord.Color.blurple(),
         )
 
-    @discord.ui.button(label="Editar texto", style=discord.ButtonStyle.primary, row=0)
-    @honeypot_operation
-    async def text_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HoneypotWarningModal(self.parent.guild_id))
-
-    @discord.ui.button(label="Editar diseño", style=discord.ButtonStyle.primary, row=0)
-    @honeypot_operation
-    async def visual_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(HoneypotWarningEmbedModal(self.parent.guild_id))
+    # Compatibilidad con vistas antiguas todavía visibles: el editor se abre
+    # directamente desde el botón principal; no hay dos editores redundantes.
 
     @discord.ui.button(label="Publicar aviso", style=discord.ButtonStyle.success, row=1)
     @honeypot_operation
@@ -19550,11 +19542,16 @@ async def condenar_config(interaction: discord.Interaction, canal: Optional[disc
 
 class ConfigurationConfirmView(discord.ui.View):
     """Borrador con control de concurrencia y confirmación explícita."""
-    def __init__(self, guild_id, owner_id, changes):
+    def __init__(self, guild_id, owner_id, changes, *, publish_honeypot_notice=False):
         super().__init__(timeout=300)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.changes = dict(changes)
         self.original = {key: guild_config_get(guild_id, key) for key in changes}
+        self.publish_honeypot_notice = publish_honeypot_notice
+        self.notice_snapshot = hp_notice_snapshot(guild_id) if publish_honeypot_notice else None
+        self.notice_traps = set(hp_traps(guild_id)) if publish_honeypot_notice else None
+        if publish_honeypot_notice:
+            self.save.label = "Guardar y publicar aviso"
         self.finished = False
 
     async def interaction_check(self, interaction):
@@ -19571,6 +19568,38 @@ class ConfigurationConfirmView(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("Esta propuesta ya fue resuelta.", ephemeral=True)
             return
+        if self.publish_honeypot_notice:
+            guild = interaction.guild
+            if (guild is None or guild.id != self.guild_id
+                    or hp_notice_snapshot(self.guild_id) != self.notice_snapshot
+                    or set(hp_traps(self.guild_id)) != self.notice_traps):
+                await interaction.response.send_message(
+                    "El aviso o sus canales cambiaron. Abra nuevamente Configurar aviso.", ephemeral=True,
+                )
+                return
+            if not self.notice_traps:
+                await interaction.response.send_message(
+                    "No hay canales trampa donde publicar el aviso. Registre uno primero.", ephemeral=True,
+                )
+                return
+            me = guild.me
+            for channel_id in self.notice_traps:
+                channel = guild.get_channel(channel_id)
+                if not isinstance(channel, discord.TextChannel) or me is None:
+                    await interaction.response.send_message(
+                        "Un canal trampa dejó de estar disponible. No se guardó ni publicó el aviso.", ephemeral=True,
+                    )
+                    return
+                perms = channel.permissions_for(me)
+                if not all(getattr(perms, key, False) for key in (
+                    "view_channel", "send_messages", "manage_messages",
+                    "read_message_history", "embed_links",
+                )):
+                    await interaction.response.send_message(
+                        f"Faltan permisos para publicar el aviso en {channel.mention}. "
+                        "No se guardó ni publicó nada.", ephemeral=True,
+                    )
+                    return
         if "condemned_channel_id" in self.changes:
             channel = interaction.guild.get_channel(int(self.changes["condemned_channel_id"]))
             me = interaction.guild.me
@@ -19681,16 +19710,36 @@ class ConfigurationConfirmView(discord.ui.View):
             conn.close()
         self.finished = True
         self.stop()
-        await interaction.response.edit_message(content="Configuración guardada. Puede volver al editor para consultar la vista previa.", view=None)
+        await interaction.response.edit_message(
+            content=(
+                "Configuración guardada. Publicando el aviso en los canales trampa…"
+                if self.publish_honeypot_notice else
+                "Configuración guardada. Puede volver al editor para consultar la vista previa."
+            ),
+            view=None,
+        )
         try:
             if 'condemned_channel_id' in self.changes:
                 guild_resource_set(self.guild_id, "channel", "condemned", int(self.changes['condemned_channel_id']))
             if 'honeypot_retention_minutes' in self.changes:
                 hp_prune_history(self.guild_id)
-            if any(key.startswith('honeypot_warning_') for key in self.changes):
+            if self.publish_honeypot_notice or any(key.startswith('honeypot_warning_') for key in self.changes):
                 errors = await hp_sync_all_warnings(interaction.guild)
-                if errors:
-                    await interaction.followup.send('Configuración guardada. Algunos avisos no se actualizaron:\n' + '\n'.join(errors)[:1500], ephemeral=True)
+                if self.publish_honeypot_notice:
+                    await interaction.edit_original_response(
+                        content=(
+                            "Aviso guardado y publicado o actualizado en los canales trampa."
+                            if not errors else
+                            "Configuración guardada, pero algunos avisos no se publicaron:\n"
+                            + "\n".join(errors)[:1500]
+                        ),
+                        view=None,
+                    )
+                elif errors:
+                    await interaction.followup.send(
+                        'Configuración guardada. Algunos avisos no se actualizaron:\n'
+                        + '\n'.join(errors)[:1500], ephemeral=True,
+                    )
             if any(key.startswith('honeypot_') for key in self.changes):
                 await log_embed(interaction.guild, "Honeypot actualizado",
                     f"{interaction.user.mention} confirmó cambios administrativos.", discord.Color.blurple())
@@ -19795,14 +19844,14 @@ def configuration_review_label(key):
     return labels.get(key, key.replace("_", " ").capitalize())
 
 
-async def confirm_configuration(interaction, guild_id, changes):
+async def confirm_configuration(interaction, guild_id, changes, *, publish_honeypot_notice=False):
     if not await configuration_access(interaction, guild_id):
         return
     # Comparar los valores persistidos, no los valores efectivos por defecto.
     # Así se evitan escrituras innecesarias sin modificar su semántica.
     changed = {key: value for key, value in changes.items()
                if guild_config_get(guild_id, key) != (None if value is None else str(value))}
-    if not changed:
+    if not changed and not publish_honeypot_notice:
         await interaction.response.send_message(
             "La configuración seleccionada ya está guardada. No hay cambios pendientes.",
             ephemeral=True)
@@ -19814,14 +19863,29 @@ async def confirm_configuration(interaction, guild_id, changes):
         after = configuration_review_value(guild, key, value)
         lines.append(f"**{configuration_review_label(key)}**\nActual: {before}\nPropuesto: {after}")
     summary = "\n\n".join(lines)
+    if publish_honeypot_notice:
+        summary = (
+            (summary + "\n\n" if summary else "")
+            + "**Publicación:** se enviará o actualizará el aviso guardado en los canales trampa. "
+              "No se duplicarán los avisos existentes."
+        )
     if len(summary) > 3200:
         summary = summary[:3150] + "\n… (más cambios pendientes)"
     embed = discord.Embed(title="El Heraldo · Confirmación de configuración",
                           description=summary, color=discord.Color.blurple())
-    embed.set_footer(text="Los cambios solo se aplicarán al seleccionar Guardar cambios.")
+    embed.set_footer(text=(
+        "El aviso solo se guardará y publicará al confirmar."
+        if publish_honeypot_notice else
+        "Los cambios solo se aplicarán al seleccionar Guardar cambios."
+    ))
     await interaction.response.send_message(
-        embed=embed, view=ConfigurationConfirmView(guild_id, interaction.user.id, changed),
-        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+        embed=embed,
+        view=ConfigurationConfirmView(
+            guild_id, interaction.user.id, changed,
+            publish_honeypot_notice=publish_honeypot_notice,
+        ),
+        ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 async def confirm_condemnation_template(interaction, guild_id, values):
@@ -20916,9 +20980,12 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         placeholder="{servidor} → Labs 🧪; {servericon} → icono",
     )
 
-    def __init__(self, guild_id: int) -> None:
+    def __init__(self, guild_id: int, *, publish_from_setup: bool = False) -> None:
         super().__init__()
         self.guild_id = guild_id
+        self.publish_from_setup = publish_from_setup
+        if publish_from_setup:
+            self.title = "Editar aviso · Guardar y publicar"
         cfg = hp_warning_custom(guild_id)
         self.title_input.default = cfg["title"]
         self.description_input.default = cfg["description"]
@@ -20952,7 +21019,8 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
             "honeypot_warning_thumbnail": "",
             "honeypot_warning_footer": footer,
             "honeypot_warning_style": "custom",
-        })
+            **({"honeypot_warning_enabled": "1"} if self.publish_from_setup else {}),
+        }, publish_honeypot_notice=self.publish_from_setup)
 
 
 @honeypot_group.command(name="warning_embed", description="Personalizar por completo el embed del aviso fijado.")

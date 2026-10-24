@@ -27,7 +27,7 @@ class HoneypotAckTests(unittest.TestCase):
         ("HeraldoHoneypotSetupView", "select_trap"),
         ("HeraldoHoneypotSetupView", "toggle"),
         ("HeraldoHoneypotSetupView", "edit_action"),
-        ("HeraldoHoneypotSetupView", "edit_notice"),
+        # edit_notice abre un modal inmediatamente; no debe deferir.
         ("HeraldoHoneypotSetupView", "details"),
         ("HeraldoHoneypotSetupView", "_save_pending_changes"),
         ("HeraldoHoneypotSetupView", "back"),
@@ -54,6 +54,12 @@ class HoneypotAckTests(unittest.TestCase):
                 self.assertNotIn("interaction.response.send_message(", body)
                 self.assertNotIn("interaction.response.edit_message(", body)
                 self.assertEqual(body.count("await interaction.response.defer("), 1)
+
+    def test_notice_modal_is_first_response(self):
+        source = code("HeraldoHoneypotSetupView", "edit_notice")
+        self.assertIn("interaction.response.send_modal(", source)
+        self.assertNotIn("interaction.response.defer(", source)
+        self.assertNotIn("HeraldoHoneypotNoticeView(self)", source)
 
     def test_refresh_ack_on_first_non_deferred_call(self):
         node = method("HeraldoHoneypotSetupView", "_refresh")

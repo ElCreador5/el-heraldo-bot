@@ -291,16 +291,19 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Añadir canal", embed.fields[3].value)
         self.assertNotIn("Miembros exentos: —", str(embed.to_dict()))
 
-    async def test_notice_uses_one_entry_and_preserves_both_editors(self):
+    async def test_configurar_aviso_opens_full_editor_directly(self):
         view = self.make_view(traps={123: None}, enabled=True)
+        i = interaction()
+        i.response.send_modal = AsyncMock()
+        await view.edit_notice.callback(i)
+        modal = i.response.send_modal.call_args.args[0]
+        self.assertIsInstance(modal, b.HoneypotWarningEmbedModal)
+        self.assertTrue(modal.publish_from_setup)
+        self.assertEqual(modal.title, "Editar aviso · Guardar y publicar")
+        i.response.defer.assert_not_awaited()
+        i.edit_original_response.assert_not_awaited()
         notice = b.HeraldoHoneypotNoticeView(view)
-        i1, i2 = interaction(), interaction()
-        i1.response.send_modal = AsyncMock()
-        i2.response.send_modal = AsyncMock()
-        await notice.text_warning.callback(i1)
-        await notice.visual_warning.callback(i2)
-        self.assertIsInstance(i1.response.send_modal.call_args.args[0], b.HoneypotWarningModal)
-        self.assertIsInstance(i2.response.send_modal.call_args.args[0], b.HoneypotWarningEmbedModal)
+        self.assertFalse(any(item.label in ("Editar texto", "Editar diseño") for item in notice.children))
 
 
 class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):

@@ -1,3 +1,6 @@
+## Honeypot Test — editor directo y publicación (2026-10-24)
+El botón «Configurar aviso» abre directamente el modal de diseño completo, sin subpanel nuevo. La confirmación de guardado existente ejecuta también «Publicar aviso» y comprueba permisos, canales, cambios concurrentes y ausencia de duplicaciones. Las vistas heredadas conservan compatibilidad, pero se retiran de su interfaz los dos editores redundantes. Las pruebas relevantes verifican ACK de modales y que no haya navegación adicional. No cambia `main` ni el volumen SQLite.
+
 ### Plantillas de solo texto también identificadas (2026-10-24)
 Las plantillas con `message_payload.TemplateEmbeds([])` dejan intacto el texto independiente (incluidas menciones) y añaden un embed vacío de contenido con el footer del laboratorio, exclusivamente durante el envío. No altera las plantillas guardadas. Se actualizan regresiones de seguridad y de footer; no afecta a producción.
 
