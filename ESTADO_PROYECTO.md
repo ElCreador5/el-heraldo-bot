@@ -1,3 +1,9 @@
+## Modo Custodio — núcleo aislado de supervisión (2026-10-23)
+
+**IMPLEMENTADO EN PRUEBAS, no integrado en /setup:** custodio_core.py y custodio_source.py, con tests/test_custodio_core.py y tests/test_custodio_source.py. El núcleo procesa exclusivamente campos TERMS del reglamento oficial, calcula una huella de revisión sin registrar texto, exige Screening y versión aprobada, agrupa propuestas por mensaje/versión y nunca sanciona. El lector asíncrono solo hace dos GET y falla de forma segura cuando el endpoint no está disponible. Conservados los archivos de la prueba ciega anterior.
+
+**PENDIENTE:** CI del HEAD final, integración en bot.py y /setup, configuración/retención SQLite tras respaldo, clasificador contextual con proveedor autorizado, intents y permisos, regresiones de concurrencia y pruebas interactivas en Discord. No modificar main. Railway Test no necesita despliegue de estos módulos aislados. Obsidian externo no conectado.
+
 ## Modo Custodio: lectura real a ciegas (2026-10-23 RD / 2026-10-24 UTC)
 
 Prueba ciega autorizada en Heraldo's Lab (servidor 1557230352802644040). El propietario NO entregó el texto a ChatGPT.
