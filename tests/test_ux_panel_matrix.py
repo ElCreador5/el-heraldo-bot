@@ -115,5 +115,44 @@ class AllSetupPanelsBehaviorTests(unittest.IsolatedAsyncioTestCase):
                 )
 
 
+
+
+class SetupSelectorDraftPersistenceTests(unittest.TestCase):
+    """Barrera estructural común: los selects de configuración no escriben datos."""
+
+    def test_administrative_select_callbacks_never_commit_directly(self):
+        import ast
+        from pathlib import Path
+        source = Path(__file__).resolve().parents[1] / "bot.py"
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        forbidden = {
+            "guild_config_set", "guild_resource_set",
+            "hp_setting_set", "hp_add_trap", "hp_remove_trap",
+            "verification_atomic_setup_save", "set_motw_channel_id",
+        }
+        checked = 0
+        for klass in tree.body:
+            if not isinstance(klass, ast.ClassDef):
+                continue
+            if not any(key in klass.name.lower() for key in ("view", "select", "editor", "modal")):
+                continue
+            for method in klass.body:
+                if not isinstance(method, ast.AsyncFunctionDef):
+                    continue
+                if not method.name.startswith(("select", "choose", "pick", "_select")):
+                    continue
+                checked += 1
+                for call in ast.walk(method):
+                    if not isinstance(call, ast.Call):
+                        continue
+                    called = call.func
+                    name = called.id if isinstance(called, ast.Name) else (
+                        called.attr if isinstance(called, ast.Attribute) else ""
+                    )
+                    self.assertNotIn(name, forbidden,
+                                     f"{klass.name}.{method.name} guarda al seleccionar")
+        self.assertGreaterEqual(checked, 40,
+                                "La revisión perdió cobertura de selectores de setup")
+
 if __name__ == "__main__":
     unittest.main()
