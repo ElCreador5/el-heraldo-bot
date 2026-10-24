@@ -1,3 +1,7 @@
+## NH — Confirmación intermedia compacta y regreso automático (2026-10-24)
+
+El propietario confirma que **Confirmar cambios** debe actualizar la tarjeta actual y devolver al editor anterior; no necesita **Descartar cambios** ni **Volver** repetidos en la pantalla de confirmación de retirada de Honeypot. Esos botones permanecen en el editor ordinario, al que se vuelve tras confirmar, y **Descartar** solo elimina borradores posteriores, no revierte configuraciones ya guardadas. Mantener las confirmaciones críticas, los permisos y la prevención de doble acción. Esta simplificación de UI no es autorización para suprimir salvaguardas de sanciones u operaciones irreversibles.
+
 ## NH — Activar/Pausar/Reanudar son los únicos botones de guardado inmediato (2026-10-24)
 
 **Aclaración explícita del propietario:** Activar, Pausar y Reanudar guardan en cuanto se pulsan, pero **únicamente la función de estado que representan**; no requieren pulsar Guardar cambios, ni ejecutan ni persisten los demás borradores de la pantalla. Selectores, canales, roles, parámetros y textos mantienen Guardar cambios como único punto de escritura. Mantener revalidación de permisos y precondiciones de activación; no encender una protección sin sus canales o medidas **ya guardados**. El cambio y sus errores se muestran en el panel existente, sin nuevos mensajes rutinarios. Esta es la única excepción general admitida al guardado por borrador; las acciones sensibles siguen conservando sus confirmaciones por separado.
