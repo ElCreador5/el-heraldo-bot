@@ -106,6 +106,11 @@ class CustodioSetupView(discord.ui.View):
             "**El Heraldo · AutoMod · Modo Custodio**",
             "",
             display_preferences(existing),
+            "**Canal de reportes:** " + (
+                "Vinculado (acceso sujeto a verificación)"
+                if self.get_setting(self.guild_id, SETTING_KEY)
+                else "No configurado"
+            ),
             "",
             "**Cambios pendientes:** " + (
                 f"Sensibilidad → {DISPLAY[KEY_SENSITIVITY][self.pending_sensitivity]}"
