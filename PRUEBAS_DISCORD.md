@@ -1,3 +1,7 @@
+## Registro de verificación de edad — identidad legible (2026-10-24)
+
+**Regresión añadida, pendiente de ejecución remota:** `tests/test_verification_log_identity.py`, para exigir el nombre visible y descartar mención, ID y etiquetas `@everyone` sin escapar en «Verificación de edad completada». **Verificación en Discord: NO REALIZADA.** En Heraldo's Lab, completar una verificación de edad y comprobar que el canal de registros muestra el apodo sin números ni ping; verificar además que los expedientes y reportes que precisan ID lo conservan. No usar servidores productivos ni deducir resultados de Railway SUCCESS.
+
 ## Custodio — resultados CI y runtime Test (2026-10-23 RD / 2026-10-24 UTC)
 
 CI `40058608076` del SHA `bbb6c272839b5be96abd9ef81a8350a2b3d60052`: SUCCESS para UX-contract y offline-regressions Python 3.11/3.12/3.13. Inicialmente falló un test de Custodio al acceder a .label en discord.ui.Select; corregido y vuelto a verificar. Railway Test despliegue `ebe2285a-9d26-4971-8c0b-8e8df55778f4`: SUCCESS, Gateway conectado, autoprueba /setup correcta en Heraldo's Lab. **NO VERIFICADO INTERACTIVAMENTE:** Confirmar creación del canal, privacidad real, Cancelar, reintento y publicación de tarjetas. No se creó canal en Discord en esta fase; código usa sólo metadatos de evidencia, no conserva el mensaje original. El motor de observación continúa sin activación.

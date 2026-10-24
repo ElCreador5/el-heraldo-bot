@@ -1,3 +1,7 @@
+## Identificadores en registros de usuarios (2026-10-24)
+
+**Decisión del propietario:** mostrar preferentemente el apodo visible del miembro en el servidor (y, si no existe, su nombre de usuario). Omitir IDs numéricos y menciones innecesarias en mensajes rutinarios, como «Verificación de edad completada». **Mantener el ID cuando facilite identificación inequívoca, investigación o trazabilidad**, particularmente en expedientes, reportes y evidencias administrativas; no eliminar sus claves internas ni referencias persistidas. Escapar nombres suministrados por usuarios para impedir formato o menciones accidentales. La aplicación global a otros registros queda pendiente de revisión específica, sin rediseños masivos.
+
 ## Modo Custodio — reportes privados, evidencias mínimas y ámbitos SFW/NSFW (2026-10-23 RD)
 
 **Decisión nueva del propietario:** Modo Custodio dispondrá de canal propio `reportes📢` para observaciones y evidencias con NH. Distinguir servidores y canales SFW/NSFW, siempre sujetos a sus Server Rules particulares. Considerar debates públicos de Reddit, X e Instagram como referencias de contexto y políticas, no como nuevas reglas de los servidores. No habilitar sanciones ni cambiar las preferencias elegidas (`observe`, `balanced`, `eligible`, avisos de cambios desactivados).

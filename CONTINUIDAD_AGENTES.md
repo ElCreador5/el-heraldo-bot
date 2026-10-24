@@ -1,3 +1,7 @@
+## Verificación de edad — ajuste de identidad visible (2026-10-24)
+
+Requisito del propietario: nombre visible de miembro en eventos rutinarios; ID conservado en expedientes, reportes y evidencias que requieran identificación inequívoca. Cambio selectivo de `bot.py` para «Verificación de edad completada», con `tests/test_verification_log_identity.py` y decisión en `DECISIONES.md`. Estado al preparar commit: `Pruebas@e73f71110b87b3993de7a92a0799d7e8daf17a7b`; CI y Discord pendientes, Railway Test no comprobado. No modificar `main` sin aprobación. Obsidian no disponible.
+
 ## Custodio — punto de continuidad tras despliegue Test (2026-10-23 RD / 2026-10-24 UTC)
 
 **Rama Pruebas código verificado:** `bbb6c272839b5be96abd9ef81a8350a2b3d60052`. CI `40058608076` SUCCESS (UX y 3 versiones Python). Railway Test worker fuente fijada a ese SHA, deploy `ebe2285a-9d26-4971-8c0b-8e8df55778f4` SUCCESS; Gateway conectó, autoprueba /setup correcta en Heraldo's Lab. **Canal reportes📢 NO creado realmente**: la acción exige confirmación desde el panel de administración. No se observa actividad ni se emiten reportes hasta implementar supervisión y permisos. La evidencia es referencia y hash opcional, no copia conservada. Next: prueba real de panel y confirmación en Heraldo's Lab, comprobación de privacidad con usuario sin permisos, revisión del manejo de pérdida de canal. Ninguna sanción y producción main sin cambios. Obsidian no conectado.

@@ -1,3 +1,7 @@
+## Verificación de edad — nombre visible sin ID superfluo (2026-10-24)
+
+**IMPLEMENTADO en Pruebas (pendiente verificar CI y Discord):** la tarjeta de «Verificación de edad completada» muestra el nombre visible del miembro escapado, sin mención ni ID numérico repetido. Se conserva la identificación técnica y los IDs mostrados cuando son útiles en expedientes, reportes y evidencias. Cambios mínimos en `bot.py` y regresión `tests/test_verification_log_identity.py`. No se han cambiado las sanciones, persistencia, notificaciones de verificación ni `main`. **PENDIENTE:** ejecutar CI y comprobar visualmente el log en Heraldo's Lab; auditar otras tarjetas individualmente antes de uniformarlas. Obsidian: sin conexión disponible.
+
 ## Custodio — CI y Railway Test verificados (2026-10-23 RD / 2026-10-24 UTC)
 
 **IMPLEMENTADO en Pruebas:** canal privado de reportes por confirmación, botón específico bajo AutoMod → Modo Custodio, metadatos de evidencia y clasificación por indicadores de edad de servidor/canal, sin analizar mensajes ni sancionar. Commit de código `bbb6c272839b5be96abd9ef81a8350a2b3d60052`. El CI `40058608076` concluyó SUCCESS (contrato NH y regressions 3.11, 3.12, 3.13), tras corregir test que esperaba label de un Select.
