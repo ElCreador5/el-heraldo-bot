@@ -3660,15 +3660,30 @@ async def _setup_apply_system_channel(
         return "Canal de verificación establecido."
 
     if key == "honeypot":
+        first_channel = not hp_traps(guild.id)
+        fallback_action = None
+        activation_error = None
+        if first_channel:
+            fallback_action, activation_error = hp_initial_activation_plan(guild)
         hp_add_trap(guild.id, channel.id)
-        # Si se crea/configura desde /setup, su tarjeta debe existir aunque el
-        # honeypot todavía no haya sido activado para sancionar.
         hp_setting_set(guild.id, "honeypot_warning_enabled", "1")
-        if publish_messages:
-            warning_error = await hp_sync_warning(channel)
-            if warning_error:
-                return f"Canal Honeypot establecido, pero {warning_error}"
-        return "Canal Honeypot establecido y tarjeta sincronizada."
+        if first_channel and not activation_error:
+            if fallback_action is not None:
+                hp_setting_set(guild.id, "honeypot_action", hp_action_storage(fallback_action))
+            hp_setting_set(guild.id, "honeypot_enabled", "1")
+            hp_setting_set(guild.id, "honeypot_paused", "0")
+        warning_error = await hp_sync_warning(channel) if publish_messages else None
+        parts = ["Canal Honeypot establecido."]
+        if first_channel:
+            if activation_error:
+                parts.append(activation_error)
+            else:
+                parts.append("Protección activada automáticamente.")
+                if fallback_action is not None:
+                    parts.append("Medida inicial segura: Solo registrar, sin sanciones.")
+        if warning_error:
+            parts.append(f"No se pudo sincronizar el aviso: {warning_error}")
+        return " ".join(parts)
 
     return "Canal establecido."
 
@@ -5778,6 +5793,16 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         remaining_traps = current_traps - ({self.pending_remove_trap_id} if self.pending_remove_trap_id else set())
         if channel is not None:
             remaining_traps.add(channel.id)
+        first_channel = bool(channel is not None and not current_traps)
+        fallback_action = None
+        if first_channel:
+            fallback_action, activation_error = hp_initial_activation_plan(
+                interaction.guild, requested_action=self.pending_action,
+                actor_permissions=interaction.user.guild_permissions,
+            )
+            if activation_error:
+                await interaction.followup.send(activation_error + " No se guardó nada.", ephemeral=True)
+                return
         auto_disable = bool(enabled and self.pending_remove_trap_id is not None
                             and not remaining_traps and self.pending_enabled is not True)
         if enabled and not remaining_traps and not auto_disable:
@@ -5824,12 +5849,18 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             hp_add_trap(self.guild_id, channel.id)
         if auto_disable:
             hp_setting_set(self.guild_id, "honeypot_enabled", "0")
+        elif first_channel:
+            hp_setting_set(self.guild_id, "honeypot_enabled", "1")
         elif self.pending_enabled is not None:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
-        if self.pending_paused is not None:
+        if first_channel:
+            hp_setting_set(self.guild_id, "honeypot_paused", "0")
+        elif self.pending_paused is not None:
             hp_setting_set(self.guild_id, "honeypot_paused", "1" if self.pending_paused else "0")
         if self.pending_action is not None:
             hp_setting_set(self.guild_id, "honeypot_action", hp_action_storage(self.pending_action))
+        elif first_channel and fallback_action is not None:
+            hp_setting_set(self.guild_id, "honeypot_action", hp_action_storage(fallback_action))
         if self.pending_kick_purge_minutes is not None:
             hp_setting_set(
                 self.guild_id, "honeypot_kick_purge_minutes", str(self.pending_kick_purge_minutes),
@@ -5860,6 +5891,10 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if channel is not None:
             warning = await hp_sync_warning(channel)
         note = "Cambios guardados."
+        if first_channel:
+            note += " Honeypot activado automáticamente."
+            if fallback_action is not None:
+                note += " Medida inicial: Solo registrar, sin sanciones."
         if removed:
             note += f" Canales trampa configurados: {len(hp_traps(self.guild_id))}."
             if auto_disable:
@@ -16608,6 +16643,32 @@ def hp_action(guild_id: int) -> str:
 def hp_action_storage(action: str) -> str:
     """Escritura explícita de sanciones nuevas, sin reinterpretar valores legados."""
     return HONEYPOT_DESTRUCTIVE_ACTION_STORAGE.get(action, action)
+
+
+def hp_initial_activation_plan(
+    guild: discord.Guild, *,
+    requested_action: str | None = None,
+    actor_permissions=None,
+) -> tuple[str | None, str | None]:
+    """Decidir la primera activación sin escribir SQLite ni ejecutar sanciones.
+
+    Devuelve (acción_segura_para_guardar, error). Si no se ha elegido ninguna
+    sanción y el rol implícito falta, usar Solo registrar, nunca condenar a ciegas.
+    """
+    action = requested_action if requested_action is not None else hp_action(guild.id)
+    if action == "role":
+        role_id = hp_punish_role_id(guild.id)
+        role = guild.get_role(role_id) if role_id else None
+        problem = hp_role_problem(role, guild) if role is not None else "no hay rol configurado"
+        if problem:
+            if requested_action is None and hp_setting_get(guild.id, "honeypot_action") is None:
+                return "log", None
+            return None, f"No se activó Honeypot: el rol de castigo no es válido ({problem})."
+    if action in {"kick", "ban"}:
+        problem = hp_sanction_permission_problem(guild, action, actor_permissions)
+        if problem:
+            return None, f"No se activó Honeypot: {problem}"
+    return None, None
 
 
 def hp_sanction_permission_problem(
