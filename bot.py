@@ -5781,6 +5781,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 return
         warning = None
         removed_channel = None
+        removed_id = self.pending_remove_trap_id
         old_warning_id = None
         if self.pending_remove_trap_id is not None:
             removed_channel = interaction.guild.get_channel(self.pending_remove_trap_id)
@@ -5838,6 +5839,11 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if warning:
             note += f" El canal se registró, pero no pudo sincronizarse el aviso: {warning}"
         await interaction.edit_original_response(content=note, embed=self._embed(interaction.guild), view=self)
+        if removed:
+            await log_embed(
+                interaction.guild, "Canal trampa quitado",
+                f"{interaction.user.mention} confirmó la retirada de <#{removed_id}>.",
+            )
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     @honeypot_operation
