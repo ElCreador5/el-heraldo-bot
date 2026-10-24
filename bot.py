@@ -11145,6 +11145,7 @@ class HeraldoAutomodSetupView(discord.ui.View):
         view = CustodioSetupView(
             self.guild_id, self.owner_id,
             get_setting=guild_config_get,
+            set_setting=guild_config_set,
             save_atomic=verification_atomic_setup_save,
             access_check=configuration_access,
             parent_factory=lambda: HeraldoAutomodSetupView(self.guild_id, self.owner_id),
