@@ -5464,7 +5464,7 @@ class HeraldoMotwSetupView(discord.ui.View):
 
 
 class HeraldoHoneypotSetupView(discord.ui.View):
-    """Panel compacto: selección y estado se preparan, Guardar es el único commit del borrador."""
+    """Selectores en borrador; Activar, Pausar y Reanudar guardan solo su estado."""
 
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -5655,11 +5655,20 @@ class HeraldoHoneypotSetupView(discord.ui.View):
     @honeypot_operation
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
-        enabled, paused = self._effective_state()
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return
+        # Excepción deliberada al borrador: este botón guarda únicamente
+        # el encendido/pausa, jamás ajustes de canales, acciones ni tiempos.
+        enabled, paused = honeypot_enabled(self.guild_id), honeypot_paused(self.guild_id)
+        if enabled != self.original_enabled or paused != self.original_paused:
+            await self._refresh(
+                interaction, "El estado de Honeypot cambió. Abra de nuevo el panel antes de actuar.",
+            )
+            return
         if not enabled:
-            if not hp_traps(self.guild_id) and self.pending_trap_id is None:
-                await interaction.followup.send(
-                    "Añada un canal trampa antes de activar la protección.", ephemeral=True,
+            if not hp_traps(self.guild_id):
+                await self._refresh(
+                    interaction, "Guarde primero un canal trampa antes de activar la protección.",
                 )
                 return
             target_enabled, target_paused = True, False
@@ -5667,11 +5676,35 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             target_enabled, target_paused = True, False
         else:
             target_enabled, target_paused = True, True
-        saved_enabled = honeypot_enabled(self.guild_id)
-        saved_paused = honeypot_paused(self.guild_id)
-        self.pending_enabled = target_enabled if target_enabled != saved_enabled else None
-        self.pending_paused = target_paused if target_paused != saved_paused else None
-        await self._refresh(interaction)
+
+        # Activar/Reanudar valida la medida guardada, sin usar un borrador distinto.
+        if target_enabled and not target_paused:
+            saved_action = hp_action(self.guild_id)
+            if saved_action == "role":
+                role_id = hp_punish_role_id(self.guild_id)
+                role = interaction.guild.get_role(role_id) if role_id else None
+                if role is None or hp_role_problem(role, interaction.guild):
+                    await self._refresh(
+                        interaction, "Configure y guarde un rol de castigo válido antes de activar.",
+                    )
+                    return
+            elif saved_action in {"kick", "ban"}:
+                problem = hp_sanction_permission_problem(
+                    interaction.guild, saved_action, interaction.user.guild_permissions,
+                )
+                if problem:
+                    await self._refresh(interaction, problem + " Estado sin cambios.")
+                    return
+        if enabled != target_enabled:
+            hp_setting_set(self.guild_id, "honeypot_enabled", "1" if target_enabled else "0")
+        if paused != target_paused:
+            hp_setting_set(self.guild_id, "honeypot_paused", "1" if target_paused else "0")
+        self.pending_enabled = self.pending_paused = None
+        self.original_enabled = honeypot_enabled(self.guild_id)
+        self.original_paused = honeypot_paused(self.guild_id)
+        note = ("Protección activada." if not enabled else
+                "Protección reanudada." if paused else "Protección pausada.")
+        await self._refresh(interaction, note)
 
     @discord.ui.button(label="Configurar acción", style=discord.ButtonStyle.primary, row=2)
     @honeypot_operation
