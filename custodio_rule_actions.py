@@ -11,7 +11,7 @@ import json
 from typing import Callable, Mapping
 
 SETTING_KEY = "custodio_rule_actions_v1"
-VALID_ACTIONS = frozenset({"report", "kick", "ban"})
+VALID_ACTIONS = frozenset({"report", "warn", "kick", "ban", "temp_ban"})
 SCHEMA_VERSION = 1
 MAX_POLICY_BYTES = 4096
 
