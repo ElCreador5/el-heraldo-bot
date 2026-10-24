@@ -127,6 +127,12 @@ Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro ag
 - Cada editor de footer debe mostrar pistas claras de `{servidor}` (nombre real en otros textos, sustituido por el distintivo Lab únicamente en el pie de Test) y `{servericon}` (icono real). Los envíos exclusivamente multimedia deben llevar la misma identidad.
 - Ejecutar regresiones aisladas y CI en `Pruebas`; una prueba automática no equivale a aceptación visual real en Discord. Esta excepción jamás debe propagarse a `main` por accidente.
 
+### UX-03D — Idioma obligatorio: español (2026-10-24)
+- **Todo texto redactado por El Heraldo para usuarios y moderadores debe estar en español** en `main` y `Pruebas`: comandos y sus descripciones cuando no rompa compatibilidad, títulos de tarjetas, menús, botones, formularios, placeholders, explicaciones, confirmaciones, errores, DMs, registros, ayuda y mensajes de prueba. Usar terminología comprensible y consistente; preferir «Roles de ingreso», «Sincronizar ahora», «ID de usuario» y «Reglas del servidor» a etiquetas en inglés.
+- **No traducir contratos técnicos**: claves SQLite, identificadores de componentes persistentes, nombres de APIs, variables (`{servidor}`, `{servericon}`), identificadores de comandos existentes, nombres de librerías/protocolos ni código interno. No reemplazar el contenido que escribieron administradores ni los nombres propios de las comunidades. «Honeypot», «AutoMod», «embed», «HEX», «URL» e «ID» pueden conservarse como términos técnicos si es necesario.
+- **Discord controla la interfaz nativa**: los botones y textos estándar generados por el cliente (p. ej. el envío de un modal) dependen del idioma del usuario en Discord; el bot sí controla los títulos, campos y componentes personalizados. No afirmar que puede traducir el cliente Discord desde el bot.
+- Al introducir o modificar un módulo, revisar los textos visibles en ambos entornos y mantener cobertura de regresiones; en el laboratorio se conserva la identidad especial del footer establecida en UX-03C.
+
 ### UX-04 — Funcionamiento real y resiliencia
 - Revalidar permisos del usuario y del bot y jerarquía de roles en **cada interacción y antes de guardar/ejecutar**, incluidos canales borrados y permisos revocados; comunicar el error específico sin fingir éxito.
 - Reconocer oportunamente las interacciones (defer cuando corresponda), re-registrar vistas persistentes con identificadores válidos tras reinicios y no duplicar botones, logs ni sanciones; conservar los avisos obligatorios de verificación.

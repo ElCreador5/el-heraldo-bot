@@ -118,7 +118,7 @@ class CustodioRuleActionsView(discord.ui.View):
         return (
             "**El Heraldo · AutoMod · Custodio · Acciones por tipo**\n\n"
             "Estas son plantillas sugeridas, no reglas universales. "
-            "Cada servidor debe vincularlas a sus propias Server Rules aprobadas.\n"
+            "Cada servidor debe vincularlas a sus propias reglas del servidor aprobadas.\n"
             "NH se refiere a las normas internas del bot.\n\n"
             f"**Plantillas:**\n{entries}\n\n"
             f"**Tipo seleccionado:** {category.label}\n"

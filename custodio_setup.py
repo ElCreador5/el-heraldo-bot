@@ -57,7 +57,7 @@ class CustodioSetupView(discord.ui.View):
         self.add_item(select)
 
         check_button = discord.ui.Button(
-            label="Consultar Server Rules", style=discord.ButtonStyle.primary, row=1)
+            label="Consultar reglas del servidor", style=discord.ButtonStyle.primary, row=1)
         check_button.callback = self.check_rules
         self.add_item(check_button)
 
@@ -146,14 +146,14 @@ class CustodioSetupView(discord.ui.View):
         except (RulesUnavailable, ValueError) as exc:
             reason = exc.reason if isinstance(exc, RulesUnavailable) else "token_unavailable"
             await interaction.edit_original_response(
-                content="No fue posible consultar Server Rules (" + reason +
+                content="No fue posible consultar reglas del servidor (" + reason +
                         "). Las preferencias no se modificaron.",
                 view=self, embed=None,
             )
             return
         await interaction.edit_original_response(
             content=self.summary() + "\n\n"
-                    f"**Server Rules:** activadas; {snapshot.count} reglas leídas. "
+                    f"**reglas del servidor:** activadas; {snapshot.count} reglas leídas. "
                     f"Revisión: {snapshot.revision[:12]}. "
                     "La API de Discord puede cambiar sin previo aviso.",
             view=self, embed=None,

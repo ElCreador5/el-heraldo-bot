@@ -1,3 +1,6 @@
+## Continuidad — idioma español en todo El Heraldo (2026-10-24)
+Requisito NH UX-03D en `Pruebas` y `main`. Traducir exclusivamente texto visible escrito por El Heraldo, sin alterar contratos internos, comandos establecidos ni preferencias de los servidores. Comprobar CI y Railway tras cada publicación. Las etiquetas del cliente Discord (botón de enviar un modal) no son controlables por la aplicación.
+
 ## Honeypot Test — editor directo y publicación (2026-10-24)
 El botón «Configurar aviso» abre directamente el modal de diseño completo, sin subpanel nuevo. La confirmación de guardado existente ejecuta también «Publicar aviso» y comprueba permisos, canales, cambios concurrentes y ausencia de duplicaciones. Las vistas heredadas conservan compatibilidad, pero se retiran de su interfaz los dos editores redundantes. Las pruebas relevantes verifican ACK de modales y que no haya navegación adicional. No cambia `main` ni el volumen SQLite.
 

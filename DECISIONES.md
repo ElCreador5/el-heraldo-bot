@@ -1,3 +1,6 @@
+## Interfaz íntegramente en español — 2026-10-24
+El propietario exige español para todos los mensajes, botones, editores, menús, registros y textos del bot en ambos entornos. Se traducen etiquetas heredadas de Roles de ingreso y reglas del servidor; se preservan identificadores internos, nombres de comandos establecidos, propiedades y contenido de terceros. Consultar NH UX-03D. La interfaz nativa del cliente Discord se localiza por las preferencias de Discord y no la controla el bot.
+
 ## Honeypot Test — «Configurar aviso» abre editor directo y publica desde su confirmación (2026-10-24)
 Por instrucción del propietario, `/setup → AutoMod → Honeypot → Configurar aviso` abre directamente el modal completo (`HoneypotWarningEmbedModal`) sin navegar a un nuevo panel ni ofrecer los botones redundantes «Editar texto»/«Editar diseño». El formulario permite título, descripción, color, imagen y pie adicional. La confirmación **existente** se etiqueta «Guardar y publicar aviso», guarda cambios y sincroniza los avisos en canales trampa, incluso cuando no cambió su contenido; la confirmación cancelada no publica. Mantener permisos, idempotencia, aislamiento por servidor, estado anterior y registros; producción no se modifica. El modal nativo de Discord solo tiene su acción de envío, no botones independientes internos.
 
