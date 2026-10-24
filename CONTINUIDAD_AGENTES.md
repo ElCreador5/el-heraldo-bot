@@ -1,3 +1,7 @@
+## Honeypot — ACK temprano de botones (2026-10-24)
+
+Rama de desarrollo `Pruebas`; objetivo evitar «Interaction failed» seguido de cambios tardíos. Código propuesto modifica solo los callbacks del panel Honeypot, selectores, publicación y confirmación de canales: `interaction.response.defer()` antes de SQLite, `interaction.edit_original_response` y `followup.send` posteriores. Las reglas existentes de Guardar/Descartar, permisos, controles obsoletos y no duplicación deben permanecer. Ver `tests/test_honeypot_interaction_ack.py`. **Estado de la revisión previa a CI:** sin comprobación interactiva, sin cambios a main, sin alterar SQLite o variables de Railway. No aceptar deploy SUCCESS como prueba de latencia; comprobar clics reales en Lab.
+
 ## Cierre técnico NH footer de servidor (2026-10-24)
 
 **Código** `Pruebas@3bbd3de8`: commit `ca14b072` centraliza identidad de servidor en pie de todos los embeds con guild; `dcccd8b1` adapta test y `3bbd3de8` ajusta límites de contrato. CI Heraldo Lab `40099579181`, Mensajes `40099579205`, Issue23 `40099579209` = SUCCESS. Railway Test worker `48dda131-aa76-48f2-aad3-c18ecf397f50` SUCCESS, Gateway y autoprueba /setup correctos en Heraldo's Lab. No hubo interacciones Discord reales ni modificación de `main@41f55654`. Mantener Issue #23 como port selectivo pendiente de aceptación humana. Sin guild verificable no adivinar servidor. No crear pie duplicado ni perder información de expedientes/estados.
