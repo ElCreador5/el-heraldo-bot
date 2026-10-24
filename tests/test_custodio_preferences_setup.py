@@ -77,8 +77,9 @@ class CustodioSetupTests(unittest.TestCase):
         self.assertEqual(self.db, {})
         self.assertEqual(self.calls, [])
         self.assertIn("Modo Custodio", view.summary())
-        self.assertEqual(len(view.children), 5)
-        self.assertEqual([x.row for x in view.children], [0, 1, 2, 2, 2])
+        self.assertEqual(next(x.label for x in view.children if x.label == "Crear canal de reportes"), "Crear canal de reportes")
+        self.assertEqual(len(view.children), 6)
+        self.assertEqual([x.row for x in view.children], [0, 1, 1, 2, 2, 2])
 
     def test_confirmation_only_prepares_observing_preferences(self):
         view = self.make_view()
