@@ -5485,7 +5485,6 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.pending_trap_id: int | None = None
-        self.pending_remove_trap_id: int | None = None
         self.selected_channel_id: int | None = None
         self.pending_enabled: bool | None = None
         self.pending_paused: bool | None = None
@@ -5540,11 +5539,6 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if self.pending_trap_id is not None:
             channel = guild.get_channel(self.pending_trap_id)
             changes.append(f"Añadir canal: {channel.mention if channel else 'canal no disponible'}")
-        if self.pending_remove_trap_id is not None:
-            channel = guild.get_channel(self.pending_remove_trap_id)
-            changes.append(f"Retirar canal trampa: {channel.mention if channel else 'canal no disponible'}")
-            if len(hp_traps(self.guild_id)) == 1 and self.pending_trap_id is None:
-                changes.append("La protección se desactivará al quedar 0 canales trampa.")
         if self.pending_enabled is not None:
             changes.append("Protección: activar" if self.pending_enabled else "Protección: desactivar")
         if self.pending_paused is not None:
@@ -5792,12 +5786,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 return
         enabled, paused = self._effective_state()
         current_traps = set(hp_traps(self.guild_id))
-        if self.pending_remove_trap_id is not None and self.pending_remove_trap_id not in current_traps:
-            await interaction.followup.send(
-                "El canal ya no figura como trampa. Abra otra vez la configuración.", ephemeral=True,
-            )
-            return
-        remaining_traps = current_traps - ({self.pending_remove_trap_id} if self.pending_remove_trap_id else set())
+        remaining_traps = set(current_traps)
         if channel is not None:
             remaining_traps.add(channel.id)
         first_channel = bool(channel is not None and not current_traps)
@@ -5810,9 +5799,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             if activation_error:
                 await interaction.followup.send(activation_error + " No se guardó nada.", ephemeral=True)
                 return
-        auto_disable = bool(enabled and self.pending_remove_trap_id is not None
-                            and not remaining_traps and self.pending_enabled is not True)
-        if enabled and not remaining_traps and not auto_disable:
+        if enabled and not remaining_traps:
             await interaction.followup.send(
                 "Debe existir un canal trampa válido para activar la protección.", ephemeral=True,
             )
@@ -5845,18 +5832,9 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                 )
                 return
         warning = None
-        removed_channel = None
-        removed_id = self.pending_remove_trap_id
-        old_warning_id = None
-        if self.pending_remove_trap_id is not None:
-            removed_channel = interaction.guild.get_channel(self.pending_remove_trap_id)
-            old_warning_id = hp_traps(self.guild_id).get(self.pending_remove_trap_id)
-            hp_remove_trap(self.guild_id, self.pending_remove_trap_id)
         if channel is not None:
             hp_add_trap(self.guild_id, channel.id)
-        if auto_disable:
-            hp_setting_set(self.guild_id, "honeypot_enabled", "0")
-        elif first_channel:
+        if first_channel:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1")
         elif self.pending_enabled is not None:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
@@ -5879,11 +5857,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if self.pending_purge_spec is not None:
             kind, value = self.pending_purge_spec
             hp_setting_set(self.guild_id, "honeypot_purge_spec", f"{kind}:{value}")
-        removed = self.pending_remove_trap_id is not None
-        self.pending_trap_id = self.pending_remove_trap_id = None
+        self.pending_trap_id = None
         self.pending_enabled = self.pending_paused = self.pending_action = None
-        if removed:
-            self.selected_channel_id = None
         self.pending_kick_purge_minutes = self.pending_ban_minutes = None
         self.pending_timeout_minutes = self.pending_purge_spec = None
         self.original_kick_purge_minutes = hp_kick_purge_minutes(self.guild_id)
@@ -5902,23 +5877,9 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             note += " Honeypot activado automáticamente."
             if fallback_action is not None:
                 note += " Medida inicial: Solo registrar, sin sanciones."
-        if removed:
-            note += f" Canales trampa configurados: {len(hp_traps(self.guild_id))}."
-            if auto_disable:
-                note += " La protección se desactivó porque no quedan canales trampa."
-        if old_warning_id and isinstance(removed_channel, discord.TextChannel):
-            try:
-                await (await removed_channel.fetch_message(old_warning_id)).delete()
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                note += " No se pudo retirar el aviso anterior del canal."
         if warning:
             note += f" El canal se registró, pero no pudo sincronizarse el aviso: {warning}"
         await interaction.edit_original_response(content=note, embed=self._embed(interaction.guild), view=self)
-        if removed:
-            await log_embed(
-                interaction.guild, "Canal trampa quitado",
-                f"{interaction.user.mention} confirmó la retirada de <#{removed_id}>.",
-            )
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     @honeypot_operation
@@ -5926,7 +5887,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         await self._save_pending_changes(interaction)
 
     def _discard_draft(self) -> None:
-        self.pending_trap_id = self.pending_remove_trap_id = None
+        self.pending_trap_id = None
         self.pending_enabled = self.pending_paused = self.pending_action = None
         self.pending_kick_purge_minutes = self.pending_ban_minutes = None
         self.pending_timeout_minutes = self.pending_purge_spec = None
