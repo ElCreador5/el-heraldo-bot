@@ -93,7 +93,7 @@ def read_snapshot(
         raise RulesUnavailable("rules_empty")
     if len(collected) > MAX_RULES:
         raise RulesUnavailable("too_many_rules")
-    serialized = json.dumps(collected, ensure_ascii=False, separators=(",", ":"))
+    serialized = json.dumps({"guild_id": guild_id, "rules": collected}, ensure_ascii=False, separators=(",", ":"))
     revision = sha256(serialized.encode("utf-8")).hexdigest()
     return RulesSnapshot(guild_id, tuple(collected), revision)
 
@@ -140,8 +140,10 @@ def plan_review(
 
     raw_key = f"{snapshot.guild_id}:{message_id}:{message_revision}:{snapshot.revision}"
     dedupe_key = sha256(raw_key.encode("utf-8")).hexdigest()
+    fallback_state = "observe" if mode == "observe" else "review"
+    fallback_action = "record_only" if mode == "observe" else "notify_staff"
     if not isinstance(model_result, Mapping):
-        return ReviewPlan("review", "classifier_unavailable", snapshot.guild_id, dedupe_key=dedupe_key, action="notify_staff")
+        return ReviewPlan(fallback_state, "classifier_unavailable", snapshot.guild_id, dedupe_key=dedupe_key, action=fallback_action)
 
     outcome = model_result.get("outcome")
     numbers = model_result.get("rule_numbers", [])
@@ -157,14 +159,14 @@ def plan_review(
         or severity not in VALID_SEVERITIES
         or not isinstance(summary, str)
     ):
-        return ReviewPlan("review", "invalid_classifier_result", snapshot.guild_id, dedupe_key=dedupe_key, action="notify_staff")
+        return ReviewPlan(fallback_state, "invalid_classifier_result", snapshot.guild_id, dedupe_key=dedupe_key, action=fallback_action)
     rule_numbers = tuple(sorted(set(numbers)))
     if outcome == "clear":
         if rule_numbers:
-            return ReviewPlan("review", "inconsistent_classifier_result", snapshot.guild_id, dedupe_key=dedupe_key, action="notify_staff")
+            return ReviewPlan(fallback_state, "inconsistent_classifier_result", snapshot.guild_id, dedupe_key=dedupe_key, action=fallback_action)
         return ReviewPlan("ignore", "no_violation", snapshot.guild_id, dedupe_key=dedupe_key)
     if not rule_numbers:
-        return ReviewPlan("review", "missing_rule_reference", snapshot.guild_id, dedupe_key=dedupe_key, action="notify_staff")
+        return ReviewPlan(fallback_state, "missing_rule_reference", snapshot.guild_id, dedupe_key=dedupe_key, action=fallback_action)
 
     return ReviewPlan(
         "observe" if mode == "observe" else "review",
