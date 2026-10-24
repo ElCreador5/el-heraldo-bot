@@ -1,3 +1,9 @@
+## Custodio — pruebas de reportes y clasificación SFW/NSFW (2026-10-23 RD)
+
+**AÑADIDOS:** `tests/test_custodio_reports_context.py` verifica creación privada, rol @everyone denegado, rol de moderación permitido, miembros ordinarios excluidos, idempotencia/solicitudes simultáneas, recuperación de canal tras fallo SQLite, error de permisos y rechazo de canales públicos o con acceso directo a miembros ordinarios. Prueba tarjeta de metadatos sin texto y rechazo de referencias incorrectas. También clasifica guild/canal SFW, NSFW y desconocido; no interpreta NSFW como permiso para ignorar reglas. Contrato de `/setup` ajustado en `tests/test_custodio_preferences_setup.py` para nuevo botón y navegación.
+
+**POR VERIFICAR:** resultado CI del commit final y ensayo real del panel, confirmación y creación del canal en Heraldo's Lab; no se ha creado canal ni observado miembros de verdad. Ausentes motor de supervisión, archivo duradero de evidencias y conexión a IA externa. Ninguna sanción, ningún cambio en main.
+
 ## Custodio — preferencias y ejemplos de foros (2026-10-23 RD)
 
 **Cobertura prevista:** `tests/test_custodio_preferences_setup.py` controla defaults seguros, ausencia de sanciones, aislamiento por servidor, panel sin escrituras al abrir, preparación de borradores y selección CAS; también confirma la navegación /setup → AutoMod → Custodio. `tests/test_custodio_benchmark.py` evalúa 16 ejemplos sintéticos y cómputo de falsos positivos, sin capturas de personas reales. **VERIFICACIÓN AUTOMÁTICA:** consultar workflow del SHA vigente antes de declarar SUCCESS. **VERIFICACIÓN DISCORD INTERACTIVA:** pendiente; no se han hecho clicks reales en los nuevos controles. **API REAL:** se conserva la prueba anterior de lectura a ciegas de 12 Server Rules, pero la nueva UI no ha sido probada en Discord.

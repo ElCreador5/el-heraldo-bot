@@ -1,3 +1,13 @@
+## Modo Custodio — reportes privados, evidencias mínimas y ámbitos SFW/NSFW (2026-10-23 RD)
+
+**Decisión nueva del propietario:** Modo Custodio dispondrá de canal propio `reportes📢` para observaciones y evidencias con NH. Distinguir servidores y canales SFW/NSFW, siempre sujetos a sus Server Rules particulares. Considerar debates públicos de Reddit, X e Instagram como referencias de contexto y políticas, no como nuevas reglas de los servidores. No habilitar sanciones ni cambiar las preferencias elegidas (`observe`, `balanced`, `eligible`, avisos de cambios desactivados).
+
+**Privacidad y consentimiento:** creación de `reportes📢` solo después de botón Confirmar creación y revalidación de permisos; `@everyone` sin acceso, roles administrativos/moderadores autorizados y bot. Cerrar ante canal eliminado, público o con permisos directos indebidos, sin reparaciones silenciosas. Las tarjetas inicialmente guardan solo referencia original, número de regla, estado, fecha, huella opcional y revisión de normas; no transcripciones ni imágenes. En esta etapa NO hay motor que capture observaciones, ni archivo probatorio duradero. La retención de contenido, cuando se diseñe, requiere controles de privacidad, consentimiento, alcance, almacenamiento y respaldo. No utilizar material sensible de canales restringidos en registros ni entrenar con él.
+
+**Distinción SFW/NSFW:** determinar con guild.nsfw_level y channel.nsfw; los valores no son permiso para ignorar las normas del servidor. Cualquier tipo desconocido se conserva desconocido. Exigir reglamento aprobado por servidor antes de evaluar. Nada de reglas universales inventadas.
+
+**Fuentes externas:** Reddit (https://redditinc.com/policies/data-api-terms) y X (https://x.com/en/tos) restringen uso para entrenamiento y recolección automatizada; Meta/Instagram exige autorizaciones específicas (https://www.facebook.com/legal/automated_data_collection_terms). Se registran fuentes como referencia general sin extraer comentarios ni entrenar modelos. Obtener permisos/licencias antes de cualquier ingestión.
+
 ## Modo Custodio — preferencias aprobadas y corpus de referencia (2026-10-23 RD)
 
 **DECISIÓN:** modo `observe` (Observar), sensibilidad `balanced` (Equilibrada), alcance `eligible` (canales elegibles/autorizados), avisos de cambios de normas desactivados. No autorizar sanciones automáticas, IA externa ni supervisión de mensajes hasta su implementación y aceptación. La pantalla de /setup ofrece solo opciones realmente seguras; Guardar prepara valores mediante confirmación administrativa, Cancelar/Descartar no escribe. Defaults no son prueba de que un servidor haya guardado su configuración.
