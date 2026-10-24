@@ -5628,19 +5628,21 @@ class HeraldoHoneypotSetupView(discord.ui.View):
                     f"No puede utilizarse ese canal: {reason}.", ephemeral=True,
                 )
                 return
-            await interaction.followup.send(
-                f"Confirme el registro de {existing.mention} como canal trampa. No se creará otro canal.",
+            await interaction.edit_original_response(
+                content=f"Confirme el registro de {existing.mention} como canal trampa. No se creará otro canal.",
+                embed=self._embed(guild),
                 view=HoneypotTrapActionConfirmView(
-                    self.guild_id, self.owner_id, "add", existing.id, from_setup=True,
+                    self.guild_id, self.owner_id, "add", existing.id, from_setup=True, parent=self,
                 ),
-                ephemeral=True,
             )
             return
-        await interaction.followup.send(
-            "Confirme la creación y registro de un nuevo canal Honeypot. "
-            "Esta acción crea el canal inmediatamente al confirmar; no depende de Guardar cambios.",
-            view=HoneypotTrapActionConfirmView(self.guild_id, self.owner_id, "create", from_setup=True),
-            ephemeral=True,
+        await interaction.edit_original_response(
+            content="Confirme crear el primer canal Honeypot y registrarlo como trampa. "
+                    "Si es la primera trampa, el bot activará automáticamente la protección.",
+            embed=self._embed(guild),
+            view=HoneypotTrapActionConfirmView(
+                self.guild_id, self.owner_id, "create", from_setup=True, parent=self,
+            ),
         )
 
     @discord.ui.button(label="Retirar canal", style=discord.ButtonStyle.danger, row=1)
@@ -20666,11 +20668,13 @@ async def honeypot_config(
 class HoneypotTrapActionConfirmView(discord.ui.View):
     """Confirma y revalida cambios de canales trampa antes de ejecutarlos."""
     def __init__(self, guild_id: int, owner_id: int, action: str,
-                 channel_id: int | None = None, *, from_setup: bool = False):
+                 channel_id: int | None = None, *, from_setup: bool = False,
+                 parent: HeraldoHoneypotSetupView | None = None):
         super().__init__(timeout=300)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.action, self.channel_id = action, channel_id
         self.from_setup = from_setup
+        self.parent = parent
         self.finished = False
         # Al confirmar se distingue crear/registrar de retirar un canal trampa.
         self.confirm.style = discord.ButtonStyle.success
@@ -20728,6 +20732,15 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
                         "El canal ya no cumple las condiciones o permisos necesarios.", ephemeral=True
                     )
                     return
+        if self.from_setup and self.action in {"add", "create"} and not hp_traps(guild.id):
+            _, activation_error = hp_initial_activation_plan(
+                guild, actor_permissions=interaction.user.guild_permissions,
+            )
+            if activation_error:
+                await interaction.followup.send(
+                    activation_error + " No se guardó el canal trampa.", ephemeral=True,
+                )
+                return
         self.finished = True
         self.stop()
         if self.action == "add":
@@ -20739,10 +20752,17 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
             else:
                 hp_add_trap(guild.id, channel.id)
                 warning = await hp_sync_warning(channel)
-            await interaction.followup.send(
-                f"{channel.mention} se añadió como canal trampa."
-                + (f"\nAdvertencia: {warning}" if warning else ""), ephemeral=True,
-            )
+            if self.parent is not None:
+                await self._refresh_setup_parent(
+                    interaction, f"{channel.mention} se añadió como canal trampa."
+                    + (" Protección activada." if honeypot_enabled(guild.id) else "")
+                    + (f" Advertencia: {warning}" if warning else ""),
+                )
+            else:
+                await interaction.followup.send(
+                    f"{channel.mention} se añadió como canal trampa."
+                    + (f"\nAdvertencia: {warning}" if warning else ""), ephemeral=True,
+                )
             await log_embed(guild, "Canal trampa añadido",
                             f"{interaction.user.mention} confirmó {channel.mention}.")
         elif self.action == "remove":
@@ -20786,14 +20806,36 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
             else:
                 hp_add_trap(guild.id, channel.id)
                 warning = await hp_sync_warning(channel)
-            await interaction.followup.send(
-                f"Se creó {channel.mention} como canal trampa."
-                + (f"\nAdvertencia: {warning}" if warning else "")
-                + "\nPara activarlo, use /honeypot setup y confirme los cambios.",
-                ephemeral=True,
-            )
+            if self.parent is not None:
+                await self._refresh_setup_parent(
+                    interaction, f"Se creó {channel.mention} como canal trampa."
+                    + (" Protección activada." if honeypot_enabled(guild.id) else "")
+                    + (f" Advertencia: {warning}" if warning else ""),
+                )
+            else:
+                await interaction.followup.send(
+                    f"Se creó {channel.mention} como canal trampa."
+                    + (f"\nAdvertencia: {warning}" if warning else "")
+                    + ("\nHoneypot activado automáticamente." if honeypot_enabled(guild.id)
+                       else "\nRevise la medida configurada antes de activar la protección."),
+                    ephemeral=True,
+                )
             await log_embed(guild, "Canal trampa creado",
                             f"{interaction.user.mention} confirmó la creación de {channel.mention}.")
+
+    async def _refresh_setup_parent(self, interaction: discord.Interaction, note: str) -> None:
+        """Devolver al panel que abrió la confirmación, sin mensaje efímero extra."""
+        if self.parent is None:
+            return
+        parent = self.parent
+        parent.original_traps = set(hp_traps(guild_id=parent.guild_id))
+        parent.original_enabled = honeypot_enabled(parent.guild_id)
+        parent.original_paused = honeypot_paused(parent.guild_id)
+        parent.original_action = hp_action(parent.guild_id)
+        parent._sync_controls()
+        await interaction.edit_original_response(
+            content=note, embed=parent._embed(interaction.guild), view=parent,
+        )
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -20804,9 +20846,17 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
             return
         self.finished = True
         self.stop()
-        await interaction.response.edit_message(
-            content="Operación cancelada. No se realizaron cambios.", view=None,
-        )
+        if self.parent is not None:
+            self.parent._sync_controls()
+            await interaction.response.edit_message(
+                content="Creación o registro descartados. Sin cambios.",
+                embed=self.parent._embed(interaction.guild),
+                view=self.parent,
+            )
+        else:
+            await interaction.response.edit_message(
+                content="Operación cancelada. No se realizaron cambios.", view=None,
+            )
 
 
 @honeypot_group.command(name="add", description="Convertir un canal de texto existente en canal trampa.")
