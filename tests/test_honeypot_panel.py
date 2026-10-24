@@ -180,7 +180,8 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         i.guild.text_channels = []
         i.guild.create_text_channel = AsyncMock()
         with patch.object(b, "get_guild_channel_id", return_value=0), \
-             patch.object(b, "hp_add_trap") as add:
+             patch.object(b, "hp_add_trap") as add, \
+             patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()):
             await view.create_channel.callback(i)
         i.guild.create_text_channel.assert_not_awaited()
         add.assert_not_called()
@@ -208,6 +209,7 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(b, "get_guild_channel_id", return_value=0),
             patch.object(b, "hp_protected_channel_reason", return_value=None),
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()),
             patch.object(b, "_setup_apply_system_channel", new=AsyncMock()) as apply,
         ):
             await view.create_channel.callback(i)
