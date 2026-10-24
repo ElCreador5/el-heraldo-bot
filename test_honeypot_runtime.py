@@ -230,16 +230,16 @@ class HoneypotRuntimeTests(unittest.IsolatedAsyncioTestCase):
         panel = self.panel()
         opening = self.i()
         await press(panel, "Retirar canal", opening)
-        confirm = opening.response.send_message.call_args.kwargs["view"]
+        confirm = opening.edit_original_response.call_args.kwargs["view"]
         self.views.append(confirm)
-        await press(confirm, "Cancelar", self.i())
+        await press(confirm, "Descartar cambios", self.i())
         self.assertIn(self.channel.id, b.hp_traps(self.gid))
         opening = self.i()
         await press(panel, "Retirar canal", opening)
-        confirm = opening.response.send_message.call_args.kwargs["view"]
+        confirm = opening.edit_original_response.call_args.kwargs["view"]
         self.views.append(confirm)
         b.hp_add_trap(self.gid, 999)
-        await press(confirm, "Confirmar retirada", self.i())
+        await press(confirm, "Confirmar cambios", self.i())
         self.assertIn(self.channel.id, b.hp_traps(self.gid))
 
     async def test_save_rechecks_permissions_and_state_after_acknowledgement(self):
