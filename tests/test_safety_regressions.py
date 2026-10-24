@@ -73,7 +73,9 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         payload = b.heraldo_template_payload({'content': 'Texto independiente'}, guild)
         content, result = b._embedify(payload.pop('content'), payload, guild, None)
         self.assertEqual(content, 'Texto independiente')
-        self.assertEqual(result['embeds'], [])
+        self.assertEqual(len(result['embeds']), 1)
+        self.assertEqual(result['embeds'][0].footer.text, b.LAB_FOOTER_TEXT)
+        self.assertIsNone(result['embeds'][0].description)
         self.assertNotIn('embed', result)
 
     async def test_template_near_limit_requires_room_for_automatic_server_footer(self):

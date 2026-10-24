@@ -1,3 +1,6 @@
+### Plantillas de solo texto también identificadas (2026-10-24)
+Las plantillas con `message_payload.TemplateEmbeds([])` dejan intacto el texto independiente (incluidas menciones) y añaden un embed vacío de contenido con el footer del laboratorio, exclusivamente durante el envío. No altera las plantillas guardadas. Se actualizan regresiones de seguridad y de footer; no afecta a producción.
+
 ### Complemento de footer de laboratorio: DMs de sugerencias y multimedia (2026-10-24)
 Los DMs de sugerencias a revisores y autores, y la edición de sus tarjetas, se sellan explícitamente con el servidor de origen; el contexto del revisor se conserva para el follow-up de interacción DM. Se agregan regresiones para DMs y envíos exclusivamente multimedia. No hay cambios de esquema, datos, autorizaciones ni sanciones. Esta nota amplía la actualización de footer en `Pruebas`, no afecta `main`.
 

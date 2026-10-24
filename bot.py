@@ -23596,8 +23596,16 @@ def _content_embed(content: str) -> discord.Embed:
 def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     """Devuelve (content, kw) con el texto convertido a embed y todos los embeds con footer."""
     if isinstance(kw.get("embeds"), message_payload.TemplateEmbeds):
-        # Las plantillas ya incluyen el pie de servidor y están validadas contra
-        # el límite global de 6000 antes de llegar al hook; conservar su diseño.
+        # Las plantillas con embeds ya fueron selladas y validadas antes de enviar.
+        # Las plantillas de solo texto conservan el contenido independiente y
+        # reciben un embed mínimo de identidad, sin mover texto ni menciones.
+        if kw["embeds"]:
+            return content, kw
+        if isinstance(content, str) and content.strip():
+            kw = dict(kw)
+            kw["embeds"] = message_payload.TemplateEmbeds(
+                [stamp_embed(discord.Embed(), guild)]
+            )
         return content, kw
     embed = kw.get("embed")
     embeds = kw.get("embeds")

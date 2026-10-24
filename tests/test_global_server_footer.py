@@ -178,6 +178,19 @@ class ServerFooterTests(unittest.TestCase):
             self.assertIn("member.guild)", source)
             self.assertNotIn("await target.send(message,", source)
 
+    def test_text_only_template_preserves_content_and_adds_lab_footer(self):
+        from test_safety_regressions import b
+        guild = server("Comunidad de texto", "https://example.org/text.png")
+        payload = b.heraldo_template_payload(
+            {"content": "Hola {servidor}"}, guild
+        )
+        content, result = b._embedify(payload.pop("content"), payload, guild, None)
+        self.assertEqual(content, "Hola Comunidad de texto")
+        self.assertEqual(len(result["embeds"]), 1)
+        self.assertEqual(result["embeds"][0].footer.text, LAB_NAME)
+        self.assertEqual(result["embeds"][0].footer.icon_url, "https://example.org/text.png")
+        self.assertIsNone(result["embeds"][0].description)
+
     def test_media_only_delivery_has_branded_footer(self):
         from test_safety_regressions import b
         guild = server("Comunidad multimedia", "https://example.org/media.png")
