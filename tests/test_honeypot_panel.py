@@ -310,6 +310,12 @@ class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
             confirmation = draft.edit_original_response.call_args.kwargs["view"]
             self.assertIsInstance(confirmation, b.HoneypotRemovalSaveConfirmView)
             self.assertEqual(confirmation.confirm.style, b.discord.ButtonStyle.success)
+            # La confirmación NO duplica Descartar/Volver; pertenecen al editor.
+            self.assertEqual(
+                [item.label for item in confirmation.children
+                 if isinstance(item, b.discord.ui.Button)],
+                ["Confirmar cambios"],
+            )
 
             accepted = interaction()
             accepted.guild.get_channel = lambda _id: channel
@@ -321,6 +327,9 @@ class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
             accepted.followup.send.assert_not_awaited()
             rendered = accepted.edit_original_response.call_args.kwargs
             self.assertIs(rendered["view"], view)
+            self.assertEqual(rendered["view"].discard_changes.label, "Descartar cambios")
+            self.assertEqual(rendered["view"].back.label, "Volver")
+            self.assertEqual(rendered["view"].discard_changes.style, b.discord.ButtonStyle.danger)
             self.assertIn("Canales trampa: 0", rendered["embed"].description)
             self.assertIn("Canales trampa configurados: 0", rendered["content"])
 
