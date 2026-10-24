@@ -16,6 +16,9 @@ from custodio_preferences import (
 )
 from custodio_source import load_server_rules
 from custodio_core import RulesUnavailable
+from custodio_reports import (
+    SETTING_KEY, ReportChannelError, create_private_report_channel,
+)
 
 
 class CustodioSetupView(discord.ui.View):
@@ -25,12 +28,14 @@ class CustodioSetupView(discord.ui.View):
         save_atomic: Callable[..., bool],
         access_check: Callable[..., Any],
         parent_factory: Callable[[], discord.ui.View],
+        set_setting: Callable[[int, str, str], None] | None = None,
     ):
         super().__init__(timeout=600)
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.get_setting = get_setting
         self.save_atomic = save_atomic
+        self.set_setting = set_setting
         self.access_check = access_check
         self.parent_factory = parent_factory
         self.pending_sensitivity = load_preferences(get_setting, guild_id).sensitivity
@@ -55,6 +60,11 @@ class CustodioSetupView(discord.ui.View):
             label="Consultar Server Rules", style=discord.ButtonStyle.primary, row=1)
         check_button.callback = self.check_rules
         self.add_item(check_button)
+
+        report_button = discord.ui.Button(
+            label="Crear canal de reportes", style=discord.ButtonStyle.primary, row=1)
+        report_button.callback = self.request_report_channel
+        self.add_item(report_button)
 
         save_button = discord.ui.Button(
             label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
@@ -137,6 +147,35 @@ class CustodioSetupView(discord.ui.View):
                     f"Revisión: {snapshot.revision[:12]}. "
                     "La API de Discord puede cambiar sin previo aviso.",
             view=self, embed=None,
+        )
+
+    async def request_report_channel(self, interaction: discord.Interaction):
+        """Solo abre confirmación; no crea canales ni cambia SQLite."""
+        existing = self.get_setting(self.guild_id, SETTING_KEY)
+        if self.set_setting is None:
+            await interaction.response.send_message(
+                "El canal de reportes no se puede configurar en esta instancia.",
+                ephemeral=True,
+            )
+            return
+        if existing:
+            await interaction.response.send_message(
+                "Ya existe una referencia a un canal de reportes. "
+                "No se creará otro automáticamente. Revise el canal existente.",
+                ephemeral=True,
+            )
+            return
+        view = CustodioReportChannelConfirmView(self)
+        await interaction.response.edit_message(
+            content="**Modo Custodio · Crear reportes📢**\n\n"
+                    "Se creará un canal privado, oculto para miembros normales "
+                    "y accesible únicamente al bot y al equipo de moderación "
+                    "que tenga permisos adecuados.\n\n"
+                    "**No se enviarán observaciones todavía:** el análisis continuo "
+                    "no está activado. La creación del canal no sanciona ni registra "
+                    "mensajes antiguos.\n\n"
+                    "Confirme para crear el canal o cancele sin realizar cambios.",
+            view=view, embed=None,
         )
 
     async def save_changes(self, interaction: discord.Interaction):
@@ -230,5 +269,71 @@ class CustodioConfirmView(discord.ui.View):
         self.parent._sync_controls()
         await interaction.response.edit_message(
             content=self.parent.summary() + "\n\nNo se guardaron cambios.",
+            view=self.parent, embed=None,
+        )
+
+class CustodioReportChannelConfirmView(discord.ui.View):
+    """Confirmación NH independiente del guardado de preferencias."""
+
+    def __init__(self, parent: CustodioSetupView):
+        super().__init__(timeout=300)
+        self.parent = parent
+        self.done = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.done:
+            await interaction.response.send_message(
+                "La solicitud ya se procesó. Abra de nuevo el panel.",
+                ephemeral=True,
+            )
+            return False
+        return await self.parent.access_check(
+            interaction, self.parent.guild_id, self.parent.owner_id)
+
+    @discord.ui.button(label="Confirmar creación", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        if guild is None or guild.id != self.parent.guild_id:
+            await interaction.response.send_message("Servidor no válido.", ephemeral=True)
+            return
+        if not interaction.user.guild_permissions.manage_channels:
+            await interaction.response.send_message(
+                "Se necesita el permiso Gestionar canales para esta operación.",
+                ephemeral=True,
+            )
+            return
+        self.done = True
+        await interaction.response.defer(ephemeral=True)
+        try:
+            channel, created = await create_private_report_channel(
+                guild, self.parent.get_setting,
+                self.parent.set_setting,
+            )
+        except (ReportChannelError, OSError, ValueError) as exc:
+            self.stop()
+            await interaction.edit_original_response(
+                content="No se completó la creación del canal privado. "
+                        "Compruebe permisos y configuración. "
+                        + (str(exc) if isinstance(exc, ReportChannelError) else "Error de persistencia."),
+                view=None,
+            )
+            return
+        self.stop()
+        self.parent._sync_controls()
+        await interaction.edit_original_response(
+            content=self.parent.summary() + "\n\n"
+                    f"**Canal de reportes:** {channel.mention} "
+                    + ("creado y vinculado." if created else "reutilizado de forma segura.")
+                    + "\nCustodio sigue sin supervisión ni sanciones automáticas.",
+            view=self.parent, embed=None,
+        )
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.done = True
+        self.stop()
+        self.parent._sync_controls()
+        await interaction.response.edit_message(
+            content=self.parent.summary() + "\n\nNo se creó ningún canal.",
             view=self.parent, embed=None,
         )
