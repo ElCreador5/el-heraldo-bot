@@ -178,6 +178,24 @@ class ServerFooterTests(unittest.TestCase):
             self.assertIn("member.guild)", source)
             self.assertNotIn("await target.send(message,", source)
 
+    def test_media_only_delivery_has_branded_footer(self):
+        from test_safety_regressions import b
+        guild = server("Comunidad multimedia", "https://example.org/media.png")
+        attachment = object()
+        content, kw = b._embedify(None, {"files": [attachment]}, guild, None)
+        self.assertIsNone(content)
+        self.assertEqual(kw["files"], [attachment])
+        self.assertEqual(kw["embed"].footer.text, LAB_NAME)
+        self.assertEqual(kw["embed"].footer.icon_url, "https://example.org/media.png")
+
+    def test_suggestion_direct_dms_and_edits_use_origin_guild(self):
+        source = ast.get_source_segment(SOURCE, FUNCS["finalize_suggestion_decision"])
+        created = SOURCE[SOURCE.index("class SuggestionModal("):SOURCE.index("class SuggestionReviewView(")]
+        self.assertIn("embed=stamp_embed(embed.copy(), guild)", created)
+        self.assertIn("embed=stamp_embed(result_embed.copy(), guild)", source)
+        self.assertIn("embed=stamp_embed(final_embed.copy(), guild)", source)
+        self.assertIn('interaction.extras["heraldo_source_guild"]', source)
+
     def test_no_lingering_hardcoded_brand_in_embed_footers(self):
         self.assertNotIn('set_footer(text="Paraíso Morboso 2026 · El Heraldo")', SOURCE)
         src = ast.get_source_segment(SOURCE, FUNCS["stamp_embed"])

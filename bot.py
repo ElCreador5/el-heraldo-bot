@@ -25260,7 +25260,9 @@ class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
         for reviewer_id in reviewer_ids:
             try:
                 reviewer = await bot.fetch_user(reviewer_id)
-                message = await reviewer.send(embed=embed, view=SuggestionReviewView(suggestion_id))
+                message = await reviewer.send(
+                    embed=stamp_embed(embed.copy(), guild), view=SuggestionReviewView(suggestion_id)
+                )
                 suggestion_set_review_message(suggestion_id, reviewer_id, message.channel.id, message.id)
                 sent += 1
             except discord.HTTPException:
@@ -25359,6 +25361,11 @@ async def finalize_suggestion_decision(
     if row is None:
         await _suggestion_interaction_reply(interaction, "Error: Esa sugerencia ya no existe.", ephemeral=True)
         return
+    # Las respuestas desde el DM del revisor necesitan la identidad del
+    # servidor donde se creó el expediente.
+    source_guild = bot.get_guild(int(row["guild_id"]))
+    if source_guild is not None:
+        interaction.extras["heraldo_source_guild"] = source_guild
     if row["status"] != SUGGESTION_STATUS_PENDING:
         await _suggestion_interaction_reply(interaction, "Información: Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
         return
@@ -25399,7 +25406,7 @@ async def finalize_suggestion_decision(
     dm_ok = False
     if requester is not None:
         try:
-            await requester.send(embed=result_embed)
+            await requester.send(embed=stamp_embed(result_embed.copy(), guild))
             dm_ok = True
         except discord.HTTPException:
             pass
@@ -25423,7 +25430,7 @@ async def finalize_suggestion_decision(
             if channel is None:
                 channel = await bot.fetch_channel(int(review_row["channel_id"]))
             message = await channel.fetch_message(int(review_row["message_id"]))
-            await message.edit(embed=final_embed, view=None)
+            await message.edit(embed=stamp_embed(final_embed.copy(), guild), view=None)
         except discord.HTTPException:
             pass
 

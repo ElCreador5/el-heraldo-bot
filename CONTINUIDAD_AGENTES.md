@@ -1,3 +1,6 @@
+### Complemento de footer de laboratorio: DMs de sugerencias y multimedia (2026-10-24)
+Los DMs de sugerencias a revisores y autores, y la edición de sus tarjetas, se sellan explícitamente con el servidor de origen; el contexto del revisor se conserva para el follow-up de interacción DM. Se agregan regresiones para DMs y envíos exclusivamente multimedia. No hay cambios de esquema, datos, autorizaciones ni sanciones. Esta nota amplía la actualización de footer en `Pruebas`, no afecta `main`.
+
 ## Continuidad — marca universal de footer en Test (2026-10-24)
 Objetivo autorizado: en `Pruebas` todos los embeds deben llevar texto `El Heraldo's Labs 🧪` e icono real del servidor cuando exista, sin cambiar los valores de `{servidor}` usados fuera del footer. Se adapta el sello global, las plantillas tipo `TemplateEmbeds`, los mensajes de verificación, los editores y las regresiones; respetar archivos/datos de prueba. Consultar el nuevo NH UX-03C y CI de la rama. No incorporar la etiqueta de Test en `main`. Prueba visual en Discord pendiente hasta ejecutarse.
 
