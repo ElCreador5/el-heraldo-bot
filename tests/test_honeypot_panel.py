@@ -390,6 +390,54 @@ class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(i.edit_original_response.call_args.kwargs["view"], view)
             i.followup.send.assert_not_awaited()
 
+    async def test_first_system_channel_save_activates_with_safe_action(self):
+        traps = {}
+        state = {"enabled": "0", "paused": "1", "action": "role"}
+        guild = NS(id=901)
+        channel = NS(id=42, mention="<#42>")
+        def save(gid, key, val):
+            if key == "honeypot_enabled":
+                state["enabled"] = val
+            elif key == "honeypot_paused":
+                state["paused"] = val
+            elif key == "honeypot_action":
+                state["action"] = val
+        with (
+            patch.object(b, "guild_resource_set") as resource,
+            patch.object(b, "hp_traps", side_effect=lambda gid: dict(traps)),
+            patch.object(b, "hp_add_trap", side_effect=lambda gid, cid: traps.update({cid: None})),
+            patch.object(b, "hp_initial_activation_plan", return_value=("log", None)),
+            patch.object(b, "hp_setting_set", side_effect=save) as setting,
+            patch.object(b, "hp_sync_warning", new=AsyncMock(return_value=None)) as notice,
+        ):
+            result = await b._setup_apply_system_channel(guild, "honeypot", channel)
+        self.assertIn("activada automáticamente", result)
+        self.assertIn("Solo registrar", result)
+        self.assertEqual(traps, {42: None})
+        self.assertEqual(state, {"enabled": "1", "paused": "0", "action": "log"})
+        setting.assert_any_call(901, "honeypot_enabled", "1")
+        resource.assert_called_once_with(901, "channel", "honeypot", 42)
+        notice.assert_awaited_once_with(channel)
+
+    async def test_second_system_channel_never_reactivates_paused_protection(self):
+        traps = {41: None}
+        guild, channel = NS(id=901), NS(id=42, mention="<#42>")
+        with (
+            patch.object(b, "guild_resource_set"),
+            patch.object(b, "hp_traps", side_effect=lambda gid: dict(traps)),
+            patch.object(b, "hp_add_trap", side_effect=lambda gid, cid: traps.update({cid: None})),
+            patch.object(b, "hp_initial_activation_plan") as preflight,
+            patch.object(b, "hp_setting_set") as save,
+            patch.object(b, "hp_sync_warning", new=AsyncMock(return_value=None)),
+        ):
+            result = await b._setup_apply_system_channel(guild, "honeypot", channel)
+        self.assertEqual(set(traps), {41, 42})
+        self.assertNotIn("activada automáticamente", result)
+        preflight.assert_not_called()
+        keys = [call.args[1] for call in save.call_args_list]
+        self.assertNotIn("honeypot_enabled", keys)
+        self.assertNotIn("honeypot_paused", keys)
+
     def test_first_activation_falls_back_only_when_no_explicit_action_exists(self):
         guild = MagicMock(spec=b.discord.Guild)
         guild.id = 901
