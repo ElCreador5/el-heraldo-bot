@@ -50,7 +50,6 @@ class CustodioSetupView(discord.ui.View):
         select.callback = self.choose_sensitivity
         self.selector = select
         self.add_item(select)
-        self._sync_controls()
 
         check_button = discord.ui.Button(
             label="Consultar Server Rules", style=discord.ButtonStyle.primary, row=1)
@@ -71,6 +70,7 @@ class CustodioSetupView(discord.ui.View):
             label="Volver", style=discord.ButtonStyle.secondary, row=2)
         back_button.callback = self.back
         self.add_item(back_button)
+        self._sync_controls()
 
     def _sync_controls(self) -> None:
         for option in self.selector.options:
