@@ -178,7 +178,7 @@ class CustodioSetupView(discord.ui.View):
             }
             explanation = details.get(reason, "No fue posible verificar las reglas oficiales de Discord.")
             await interaction.edit_original_response(
-                content=self.summary() + "\\n\\n**Reglas del servidor no disponibles.** " + explanation,
+                content=self.summary() + "\n\n**Reglas del servidor no disponibles.** " + explanation,
                 view=self, embed=None,
             )
             return
@@ -399,18 +399,18 @@ class CustodioRulesView(discord.ui.View):
         return await self.parent.access_check(interaction, self.parent.guild_id, self.parent.owner_id)
 
     def summary(self) -> str:
-        rules = "\\n".join(
+        rules = "\n".join(
             f"**{index}.** {rule[:600]}" + ("…" if len(rule) > 600 else "")
             for index, rule in enumerate(self.snapshot.rules, 1)
         )
         # Mensajes de Discord tienen un límite de 2000 caracteres.
         if len(rules) > 1300:
-            rules = rules[:1290].rsplit("\\n", 1)[0] + "\\n… Consulte las restantes en Discord."
+            rules = rules[:1290].rsplit("\n", 1)[0] + "\n… Consulte las restantes en Discord."
         return (
-            "**Modo Custodio · Reglas del servidor**\\n\\n"
-            f"**Estado:** activadas · **Reglas:** {self.snapshot.count}\\n"
-            f"**Revisión:** {self.snapshot.revision[:12]}\\n\\n"
-            + rules + "\\n\\n"
+            "**Modo Custodio · Reglas del servidor**\n\n"
+            f"**Estado:** activadas · **Reglas:** {self.snapshot.count}\n"
+            f"**Revisión:** {self.snapshot.revision[:12]}\n\n"
+            + rules + "\n\n"
             "**Análisis de ambigüedades:** no configurado. "
             "La IA solo se ejecutará mediante una acción administrativa manual "
             "cuando se disponga de un modelo comprobado. "
@@ -423,12 +423,12 @@ class CustodioRulesView(discord.ui.View):
         # Nunca se pasa texto a un servicio externo; IA permanece apagada.
         result = prepare_rule_analysis(
             config=CustodioAIConfig(), rules_active=True,
-            administrator_requested=True, text="\\n".join(self.snapshot.rules),
+            administrator_requested=True, text="\n".join(self.snapshot.rules),
         )
         if result["status"] != "manual_review":
             raise RuntimeError("El modo seguro de IA no se ha respetado")
         await interaction.response.edit_message(
-            content=self.summary() + "\\n\\n**Análisis pendiente:** "
+            content=self.summary() + "\n\n**Análisis pendiente:** "
                     "todavía no hay modelo gratuito instalado y verificado. "
                     "Puede revisar las ambigüedades manualmente; "
                     "no se ha enviado ningún texto a una IA.",
@@ -455,8 +455,8 @@ class CustodioInformationView(discord.ui.View):
 
     def summary(self):
         return (
-            f"**El Heraldo · AutoMod · Modo Custodio · {self.title}**\\n\\n"
-            f"{self.information}\\n\\n"
+            f"**El Heraldo · AutoMod · Modo Custodio · {self.title}**\n\n"
+            f"{self.information}\n\n"
             "No hay cambios que guardar ni acciones automáticas activas en este apartado."
         )
 
