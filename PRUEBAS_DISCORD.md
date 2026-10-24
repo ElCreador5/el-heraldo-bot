@@ -1,3 +1,7 @@
+## Custodio — pruebas de núcleo, sin acciones Discord (2026-10-23)
+
+tests/test_custodio_core.py comprueba extracción de TERMS, huella/versiones, obligatoriedad de Server Rules, fallos de payload y generación de revisión sin efectos laterales; tests/test_custodio_source.py comprueba lectura asíncrona de dos GET, fallos de API y credenciales, con dobles sin red. Confirmar CI del HEAD antes de decir SUCCESS. API REAL: continúa acreditada la prueba ciega anterior de 12 reglas en Heraldo's Lab; los módulos nuevos no se han empleado en Discord. DISCORD INTERACTIVO: no realizado. PENDIENTE: análisis de 12 reglas con contexto, relectura tras cambio, roles y permisos, canales inexistentes, duplicados y UI /setup.
+
 ## Modo Custodio: consulta REAL a API, NO interacción en Discord (2026-10-23 RD / 2026-10-24 UTC)
 
 Prueba ciega autorizada en Heraldo's Lab (servidor 1557230352802644040). El propietario NO entregó el texto a ChatGPT.
