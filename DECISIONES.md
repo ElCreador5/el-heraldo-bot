@@ -1,3 +1,11 @@
+## Modo Custodio — diseño y límites (2026-10-23)
+
+**Acordado por el propietario:** nombre Modo Custodio; debe leer automáticamente las Server Rules oficiales del servidor y exigir que estén activadas, sin obligar a reescribir el reglamento en /setup. La lectura real de laboratorio recuperó 12 reglas mediante la API de Member Verification, que no tiene contrato público estable.
+
+**Propuesta técnica, NO autorización de sanciones:** ubicación /setup → AutoMod → Modo Custodio; mostrar versión, número, interpretación, alcance y borrador de acciones; aprobación administrativa explícita antes de supervisión. Modos posibles: Observar, Asistir y, solo después de nuevas pruebas y autorización, Automático controlado. No enviar mensajes a un proveedor de IA sin decidir privacidad y acceso. Ante cambios de reglas, API caída, permisos insuficientes o ambigüedad, nunca inventar normas ni sanciones; suspender acciones o derivar a revisión. Evitar DMs ajenos, canales no autorizados, logs duplicados y retención excesiva.
+
+**Implementación inicial:** módulos aislados y lector asíncrono, sin bot ni /setup operativos. Clasificación real y política final de respuestas siguen pendientes de autorización y pruebas.
+
 ## Publicación selectiva NH UX-03B a main — 2026-10-21
 
 **GitHub main ACTUALIZADO:** commit `2b6aeeb0fe1cc60154ac3ab179c3bec9463d9287`, base anterior `317ed8668b659af9f9945d1cb36027c7aca008b9`. Solo `bot.py` (botones y navegación /setup), `AGENTS.md` (UX-03B), `tests/test_ux_main_release.py`, y `.github/workflows/member-logs-checks.yml` (contrato UX en CI); sin fusionar toda Pruebas, sin cambios de esquema ni operaciones deliberadas sobre SQLite. Se normalizaron cuatro retornos Join Roles, tres etiquetas «Volver a /setup», rutas de Honeypot/Raid a AutoMod, Edad/Personalidad a Verificación y tres controles finales del editor de Roles del sistema.
