@@ -14,11 +14,15 @@ from custodio_rule_actions import (
 
 ACTION_LABELS = {
     "report": "Solo reportar",
+    "warn": "Warn",
+    "temp_ban": "Temp Ban",
     "kick": "Expulsar (futuro)",
     "ban": "Banear (futuro)",
 }
 ACTION_DESCRIPTIONS = {
     "report": "Registra la observación para revisión, sin sancionar.",
+    "warn": "Advertencia centralizada, pendiente de integración.",
+    "temp_ban": "Baneo temporal; plazo aún no configurable.",
     "kick": "Propuesta de expulsión; no ejecutable en esta fase.",
     "ban": "Propuesta de baneo; no ejecutable en esta fase.",
 }
@@ -55,14 +59,14 @@ class CustodioRuleActionsView(discord.ui.View):
                     label=ACTION_LABELS[action],
                     value=action,
                     description=ACTION_DESCRIPTIONS[action],
-                ) for action in ("report", "kick", "ban")
+                ) for action in ("report", "warn", "temp_ban", "kick", "ban")
             ],
         )
         self.action_selector.callback = self.choose_action
         self.add_item(self.action_selector)
 
         suggestion = discord.ui.Button(
-            label="Usar sugerencia", style=discord.ButtonStyle.primary, row=2,
+            label="Aplicar acción sugerida", style=discord.ButtonStyle.primary, row=2,
         )
         suggestion.callback = self.apply_suggestion
         self.add_item(suggestion)
