@@ -1,3 +1,7 @@
+## NH footer global por servidor — resultado automatizado (2026-10-24)
+
+**Verificado automáticamente en `Pruebas@3bbd3de8`:** CI de Heraldo Lab `40099579181` SUCCESS en Python 3.11/3.12/3.13 + UX; Mensajes `40099579205` SUCCESS; candidato Issue23 `40099579209` SUCCESS. Nueva regresión `tests/test_global_server_footer.py` para 2 comunidades, estado preservado, iconos, límites 6000, idempotencia y ausencia de literales fijos. Railway Test `48dda131-aa76-48f2-aad3-c18ecf397f50` SUCCESS, arranque y Gateway en Lab. **VERIFICADO EN DISCORD:** NO; recorrer Verificación, Personalidad, Moderación, Condenas, Mensajes/plantillas, Raid, Honeypot, Sugerencias, DM y eventos de miembros, comprobando nombre real del guild y pie funcional conservado. El límite de Mensajes exige abreviar contenidos de plantillas en el máximo antes de publicarlas: nunca truncar silenciosamente. Solo `Pruebas`, sin `main`.
+
 ## NH — pie de servidor transversal (2026-10-24)
 
 **Implementado en `Pruebas`, comprobaciones por ejecutar:** `server_footer_text` y `stamp_embed` centralizados: conservan pie informativo, añaden nombre real por guild, previenen duplicación, usan icono actual si no existe otro. Eliminar literales fijos en tres embeds. Mensajes con plantillas JSON pasan por marca del servidor y validación conjunta antes de publicar; contenido fuera de presupuesto 6000 se rechaza, sin mutación de la plantilla almacenada. DMs sin servidor atribuible no se adjudican arbitrariamente a otra comunidad. El pie de confirmación funcional debe mantenerse.

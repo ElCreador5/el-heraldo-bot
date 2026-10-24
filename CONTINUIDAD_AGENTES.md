@@ -1,3 +1,7 @@
+## Cierre técnico NH footer de servidor (2026-10-24)
+
+**Código** `Pruebas@3bbd3de8`: commit `ca14b072` centraliza identidad de servidor en pie de todos los embeds con guild; `dcccd8b1` adapta test y `3bbd3de8` ajusta límites de contrato. CI Heraldo Lab `40099579181`, Mensajes `40099579205`, Issue23 `40099579209` = SUCCESS. Railway Test worker `48dda131-aa76-48f2-aad3-c18ecf397f50` SUCCESS, Gateway y autoprueba /setup correctos en Heraldo's Lab. No hubo interacciones Discord reales ni modificación de `main@41f55654`. Mantener Issue #23 como port selectivo pendiente de aceptación humana. Sin guild verificable no adivinar servidor. No crear pie duplicado ni perder información de expedientes/estados.
+
 ## Coordinación — globalización de identidad por servidor en embeds, 2026-10-24
 
 Propietario exige footer de nombre de servidor en **todos** los módulos y embeds, sin limitarse a Verificación. Corrección transversal `Pruebas`: `stamp_embed` ahora antepone el nombre de guild a los pies informativos, sin duplicarlo; pies fijos de perfiles, plantilla y Miembro de la Semana sustituidos por nombre dinámico; plantillas Mensajes pre-validadas con el pie antes de `send` para respetar 6000 caracteres y conservar datos; sin guild comprobable no atribuir servidor por conjetura. No escribir SQLite, no cambiar `main`, no fusionar ramas. En Test se requieren CI y prueba visual de módulos; incorporar al port selectivo #23 posteriormente.

@@ -1,3 +1,9 @@
+## NH — pie dinámico universal por servidor, verificado técnicamente (2026-10-24)
+
+**Pruebas `3bbd3de8b928bd859466ca7c5ee6905a839f86fb` (código):** `stamp_embed` integra el nombre real del servidor a todo embed con contexto guild, sin duplicación y preservando información funcional, identifica plantillas JSON de Mensajes mediante validación del límite 6000 antes de publicar; elimina 3 pies fijos de módulos. Ninguna migración SQLite ni modificación de variables/volúmenes deliberada.
+
+**CI SUCCESS del SHA exacto:** Heraldo Lab `40099579181` (Python 3.11/3.12/3.13, UX); Mensajes `40099579205`; candidato selectivo Issue23 `40099579209`. **Railway Test:** worker `48dda131-aa76-48f2-aad3-c18ecf397f50` SUCCESS, Gateway conectado y autoprueba /setup correcta en Heraldo's Lab. **Discord interacción real:** no comprobada; pendiente validación de embeds en varios módulos y DMs. **main:** no modificado (`41f55654`). **Obsidian externo:** no conectado.
+
 ## #23 - respaldo productivo HTTPS recuperado y verificado (2026-10-24, RD)
 
 RESPALDO REAL COMPLETADO: snapshot online de main@41f55654 a las 07:53:44 RD, AES-GCM y subida HTTPS al bucket privado externo heraldo-sqlite-backups. Descarga independiente y restauracion offline en dos SQLite aisladas en memoria verificadas a las 07:54:43 RD: integridad, FK, esquema, recuentos, contenido, SHA/manifiesto/fecha correctos; clave incorrecta y manipulacion rechazadas, descarga anonima/publica denegada. Objeto cifrado: 267497 bytes. No se restauro la base activa. Recibo administrativo y plan de recuperacion: [[ISSUE23_RESPALDO]].
