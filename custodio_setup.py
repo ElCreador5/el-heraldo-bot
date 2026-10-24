@@ -57,7 +57,7 @@ class CustodioSetupView(discord.ui.View):
         self.add_item(select)
 
         check_button = discord.ui.Button(
-            label="Consultar reglas del servidor", style=discord.ButtonStyle.primary, row=1)
+            label="Reglas del servidor", style=discord.ButtonStyle.primary, row=1)
         check_button.callback = self.check_rules
         self.add_item(check_button)
 
@@ -109,6 +109,18 @@ class CustodioSetupView(discord.ui.View):
         existing = load_preferences(self.get_setting, self.guild_id)
         lines = [
             "**El Heraldo · AutoMod · Modo Custodio**",
+            "",
+            "Modo Custodio ayuda a mantener una comunidad segura, organizada y respetuosa. "
+            "Se guía por las reglas del servidor y busca actuar con justicia y proporcionalidad. "
+            "Prioriza orientar antes de sancionar cuando sea posible: es amable, paciente y discreto, "
+            "pero firme ante reincidencias o faltas graves. No inventa prohibiciones: "
+            "ante una norma ambigua solicita aclaración administrativa. "
+            "Su principio es educar cuando sea posible, corregir cuando sea necesario "
+            "y sancionar solo cuando esté justificado.",
+            "",
+            "**Requisito:** las Reglas del servidor (Server Rules) deben estar activas. "
+            "Abre «Reglas del servidor» para consultar su disponibilidad manualmente; "
+            "esta acción no activa IA ni sanciones.",
             "",
             display_preferences(existing),
             "**Canal de reportes:** " + (
