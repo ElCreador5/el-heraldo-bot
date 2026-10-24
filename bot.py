@@ -4633,8 +4633,10 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         return hp_config_summary(guild) + _pending_config_text(self._pending_lines(guild))
 
     async def _refresh(self, interaction: discord.Interaction, note: str | None = None) -> None:
+        if not interaction.response.is_done():
+            await interaction.response.defer()
         self._sync_controls()
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=note, embed=self._embed(interaction.guild), view=self,
         )
 
@@ -4729,23 +4731,57 @@ class HeraldoHoneypotSetupView(discord.ui.View):
 
     @discord.ui.button(label="Activar protección", style=discord.ButtonStyle.success, row=1)
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        enabled, paused = self._effective_state()
+        await interaction.response.defer()
+        if not await hp_config_interaction_allowed(interaction, self.guild_id, self.owner_id):
+            return
+        enabled, paused = honeypot_enabled(self.guild_id), honeypot_paused(self.guild_id)
+        if (enabled, paused) != (self.original_enabled, self.original_paused):
+            await self._refresh(interaction, "La protección cambió. Abra el panel nuevamente.")
+            return
         if not enabled:
-            if not hp_traps(self.guild_id) and self.pending_trap_id is None:
-                await interaction.response.send_message(
-                    "Añada un canal trampa antes de activar la protección.", ephemeral=True,
-                )
+            if not hp_traps(self.guild_id):
+                await self._refresh(interaction, "Guarde un canal trampa antes de activar.")
                 return
             target_enabled, target_paused = True, False
         elif paused:
             target_enabled, target_paused = True, False
         else:
             target_enabled, target_paused = True, True
-        saved_enabled = honeypot_enabled(self.guild_id)
-        saved_paused = honeypot_paused(self.guild_id)
-        self.pending_enabled = target_enabled if target_enabled != saved_enabled else None
-        self.pending_paused = target_paused if target_paused != saved_paused else None
-        await self._refresh(interaction)
+        if target_enabled and not target_paused:
+            action = hp_action(self.guild_id)
+            if action == "role":
+                role_id = hp_punish_role_id(self.guild_id)
+                role = interaction.guild.get_role(role_id) if role_id else None
+                if role is None or hp_role_problem(role, interaction.guild):
+                    await self._refresh(interaction, "Configure primero un rol de castigo válido.")
+                    return
+            elif action in {"kick", "ban"}:
+                error = hp_sanction_permission_problem(
+                    interaction.guild, action, interaction.user.guild_permissions,
+                )
+                if error:
+                    await self._refresh(interaction, error + " Estado sin cambios.")
+                    return
+            warning_errors = await hp_sync_all_warnings(interaction.guild)
+            if warning_errors:
+                await self._refresh(interaction, "No se activó: " + "; ".join(warning_errors[:2]))
+                return
+        try:
+            hp_save_settings(self.guild_id, {
+                "honeypot_enabled": "1" if target_enabled else "0",
+                "honeypot_paused": "1" if target_paused else "0",
+            })
+        except Exception:
+            await self._refresh(interaction, "No se pudo guardar el estado de protección.")
+            return
+        self.pending_enabled = self.pending_paused = None
+        self.original_enabled = honeypot_enabled(self.guild_id)
+        self.original_paused = honeypot_paused(self.guild_id)
+        self._original_config = self._snapshot()
+        note = "Protección activada." if not enabled else (
+            "Protección reanudada." if paused else "Protección pausada."
+        )
+        await self._refresh(interaction, note)
 
     @discord.ui.button(label="Configurar acción", style=discord.ButtonStyle.primary, row=2)
     async def edit_action(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -4781,7 +4817,17 @@ class HeraldoHoneypotSetupView(discord.ui.View):
             )
             return
         guild = interaction.guild
-        action = self.pending_action or hp_action(self.guild_id)
+        first_trap = self.pending_trap_id is not None and not hp_traps(self.guild_id)
+        fallback_action = None
+        if first_trap:
+            fallback_action, activation_error = hp_initial_activation_plan(
+                guild, requested_action=self.pending_action,
+                actor_permissions=interaction.user.guild_permissions,
+            )
+            if activation_error:
+                await self._refresh(interaction, activation_error + " Sin cambios guardados.")
+                return
+        action = self.pending_action or fallback_action or hp_action(self.guild_id)
         if action in {"kick", "ban"}:
             issue = hp_sanction_permission_problem(guild, action, interaction.user.guild_permissions)
             if issue:
@@ -4834,11 +4880,28 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if self.pending_purge_spec is not None:
             kind, amount = self.pending_purge_spec
             changes["honeypot_purge_spec"] = f"{kind}:{amount}"
+        if first_trap:
+            changes.update({
+                "honeypot_enabled": "0", "honeypot_paused": "0",
+                "honeypot_warning_enabled": "1",
+            })
+            if fallback_action is not None and self.pending_action is None:
+                changes["honeypot_action"] = hp_action_storage(fallback_action)
         try:
             hp_save_settings(self.guild_id, changes, self.pending_trap_id)
         except Exception:
-            await interaction.followup.send("No se guardó el borrador. Inténtelo de nuevo.", ephemeral=True)
+            await self._refresh(interaction, "No se guardó el borrador. Inténtelo nuevamente.")
             return
+        warning = await hp_sync_warning(channel) if channel is not None else None
+        first_activated = False
+        if first_trap and warning is None:
+            try:
+                hp_save_settings(self.guild_id, {
+                    "honeypot_enabled": "1", "honeypot_paused": "0",
+                })
+                first_activated = True
+            except Exception:
+                warning = "No se completó la activación; el canal permanece desactivado"
         self._reset_draft()
         self._original_config = self._snapshot()
         self._original_traps = set(hp_traps(self.guild_id))
@@ -4851,8 +4914,16 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.original_timeout_minutes = hp_timeout_minutes(self.guild_id)
         self.original_purge_spec = hp_purge_spec(self.guild_id)
         self._sync_controls()
+        note = "Cambios guardados."
+        if first_activated:
+            note += " Honeypot activado automáticamente."
+            if fallback_action is not None:
+                note += " Medida inicial: Solo registrar, sin sanciones."
+        if warning:
+            note += (" No se activó la primera trampa: " if first_trap
+                     else " No se pudo sincronizar el aviso: ") + warning
         await interaction.edit_original_response(
-            content=None, embed=self._embed(guild), view=self,
+            content=note, embed=self._embed(guild), view=self,
         )
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
@@ -12852,6 +12923,28 @@ def hp_action(guild_id: int) -> str:
     return "role"
 
 
+def hp_initial_activation_plan(
+    guild: discord.Guild, *, requested_action: str | None = None, actor_permissions=None,
+) -> tuple[str | None, str | None]:
+    """Validar la primera activación sin sancionar ni modificar SQLite."""
+    action = requested_action if requested_action is not None else hp_action(guild.id)
+    if action == "role":
+        role_id = hp_punish_role_id(guild.id)
+        role = guild.get_role(role_id) if role_id else None
+        issue = ("El Heraldo no aparece en el servidor" if role is not None and guild.me is None
+                 else hp_role_problem(role, guild) if role is not None
+                 else "no hay rol de castigo configurado")
+        if issue:
+            if requested_action is None and hp_setting_get(guild.id, "honeypot_action") is None:
+                return "log", None
+            return None, f"No se activó Honeypot: rol de castigo inválido ({issue})."
+    if action in {"kick", "ban"}:
+        issue = hp_sanction_permission_problem(guild, action, actor_permissions)
+        if issue:
+            return None, f"No se activó Honeypot: {issue}"
+    return None, None
+
+
 def hp_sanction_permission_problem(guild: discord.Guild, action: str, actor_permissions=None) -> str | None:
     if action not in {"kick", "ban"}:
         return None
@@ -13053,7 +13146,7 @@ def hp_setup_embed(guild: discord.Guild, pending: list[str] | None = None) -> di
         display_traps += f" y {len(traps) - 5} más"
     state_lines = [
         f"**Protección:** {state}",
-        f"**Canales trampa:** {len(traps)}" + (f" · {display_traps}" if traps else ""),
+        f"**Canales trampa:** {len(traps)}" + (f" · {display_traps}" if traps else " · Ninguno configurado"),
     ]
     if paused and enabled:
         state_lines.append("Pausa de seguridad: revise los canales antes de reanudar.")

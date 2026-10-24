@@ -145,15 +145,17 @@ class HoneypotSelectiveMainTests(unittest.TestCase):
         self.assertNotIn("Capturas en el historial", summary)
         self.assertIn("sin contenido del mensaje", summary)
 
-    def test_toggle_stages_draft_without_persisting(self):
+    def test_toggle_persists_only_enabled_pause_after_ack(self):
         panel = SOURCE[
             SOURCE.index("class HeraldoHoneypotSetupView("):
             SOURCE.index("class HoneypotPublishWarningConfirmView(")
         ]
         toggle = panel[panel.index("async def toggle("):panel.index("async def edit_action(")]
-        self.assertIn("self.pending_enabled", toggle)
-        self.assertIn("self.pending_paused", toggle)
-        self.assertNotIn("hp_setting_set(", toggle)
+        self.assertIn("await interaction.response.defer()", toggle)
+        self.assertIn('"honeypot_enabled"', toggle)
+        self.assertIn('"honeypot_paused"', toggle)
+        self.assertIn("hp_save_settings(self.guild_id", toggle)
+        self.assertNotIn("pending_action =", toggle)
 
     def test_notice_publication_requires_confirmation_and_rechecks(self):
         code = SOURCE[
