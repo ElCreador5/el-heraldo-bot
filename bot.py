@@ -3328,7 +3328,8 @@ async def send_recovery_dm(member: discord.Member, report: bool = True, *,
     text = render_personality_recovery_dm(member.guild, invite_url)
     try:
         target = dm_channel if dm_channel is not None else member
-        await target.send(text, allowed_mentions=discord.AllowedMentions.none())
+        await target.send(embed=stamp_embed(_content_embed(text), member.guild),
+                          allowed_mentions=discord.AllowedMentions.none())
         return True
     except discord.HTTPException:
         return False
@@ -14048,7 +14049,7 @@ async def sync_server_template(guild: discord.Guild) -> tuple[discord.Template |
     return template, was_dirty, None
 
 
-def template_report_embed(template: discord.Template, was_dirty: bool | None, trigger: str) -> discord.Embed:
+def template_report_embed(guild: discord.Guild, template: discord.Template, was_dirty: bool | None, trigger: str) -> discord.Embed:
     if was_dirty is True:
         state = "Había cambios pendientes y ya están sincronizados."
     elif was_dirty is False:
@@ -14080,14 +14081,14 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
             timestamp=datetime.now(timezone.utc),
         )
     else:
-        embed = template_report_embed(template, was_dirty, "programada")
+        embed = template_report_embed(guild, template, was_dirty, "programada")
 
     sent = False
     try:
         # La copia programada siempre pertenece al servidor: el destinatario es
         # el propietario actual del servidor, no el usuario que configuró el comando.
         owner = await bot.fetch_user(guild.owner_id)
-        await owner.send(embed=embed)
+        await owner.send(embed=stamp_embed(embed, guild))
         sent = True
     except discord.HTTPException:
         pass  # incluye Forbidden (mensajes privados cerrados)
@@ -14231,10 +14232,10 @@ async def template_sync(interaction: discord.Interaction) -> None:
     if error:
         await interaction.followup.send(f"Error: {error}", ephemeral=True)
         return
-    embed = template_report_embed(template, was_dirty, "manual")
+    embed = template_report_embed(interaction.guild, template, was_dirty, "manual")
     try:
         owner = await bot.fetch_user(interaction.guild.owner_id)
-        await owner.send(embed=embed)
+        await owner.send(embed=stamp_embed(embed, interaction.guild))
         if interaction.user.id == owner.id:
             confirmation = "Plantilla sincronizada. Te envié el enlace por mensaje privado."
         else:
@@ -14343,7 +14344,7 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
     embed.add_field(name="Mensajes", value=f"{messages:,}", inline=True)
     embed.add_field(name="Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
     embed.add_field(name="Roles", value=roles_text, inline=False)
-    embed.set_footer(text=f"{guild.name} · El Heraldo")
+    embed.set_footer(text=f"{interaction.guild.name} · El Heraldo")
 
     await interaction.response.send_message(embed=embed)
 
@@ -15661,7 +15662,8 @@ async def send_test_removal_notice(member: discord.Member, action: str,
     )
     try:
         target = dm_channel if dm_channel is not None else member
-        await target.send(message, allowed_mentions=discord.AllowedMentions.none())
+        await target.send(embed=stamp_embed(_content_embed(message), member.guild),
+                          allowed_mentions=discord.AllowedMentions.none())
         return True
     except discord.HTTPException:
         return False

@@ -127,6 +127,25 @@ class ServerFooterTests(unittest.TestCase):
             env["heraldo_template_payload"](template, server("Laboratorio"))
         self.assertNotIn("footer", template["embeds"][0])
 
+    def test_templates_and_profiles_keep_their_real_guild_context(self):
+        template_fn = FUNCS["template_report_embed"]
+        self.assertEqual(template_fn.args.args[0].arg, "guild")
+        scheduled = ast.get_source_segment(SOURCE, FUNCS["run_scheduled_template_backup"])
+        manual = ast.get_source_segment(SOURCE, FUNCS["template_sync"])
+        profile = ast.get_source_segment(SOURCE, FUNCS["profile"])
+        self.assertIn('template_report_embed(guild, template,', scheduled)
+        self.assertIn('template_report_embed(interaction.guild, template,', manual)
+        self.assertIn("stamp_embed(embed, guild)", scheduled)
+        self.assertIn("stamp_embed(embed, interaction.guild)", manual)
+        self.assertIn('f"{interaction.guild.name} · El Heraldo"', profile)
+
+    def test_dms_sent_through_user_or_dmchannel_keep_source_server(self):
+        for name in ("send_recovery_dm", "send_test_removal_notice"):
+            source = ast.get_source_segment(SOURCE, FUNCS[name])
+            self.assertIn("stamp_embed(_content_embed(", source)
+            self.assertIn("member.guild)", source)
+            self.assertNotIn("await target.send(message,", source)
+
     def test_no_lingering_hardcoded_brand_in_embed_footers(self):
         self.assertNotIn('set_footer(text="Paraíso Morboso 2026 · El Heraldo")', SOURCE)
         src = ast.get_source_segment(SOURCE, FUNCS["stamp_embed"])
