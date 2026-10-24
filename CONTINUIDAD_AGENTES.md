@@ -1,3 +1,7 @@
+## Custodio — inicio del núcleo contextual (2026-10-23)
+
+Base: prueba ciega anterior, 12 Server Rules de Heraldo's Lab, HTTP 200. Se añadieron cuatro archivos aislados a Pruebas: custodio_core.py, custodio_source.py, tests/test_custodio_core.py y tests/test_custodio_source.py. Parseo, huella/versión, aprobación y propuestas deduplicadas son operaciones lógicas, sin conexión con bot.py, sin sanciones, sin persistir mensajes y sin enviar contenido a terceros. Reader asíncrono solo GET. Main sin cambios. CI y pruebas: consultar HEAD final; Discord interactivo NO realizado. Riesgos: API Membership Screening no documentada; intents, proveedor de análisis, privacidad y retención aún pendientes. Siguiente paso: estudiar integración AutoMod y flujo sancionador de bot.py; conectar primero un modo Observar seguro en Test tras controles de acceso y pruebas. Obsidian externo no conectado.
+
 ## Custodio: prueba de lectura automática en Lab (2026-10-23 RD / 2026-10-24 UTC)
 
 Prueba ciega autorizada en Heraldo's Lab (servidor 1557230352802644040). El propietario NO entregó el texto a ChatGPT.
