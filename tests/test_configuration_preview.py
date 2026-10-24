@@ -25,7 +25,7 @@ class ConfigurationPreviewTests(unittest.TestCase):
     def test_unmodified_values_bypass_save(self):
         code = ast.unparse(find_function("confirm_configuration"))
         self.assertIn("guild_config_get", code)
-        self.assertIn("if not changed and not publish_honeypot_notice:", code)
+        self.assertIn("if not changed and (not publish_honeypot_notice):", code)
         self.assertIn("No hay cambios pendientes", code)
         self.assertIn("publish_honeypot_notice=publish_honeypot_notice", code)
 
