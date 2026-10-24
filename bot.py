@@ -5745,8 +5745,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         remaining_traps = current_traps - ({self.pending_remove_trap_id} if self.pending_remove_trap_id else set())
         if channel is not None:
             remaining_traps.add(channel.id)
-        auto_disable = bool(self.pending_remove_trap_id is not None and not remaining_traps
-                            and self.pending_enabled is not True)
+        auto_disable = bool(enabled and self.pending_remove_trap_id is not None
+                            and not remaining_traps and self.pending_enabled is not True)
         if enabled and not remaining_traps and not auto_disable:
             await interaction.followup.send(
                 "Debe existir un canal trampa válido para activar la protección.", ephemeral=True,
