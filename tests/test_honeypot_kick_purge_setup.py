@@ -61,7 +61,8 @@ class HoneypotKickPurgeSetupTests(unittest.IsolatedAsyncioTestCase):
             await kick_select[0].callback(i)
         self.assertEqual(view.pending_kick_purge_minutes, 2880)
         save.assert_not_called()
-        i.response.edit_message.assert_awaited_once()
+        i.edit_original_response.assert_awaited_once()
+        i.response.defer.assert_awaited_once()
         self.assertTrue(any("2 d" in line for line in view._pending_lines(i.guild)))
 
     async def test_discard_clears_kick_purge_draft_without_writes(self):
@@ -100,7 +101,7 @@ class HoneypotKickPurgeSetupTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(b, "hp_setting_set") as save:
                 await view.save_changes.callback(i)
         save.assert_not_called()
-        self.assertIn("configuración cambió", i.response.send_message.call_args.args[0])
+        self.assertIn("configuración cambió", i.followup.send.call_args.args[0])
 
     def test_ui_parameters_adapt_to_action_without_slash_dependency(self):
         for action, count in [("kick", 1), ("ban", 1), ("role", 1),

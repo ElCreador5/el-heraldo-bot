@@ -39,7 +39,8 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(view.pending_paused)
         self.assertEqual(view.toggle.label, "Reanudar protección")
         self.assertEqual(view.toggle.style, b.discord.ButtonStyle.success)
-        i.response.edit_message.assert_awaited_once()
+        i.edit_original_response.assert_awaited_once()
+        i.response.defer.assert_awaited_once()
 
     async def test_paused_protection_can_be_resumed_as_draft_only(self):
         view = self.make_view(traps={123: None}, enabled=True, paused=True)
@@ -102,8 +103,9 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             await editor.discard_changes.callback(i)
             database_write.assert_not_called()
         self.assertIsNone(view.pending_action)
-        i.response.edit_message.assert_awaited_once()
-        self.assertIs(i.response.edit_message.call_args.kwargs["view"], view)
+        i.edit_original_response.assert_awaited_once()
+        i.response.defer.assert_awaited_once()
+        self.assertIs(i.edit_original_response.call_args.kwargs["view"], view)
 
     def test_submenus_disable_save_without_pending_changes(self):
         view = self.make_view(traps={123: None}, enabled=True)
@@ -162,7 +164,7 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
              patch.object(b, "hp_setting_set") as save:
             await view.save_changes.callback(i)
         save.assert_not_called()
-        self.assertIn("configuración cambió", i.response.send_message.call_args.args[0])
+        self.assertIn("configuración cambió", i.followup.send.call_args.args[0])
 
     def test_embed_only_shows_relevant_action_and_compact_followup(self):
         guild = NS(id=901)

@@ -78,7 +78,7 @@ class HoneypotRemovalActionTests(unittest.IsolatedAsyncioTestCase):
             i.guild.me = self.make_member().guild.me
             await view.save_changes.callback(i)
             save.assert_not_called()
-            self.assertIn("Banear miembros", i.response.send_message.call_args.args[0])
+            self.assertIn("Banear miembros", i.followup.send.call_args.args[0])
 
     async def test_panel_save_requires_bot_permission_for_kick(self):
         with (
@@ -95,7 +95,7 @@ class HoneypotRemovalActionTests(unittest.IsolatedAsyncioTestCase):
             i.guild.me = self.make_member(kick=False).guild.me
             await view.save_changes.callback(i)
             save.assert_not_called()
-            self.assertIn("El Heraldo necesita", i.response.send_message.call_args.args[0])
+            self.assertIn("El Heraldo necesita", i.followup.send.call_args.args[0])
 
     async def test_explicit_save_serializes_new_action_safely(self):
         with (

@@ -66,7 +66,7 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
         ):
             parent = b.HeraldoHoneypotSetupView(901, 10)
             await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
-            self.assertNotIn("view", i.response.send_message.call_args.kwargs)
+            self.assertNotIn("view", i.followup.send.call_args.kwargs)
             sync.assert_not_awaited()
 
     async def test_pending_draft_prevents_publication(self):
@@ -79,7 +79,7 @@ class HoneypotWarningPublicationTests(unittest.IsolatedAsyncioTestCase):
             parent = b.HeraldoHoneypotSetupView(901, 10)
             parent.pending_action = "log"
             await b.HeraldoHoneypotNoticeView(parent).publish_warning.callback(i)
-            self.assertIn("cambios pendientes", i.response.send_message.call_args.args[0].lower())
+            self.assertIn("cambios pendientes", i.followup.send.call_args.args[0].lower())
             sync.assert_not_awaited()
 
     async def test_cancel_does_not_publish_or_change_enabled(self):
