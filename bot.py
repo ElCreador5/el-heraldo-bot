@@ -3669,6 +3669,8 @@ async def _setup_apply_system_channel(
         hp_setting_set(guild.id, "honeypot_warning_enabled", "1")
         warning_error = await hp_sync_warning(channel) if publish_messages else "aviso no publicado"
         first_activated = first_channel and not activation_error and not warning_error
+        if first_channel and not first_activated and honeypot_enabled(guild.id):
+            hp_setting_set(guild.id, "honeypot_enabled", "0")
         if first_activated:
             if fallback_action is not None:
                 hp_setting_set(guild.id, "honeypot_action", hp_action_storage(fallback_action))
@@ -5861,6 +5863,8 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if channel is not None:
             warning = await hp_sync_warning(channel)
         first_activated = first_channel and not warning
+        if first_channel and not first_activated and honeypot_enabled(self.guild_id):
+            hp_setting_set(self.guild_id, "honeypot_enabled", "0")
         if first_activated:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1")
             hp_setting_set(self.guild_id, "honeypot_paused", "0")
@@ -16680,7 +16684,11 @@ def hp_initial_activation_plan(
     if action == "role":
         role_id = hp_punish_role_id(guild.id)
         role = guild.get_role(role_id) if role_id else None
-        problem = hp_role_problem(role, guild) if role is not None else "no hay rol configurado"
+        problem = (
+            "no se pudo comprobar la jerarquía de El Heraldo" if role is not None and guild.me is None
+            else hp_role_problem(role, guild) if role is not None
+            else "no hay rol configurado"
+        )
         if problem:
             if requested_action is None and hp_setting_get(guild.id, "honeypot_action") is None:
                 return "log", None
