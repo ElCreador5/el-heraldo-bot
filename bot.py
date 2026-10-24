@@ -3667,20 +3667,23 @@ async def _setup_apply_system_channel(
             fallback_action, activation_error = hp_initial_activation_plan(guild)
         hp_add_trap(guild.id, channel.id)
         hp_setting_set(guild.id, "honeypot_warning_enabled", "1")
-        if first_channel and not activation_error:
+        warning_error = await hp_sync_warning(channel) if publish_messages else "aviso no publicado"
+        first_activated = first_channel and not activation_error and not warning_error
+        if first_activated:
             if fallback_action is not None:
                 hp_setting_set(guild.id, "honeypot_action", hp_action_storage(fallback_action))
             hp_setting_set(guild.id, "honeypot_enabled", "1")
             hp_setting_set(guild.id, "honeypot_paused", "0")
-        warning_error = await hp_sync_warning(channel) if publish_messages else None
         parts = ["Canal Honeypot establecido."]
         if first_channel:
             if activation_error:
                 parts.append(activation_error)
-            else:
+            elif first_activated:
                 parts.append("Protección activada automáticamente.")
                 if fallback_action is not None:
                     parts.append("Medida inicial segura: Solo registrar, sin sanciones.")
+            else:
+                parts.append("Protección no activada: el aviso requiere revisión.")
         if warning_error:
             parts.append(f"No se pudo sincronizar el aviso: {warning_error}")
         return " ".join(parts)
@@ -5835,12 +5838,10 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if channel is not None:
             hp_add_trap(self.guild_id, channel.id)
         if first_channel:
-            hp_setting_set(self.guild_id, "honeypot_enabled", "1")
+            hp_setting_set(self.guild_id, "honeypot_warning_enabled", "1")
         elif self.pending_enabled is not None:
             hp_setting_set(self.guild_id, "honeypot_enabled", "1" if self.pending_enabled else "0")
-        if first_channel:
-            hp_setting_set(self.guild_id, "honeypot_paused", "0")
-        elif self.pending_paused is not None:
+        if not first_channel and self.pending_paused is not None:
             hp_setting_set(self.guild_id, "honeypot_paused", "1" if self.pending_paused else "0")
         if self.pending_action is not None:
             hp_setting_set(self.guild_id, "honeypot_action", hp_action_storage(self.pending_action))
@@ -5857,6 +5858,12 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         if self.pending_purge_spec is not None:
             kind, value = self.pending_purge_spec
             hp_setting_set(self.guild_id, "honeypot_purge_spec", f"{kind}:{value}")
+        if channel is not None:
+            warning = await hp_sync_warning(channel)
+        first_activated = first_channel and not warning
+        if first_activated:
+            hp_setting_set(self.guild_id, "honeypot_enabled", "1")
+            hp_setting_set(self.guild_id, "honeypot_paused", "0")
         self.pending_trap_id = None
         self.pending_enabled = self.pending_paused = self.pending_action = None
         self.pending_kick_purge_minutes = self.pending_ban_minutes = None
@@ -5870,15 +5877,15 @@ class HeraldoHoneypotSetupView(discord.ui.View):
         self.original_action = hp_action(self.guild_id)
         self.original_traps = set(hp_traps(self.guild_id))
         self._sync_controls()
-        if channel is not None:
-            warning = await hp_sync_warning(channel)
         note = "Cambios guardados."
-        if first_channel:
+        if first_activated:
             note += " Honeypot activado automáticamente."
             if fallback_action is not None:
                 note += " Medida inicial: Solo registrar, sin sanciones."
         if warning:
-            note += f" El canal se registró, pero no pudo sincronizarse el aviso: {warning}"
+            note += f" El canal se registró, pero no se activó por el aviso: {warning}" if first_channel else (
+                f" El canal se registró, pero no pudo sincronizarse el aviso: {warning}"
+            )
         await interaction.edit_original_response(content=note, embed=self._embed(interaction.guild), view=self)
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
