@@ -1,3 +1,5 @@
+**Salvaguarda añadida:** la activación inicial depende de que el aviso del canal se sincronice correctamente; si falla, se guarda el canal sin activar la protección ni afirmar éxito. Cubierto por regresión que simula error de permisos al publicar el aviso. Si la protección tenía un estado previo incoherente, se desactiva en vez de dejar sanciones habilitadas sin advertencia.
+
 ## Honeypot — activación con primer canal y retiro directo (24/10/2026)
 
 **Solicitud:** primer registro confirmado de un canal trampa por selector + Guardar o Crear canal + Confirmar activa automáticamente Honeypot, siempre con acción segura y válida. Si no hay medida explícita ni rol válido, Solo registrar es la medida inicial sin sanciones. Una segunda trampa no modifica la pausa ni el estado elegido posteriormente. Retirar canal abre directamente una confirmación en el mismo mensaje con Confirmar cambios verde y Descartar cambios rojo; no requiere Guardar intermedio. Confirmar elimina únicamente la trampa elegida (y desactiva si era la última), Descartar no altera registros y ambos regresan al editor preservando otros borradores.
