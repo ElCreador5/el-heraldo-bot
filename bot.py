@@ -8805,8 +8805,9 @@ def heraldo_template_payload(template, guild, member=None, channel=None):
             data = dict(raw)
             footer = dict(data.get("footer") or {})
             footer["text"] = server_footer_text(guild.name, footer.get("text", ""))
-            if guild.icon and not footer.get("icon_url"):
-                footer["icon_url"] = str(guild.icon.url)
+            server_icon = getattr(guild, "icon", None)
+            if server_icon and not footer.get("icon_url"):
+                footer["icon_url"] = str(server_icon.url)
             data["footer"] = footer
             prepared.append(data)
         message_payload.validate({"embeds": prepared})
@@ -23211,7 +23212,8 @@ def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Em
         return embed
     desired = server_footer_text(guild.name, detail)
     existing_icon = getattr(embed.footer, "icon_url", None)
-    server_icon = str(guild.icon.url) if guild.icon else None
+    guild_icon = getattr(guild, "icon", None)
+    server_icon = str(guild_icon.url) if guild_icon else None
     if desired != detail or (not detail and desired):
         embed.set_footer(text=desired, icon_url=existing_icon or server_icon)
     return embed

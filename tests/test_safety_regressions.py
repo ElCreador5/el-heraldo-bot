@@ -76,13 +76,15 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['embeds'], [])
         self.assertNotIn('embed', result)
 
-    async def test_template_limit_not_increased_by_automatic_footer(self):
+    async def test_template_near_limit_requires_room_for_automatic_server_footer(self):
         guild = NS(id=901, name='Laboratorio')
         item = {'embeds': [{'description': 'a' * 4000}, {'description': 'b' * 2000}]}
-        payload = b.heraldo_template_payload(item, guild)
-        _, result = b._embedify(payload.pop('content'), payload, guild, None)
-        self.assertEqual(sum(len(e) for e in result['embeds']), 6000)
-        self.assertTrue(all(not e.footer.text for e in result['embeds']))
+        # Antes el hook omitía el pie y publicaba 6000 caracteres. Ahora no
+        # se envía una plantilla sin marca ni se recortan contenidos a escondidas.
+        with self.assertRaisesRegex(ValueError, "6000"):
+            b.heraldo_template_payload(item, guild)
+        self.assertNotIn('footer', item['embeds'][0])
+        self.assertNotIn('footer', item['embeds'][1])
 
     async def test_setup_times_are_only_saved_after_confirmation(self):
         # Ambos editores tienen tiempos independientes y usan el mismo
