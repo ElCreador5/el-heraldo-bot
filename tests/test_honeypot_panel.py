@@ -221,6 +221,37 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             apply.assert_not_awaited()
         self.assertEqual(proposed.channel_id, 777)
 
+    async def test_create_confirmation_returns_to_panel_with_failed_activation_reason(self):
+        view = self.make_view(traps={}, enabled=False, action="log")
+        open_interaction = interaction()
+        open_interaction.guild.text_channels = []
+        channel = MagicMock(spec=b.discord.TextChannel)
+        channel.id, channel.mention, channel.name = 60, "<#60>", "honeypot"
+        with (
+            patch.object(b, "get_guild_channel_id", return_value=None),
+            patch.object(b, "hp_setup_embed", return_value=b.discord.Embed()),
+            patch.object(b, "configuration_access", new=AsyncMock(return_value=True)),
+            patch.object(b, "hp_initial_activation_plan", return_value=(None, None)),
+            patch.object(b, "_setup_apply_system_channel",
+                         new=AsyncMock(return_value="Canal registrado. Protección no activada: fallo del aviso.")),
+            patch.object(b, "log_embed", new=AsyncMock()),
+        ):
+            await view.create_channel.callback(open_interaction)
+            proposal = open_interaction.edit_original_response.call_args.kwargs["view"]
+            self.assertIsInstance(proposal, b.HoneypotTrapActionConfirmView)
+            confirmed = interaction()
+            confirmed.guild.text_channels = []
+            confirmed.guild.get_channel = lambda cid: None
+            confirmed.guild.create_text_channel = AsyncMock(return_value=channel)
+            confirmed.guild.me = NS(guild_permissions=NS(manage_channels=True))
+            confirmed.user.guild_permissions = b.discord.Permissions(manage_channels=True)
+            await proposal.confirm.callback(confirmed)
+            confirmed.followup.send.assert_not_awaited()
+            output = confirmed.edit_original_response.call_args.kwargs
+            self.assertIs(output["view"], view)
+            self.assertIn("Protección no activada", output["content"])
+            self.assertIn("fallo del aviso", output["content"])
+
     async def test_old_draft_blocks_save_after_concurrent_setting_change(self):
         view = self.make_view(traps={123: None}, enabled=False, action="log")
         view.pending_action = "timeout"
