@@ -20730,9 +20730,7 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
                 warning = await hp_sync_warning(channel)
             if self.parent is not None:
                 await self._refresh_setup_parent(
-                    interaction, f"{channel.mention} se añadió como canal trampa."
-                    + (" Protección activada." if honeypot_enabled(guild.id) else "")
-                    + (f" Advertencia: {warning}" if warning else ""),
+                    interaction, f"{channel.mention} se añadió como canal trampa. {note}",
                 )
             else:
                 await interaction.followup.send(
@@ -20784,9 +20782,7 @@ class HoneypotTrapActionConfirmView(discord.ui.View):
                 warning = await hp_sync_warning(channel)
             if self.parent is not None:
                 await self._refresh_setup_parent(
-                    interaction, f"Se creó {channel.mention} como canal trampa."
-                    + (" Protección activada." if honeypot_enabled(guild.id) else "")
-                    + (f" Advertencia: {warning}" if warning else ""),
+                    interaction, f"Se creó {channel.mention} como canal trampa. {note}",
                 )
             else:
                 await interaction.followup.send(
