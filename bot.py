@@ -165,18 +165,19 @@ ORIENTATION_ROLE_DEFINITIONS = (
     ("orientation_rr_gay", "Gay", "🥒"),
     ("orientation_rr_bisex", "Bisex", "🚻"),
 )
-ORIENTATION_EMBED_TITLE = "ORIENTACIÓN"
+ORIENTATION_EMBED_TITLE = "VERIFICACIÓN DE PERSONALIDAD"
 ORIENTATION_EMBED_COLOR = 0x19A7E0
 ORIENTATION_EMBED_INTRO = "Selecciona el rol que te represente reaccionando con el emoji correspondiente:"
 ORIENTATION_EMBED_DETAILS = (
-    "Estos roles permiten definir tu orientación dentro del servidor. "
-    "Si tu preferencia cambia, puedes seleccionar otra opción.\n\n"
+    "Los roles de personalidad permiten al miembro elegir cómo desea participar en esta comunidad. "
+    "Puede seleccionar una opción y cambiarla posteriormente si así lo desea "
+    "y el servidor lo permite.\n\n"
     "**¿Cómo funciona?**\n"
-    "Reacciona con el emoji correspondiente para recibir el rol asociado. "
-    "Solo puedes mantener una orientación activa a la vez. Al elegir otra, "
-    "la anterior será reemplazada.\n\n"
-    "Esto certifica que eres una persona y tu participación en el servidor.\n"
-    "Si se detecta que no posees un rol de estos serás expulsado por sospecha."
+    "El miembro reacciona con el emoji de la opción elegida para obtener el rol "
+    "asociado a dicho emoji. Solo puede conservar una elección a la vez.\n\n"
+    "La elección expresa su interés y ofrece una experiencia personalizada dentro del servidor. "
+    "Puede desbloquear canales según los permisos de los roles; no constituye una "
+    "prueba de identidad ni sustituye la verificación de edad."
 )
 
 # --- Tarjeta de condena ----------------------------------------------------
@@ -1480,12 +1481,19 @@ def get_orientation_embed_title(guild_id: int) -> str:
     return guild_config_get(guild_id, "orientation_embed_title") or ORIENTATION_EMBED_TITLE
 
 
+def normalize_personality_embed_text(text: str) -> str:
+    """Normaliza saltos de línea heredados al visualizar; no altera SQLite."""
+    return text.replace("\\r\\n", "\n").replace("\\n", "\n")
+
+
 def get_orientation_embed_intro(guild_id: int) -> str:
-    return guild_config_get(guild_id, "orientation_embed_intro") or ORIENTATION_EMBED_INTRO
+    value = guild_config_get(guild_id, "orientation_embed_intro") or ORIENTATION_EMBED_INTRO
+    return normalize_personality_embed_text(value)
 
 
 def get_orientation_embed_details(guild_id: int) -> str:
-    return guild_config_get(guild_id, "orientation_embed_details") or ORIENTATION_EMBED_DETAILS
+    value = guild_config_get(guild_id, "orientation_embed_details") or ORIENTATION_EMBED_DETAILS
+    return normalize_personality_embed_text(value)
 
 
 def get_orientation_embed_color(guild_id: int) -> int:
@@ -1535,24 +1543,23 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
         role = guild.get_role(int(binding["role_id"]))
         emoji = str(binding["emoji"])
         roles.append(f"{emoji} {role.mention if role else '**Rol eliminado**'}")
-
     role_text = "\n".join(roles) if roles else "**No hay roles seleccionados.**"
+    timeout_seconds = int(get_orientation_window(guild.id).total_seconds())
     return (
-        f"Estado: **{'Activo' if enabled else 'Desactivado'}**\n"
+        f"Verificación de personalidad: **{'Activada' if enabled else 'Desactivada'}**\n"
         f"Canal: {channel.mention if isinstance(channel, discord.TextChannel) else '**No configurado**'}\n"
-        f"Tarjeta administrada: **{'Sí' if enabled else 'No'}**\n"
-        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\n\n"
+        f"Roles vinculados: **{len(roles)}/{ORIENTATION_MAX_ROLES}**\n"
+        f"Plazo configurado: **{timeout_seconds} segundos**\n\n"
         + role_text
-        + "\n\n**Cómo funciona:** El Heraldo establece un sistema para la selección de roles "
-          "obligatorios usando **roles que ya existen en tu servidor**. Puedes seleccionar de **1 a 6** "
-          "roles; El Heraldo toma automáticamente el emoji incluido en cada rol. No crea, renombra ni elimina esos roles. "
-          "Estos roles complementan la verificación, ayudan a garantizar participación dentro del servidor "
-          "y sirven como una señal adicional de que el miembro es humano.\n\n"
-          "• Después de verificar su edad, el miembro debe seleccionar uno de los roles configurados "
-          "antes de que venza el temporizador de **10 minutos**.\n"
-          "• Si no selecciona ninguno dentro del plazo, El Heraldo lo expulsa y envía una invitación "
-          "de recuperación de **un solo uso** para darle una oportunidad de volver a ingresar.\n"
-          "• Los permisos de los roles siguen siendo completamente tuyos y pueden personalizar la vista del servidor."
+        + "\n\n**¿Cómo funciona?**\n"
+          "Los roles de personalidad permiten al miembro elegir cómo desea participar en "
+          "la comunidad. El miembro reacciona con el emoji para recibir un único rol a "
+          "la vez. Puede cambiarlo posteriormente según las opciones disponibles.\n\n"
+          "La elección expresa intereses y puede desbloquear canales según los permisos, "
+          "pero no demuestra identidad ni sustituye la verificación de edad.\n\n"
+          "Cuando esta función está activa, si un miembro no elige dentro del plazo "
+          "configurado se intenta enviar un DM de recuperación antes de la expulsión "
+          "automática. Los permisos de los roles permanecen bajo control del servidor."
     )
 
 
