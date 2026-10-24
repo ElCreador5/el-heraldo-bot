@@ -1,3 +1,12 @@
+## Encargo #23 — verificación de candidato (2026-10-23 RD / 2026-10-24 UTC)
+
+- Nuevas regresiones en test_personality_deadline_runtime.py: chequeo antes del plazo, ampliación de plazo, marca rearmada, rol sin reloj, sanción de edad en curso, dos evaluaciones simultáneas, KICK fallido con reintento y construcción real de ambos selectores sin escribir configuración.
+- Suites específicas: 57/57 correctas; tras reparar construcción del panel, 21/21 correctas incluyendo matriz de paneles de /setup.
+- Candidato selectivo construido desde main@41f55654: 118/118 correctas, incluidas test_regressions y test_member_logs propios de main. No ejecuta Gateway; usa SQLite sintética.
+- Suite general local Windows: 708 ejecutadas, 12 fallos, 122 errores y 13 omisiones. Predominan restricciones POSIX/fcntl/getuid, ACL de temporales y SQLite abierta en limpieza. No equivale a regresión Linux aprobada ni se han ocultado pruebas. Compilación y pip check correctos en el entorno con dependencias existentes.
+- CI del SHA final: consultar después de push; el workflow issue23-selective-checks prueba separadamente el port sobre producción. La CI Linux de base e9f9f5a terminó SUCCESS (40049704649; Mensajes 40049704617).
+- Discord real de este lote, respaldo nuevo/descifrado/restauración de producción: NO REALIZADOS. El estado y bloqueo exactos están en [[ESTADO_PROYECTO]]. No confundir el respaldo histórico del 18/10 ni la autoprueba /setup con estas verificaciones.
+
 ## Custodio — pruebas de núcleo, sin acciones Discord (2026-10-23)
 
 tests/test_custodio_core.py comprueba extracción de TERMS, huella/versiones, obligatoriedad de Server Rules, fallos de payload y generación de revisión sin efectos laterales; tests/test_custodio_source.py comprueba lectura asíncrona de dos GET, fallos de API y credenciales, con dobles sin red. Confirmar CI del HEAD antes de decir SUCCESS. API REAL: continúa acreditada la prueba ciega anterior de 12 reglas en Heraldo's Lab; los módulos nuevos no se han empleado en Discord. DISCORD INTERACTIVO: no realizado. PENDIENTE: análisis de 12 reglas con contexto, relectura tras cambio, roles y permisos, canales inexistentes, duplicados y UI /setup.

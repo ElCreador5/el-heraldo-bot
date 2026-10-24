@@ -1,3 +1,11 @@
+## Continuación del encargo #23 (2026-10-23 RD / 2026-10-24 UTC)
+
+Trabajo directo en Pruebas, sin crear ramas/PR. Reconciliados los commits concurrentes de Custodio hasta bfc24ad; el código de Custodio se conserva. Detalles de implementación y bloqueo: [[ESTADO_PROYECTO]]; evidencia de pruebas: [[PRUEBAS_DISCORD]].
+
+Preservado: correcciones de relojes/concurrencia y de selectores de personalidad en bot.py; ocho regresiones; generador tools/prepare_issue23_candidate.py y CI issue23-selective-checks.yml. El generador produce únicamente un candidato OFFLINE sobre main@41f55654 y rechaza otra base; no es un publicador ni activa H-03. Resultado local del candidato: 118 pruebas correctas, sin Gateway.
+
+Siguiente paso técnico: comprobar CI del SHA final; completar sesión oficial Railway CLI (el código anterior caducó), verificar SSH con la clave dedicada existente y la identidad del volumen/DB_PATH sin imprimir secretos. Adaptar las herramientas de respaldo previas a la revisión y generación actuales: crear copia online con sqlite_recovery.create_backup, cifrar y almacenar fuera de Railway, descargar/descifrar y restaurar en SQLite aislada. Sin esa evidencia no actualizar main. Luego validar interacciones solo en Test/Lab y publicar únicamente el port probado; conservar rollback de código y comprobar runtime por SHA. No repetir investigaciones ni tratar históricos como copia vigente. Obsidian externo no conectado.
+
 ## Custodio — inicio del núcleo contextual (2026-10-23)
 
 Base: prueba ciega anterior, 12 Server Rules de Heraldo's Lab, HTTP 200. Se añadieron cuatro archivos aislados a Pruebas: custodio_core.py, custodio_source.py, tests/test_custodio_core.py y tests/test_custodio_source.py. Parseo, huella/versión, aprobación y propuestas deduplicadas son operaciones lógicas, sin conexión con bot.py, sin sanciones, sin persistir mensajes y sin enviar contenido a terceros. Reader asíncrono solo GET. Main sin cambios. CI y pruebas: consultar HEAD final; Discord interactivo NO realizado. Riesgos: API Membership Screening no documentada; intents, proveedor de análisis, privacidad y retención aún pendientes. Siguiente paso: estudiar integración AutoMod y flujo sancionador de bot.py; conectar primero un modo Observar seguro en Test tras controles de acceso y pruebas. Obsidian externo no conectado.

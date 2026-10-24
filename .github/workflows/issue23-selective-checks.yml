@@ -1,0 +1,51 @@
+name: Issue 23 - selective production candidate
+
+on:
+  push:
+    branches: [Pruebas]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selective-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install isolated test dependencies
+        run: python -m pip install -r requirements-ci.txt -r requirements-backup.txt
+      - name: Check dependencies
+        run: python -m pip check
+      - name: Read production baseline without modifying either branch
+        run: git fetch --depth=1 origin main:refs/remotes/origin/main
+      - name: Prepare selective offline candidate
+        run: python tools/prepare_issue23_candidate.py "$RUNNER_TEMP/issue23-candidate"
+      - name: Compile and exercise candidate with synthetic SQLite
+        working-directory: ${{ runner.temp }}/issue23-candidate
+        env:
+          PYTHONPATH: 'tests:.'
+        run: |
+          python -m py_compile bot.py member_exit_comments.py
+          python -m unittest -v \
+            test_personality_deadline_runtime \
+            test_verification_expiry \
+            test_verification_nh_release \
+            test_verification_notice_persistence \
+            test_verification_reconciliation \
+            test_verification_shared_times \
+            test_verification_staff_exemption \
+            test_personality_copy_layout \
+            test_personality_embed_linebreaks \
+            test_personality_recovery_dm \
+            test_personality_safety_release \
+            test_personality_setup_contract \
+            test_exit_comment_privacy_runtime \
+            test_member_exit_comment_flow \
+            test_member_exit_comments \
+            test_member_logs \
+            test_regressions

@@ -3190,8 +3190,25 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
         db_clear_tentado(guild_id, user_id)
         return "no-obligatorio"
 
-    kicked = await expel(member, report=report)
-    return "expulsado" if kicked else "pendiente"
+    # Un temporizador anterior o el chequeo masivo no pueden adelantar el plazo.
+    # Leer la marca actual también impide sancionar roles heredados sin reloj.
+    row = db_get(guild_id, user_id)
+    if row is None or row["tentado_at"] is None:
+        return "sin-plazo"
+    deadline = datetime.fromisoformat(row["tentado_at"]) + get_orientation_window(guild_id)
+    if datetime.now(timezone.utc) < deadline:
+        return "pendiente"
+    # Edad y personalidad comparten exclusión por miembro y servidor: ninguna
+    # ruta puede iniciar otra sanción mientras Discord confirma la primera.
+    key = (guild_id, user_id)
+    if key in _verification_expiry_inflight:
+        return "pendiente"
+    _verification_expiry_inflight.add(key)
+    try:
+        kicked = await expel(member, report=report)
+        return "expulsado" if kicked else "pendiente"
+    finally:
+        _verification_expiry_inflight.discard(key)
 
 
 # ---------------------------------------------------------------------------
@@ -3225,6 +3242,7 @@ async def expel(member: discord.Member, report: bool = True) -> bool:
     if kicked:
         # No resolver el plazo hasta que Discord haya confirmado la expulsión.
         db_clear_tentado(member.guild.id, member.id)
+        clear_verification_expiry(member.guild.id, member.id)
     if kicked and test_mode:
         await send_test_removal_notice(member, "KICK", dm_channel=dm_channel,
                                        allow_reentry_invite=True)
@@ -4810,13 +4828,6 @@ class HeraldoOrientationSetupView(discord.ui.View):
         self.pending_dm_template: str | None = None
         self._original = self._snapshot()
 
-    def _snapshot(self) -> dict[str, str | None]:
-        return {key: guild_config_get(self.guild_id, key) for key in (
-            "orientation_channel_id", "orientation_role_bindings",
-            "orientation_created_role_ids", "orientation_enabled",
-            "personality_required", "personality_allow_change",
-            "personality_recovery_dm_template")}
-
         self.toggle_required.label = "Expulsar si no elige: Sí" if personality_required(guild_id) else "Expulsar si no elige: No"
         self.toggle_change.label = "Cambiar elección: Sí (recomendado)" if personality_allow_change(guild_id) else "Cambiar elección: No"
 
@@ -4838,6 +4849,13 @@ class HeraldoOrientationSetupView(discord.ui.View):
         )
         role_select.callback = self.select_roles
         self.add_item(role_select)
+
+    def _snapshot(self) -> dict[str, str | None]:
+        return {key: guild_config_get(self.guild_id, key) for key in (
+            "orientation_channel_id", "orientation_role_bindings",
+            "orientation_created_role_ids", "orientation_enabled",
+            "personality_required", "personality_allow_change",
+            "personality_recovery_dm_template")}
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
@@ -13270,6 +13288,7 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
         )
         return
     clear_verification_expiry(guild_id, user_id)
+    db_clear_tentado(guild_id, user_id)
     await log_embed(
         guild, "Expulsión permanente por falta de verificación" if action == "ban" else "Expulsión por falta de verificación",
         f"{member.mention} (`{member.id}`) no completó la verificación dentro del plazo establecido.",
