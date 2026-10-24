@@ -5923,7 +5923,7 @@ class HeraldoHoneypotSetupView(discord.ui.View):
 
 
 class HoneypotRemovalSaveConfirmView(discord.ui.View):
-    """Confirma el borrador sobre la misma tarjeta y conserva permisos/controles."""
+    """Confirmación breve: solo Confirmar; al ejecutar vuelve al editor original."""
 
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
         super().__init__(timeout=300)
@@ -5937,19 +5937,6 @@ class HoneypotRemovalSaveConfirmView(discord.ui.View):
     @honeypot_operation
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.parent._save_pending_changes(interaction)
-
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
-    @honeypot_operation
-    async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer()
-        self.parent._discard_draft()
-        await self.parent._refresh(interaction)
-
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
-    @honeypot_operation
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer()
-        await self.parent._refresh(interaction)
 
 
 class HeraldoHoneypotSubView(discord.ui.View):
