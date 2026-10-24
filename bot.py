@@ -11132,7 +11132,23 @@ class HeraldoAutomodSetupView(discord.ui.View):
             view=HeraldoRaidSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Modo Custodio", style=discord.ButtonStyle.primary, row=1)
+    async def modo_custodio(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        """Configura preferencias, sin iniciar vigilancia ni sanciones."""
+        from custodio_setup import CustodioSetupView
+
+        view = CustodioSetupView(
+            self.guild_id, self.owner_id,
+            get_setting=guild_config_get,
+            save_atomic=verification_atomic_setup_save,
+            access_check=configuration_access,
+            parent_factory=lambda: HeraldoAutomodSetupView(self.guild_id, self.owner_id),
+        )
+        await interaction.response.edit_message(
+            content=view.summary(), embed=None, view=view,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
