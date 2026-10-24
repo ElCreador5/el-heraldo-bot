@@ -1,3 +1,7 @@
+## Continuidad — política universal del footer (2026-10-24)
+
+Trabajo transversal autorizado para `main`: asegurar identidad del servidor en todo embed enviado/editado, aun con footer personalizado, con ayuda de `{servidor}` y `{servericon}` en editores. Ver `AGENTS.md` UX-03C y regresiones `test_server_footer_policy.py`. Los DMs a `discord.User` sin propiedad `guild` (propietario de plantilla, sugerencias) reciben un sello explícito con el servidor conocido, y las respuestas de la revisión de sugerencias recuperan el servidor de origen. No alterar registros ni configuraciones SQLite. Confirmar CI real, estado Railway y prueba visual de `/setup`, logs y DM en Lab antes de declarar aceptación total.
+
 ## Actualizaciones directas y log único de expulsión — 2026-10-20
 
 **IMPLEMENTADO EN CANDIDATO PARA `main`**: se suprimen los dos registros de éxito por KICK de verificación para dejar la tarjeta genérica «Miembro expulsado», conservando avisos de error, «Solo registrar», y BAN sin cambio. Sin modificación de esquema, SQLite, datos ni configuración. Regresiones de contrato en `test_member_departure_cards.py`; `python-checks` se ejecuta automáticamente en push a `main`, ahora sin ser check obligatorio. **Al crear esta anotación las verificaciones y Railway todavía están pendientes; consultar el SHA y CI real tras el push.** Prueba interactiva Discord NO realizada. **Proceso administrativo simplificado:** sin PR obligatoria ni checks requeridos; continuar con pruebas, trazabilidad y respaldos proporcionados al riesgo de cada cambio.

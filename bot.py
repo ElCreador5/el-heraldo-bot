@@ -84,8 +84,9 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
      /list variables lista todas; /variables texto:… prueba un texto con datos reales.
 
 11. RESPUESTAS SIEMPRE EN EMBED
-   - Todo lo que el Heraldo envía o edita sale como embed (el texto plano se convierte) con el
-     footer {servidor} + {servericon}. Los embeds con pie propio configurado lo conservan.
+   - Todo lo que el Heraldo envía o edita en contexto de servidor incluye un embed con
+     {servidor} como nombre y {servericon} como icono del footer. Los pies personalizados
+     conservan su texto, además de la identidad obligatoria del servidor.
      Se cambia en GLOBAL_FOOTER_TEXT / GLOBAL_FOOTER_ICON.
 
 12. AUTOCOMPLETADO DE VARIABLES
@@ -4045,6 +4046,7 @@ class OrientationEmbedModal(discord.ui.Modal, title="Editar tarjeta de orientaci
         label="Footer",
         required=False,
         max_length=2048,
+        placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)",
     )
 
     def __init__(self, guild: discord.Guild) -> None:
@@ -6478,6 +6480,7 @@ class VerifyDmEditorContentModal(discord.ui.Modal):
             default=get_verify_dm_footer(guild_id),
             required=True,
             max_length=2048,
+            placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)",
         )
         self.color_input = discord.ui.TextInput(
             label="Color HEX",
@@ -6538,7 +6541,7 @@ class VerifyDmEditorVisualModal(discord.ui.Modal):
             default=get_verify_dm_footer_icon(guild_id),
             required=False,
             max_length=500,
-            placeholder="https://… o {servericon}",
+            placeholder="{servericon} = icono obligatorio del servidor",
         )
         self.add_item(self.footer_icon)
 
@@ -6670,6 +6673,7 @@ class SuggestionPanelVisualModal(discord.ui.Modal):
             default=guild_config_get(guild_id, "suggestion_panel_footer") or SUGGESTION_PANEL_FOOTER_DEFAULT,
             required=False,
             max_length=2048,
+            placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)",
         )
         self.button_input = discord.ui.TextInput(
             label="Texto del botón",
@@ -7481,6 +7485,7 @@ class LogTemplateContentModal(discord.ui.Modal):
             default=log_template_get(guild_id, category, "footer", event_key),
             required=False,
             max_length=2048,
+            placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)",
         )
         self.fields_input = discord.ui.TextInput(
             label="Campos · Nombre | Valor | inline",
@@ -11051,7 +11056,7 @@ def template_report_embed(template: discord.Template, was_dirty: bool | None, tr
     embed.add_field(name="Última sincronización", value=discord.utils.format_dt(synced_at, "f"), inline=True)
     embed.add_field(name="Usos", value=str(template.uses), inline=True)
     embed.add_field(name="Disparada por", value=trigger, inline=True)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+    embed.set_footer(text="{servidor}")
     return embed
 
 
@@ -11072,7 +11077,7 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
         # La copia programada siempre pertenece al servidor: el destinatario es
         # el propietario actual del servidor, no el usuario que configuró el comando.
         owner = await bot.fetch_user(guild.owner_id)
-        await owner.send(embed=embed)
+        await owner.send(embed=stamp_embed(embed.copy(), guild))
         sent = True
     except discord.HTTPException:
         pass  # incluye Forbidden (mensajes privados cerrados)
@@ -11219,7 +11224,7 @@ async def template_sync(interaction: discord.Interaction) -> None:
     embed = template_report_embed(template, was_dirty, "manual")
     try:
         owner = await bot.fetch_user(interaction.guild.owner_id)
-        await owner.send(embed=embed)
+        await owner.send(embed=stamp_embed(embed.copy(), interaction.guild))
         if interaction.user.id == owner.id:
             confirmation = "Plantilla sincronizada. Te envié el enlace por mensaje privado."
         else:
@@ -11332,7 +11337,7 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
     embed.add_field(name="Mensajes", value=f"{messages:,}", inline=True)
     embed.add_field(name="Racha diaria", value=f"{streak} día{'s' if streak != 1 else ''}", inline=True)
     embed.add_field(name="Roles", value=roles_text, inline=False)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+    embed.set_footer(text="{servidor}")
 
     await interaction.response.send_message(embed=embed)
 
@@ -11446,7 +11451,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         timestamp=datetime.now(timezone.utc),
     )
     embed.set_thumbnail(url=winner.display_avatar.url)
-    embed.set_footer(text="Paraíso Morboso 2026 · El Heraldo")
+    embed.set_footer(text="{servidor}")
     try:
         await channel.send(embed=embed)
     except discord.HTTPException as e:
@@ -15137,7 +15142,7 @@ class CondemnationCoreModal(discord.ui.Modal, title="Condenados · Diseño"):
         label="Pie del embed",
         required=False,
         max_length=2048,
-        placeholder="Admite variables: {servidor}, {servericon}…",
+        placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)",
     )
     button_label_input = discord.ui.TextInput(label="Texto del botón", required=False, max_length=80)
 
@@ -16122,6 +16127,7 @@ class HoneypotWarningEmbedModal(discord.ui.Modal, title="Embed personalizado del
         label="Pie del embed (opcional)",
         required=False,
         max_length=2048,
+        placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)",
     )
 
     def __init__(self, guild_id: int, owner_id: int, panel=None, panel_interaction=None) -> None:
@@ -18204,11 +18210,12 @@ bot.tree.add_command(list_group)
 # ---------------------------------------------------------------------------
 # 11. RESPUESTAS SIEMPRE EN EMBED, CON FOOTER {servidor}{servericon}
 # ---------------------------------------------------------------------------
-# Todo lo que El Heraldo envía o edita (respuestas a comandos, follow-ups, mensajes a canales y DMs)
-# pasa por aquí: el texto plano se convierte en embed y todo embed sin pie recibe el footer global
-# (nombre del servidor + su icono). Los embeds que ya traen un pie propio (el DM de verificación o el
-# aviso del honeypot, si lo configuraste) lo conservan. Los mensajes con solo archivos no se tocan.
-# Se engancha en discord.py una sola vez, así que no hay que tocar cada comando.
+# Todas las respuestas, follow-ups, mensajes de canales y DMs con un servidor identificable
+# pasan por este punto: el texto plano se convierte en embed y SIEMPRE se incorpora la
+# identidad de ese servidor en el footer. Los textos de pie personalizados se mantienen
+# como información adicional; no sustituyen el nombre ni el icono real del servidor.
+# Los mensajes con solo archivos no se tocan y no se inventa un servidor cuando un
+# DM carece de contexto identificable. Enganche central de discord.py.
 
 GLOBAL_FOOTER_TEXT = "{servidor}"
 GLOBAL_FOOTER_ICON = "{servericon}"
@@ -18229,10 +18236,31 @@ def heraldo_footer(guild: discord.Guild | None) -> tuple[str, str]:
 
 
 def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Embed:
-    if not embed.footer.text:
-        text, icon = heraldo_footer(guild)
-        if text:
-            embed.set_footer(text=text, icon_url=icon or None)
+    """Exige identidad del servidor en cada pie sin borrar su texto personalizado.
+
+    Es idempotente y mantiene la prioridad del nombre aunque un footer
+    personalizado alcance el límite de 2048 caracteres de Discord.
+    """
+    if guild is None and len(bot.guilds) == 1:
+        guild = bot.guilds[0]
+    text, icon = heraldo_footer(guild)
+    original = (embed.footer.text or "").strip()
+    if guild is None:
+        # Un DM sin servidor reconocible nunca debe atribuirse a otro servidor.
+        if not original and text:
+            embed.set_footer(text=text)
+        return embed
+    if original:
+        original = render_vars(original, VarContext(guild), 2048, plain=True).strip()
+    if original and text.casefold() in original.casefold():
+        footer = original
+    elif original:
+        footer = text + (" · " + original)[: max(0, 2048 - len(text))]
+    else:
+        footer = text
+    # El icono del servidor prevalece sobre cualquier URL guardada en plantillas
+    # antiguas. Si el servidor no tiene icono, Discord no puede mostrar uno.
+    embed.set_footer(text=footer[:2048], icon_url=icon or None)
     return embed
 
 
@@ -18256,11 +18284,11 @@ def _embedify(content, kw: dict, guild: discord.Guild | None, empty):
     has_embed = embed not in (None, _MISSING)
     has_embeds = embeds not in (None, _MISSING) and len(embeds) > 0
     if has_embed or has_embeds:
+        # Copiar evita contaminar un mismo embed reutilizado entre servidores.
         if has_embed:
-            stamp_embed(embed, guild)
+            kw["embed"] = stamp_embed(embed.copy(), guild)
         if has_embeds:
-            for e in embeds:
-                stamp_embed(e, guild)
+            kw["embeds"] = [stamp_embed(e.copy(), guild) for e in embeds]
         return content, kw
     if isinstance(content, str) and content.strip():
         kw["embed"] = stamp_embed(_content_embed(content), guild)
@@ -18329,14 +18357,23 @@ def _install_embed_hooks() -> None:
         gid = _interaction_guilds.get(getattr(self, "token", None))
         return bot.get_guild(gid) if gid else None
 
-    wrap_positional(discord.InteractionResponse, "send_message", lambda s: s._parent.guild, None)
-    wrap_edit(discord.InteractionResponse, "edit_message", lambda s: s._parent.guild)
+    wrap_positional(
+        discord.InteractionResponse, "send_message",
+        lambda s: s._parent.guild or bot.get_guild(_interaction_guilds.get(s._parent.token, 0)), None,
+    )
+    wrap_edit(
+        discord.InteractionResponse, "edit_message",
+        lambda s: s._parent.guild or bot.get_guild(_interaction_guilds.get(s._parent.token, 0)),
+    )
     wrap_positional(discord.Webhook, "send", webhook_guild, _MISSING)
     wrap_positional(discord.abc.Messageable, "send", _guild_for, None)
     wrap_edit(discord.Message, "edit", _guild_for)
     wrap_edit(discord.WebhookMessage, "edit", _guild_for)
     wrap_edit(discord.InteractionMessage, "edit", _guild_for)
-    wrap_edit(discord.Interaction, "edit_original_response", lambda s: s.guild)
+    wrap_edit(
+        discord.Interaction, "edit_original_response",
+        lambda s: s.guild or bot.get_guild(_interaction_guilds.get(s.token, 0)),
+    )
 
 
 _install_embed_hooks()
@@ -18703,10 +18740,10 @@ class EmbedAuthorFooterModal(discord.ui.Modal):
             max_length=500, placeholder="https://… o {servericon}")
         self.e_footer = discord.ui.TextInput(
             label="Pie del embed", default=data.get("footer", ""), required=False, max_length=2048,
-            placeholder="Vacío = pie del servidor")
+            placeholder="Nombre: {servidor}; icono: {servericon} (automáticos)")
         self.e_footer_icon = discord.ui.TextInput(
             label="Icono del pie (URL o variable)", default=data.get("footer_icon", ""), required=False,
-            max_length=500, placeholder="https://… o {servericon}")
+            max_length=500, placeholder="{servericon} = icono obligatorio del servidor")
         self.e_content = discord.ui.TextInput(
             label="Texto fuera del embed (menciones)", style=discord.TextStyle.paragraph,
             default=data.get("content", ""), required=False, max_length=2000,
@@ -19317,7 +19354,9 @@ class SuggestionModal(discord.ui.Modal, title="Nueva sugerencia"):
         for reviewer_id in reviewer_ids:
             try:
                 reviewer = await bot.fetch_user(reviewer_id)
-                message = await reviewer.send(embed=embed, view=SuggestionReviewView(suggestion_id))
+                message = await reviewer.send(
+                    embed=stamp_embed(embed.copy(), guild), view=SuggestionReviewView(suggestion_id)
+                )
                 suggestion_set_review_message(suggestion_id, reviewer_id, message.channel.id, message.id)
                 sent += 1
             except discord.HTTPException:
@@ -19416,6 +19455,10 @@ async def finalize_suggestion_decision(
     if row is None:
         await _suggestion_interaction_reply(interaction, "Error: Esa sugerencia ya no existe.", ephemeral=True)
         return
+    # Panel de revisión en DM: recuperar el servidor de origen al responder.
+    guild = bot.get_guild(int(row["guild_id"]))
+    if guild is not None:
+        _interaction_guilds[interaction.token] = guild.id
     if row["status"] != SUGGESTION_STATUS_PENDING:
         await _suggestion_interaction_reply(interaction, "Información: Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
         return
@@ -19428,7 +19471,6 @@ async def finalize_suggestion_decision(
         await _suggestion_interaction_reply(interaction, "Información: Esta sugerencia ya fue resuelta por otra persona.", ephemeral=True)
         return
 
-    guild = bot.get_guild(int(row["guild_id"]))
     requester = None
     try:
         requester = await bot.fetch_user(int(row["user_id"]))
@@ -19456,7 +19498,7 @@ async def finalize_suggestion_decision(
     dm_ok = False
     if requester is not None:
         try:
-            await requester.send(embed=result_embed)
+            await requester.send(embed=stamp_embed(result_embed.copy(), guild))
             dm_ok = True
         except discord.HTTPException:
             pass
@@ -19480,7 +19522,7 @@ async def finalize_suggestion_decision(
             if channel is None:
                 channel = await bot.fetch_channel(int(review_row["channel_id"]))
             message = await channel.fetch_message(int(review_row["message_id"]))
-            await message.edit(embed=final_embed, view=None)
+            await message.edit(embed=stamp_embed(final_embed.copy(), guild), view=None)
         except discord.HTTPException:
             pass
 

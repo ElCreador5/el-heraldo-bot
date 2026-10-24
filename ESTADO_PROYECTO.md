@@ -1,3 +1,7 @@
+## Identidad obligatoria del footer en toda salida — 2026-10-24
+
+**Preparado para publicación en `main`**: `stamp_embed` aplica el nombre/icono reales del servidor también sobre pies personalizados, conserva el texto configurable y utiliza copias para evitar que una plantilla reutilizada contamine otros servidores. Se incorporan pistas en los editores y regresiones globales. No hay migración ni modificación de SQLite. Las pruebas automatizadas y el despliegue deben comprobarse en el commit publicado; la comprobación visual en Discord Lab continúa pendiente.
+
 ## Actualizaciones directas y log único de expulsión — 2026-10-20
 
 **IMPLEMENTADO EN CANDIDATO PARA `main`**: se suprimen los dos registros de éxito por KICK de verificación para dejar la tarjeta genérica «Miembro expulsado», conservando avisos de error, «Solo registrar», y BAN sin cambio. Sin modificación de esquema, SQLite, datos ni configuración. Regresiones de contrato en `test_member_departure_cards.py`; `python-checks` se ejecuta automáticamente en push a `main`, ahora sin ser check obligatorio. **Al crear esta anotación las verificaciones y Railway todavía están pendientes; consultar el SHA y CI real tras el push.** Prueba interactiva Discord NO realizada. **Proceso administrativo simplificado:** sin PR obligatoria ni checks requeridos; continuar con pruebas, trazabilidad y respaldos proporcionados al riesgo de cada cambio.
