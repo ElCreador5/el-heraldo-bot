@@ -62,6 +62,11 @@ def private_report_channel(channel: discord.TextChannel) -> bool:
             continue
         if channel.overwrites_for(role).view_channel is True:
             return False
+    # También se prohíben excepciones directas a miembros ordinarios.
+    for target, overwrite in channel.overwrites.items():
+        if isinstance(target, discord.Member) and overwrite.view_channel is True:
+            if target.id not in {channel.guild.owner_id, getattr(channel.guild.me, "id", None)}:
+                return False
     return True
 
 
