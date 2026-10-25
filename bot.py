@@ -12775,8 +12775,9 @@ class HeraldoLanguageView(discord.ui.View):
         selector = discord.ui.Select(
             placeholder=i18n.translate(self.original, "language.select"),
             options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
-                                          description=("Estado: parcial" if key in i18n.PARTIAL_LOCALES
-                                                       else "Estado: completo"),
+                                          description=("Traducción parcial: algunos mensajes siguen en español"
+                                                       if key in i18n.PARTIAL_LOCALES
+                                                       else "Traducción completa"),
                                           default=key == self.pending)
                      for key in sorted(LANGUAGE_READY)],
             row=0,
