@@ -12736,6 +12736,100 @@ class HeraldoDateFormatSetupView(discord.ui.View):
         await interaction.response.edit_message(content="Edición cancelada. No se guardaron cambios.", view=None)
 
 
+
+LANGUAGE_CHOICES = {"es-419": "Español (Latinoamérica)", "en-US": "English (US)", "pt-BR": "Português (Brasil)"}
+# No publicar otro idioma hasta verificar todos los textos de todos los módulos.
+LANGUAGE_READY = frozenset({"es-419"})
+
+
+def guild_language(guild_id: int) -> str:
+    configured = guild_config_get(guild_id, "language") or "es-419"
+    return configured if configured in LANGUAGE_READY else "es-419"
+
+
+def language_panel_text(guild_id: int, selected: str | None = None) -> str:
+    current = guild_language(guild_id)
+    text = ("**El Heraldo · Idioma**\n\n"
+            "Configura el idioma del bot para este servidor, incluidos los registros, "
+            "los avisos y los mensajes privados asociados.\n\n"
+            f"**Actual:** {LANGUAGE_CHOICES[current]}\n")
+    if selected is not None and selected != current:
+        text += f"**Sin guardar:** {LANGUAGE_CHOICES[selected]}\n"
+    return text + ("\nLos idiomas adicionales aparecerán cuando sus traducciones "
+                   "estén completas y verificadas. Los textos personalizados se conservan.")
+
+
+class HeraldoLanguageView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, *, from_setup: bool = False):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.from_setup = from_setup
+        self.original = guild_language(guild_id)
+        self.pending = self.original
+        selector = discord.ui.Select(
+            placeholder="Selecciona el idioma del servidor",
+            options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
+                                          description="Idioma completo y verificado",
+                                          default=key == self.pending)
+                     for key in sorted(LANGUAGE_READY)],
+            row=0,
+        )
+        selector.callback = self.select_language
+        self.add_item(selector)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    async def select_language(self, interaction: discord.Interaction) -> None:
+        data = (interaction.data or {}).get("values") or []
+        value = str(data[0]) if data else ""
+        if value not in LANGUAGE_READY:
+            await interaction.response.send_message(
+                "Este idioma todavía no está disponible.", ephemeral=True)
+            return
+        self.pending = value
+        for item in self.children:
+            if isinstance(item, discord.ui.Select):
+                for option in item.options:
+                    option.default = option.value == value
+        await interaction.response.edit_message(
+            content=language_panel_text(self.guild_id, value), view=self)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=1)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if guild_language(self.guild_id) != self.original:
+            await interaction.response.edit_message(
+                content="El idioma cambió en otra sesión. Abre nuevamente el editor.", view=None)
+            return
+        if self.pending not in LANGUAGE_READY:
+            await interaction.response.send_message(
+                "Este idioma todavía no está disponible.", ephemeral=True)
+            return
+        if self.pending != self.original:
+            guild_config_set(self.guild_id, "language", self.pending)
+        await interaction.response.edit_message(
+            content=language_panel_text(self.guild_id) + "\n\n**Cambios guardados.**",
+            view=HeraldoLanguageView(self.guild_id, self.owner_id,
+                                     from_setup=self.from_setup))
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=1)
+    async def discard(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content=language_panel_text(self.guild_id),
+            view=HeraldoLanguageView(self.guild_id, self.owner_id,
+                                     from_setup=self.from_setup))
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.from_setup:
+            await interaction.response.edit_message(
+                content=heraldo_setup_home_content(),
+                view=HeraldoSetupView(self.guild_id, self.owner_id))
+        else:
+            await interaction.response.edit_message(
+                content="Configuración de idioma cerrada.", view=None)
+
+
 class HeraldoSetupView(discord.ui.View):
     """Navegación directa: abrir un módulo al elegirlo, sin pasos redundantes."""
 
@@ -12748,7 +12842,7 @@ class HeraldoSetupView(discord.ui.View):
         ("logging", "Logs", "Eventos y canales de registros"),
         ("messages", "Mensajes", "Plantillas y mensajes predeterminados"),
         ("verification", "Verification", "Verificación y personalidad"),
-        ("language", "Idioma", "Configuración del idioma (pendiente)"),
+        ("language", "Idioma", "Idioma del bot en este servidor"),
         ("date_format", "Formato de fecha", "Fechas y horas en los mensajes del bot"),
     )
 
@@ -12770,7 +12864,7 @@ class HeraldoSetupView(discord.ui.View):
                     description=description,
                 )
                 for key, label, description in self.MODULES
-                if key not in {"role_connections", "language"}
+                if key not in {"role_connections"}
             ],
         )
         select.callback = self.select_module
@@ -12841,11 +12935,8 @@ class HeraldoSetupView(discord.ui.View):
             content = verification_hub_content(self.guild_id)
             view = HeraldoVerificationHubView(self.guild_id, self.owner_id)
         elif selected == "language":
-            content = (
-                "**El Heraldo · Idioma**\n\n"
-                "Módulo reservado para la internacionalización del bot."
-            )
-            view = HeraldoPendingSetupModuleView(self.guild_id, self.owner_id, "Idioma")
+            content = language_panel_text(self.guild_id)
+            view = HeraldoLanguageView(self.guild_id, self.owner_id, from_setup=True)
         else:
             await interaction.response.send_message("Módulo no válido.", ephemeral=True)
             return
@@ -13067,6 +13158,19 @@ async def heraldo_edittemplate_autocomplete(interaction: discord.Interaction, cu
     return [app_commands.Choice(name=t["name"][:100], value=t["name"][:100])
             for t in heraldo_template_list(interaction.guild_id)
             if current.casefold() in t["name"].casefold()][:25]
+
+
+@bot.tree.command(name="language", description="Configura el idioma de El Heraldo en este servidor.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+async def language(interaction: discord.Interaction) -> None:
+    if not await configuration_access(interaction):
+        return
+    await interaction.response.send_message(
+        language_panel_text(interaction.guild.id),
+        view=HeraldoLanguageView(interaction.guild.id, interaction.user.id),
+        ephemeral=True,
+    )
 
 
 @bot.tree.command(name="setup", description="Configura las opciones generales de El Heraldo en este servidor.")
