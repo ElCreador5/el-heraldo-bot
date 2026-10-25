@@ -3559,12 +3559,9 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
     return "\n".join(lines)
 
 
-def heraldo_setup_home_content() -> str:
-    return (
-        "**El Heraldo · Configuración**\n\n"
-        "Selecciona una sección y se abrirá directamente. Guarda los cambios solo cuando estés conforme.\n"
-        "Puedes volver a este menú desde las opciones de navegación de cada módulo."
-    )
+def heraldo_setup_home_content(guild_id: int | None = None) -> str:
+    locale = guild_language(guild_id) if guild_id is not None else "es-419"
+    return i18n.translate(locale, "setup.home")
 
 
 async def heraldo_setup_go_home(
@@ -3572,7 +3569,7 @@ async def heraldo_setup_go_home(
 ) -> None:
     await interaction.response.defer()
     await interaction.edit_original_response(
-        content=heraldo_setup_home_content(),
+        content=heraldo_setup_home_content(guild_id),
         embed=None,
         view=HeraldoSetupView(guild_id, owner_id),
     )
@@ -3742,7 +3739,7 @@ async def configuration_access(interaction, guild_id=None, owner_id=None) -> boo
              and bool(getattr(getattr(interaction.user, "guild_permissions", None), "manage_guild", False)))
     if not valid:
         sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
-        await sender("Acceso denegado. Se requiere Gestionar servidor y una sesión propia en este servidor.", ephemeral=True)
+        await sender(i18n.translate(guild_language(interaction.guild.id) if interaction.guild else "es-419", "setup.access_denied"), ephemeral=True)
     return valid
 
 
@@ -12835,7 +12832,7 @@ class HeraldoLanguageView(discord.ui.View):
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.from_setup:
             await interaction.response.edit_message(
-                content=heraldo_setup_home_content(),
+                content=heraldo_setup_home_content(self.guild_id),
                 view=HeraldoSetupView(self.guild_id, self.owner_id))
         else:
             await interaction.response.edit_message(
@@ -13195,7 +13192,7 @@ async def setup(interaction: discord.Interaction) -> None:
         return
 
     await interaction.response.send_message(
-        heraldo_setup_home_content(),
+        heraldo_setup_home_content(guild.id),
         view=HeraldoSetupView(guild.id, interaction.user.id),
         ephemeral=True,
     )
