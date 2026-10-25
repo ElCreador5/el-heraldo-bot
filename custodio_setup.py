@@ -186,10 +186,23 @@ class CustodioSetupView(discord.ui.View):
         await interaction.edit_original_response(content=view.summary(), view=view, embed=None)
 
     async def open_rule_actions(self, interaction: discord.Interaction):
-        """Abre las plantillas por categoría sin guardar ni sancionar."""
-        from custodio_rule_actions_setup import CustodioRuleActionsView
-        view = CustodioRuleActionsView(self)
-        await interaction.response.edit_message(
+        """Carga únicamente reglas oficiales del servidor actual."""
+        await interaction.response.defer(thinking=False)
+        from custodio_server_rule_actions_setup import CustodioServerRuleActionsView
+        try:
+            snapshot = await load_server_rules(
+                self.guild_id, os.environ.get("DISCORD_TOKEN", "")
+            )
+        except (RulesUnavailable, ValueError):
+            await interaction.edit_original_response(
+                content=self.summary() + "\n\n**Acciones no disponibles:** "
+                        "no fue posible verificar las reglas oficiales del servidor. "
+                        "No se mostrarán plantillas ni reglas inventadas.",
+                view=self, embed=None,
+            )
+            return
+        view = CustodioServerRuleActionsView(self, snapshot)
+        await interaction.edit_original_response(
             content=view.summary(), view=view, embed=None,
         )
 
