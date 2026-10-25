@@ -1,3 +1,7 @@
+## 2026-10-25 — Reanudación de revisión editorial i18n
+
+Revisadas 1827 de 3000 claves, con 1173 pendientes. Corregidos sentidos administrativos, sanciones, estados, cargos, borradores, pies, fechas y ayudas en en-US/pt-BR. Identificadores, comandos, variables, nombres reales y textos personalizados se conservan. Los idiomas continúan parciales. El despliegue de Test permanece fijado en `74c2adfb2f101a5ad16af8d2fb2347947808437c` (Railway SUCCESS, deployment `d18cce3c-efa3-4392-8067-57d585804b8d`); estos cambios editoriales se publican como punto de control y todavía no sustituyen ese despliegue. Revisión integral y aceptación interactiva pendientes.
+
 ## 2026-10-25 — i18n transversal en Pruebas
 
 Internacionalización extendida a bot y módulos auxiliares: 3000 claves para es-419/en-US/pt-BR; selector de setup corregido; contexto por servidor en callbacks, DMs, filas persistidas y tareas; serialización de componentes de clase y entradas localizadas con valores internos estables. Preferencia única en SQLite, guardar explícito y footer Lab conservados. SQL sin cambios. Catálogos parciales: 397 claves revisadas explícitamente y 2603 en cola editorial; no se declara 100 %. Ver `docs/I18N_COVERAGE.md` y `locales/editorial_status.json`.
