@@ -27,7 +27,7 @@ class Catalog:
 
 CATALOGS = {
     "es-419": Catalog("es-419", {
-        "setup.home": "**El Heraldo · Configuración**\\\n\\\nSelecciona una sección y se abrirá directamente. Guarda los cambios solo cuando estés conforme.\\\nPuedes volver a este menú desde las opciones de navegación de cada módulo.",
+        "setup.home": "**El Heraldo · Configuración**\n\nSelecciona una sección y se abrirá directamente. Guarda los cambios solo cuando estés conforme.\nPuedes volver a este menú desde las opciones de navegación de cada módulo.",
         "setup.access_denied": "Acceso denegado. Se requiere Gestionar servidor y una sesión propia en este servidor.",
         "language.title": "El Heraldo · Idioma",
         "language.description": "Configura el idioma del bot para este servidor, incluidos los registros, los avisos y los mensajes privados asociados.",
@@ -45,7 +45,7 @@ CATALOGS = {
         "language.back": "Volver",
     }),
     "en-US": Catalog("en-US", {
-        "setup.home": "**El Heraldo · Settings**\\\n\\\nSelect a section to open it directly. Save changes only when you are satisfied.\\\nYou can return to this menu from each module's navigation options.",
+        "setup.home": "**El Heraldo · Settings**\n\nSelect a section to open it directly. Save changes only when you are satisfied.\nYou can return to this menu from each module's navigation options.",
         "setup.access_denied": "Access denied. You need Manage Server permission and must use your own session in this server.",
         "language.title": "El Heraldo · Language",
         "language.description": "Configure the bot's language for this server, including logs, notices, and associated direct messages.",
@@ -63,7 +63,7 @@ CATALOGS = {
         "language.back": "Back",
     }),
     "pt-BR": Catalog("pt-BR", {
-        "setup.home": "**El Heraldo · Configurações**\\\n\\\nSelecione uma seção para abri-la diretamente. Salve as alterações somente quando estiver satisfeito.\\\nVocê pode voltar a este menu pelas opções de navegação de cada módulo.",
+        "setup.home": "**El Heraldo · Configurações**\n\nSelecione uma seção para abri-la diretamente. Salve as alterações somente quando estiver satisfeito.\nVocê pode voltar a este menu pelas opções de navegação de cada módulo.",
         "setup.access_denied": "Acesso negado. É necessário ter a permissão Gerenciar Servidor e usar sua própria sessão neste servidor.",
         "language.title": "El Heraldo · Idioma",
         "language.description": "Configure o idioma do bot neste servidor, incluindo registros, avisos e mensagens privadas relacionadas.",
