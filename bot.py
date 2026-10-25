@@ -12778,9 +12778,10 @@ class HeraldoLanguageView(discord.ui.View):
         selector = discord.ui.Select(
             placeholder=i18n.translate(self.original, "language.select"),
             options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
-                                          description=("Otras funciones del bot todavía pueden aparecer en español."
-                                                       if key in i18n.PARTIAL_LOCALES
-                                                       else None),
+                                          description=({
+                                              "en-US": "Other bot features may appear in Spanish. In development.",
+                                              "pt-BR": "Outras funções do bot podem aparecer em espanhol. Em desenvolvimento.",
+                                          }.get(key)),
                                           default=key == self.pending)
                      for key in sorted(LANGUAGE_READY)],
             row=0,
