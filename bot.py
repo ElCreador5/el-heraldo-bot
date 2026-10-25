@@ -12812,7 +12812,7 @@ class HeraldoLanguageView(discord.ui.View):
             view=HeraldoLanguageView(self.guild_id, self.owner_id,
                                      from_setup=self.from_setup))
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=1)
     async def discard(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(
             content=language_panel_text(self.guild_id),
