@@ -1,5 +1,6 @@
 """Componentes por plantilla: definiciones limitadas y ejecución confirmada."""
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
+from heraldo_i18n import join_text as _i18n_join
 import copy
 import json
 import time
@@ -15,9 +16,9 @@ def describe_actions(actions):
     for index, action in enumerate(actions, 1):
         details = [f"{key}: {action[key]}" for key in ('rol', 'plantilla', 'canal') if key in action]
         if action['tipo'] == 'respuesta':
-            details.append('privada' if action.get('efimera', True) else _t('text.6cf9a6ab18b23c'))
-        lines.append(f"{index}. {action['tipo']}" + (' — ' + ', '.join(details) if details else _t('text.eebdf2d01065df')))
-    return '\n'.join(lines)
+            details.append(_t('common.private') if action.get('efimera', True) else _t('text.6cf9a6ab18b23c'))
+        lines.append(f"{index}. {action['tipo']}" + (' — ' + _i18n_join(', ', details) if details else _t('text.eebdf2d01065df')))
+    return _i18n_join('\n', lines)
 
 
 def validate(data):
@@ -216,7 +217,7 @@ class ActionConfirm(discord.ui.View):
                 conn.close()
             if outcome != 'ok':
                 break  # Resultado parcial explícito; no ejecutar dependencias de una acción fallida.
-        await interaction.edit_original_response(content='\n'.join(results)[:1900], view=None,
+        await interaction.edit_original_response(content=_i18n_join('\n', results)[:1900], view=None,
                                                   allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger)

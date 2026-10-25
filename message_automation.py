@@ -1,5 +1,6 @@
 """Programación persistente de plantillas, con confirmación y ejecución conservadora."""
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
+from heraldo_i18n import join_text as _i18n_join
 import json
 import copy
 import io
@@ -20,7 +21,7 @@ STICKY_KEY = 'message_stickies'
 
 @_i18n_context
 async def send_report(interaction, lines, empty):
-    text = '\n'.join(lines) or empty
+    text = _i18n_join('\n', lines) or empty
     if len(text) <= 1900:
         await interaction.response.send_message(text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
         return

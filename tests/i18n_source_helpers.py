@@ -16,6 +16,11 @@ import heraldo_i18n
 class SourcePresentation(ast.NodeTransformer):
     def visit_Call(self, node):
         node = self.generic_visit(node)
+        if (isinstance(node.func, ast.Name) and node.func.id == '_i18n_join'
+                and len(node.args) == 2):
+            return ast.copy_location(ast.Call(
+                func=ast.Attribute(value=node.args[0], attr='join', ctx=ast.Load()),
+                args=[node.args[1]], keywords=[]), node)
         if (node.args and isinstance(node.args[0], ast.Constant)
                 and ((isinstance(node.func, ast.Name) and node.func.id == '_i18n_variants')
                      or (isinstance(node.func, ast.Attribute) and node.func.attr == 'variants'
@@ -63,7 +68,7 @@ def semantic_source(source):
     tree = ast.parse(source)
     parents = {id(child): parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
     calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
-             and isinstance(node.func, ast.Name) and node.func.id == '_t']
+             and isinstance(node.func, ast.Name) and node.func.id in {'_t', '_i18n_join'}]
     chosen = {id(node) for node in calls}
     lines = source.splitlines(keepends=True)
     offsets, position = [], 0

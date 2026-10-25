@@ -135,6 +135,71 @@ class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
                                                  send_modal=AsyncMock(), defer=AsyncMock(), is_done=lambda: False),
                   followup=NS(send=AsyncMock()), edit_original_response=AsyncMock())
 
+    async def test_global_labels_join_in_the_active_guild_language(self):
+        # POLICY_ACTIONS is constructed at import time, before a guild is known.
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            view = b.HeraldoWarningLimitSelectView(self.guild.id, self.owner)
+            view.enabled_actions = {row[0] for row in view.POLICY_ACTIONS}
+            rendered = view._content()
+            expected = ', '.join(i18n.translate(locale, label.key)
+                                 for _, label, _ in view.POLICY_ACTIONS)
+            self.assertIn(expected, rendered)
+
+    async def test_nested_message_editors_use_the_server_language(self):
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            expected = i18n.translate(locale, 'setup.module.verification.label')
+            view = b.HeraldoMessagesSetupView(self.guild.id, self.owner)
+            option = next(x for x in view.panel_select.options if x.value == 'verification')
+            self.assertEqual(str(option.label), expected)
+            view = b.HeraldoMessagesView(self.guild.id, self.owner)
+            serialized = list(labels(view.to_components()))
+            self.assertIn(('label', expected), serialized)
+
+    async def test_all_registered_setup_builders_run_in_each_language(self):
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            baseline = sqlite_snapshot()
+            self.assertEqual(b.validate_setup_view_layouts(self.guild.id), [], locale)
+            self.assertEqual(sqlite_snapshot(), baseline, locale)
+
+    async def test_owned_text_operators_preserve_custom_text_and_type_errors(self):
+        own = i18n.text('language.saved')
+        custom = 'Cambios guardados.'
+        self.choose('pt-BR')
+        with i18n.use_guild(self.guild.id):
+            expected = i18n.translate('pt-BR', 'language.saved')
+            self.assertEqual(own + '!', expected + '!')
+            self.assertEqual('>' + own, '>' + expected)
+            self.assertEqual(i18n.join_text(' / ', [own, custom]), expected + ' / ' + custom)
+            with self.assertRaises(TypeError):
+                i18n.join_text(', ', [own, 42])
+            with self.assertRaises(TypeError):
+                own + 42
+
+    async def test_internal_verification_states_and_variable_aliases_never_translate(self):
+        member = NS(roles=[])
+        guild = NS(id=self.guild.id, get_member=lambda _: member)
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            with patch.object(b, 'condemnation_get', return_value=None), \
+                 patch.object(b.bot, 'get_guild', return_value=None):
+                self.assertEqual(await b.evaluate_member(self.guild.id, 20), 'sin-guild')
+            with patch.object(b, 'condemnation_get', return_value=None), \
+                 patch.object(b.bot, 'get_guild', return_value=guild), \
+                 patch.object(b, 'verification_is_exempt', return_value=False), \
+                 patch.object(b, 'hp_punish_role_id', return_value=0), \
+                 patch.object(b, 'get_eval_role_ids', return_value=set()), \
+                 patch.object(b, 'orientation_enabled', return_value=True), \
+                 patch.object(b, 'personality_required', return_value=True), \
+                 patch.object(b, 'db_get', return_value=None):
+                self.assertEqual(await b.evaluate_member(self.guild.id, 20), 'sin-plazo')
+            aliases = next(row[2] for row in b.VARIABLES
+                           if row[1] == 'servidor_dueno_mencion')
+            self.assertEqual(aliases, ('dueno', 'dueño', 'owner'))
+            self.assertTrue(all(type(alias) is str for alias in aliases))
+
     async def test_setup_selector_uses_guild_language_and_keeps_module_ids(self):
         expected = {row[0] for row in b.HeraldoSetupView.MODULES} - {'role_connections'}
         for locale in i18n.TARGET_LOCALES:

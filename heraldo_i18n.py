@@ -241,6 +241,12 @@ class DeferredText(str):
     def __getitem__(self, key):
         return str(self)[key]
 
+    def __add__(self, other):
+        return str(self) + (str(other) if isinstance(other, DeferredText) else other)
+
+    def __radd__(self, other):
+        return other + str(self)
+
     def format(self, *args, **kwargs):
         return str(self).format(*args, **kwargs)
 
@@ -265,6 +271,12 @@ def text(key, **variables):
     if key not in CATALOGS[DEFAULT_LOCALE].messages:
         raise TranslationUnavailable(f"Traducción faltante: {key}")
     return DeferredText(key, variables, current_locale())
+
+
+def join_text(separator, values):
+    """Unir textos propios en el contexto actual, conservando texto libre."""
+    return separator.join(str(value) if isinstance(value, DeferredText) else value
+                          for value in values)
 
 
 def variants(key):

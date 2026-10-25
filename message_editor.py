@@ -1,5 +1,6 @@
 """Editor visual de borradores; ninguna modificación persiste sin confirmación."""
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
+from heraldo_i18n import join_text as _i18n_join
 import copy
 import json
 import discord
@@ -174,7 +175,7 @@ class VisualEditor(discord.ui.View):
     def summary(self):
         fields = self.draft['embeds'][self.index].get('fields', []) if self.draft['embeds'] else []
         return (_t('text.80a8aaa3381b15', p0=f"{discord.utils.escape_markdown(self.original['name'])}", p1=f"{len(self.draft['embeds'])}", p2=f"{(self.index + 1 if self.draft['embeds'] else _t('text.3f695d04348e0b'))}") +
-                '\n'.join(_t('text.a677a44e56fbba', p0=f'{i + 1}', p1=f"{discord.utils.escape_markdown(x['name'])}") for i, x in enumerate(fields)))[:1900]
+                _i18n_join('\n', (_t('text.a677a44e56fbba', p0=f'{i + 1}', p1=f"{discord.utils.escape_markdown(x['name'])}") for i, x in enumerate(fields))))[:1900]
 
     @_i18n_context
     def update_selectors(self):

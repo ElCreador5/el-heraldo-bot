@@ -5,6 +5,7 @@ activan supervisión. Todos los cambios requieren una segunda confirmación.
 """
 from __future__ import annotations
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, variants as _i18n_variants
+from heraldo_i18n import join_text as _i18n_join
 
 import os
 from typing import Callable, Any
@@ -143,12 +144,12 @@ class CustodioSetupView(discord.ui.View):
                 _t('text.ac661742a1c744', p0=f'{DISPLAY[KEY_SENSITIVITY][self.pending_sensitivity]}')
                 if self.pending_sensitivity != existing.sensitivity
                 else _t('text.196bb0724613d5')
-                if self._raw_changes() else 'Ninguno.'
+                if self._raw_changes() else _t('common.none_sentence')
             ),
             "",
             _t('text.b74d22c0bda1ce'),
         ]
-        return "\n".join(lines)
+        return _i18n_join("\n", lines)
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -376,7 +377,7 @@ class CustodioReportChannelConfirmView(discord.ui.View):
         self.parent._sync_controls()
         await interaction.edit_original_response(
             content=self.parent.summary() + _t('text.308e703a90bc13', p0=f'{channel.mention}')
-                    + ("creado y vinculado." if created else _t('text.a1315642c3cc9a'))
+                    + (_t("common.created_linked") if created else _t('text.a1315642c3cc9a'))
                     + _t('text.e63a066c01112a'),
             view=self.parent, embed=None,
         )
@@ -408,10 +409,10 @@ class CustodioRulesView(discord.ui.View):
 
     @_i18n_context
     def summary(self) -> str:
-        rules = "\n".join(
+        rules = _i18n_join("\n", (
             f"**{index}.** {rule[:600]}" + ("…" if len(rule) > 600 else "")
             for index, rule in enumerate(self.snapshot.rules, 1)
-        )
+        ))
         # Mensajes de Discord tienen un límite de 2000 caracteres.
         if len(rules) > 1300:
             rules = rules[:1290].rsplit("\n", 1)[0] + _t('text.233e756c692ec6')
@@ -427,7 +428,7 @@ class CustodioRulesView(discord.ui.View):
         # Nunca se pasa texto a un servicio externo; IA permanece apagada.
         result = prepare_rule_analysis(
             config=CustodioAIConfig(), rules_active=True,
-            administrator_requested=True, text="\n".join(self.snapshot.rules),
+            administrator_requested=True, text=_i18n_join("\n", self.snapshot.rules),
         )
         if result["status"] != "manual_review":
             raise RuntimeError(_t('text.85ab1149c4ef10'))

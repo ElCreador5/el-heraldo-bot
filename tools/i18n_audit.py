@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-HUMAN = re.compile(r'[áéíóúñÁÉÍÓÚÑ¿¡]|\b(?:el|la|los|las|para|sin|con|del|selecciona|guardar|volver|cancelar|cerrar|publicar|no|sí|activo|desactivado|miembro|canal|servidor)\b', re.I)
+HUMAN = re.compile(r'[áéíóúñÁÉÍÓÚÑ¿¡]|\b(?:el|la|los|las|para|sin|con|del|selecciona|guardar|volver|cancelar|cerrar|publicar|no|sí|activo|desactivado|miembro|canal|servidor|ninguno|ninguna|privada|privado|verificar|verificacion|condenado|borrador|activado|pendiente|expirado|asignado|actualizado|retirado|general|restaurado|creado|eliminado|modificado|reutilizado|reportado|rechazado|aceptado)\b', re.I)
 SQL = ('SELECT ', 'INSERT ', 'UPDATE ', 'DELETE ', 'CREATE ', 'ALTER ', 'PRAGMA ', 'WITH ', 'DROP ', 'ON ', 'WHERE ', 'AND ', 'FROM ', 'VALUES ', 'BEGIN ', 'ORDER BY ', ') VALUES ')
 
 
@@ -66,6 +66,11 @@ def audit(root=ROOT):
         raw = file.read_text(encoding='utf-8')
         found.extend(findings(raw, file.name))
         for node in ast.walk(ast.parse(raw)):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == '_t' and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)):
+                used.add(node.args[0].value)
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 if node.value.startswith(('text.', 'setup.', 'language.', 'common.', 'access.', 'personality.', 'suggestion.', 'input.', 'footer.')):
                     used.add(node.value)

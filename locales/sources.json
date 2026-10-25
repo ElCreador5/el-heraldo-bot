@@ -2983,7 +2983,13 @@
     "text.5bc44882e1a920": "0 = desactivar",
     "text.380c34da780c51": "Condenado",
     "text.742321065c0d4b": "https://… o {serverbanner}",
-    "text.0b202b1dc653c4": "https://… o {servericon}"
+    "text.0b202b1dc653c4": "https://… o {servericon}",
+    "common.none_sentence": "Ninguno.",
+    "common.pending_suffix": " (pendiente)",
+    "common.private": "privada",
+    "common.created_linked": "creado y vinculado.",
+    "common.everyone_role": "es @everyone",
+    "reaction.access_mode": "Modo de acceso"
   },
   "uses": {
     "text.d93c9b9a2a26ac": [

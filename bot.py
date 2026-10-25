@@ -106,6 +106,7 @@ Persistencia: SQLite (DB_PATH; en Railway, un Volume para sobrevivir deploys).
 Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 """
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, variants as _i18n_variants
+from heraldo_i18n import join_text as _i18n_join
 
 import asyncio
 import contextvars
@@ -1193,7 +1194,7 @@ def _join_roles_render(guild: discord.Guild, role_ids: list[int]) -> str:
             parts.append(_t('text.c72fe7d6a2210b', p0=f'{role.mention}', p1=f'{issue}'))
         else:
             parts.append(role.mention)
-    return ", ".join(parts)
+    return _i18n_join(", ", parts)
 
 
 @_i18n_context
@@ -1213,7 +1214,7 @@ def join_roles_users_summary(guild: discord.Guild) -> str:
         lines.append(_t('text.e272dd3f4d0846', p0=f'{len(mapping) - 15}'))
     return (
         _t('text.60a553467bfe99')
-        + ("\n".join(lines) if lines else _t('text.6405bfc80508ea'))
+        + (_i18n_join("\n", lines) if lines else _t('text.6405bfc80508ea'))
         + _t('text.d3555de6d2fdb9', p0=f"{(_t('common.yes') if join_roles_remove_specific_after_join(guild.id) else _t('common.no'))}")
     )
 
@@ -1782,7 +1783,7 @@ def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
     if not orientation_enabled(guild.id):
         description = _t('text.83fd08a71de01a') + description
     if option_lines:
-        description += "\n\n" + "\n".join(option_lines)
+        description += "\n\n" + _i18n_join("\n", option_lines)
     description += "\n\n" + get_orientation_embed_details(guild.id).strip()
 
     embed = discord.Embed(
@@ -1809,7 +1810,7 @@ def orientation_setup_summary(guild: discord.Guild) -> str:
         role = guild.get_role(int(binding["role_id"]))
         emoji = str(binding["emoji"])
         roles.append(f"{emoji} {role.mention if role else _t('text.fb332e4bd7c06f')}")
-    role_text = "\n".join(roles) if roles else _t('text.cb3fa301cfe9b3')
+    role_text = _i18n_join("\n", roles) if roles else _t('text.cb3fa301cfe9b3')
     return (
         _t('text.22377b48925eb7', p0=f"{(_t('text.3b9c0b63f4d7b0') if enabled else _t('text.987d904d7afee2'))}", p1=f"{(_t('common.yes') if required else _t('common.no'))}", p2=f"{(_t('text.f3fb44a969080b') if personality_allow_change(guild.id) else _t('text.e252efe6974743'))}", p3=f"{(channel.mention if isinstance(channel, discord.TextChannel) else _t('text.9c8a4f4d30f906'))}", p4=f"{(_t('common.yes') if get_orientation_message_id(guild.id) else _t('common.no'))}", p5=f'{len(roles)}', p6=f'{ORIENTATION_MAX_ROLES}') + role_text +
         _t('text.db8bf54b7e2fa6')
@@ -1844,7 +1845,7 @@ async def ensure_orientation_system(guild: discord.Guild) -> tuple[bool, str]:
     if not me.guild_permissions.manage_roles:
         missing.append(_t('text.9f6d1e3575d492'))
     if missing:
-        return False, _t('text.95b0a52c0b7a22') + ", ".join(missing) + "**."
+        return False, _t('text.95b0a52c0b7a22') + _i18n_join(", ", missing) + "**."
 
     bindings = get_orientation_bindings(guild.id)
     if not (ORIENTATION_MIN_ROLES <= len(bindings) <= ORIENTATION_MAX_ROLES):
@@ -2517,10 +2518,10 @@ def member_departure_description(
     roles = [role.mention for role in member.roles if role.id != guild.default_role.id]
     shown: list[str] = []
     for role in roles:
-        if len(", ".join((*shown, role))) > 850:
+        if len(_i18n_join(", ", (*shown, role))) > 850:
             break
         shown.append(role)
-    roles_text = ", ".join(shown) if shown else _t('text.9e3fc69d0d9cdc')
+    roles_text = _i18n_join(", ", shown) if shown else _t('text.9e3fc69d0d9cdc')
     if len(shown) < len(roles):
         roles_text += _t('text.ae7023b76cf9e6', p0=f'{len(roles) - len(shown)}')
     name = discord.utils.escape_markdown(str(member.display_name))[:100]
@@ -2549,7 +2550,7 @@ def member_departure_description(
         lines.append(_t('text.6e39e7feb39194', p0=f'{discord.utils.escape_markdown(uncertainty[:220])}'))
     for label, value in (extra or []):
         lines.append(f"> **{label}:** {value}")
-    return "\n".join(lines)
+    return _i18n_join("\n", lines)
 
 
 @_i18n_context
@@ -3244,7 +3245,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
         return "castigado"
     guild = bot.get_guild(guild_id)
     if guild is None:
-        return _t('text.1f9831e1f3d8d6')
+        return 'sin-guild'
     member = guild.get_member(user_id)
     if member is None:
         db_clear_tentado(guild_id, user_id)  # ya no está, nada que hacer
@@ -3273,7 +3274,7 @@ async def evaluate_member(guild_id: int, user_id: int, report: bool = True) -> s
     # Leer la marca actual también impide sancionar roles heredados sin reloj.
     row = db_get(guild_id, user_id)
     if row is None or row["tentado_at"] is None:
-        return _t('text.3780ffd5150442')
+        return 'sin-plazo'
     deadline = datetime.fromisoformat(row["tentado_at"]) + get_orientation_window(guild_id)
     if datetime.now(timezone.utc) < deadline:
         return "pendiente"
@@ -3636,7 +3637,7 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
             lines.append(_t('text.3553c58f96b29c', p0=f'{label}', p1=f'{exact.mention}'))
         else:
             lines.append(_t('text.323e705eaf254e', p0=f'{label}', p1=f'{default_name}'))
-    return "\n".join(lines)
+    return _i18n_join("\n", lines)
 
 
 @_i18n_context
@@ -3661,7 +3662,7 @@ async def heraldo_setup_go_home(
 def _pending_config_text(items: list[str]) -> str:
     if not items:
         return ""
-    return _t('text.a63512e157a566') + "\n".join(f"• {item}" for item in items)
+    return _t('text.a63512e157a566') + _i18n_join("\n", (f"• {item}" for item in items))
 
 
 @_i18n_context
@@ -3768,7 +3769,7 @@ async def _setup_apply_system_channel(
                 parts.append(_t('text.dc2c4fdc489614'))
         if warning_error:
             parts.append(_t('text.09d3c987897466', p0=f'{warning_error}'))
-        return " ".join(parts)
+        return _i18n_join(" ", parts)
 
     return _t('text.ebbeb2f9b81f4f')
 
@@ -4037,7 +4038,7 @@ class HeraldoChannelSetupView(discord.ui.View):
         await interaction.edit_original_response(
             content=self._content(
                 interaction.guild,
-                _t('text.9a77ea6b8909d1', p0=f'{saved_count}') + "\n".join(f"• {note}" for note in notes),
+                _t('text.9a77ea6b8909d1', p0=f'{saved_count}') + _i18n_join("\n", (f"• {note}" for note in notes)),
             ),
             view=self,
         )
@@ -4449,7 +4450,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         items: list[str] = []
         if self.pending_role_ids is not None:
             roles = [guild.get_role(rid) for rid in self.pending_role_ids]
-            items.append(_t('text.409c3c30aa7e34') + (", ".join(r.mention for r in roles if r) or "ninguno"))
+            items.append(_t('text.409c3c30aa7e34') + (_i18n_join(", ", (r.mention for r in roles if r)) or _t("text.3f695d04348e0b")))
         if self.pending_screening is not None:
             items.append(_t('text.0dfaed0f43e17a', p0=f"{(_t('text.4f87498b67d589') if self.pending_screening else _t('text.9390298f3fb0c5'))}"))
         if self.pending_enabled is not None:
@@ -4467,7 +4468,7 @@ class HeraldoJoinRolesBasicView(_JoinRolesOwnedView):
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
             await interaction.response.send_message(
-                _t('text.2a6e4612e476fa') + ", ".join(role.mention for role in invalid), ephemeral=True
+                _t('text.2a6e4612e476fa') + _i18n_join(", ", (role.mention for role in invalid)), ephemeral=True
             )
             return
         self.pending_role_ids = [role.id for role in roles]
@@ -4634,7 +4635,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
             roles = [guild.get_role(role_id) for role_id in self.selected_role_ids]
             items.append(
                 _t('text.4e531f08a443f3', p0=f'{self.selected_user_id}')
-                + ", ".join(role.mention for role in roles if role is not None)
+                + _i18n_join(", ", (role.mention for role in roles if role is not None))
             )
         if self.pending_remove_after is not None:
             items.append(_t('text.4af2b0fb457f2c', p0=f"{(_t('text.4f87498b67d589') if self.pending_remove_after else _t('text.9390298f3fb0c5'))}"))
@@ -4666,7 +4667,7 @@ class HeraldoJoinRolesUsersView(_JoinRolesOwnedView):
         me = interaction.guild.me
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
-            await interaction.response.send_message(_t('text.2a6e4612e476fa') + ", ".join(role.mention for role in invalid), ephemeral=True)
+            await interaction.response.send_message(_t('text.2a6e4612e476fa') + _i18n_join(", ", (role.mention for role in invalid)), ephemeral=True)
             return
         set_join_specific_user_roles(self.guild_id, self.selected_user_id, [role.id for role in roles])
         self.selected_role_ids = []
@@ -4749,7 +4750,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         items = []
         if self.pending_role_ids is not None:
             roles = [guild.get_role(rid) for rid in self.pending_role_ids]
-            items.append(_t('text.4b008ac5ebcc5d') + (", ".join(r.mention for r in roles if r) or "ninguno"))
+            items.append(_t('text.4b008ac5ebcc5d') + (_i18n_join(", ", (r.mention for r in roles if r)) or _t("text.3f695d04348e0b")))
         if self.pending_enabled is not None:
             items.append(_t('text.a8172aaca83e4a', p0=f"{(_t('text.4f87498b67d589') if self.pending_enabled else _t('text.9390298f3fb0c5'))}"))
         if self.pending_delay is not None:
@@ -4766,7 +4767,7 @@ class HeraldoJoinRolesBotsView(_JoinRolesOwnedView):
         me = interaction.guild.me
         invalid = [role for role in roles if role.managed or me is None or role >= me.top_role]
         if invalid:
-            await interaction.response.send_message(_t('text.2a6e4612e476fa') + ", ".join(role.mention for role in invalid), ephemeral=True)
+            await interaction.response.send_message(_t('text.2a6e4612e476fa') + _i18n_join(", ", (role.mention for role in invalid)), ephemeral=True)
             return
         self.pending_role_ids = [role.id for role in roles]
         await interaction.response.edit_message(
@@ -4858,7 +4859,7 @@ class HeraldoJoinRolesSyncView(_JoinRolesOwnedView):
         await interaction.response.edit_message(
             content=_t('text.8db1c7466baf75')
             + join_roles_sync_summary(interaction.guild)
-            + _pending_config_text([_t('text.a41edbe9c872df') + (", ".join(r.mention for r in roles if r) or "ninguno")]),
+            + _pending_config_text([_t('text.a41edbe9c872df') + (_i18n_join(", ", (r.mention for r in roles if r)) or _t("text.3f695d04348e0b"))]),
             view=self,
         )
 
@@ -5056,7 +5057,7 @@ class HeraldoOrientationSetupView(discord.ui.View):
             items.append(_t('text.2639edffb76eb3', p0=f'{(channel.mention if channel else self.pending_channel_id)}'))
         if self.pending_bindings is not None:
             roles = [guild.get_role(int(item["role_id"])) for item in self.pending_bindings]
-            items.append(_t('text.2976dd6f1ea136') + ", ".join(role.mention for role in roles if role is not None))
+            items.append(_t('text.2976dd6f1ea136') + _i18n_join(", ", (role.mention for role in roles if role is not None)))
         if self.pending_enabled is not None:
             items.append(_t('text.198d94236c0142', p0=f"{(_t('text.913dba3a79e33b') if self.pending_enabled else _t('text.f7f5a5c6c80d49'))}"))
         if self.pending_required is not None:
@@ -5092,12 +5093,12 @@ class HeraldoOrientationSetupView(discord.ui.View):
         me = guild.me
         blocked = [role.mention for role in roles if me is None or role >= me.top_role or role.managed]
         if blocked:
-            await interaction.response.send_message(_t('text.bbce2b4665c6ca') + ", ".join(blocked), ephemeral=True)
+            await interaction.response.send_message(_t('text.bbce2b4665c6ca') + _i18n_join(", ", blocked), ephemeral=True)
             return
         unsafe = [role.mention for role in roles if verify_role_problem(role, guild)]
         if unsafe:
             await interaction.response.send_message(
-                _t('text.5f9ce7cde4f083') + ", ".join(unsafe),
+                _t('text.5f9ce7cde4f083') + _i18n_join(", ", unsafe),
                 ephemeral=True,
             )
             return
@@ -5118,10 +5119,10 @@ class HeraldoOrientationSetupView(discord.ui.View):
             used.add(key)
             bindings.append({"role_id": role.id, "emoji": emoji})
         if missing_emoji:
-            await interaction.response.send_message(_t('text.ff1a1c04ed24b4') + ", ".join(missing_emoji), ephemeral=True)
+            await interaction.response.send_message(_t('text.ff1a1c04ed24b4') + _i18n_join(", ", missing_emoji), ephemeral=True)
             return
         if duplicate_emoji:
-            await interaction.response.send_message(_t('text.148f83c32341a7') + ", ".join(duplicate_emoji), ephemeral=True)
+            await interaction.response.send_message(_t('text.148f83c32341a7') + _i18n_join(", ", duplicate_emoji), ephemeral=True)
             return
         self.pending_bindings = bindings
         await interaction.response.edit_message(content=self._content(guild), view=self)
@@ -6424,7 +6425,7 @@ class HeraldoHoneypotParametersView(HeraldoHoneypotDraftSubView):
         lines.append(_t('text.9138b3c1be198e'))
         return discord.Embed(
             title=_t('text.5fc6e4b4e07d52'),
-            description="\n".join(lines),
+            description=_i18n_join("\n", lines),
             color=discord.Color.blurple(),
         )
 
@@ -6622,7 +6623,7 @@ class HoneypotPublishWarningConfirmView(discord.ui.View):
         if errors:
             await interaction.followup.send(
                 _t('text.a1321bc042d0bf')
-                + "\n".join(f"• {error}" for error in errors[:8]),
+                + _i18n_join("\n", (f"• {error}" for error in errors[:8])),
                 ephemeral=True,
             )
         elif not refreshed:
@@ -6764,7 +6765,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
             missing.append(_t('text.c96c4445540314'))
         lines.append(
             f"**{label}:** {channel.mention}"
-            + (_t('text.538942d91cc934', p0=f"{', '.join(missing)}") if missing else "")
+            + (_t('text.538942d91cc934', p0=f"{_i18n_join(', ', missing)}") if missing else "")
         )
 
     role_defs = (
@@ -6780,7 +6781,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
             continue
         problem = None
         if role.is_default():
-            problem = "es @everyone"
+            problem = _t("common.everyone_role")
         elif role.managed:
             problem = _t('text.6d961097a2cc64')
         elif role >= guild.me.top_role:
@@ -6789,7 +6790,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
             _t('text.6fb017c1a4c12d', p0=f'{label}', p1=f'{role.mention}')
             + (f" · {problem}" if problem else "")
         )
-    return "\n".join(lines)
+    return _i18n_join("\n", lines)
 
 
 
@@ -6914,7 +6915,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
         if not perms.send_messages:
             missing.append(_t('text.58a23dea20d696'))
         if missing:
-            await interaction.response.send_message(_t('text.0a311dd6a9c2f4', p0=f"{', '.join(missing)}", p1=f'{channel.mention}'), ephemeral=True)
+            await interaction.response.send_message(_t('text.0a311dd6a9c2f4', p0=f"{_i18n_join(', ', missing)}", p1=f'{channel.mention}'), ephemeral=True)
             return
         self.pending_channel_id = channel.id
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
@@ -7357,7 +7358,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
     def summary(self):
         items = []
         for key in RAID_FIELDS:
-            suffix = " (pendiente)" if self.draft[key] != self.original[key] else ""
+            suffix = _t("common.pending_suffix") if self.draft[key] != self.original[key] else ""
             items.append(f"**{RAID_OPTIONS[key][0]}:** "
                          f"{raid_format_choice(key, self.draft[key])}{suffix}")
         help_text = (
@@ -7366,7 +7367,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
             _t('text.6982631f6a5311')
         )
         return (_t('text.8af733400a5d07', p0=f'{self.active_profile().capitalize()}')
-                + "\n".join(items) + _t('text.55754648d55b18') + help_text
+                + _i18n_join("\n", items) + _t('text.55754648d55b18') + help_text
                 + _t('text.daad5f0b250052'))
 
     @_i18n_context
@@ -8426,7 +8427,7 @@ LOG_TEMPLATE_DEFAULTS = {
 def _log_normalize_title(title: str) -> str:
     title = i18n.canonical_text(title)
     raw = unicodedata.normalize("NFKD", title or "")
-    return "".join(ch for ch in raw if not unicodedata.combining(ch)).strip().lower()
+    return _i18n_join("", (ch for ch in raw if not unicodedata.combining(ch))).strip().lower()
 
 
 def _log_slug(title: str) -> str:
@@ -9689,7 +9690,7 @@ class HeraldoMessageComponentsSetupView(discord.ui.View):
     async def list_components(self, interaction: discord.Interaction, button: discord.ui.Button):
         items = heraldo_message_role_config(self.guild_id)
         lines = [f"**{discord.utils.escape_markdown(x['label'])}** · <@&{x['role_id']}> · {i18n.fixed_label(x.get('action', 'alternar'))}" for x in items]
-        await interaction.response.send_message("\n".join(lines)[:1900] if lines else _t('text.a279ab82b21808'), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+        await interaction.response.send_message(_i18n_join("\n", lines)[:1900] if lines else _t('text.a279ab82b21808'), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary)
     @_i18n_context
@@ -9973,7 +9974,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="Verificación", value="verification", description=_t('text.75504974e94b7a')),
+                discord.SelectOption(label=_t("setup.module.verification.label"), value="verification", description=_t('text.75504974e94b7a')),
                 discord.SelectOption(label=_t('text.da204f52a7fdf7'), value="verify_dm", description=_t('text.2f8ba24fb6e51e')),
                 discord.SelectOption(label=_t('text.f5b397a636a054'), value="condemnation", description=_t('text.f1103523bf61f5')),
                 discord.SelectOption(label=_t('text.70cf296fe178d5'), value="suggestions", description=_t('text.c20ea5ffe49319')),
@@ -10433,8 +10434,8 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
     def _content(self) -> str:
         names = {"none": _t('text.716ff07341bc5e'), "timeout": _t('text.e57f389344d2ea'), "kick": _t('text.ffb1a9c946e708'),
                  "ban": _t('text.e1e571bc9280a3'), "condemn": _t('text.49c04f00c2a806')}
-        toggles = ", ".join(label for action, label, _ in self.POLICY_ACTIONS
-                            if action in self.enabled_actions) or _t('text.265a0222634a7a')
+        toggles = _i18n_join(", ", (label for action, label, _ in self.POLICY_ACTIONS
+                            if action in self.enabled_actions)) or _t('text.265a0222634a7a')
         return (
             _t('text.37dd3fcdb335d9', p0=f'{self.max_warns}', p1=f'{self.max_warns}', p2=f'{names[self.escalation]}')
             + (_t('text.2b364d09092d2e', p0=f'{format_duration(self.mute_minutes)}') if self.escalation == "timeout" else "")
@@ -10565,7 +10566,7 @@ def reminder_preview(guild_id):
             continue
         lines.append(_t('text.a4b44b483f36fa', p0=f"{item['emoji']}", p1=f"{discord.utils.escape_markdown(str(item['label']))}", p2=f"{item.get('threshold', 1)}"))
     return (_t('text.5d4decf366f299')
-            + ("\n".join(lines) or _t('text.fafc3fe984c376'))
+            + (_i18n_join("\n", lines) or _t('text.fafc3fe984c376'))
             + _t('text.27ab166caf064d'))[:1900]
 
 
@@ -12196,15 +12197,15 @@ def rr_summary(guild: discord.Guild, panel: dict) -> str:
               _t('text.38d6afa05aee67', p0=f"{panel.get('max_reactions') or _t('text.553f5b2ff5d004')}"),
               _t('text.485077e3658ded', p0=f"{i18n.fixed_label(panel.get('list_mode', 'Todos'))}")]
     if panel.get("allowed_roles"):
-        result.append(_t('text.4efc4db0c1b16e') + ", ".join(f"<@&{r}>" for r in panel["allowed_roles"]))
+        result.append(_t('text.4efc4db0c1b16e') + _i18n_join(", ", (f"<@&{r}>" for r in panel["allowed_roles"])))
     result.append(_t('text.2c0288a39361ff'))
     for binding in rr_bindings(panel):
-        adds = ", ".join(f"<@&{r}>" for r in binding["add"]) or _t('text.9e3fc69d0d9cdc')
-        removes = ", ".join(f"<@&{r}>" for r in binding["remove"]) or _t('text.9e3fc69d0d9cdc')
+        adds = _i18n_join(", ", (f"<@&{r}>" for r in binding["add"])) or _t('text.9e3fc69d0d9cdc')
+        removes = _i18n_join(", ", (f"<@&{r}>" for r in binding["remove"])) or _t('text.9e3fc69d0d9cdc')
         result.append(_t('text.3f0ed7d099331a', p0=f"{binding['emoji']}", p1=f'{adds}', p2=f'{removes}'))
     if not rr_bindings(panel):
         result.append(_t('text.ef6ff65865ae0f'))
-    return "\n".join(result)
+    return _i18n_join("\n", result)
 
 
 @_i18n_context
@@ -12267,7 +12268,7 @@ class HeraldoReactionEmojiModal(discord.ui.Modal, title=_t('text.51ced4ce20b298'
 
 class HeraldoReactionOptionsModal(discord.ui.Modal, title=_t('text.2046b60ec4f504')):
     maximum = discord.ui.TextInput(label=_t('text.a8f312a08f77fe'), default="0", max_length=2)
-    mode = discord.ui.TextInput(label=_t('text.ee2bc5a98b39d8'), default="Todos", max_length=20)
+    mode = discord.ui.TextInput(label=_t('reaction.access_mode'), placeholder=_t('text.ee2bc5a98b39d8'), default="Todos", max_length=20)
     reverse_mode = discord.ui.TextInput(label=_t('text.728733b87fc656'), default=_t("common.no"), max_length=3)
 
     @_i18n_context
@@ -13484,7 +13485,7 @@ async def heraldo_importkit(interaction: discord.Interaction, archivo: discord.A
         await interaction.followup.send(_t('text.012489178235ed'), ephemeral=True)
         return
     summary = _t('text.cc618b46ca9a05', p0=f'{len(items) - len(duplicates)}', p1=f'{len(duplicates)}')
-    summary += '\n'.join((_t('text.c851b894c97790') if x['name'] in duplicates else _t('text.e3bc8317158df3')) + discord.utils.escape_markdown(x['name']) for x in items)
+    summary += _i18n_join('\n', ((_t('text.c851b894c97790') if x['name'] in duplicates else _t('text.e3bc8317158df3')) + discord.utils.escape_markdown(x['name']) for x in items))
     await interaction.followup.send(summary + _t('text.4f576a529f810c'),
         view=HeraldoMessageConfirmView(interaction.guild.id, interaction.user.id, 'kit', {'items': items, 'replace': reemplazar}),
         ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
@@ -13914,14 +13915,14 @@ def verify_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
     si está bien. El botón lo puede pulsar cualquiera: el rol no puede dar poderes de
     moderación, y el Heraldo tiene que poder asignarlo."""
     if role.is_default():
-        return "es @everyone"
+        return _t("common.everyone_role")
     if role.managed:
         return _t('text.9d211cfc9f5be0')
     if role >= guild.me.top_role:
         return _t('text.ea68e9bfe68ef1')
     risky = [label for attr, label in VERIFY_DANGEROUS_PERMS if getattr(role.permissions, attr)]
     if risky:
-        return _t('text.e378e34dcb8f79') + ", ".join(risky) + ")"
+        return _t('text.e378e34dcb8f79') + _i18n_join(", ", risky) + ")"
     return None
 
 
@@ -14528,7 +14529,7 @@ async def verify_config(
     if proposed_role_id != get_tentado_role_id(guild.id):
         warnings.append(_t('text.91d20fb8eaaaa6'))
     if warnings:
-        await interaction.followup.send(_t('text.fdd0bf00d145be') + "\n".join(warnings), ephemeral=True)
+        await interaction.followup.send(_t('text.fdd0bf00d145be') + _i18n_join("\n", warnings), ephemeral=True)
 
 
 @_i18n_context
@@ -14576,7 +14577,7 @@ def _joinroles_validate_command_roles(
         _role, issue = _join_role_status(guild, role.id)
         if issue:
             issues.append(f"{role.mention}: {issue}")
-    return "; ".join(issues) if issues else None
+    return _i18n_join("; ", issues) if issues else None
 
 
 @joinroles_group.command(name="status", description="Ver la configuración actual de Roles de ingreso.")
@@ -15080,12 +15081,12 @@ async def template_config(
             note = _t('text.06bc8be6ceefe5', p0=f'{e}')
 
     await interaction.followup.send(
-        _t('text.5ee32d24cca2ca') + "; ".join(changes) + "\n\n" + template_config_summary(guild.id, now) + note,
+        _t('text.5ee32d24cca2ca') + _i18n_join("; ", changes) + "\n\n" + template_config_summary(guild.id, now) + note,
         ephemeral=True,
     )
     await log_embed(
         guild, _t('text.92529e802b56bf'),
-        f"{interaction.user.mention}: " + "; ".join(changes),
+        f"{interaction.user.mention}: " + _i18n_join("; ", changes),
         discord.Color.blurple(),
     )
 
@@ -15198,7 +15199,7 @@ async def profile(interaction: discord.Interaction, user: Optional[discord.User]
     # Roles de mayor a menor jerarquía, sin @everyone.
     roles = [r for r in reversed(target.roles) if not r.is_default()]
     if roles:
-        roles_text = " ".join(r.mention for r in roles[:PROFILE_MAX_ROLES])
+        roles_text = _i18n_join(" ", (r.mention for r in roles[:PROFILE_MAX_ROLES]))
         if len(roles) > PROFILE_MAX_ROLES:
             roles_text += _t('text.2629c18ce8ee2b', p0=f'{len(roles) - PROFILE_MAX_ROLES}')
     else:
@@ -16021,7 +16022,7 @@ def _legacy_case_code(number: int) -> str:
     for _ in range(6):
         value, digit = divmod(value, 36)
         chars.append(CASE_CODE_ALPHABET[digit])
-    return "C" + "".join(reversed(chars))
+    return "C" + _i18n_join("", reversed(chars))
 
 
 def _case_code_table(conn: sqlite3.Connection) -> None:
@@ -16046,7 +16047,7 @@ def moderation_case_code(number: int, guild_id: int) -> str:
         if row:
             return str(row[0])
         for _ in range(30):
-            code = "".join(secrets.choice(CASE_CODE_ALPHABET) for _ in range(7))
+            code = _i18n_join("", (secrets.choice(CASE_CODE_ALPHABET) for _ in range(7)))
             if not any(ch.isalpha() for ch in code) or not any(ch.isdigit() for ch in code):
                 continue
             try:
@@ -16143,7 +16144,7 @@ def moderation_case_list(guild_id: int, user_id: int | None = None, case_type: s
         params.append(1 if open_only else 0)
     params.append(max(1, min(limit, 50)))
     rows = conn.execute(
-        "SELECT * FROM moderation_cases WHERE " + " AND ".join(where) + " ORDER BY case_number DESC LIMIT ?",
+        "SELECT * FROM moderation_cases WHERE " + _i18n_join(" AND ", where) + " ORDER BY case_number DESC LIMIT ?",
         params,
     ).fetchall()
     conn.close()
@@ -16431,7 +16432,7 @@ def moderation_case_update(guild_id: int, case_number: int, *, reason: str | Non
         return True
     params.extend([guild_id, case_number])
     conn = db_connect()
-    conn.execute("UPDATE moderation_cases SET " + ", ".join(updates) + " WHERE guild_id = ? AND case_number = ?", params)
+    conn.execute("UPDATE moderation_cases SET " + _i18n_join(", ", updates) + " WHERE guild_id = ? AND case_number = ?", params)
     conn.close()
     return True
 
@@ -16472,7 +16473,7 @@ async def moderation_verified_proof(guild: discord.Guild, proof: str | None) -> 
         return None
     text = message.content or _t('text.e51b95334abfdf')
     if message.attachments:
-        text += "\n" + "\n".join(attachment.url for attachment in message.attachments[:5])
+        text += "\n" + _i18n_join("\n", (attachment.url for attachment in message.attachments[:5]))
     return text[:2000]
 
 
@@ -16520,7 +16521,7 @@ def moderation_cases_summary(guild: discord.Guild) -> str:
         with _i18n_guild(i18n.source_id(row) or i18n.current_guild_id()):
             state = "abierto" if row["open"] else "cerrado"
             lines.append(f"**{moderation_case_code(row['case_number'], int(row['guild_id']))}** · {row['type']} · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
-    return _t('text.9bd83f9a0fd22b') + "\n\n".join(lines)
+    return _t('text.9bd83f9a0fd22b') + _i18n_join("\n\n", lines)
 
 
 
@@ -17165,7 +17166,7 @@ async def execute_moderation_report_action(
     if action == "condemn" and purge_minutes:
         notes.append(_t('text.f8d0785f2d5976'))
 
-    return True, "; ".join(notes) if notes else moderation_action_label(action)
+    return True, _i18n_join("; ", notes) if notes else moderation_action_label(action)
 
 
 @_i18n_context
@@ -17219,7 +17220,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         purge = item.get("purge_minutes") if item.get("action") != "report" else None
         purge_text = _t('text.0ad9bd3e1926f0', p0=f'{format_duration(int(purge))}') if purge else ""
         return _t('text.ac76d4f3e1692c', p0=f"{item['emoji']}", p1=f"{item['label']}", p2=f'{action}', p3=f'{duration_text}', p4=f'{threshold}', p5=f'{purge_text}')
-    mapping_text = "\n".join(rule_line(item) for item in mappings) or _t('text.3b03f2cc14fbbd')
+    mapping_text = _i18n_join("\n", (rule_line(item) for item in mappings)) or _t('text.3b03f2cc14fbbd')
     return (
         _t('text.83beb5900bb693', p0=f"{(channel.mention if isinstance(channel, discord.TextChannel) else _t('text.c92d59d68552b1'))}", p1=f'{mapping_text}', p2=f'{condemn_emoji or get_condemnation_emoji(guild.id)}')
     )
@@ -17468,7 +17469,7 @@ def hp_protected_channel_reason(channel: discord.abc.GuildChannel) -> str | None
 def hp_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
     """Motivo por el que el Heraldo no puede usar este rol como rol de castigo, o None."""
     if role.is_default():
-        return "es @everyone"
+        return _t("common.everyone_role")
     if role.managed:
         return _t('text.9d211cfc9f5be0')
     if role >= guild.me.top_role:
@@ -17510,7 +17511,7 @@ def format_duration(minutes: int) -> str:
     d, rest = divmod(minutes, 1440)
     h, m = divmod(rest, 60)
     parts = [f"{d} d" if d else "", f"{h} h" if h else "", _t('text.618d152970777c', p0=f'{m}') if m else ""]
-    return " ".join(p for p in parts if p)
+    return _i18n_join(" ", (p for p in parts if p))
 
 
 @_i18n_context
@@ -17649,7 +17650,7 @@ def hp_config_summary(guild: discord.Guild) -> str:
     lines.append(
         _t('text.079d6bd278c918', p0=f'{hp_total_triggers(guild.id)}', p1=f'{format_duration(hp_retention_minutes(guild.id))}')
     )
-    return "\n".join(lines)
+    return _i18n_join("\n", lines)
 
 
 @_i18n_context
@@ -17658,7 +17659,7 @@ def hp_setup_embed(guild: discord.Guild, pending: list[str] | None = None) -> di
     traps = hp_traps(guild.id)
     enabled, paused = honeypot_enabled(guild.id), honeypot_paused(guild.id)
     state = _t('text.e252efe6974743') if not enabled else _t('text.d455cfb682d370') if paused else _t('text.0a0ca661486c7e')
-    display_traps = ", ".join(f"<#{cid}>" for cid in list(traps)[:5])
+    display_traps = _i18n_join(", ", (f"<#{cid}>" for cid in list(traps)[:5]))
     if len(traps) > 5:
         display_traps += _t('text.ae7023b76cf9e6', p0=f'{len(traps) - 5}')
     state_lines = [
@@ -17713,12 +17714,12 @@ def hp_setup_embed(guild: discord.Guild, pending: list[str] | None = None) -> di
         description=_t('text.a7f2a630fff46e'),
         color=discord.Color.orange() if paused else discord.Color.blurple(),
     )
-    embed.add_field(name=_t('text.ff241d9dcfe873'), value="\n".join(state_lines), inline=False)
-    embed.add_field(name=_t('text.c14c351ba250b0'), value="\n".join(measure_lines), inline=False)
-    embed.add_field(name=_t('text.b26cb6a9b818ab'), value="\n".join(followup_lines), inline=False)
+    embed.add_field(name=_t('text.ff241d9dcfe873'), value=_i18n_join("\n", state_lines), inline=False)
+    embed.add_field(name=_t('text.c14c351ba250b0'), value=_i18n_join("\n", measure_lines), inline=False)
+    embed.add_field(name=_t('text.b26cb6a9b818ab'), value=_i18n_join("\n", followup_lines), inline=False)
     embed.add_field(
         name=_t('text.d1d4b8bbb18d51'),
-        value="\n".join("• " + line for line in pending) if pending else 'Ninguno.',
+        value=_i18n_join("\n", ("• " + line for line in pending)) if pending else _t("common.none_sentence"),
         inline=False,
     )
     embed.set_footer(text=_t('text.b14880642ffda1'))
@@ -18428,7 +18429,7 @@ def _build_condemnation_embed(
         role = guild.get_role(rid)
         if role is not None:
             role_mentions.append(f"`{role.name}`")
-    field("label_roles", ", ".join(role_mentions) if role_mentions else _t('text.a7d5911410cc63'), False)
+    field("label_roles", _i18n_join(", ", role_mentions) if role_mentions else _t('text.a7d5911410cc63'), False)
 
     if evidence_url:
         value = _t('text.90b54c8acd98ad', p0=f'{evidence_url}')
@@ -18997,7 +18998,7 @@ async def condemnation_ensure_private_thread(
         if missing:
             await log_embed(
                 guild, _t('text.fef09b098ffe99'),
-                _t('text.43e5b3eaa582db') + ", ".join(missing)
+                _t('text.43e5b3eaa582db') + _i18n_join(", ", missing)
                 + _t('text.9926bfe7b44a1e'),
                 discord.Color.orange(),
             )
@@ -19584,7 +19585,7 @@ async def _release_condemned_member_inner(
         db_set_verify_pending(member.guild.id, member.id, now)
         asyncio.create_task(schedule_verify_timeout(member.guild.id, member.id, now))
 
-    pending_role_details = ", ".join(str(rid) for rid in missing_role_ids[:15])
+    pending_role_details = _i18n_join(", ", (str(rid) for rid in missing_role_ids[:15]))
     if lost > 15:
         pending_role_details += _t('text.ae7023b76cf9e6', p0=f'{lost - 15}')
     text = _t('text.adcd5c7ac1e9f2', p0=f'{len(restore)}') + (_t('text.1271fcf9931940', p0=f'{lost}') if lost else "")
@@ -20500,14 +20501,14 @@ class ConfigurationConfirmView(discord.ui.View):
                             _t('text.c75d7d977cd1c6')
                             if not errors else
                             _t('text.f72360c728cadd')
-                            + "\n".join(errors)[:1500]
+                            + _i18n_join("\n", errors)[:1500]
                         ),
                         view=None,
                     )
                 elif errors:
                     await interaction.followup.send(
                         _t('text.92fb75b24bc32d')
-                        + '\n'.join(errors)[:1500], ephemeral=True,
+                        + _i18n_join('\n', errors)[:1500], ephemeral=True,
                     )
             if any(key.startswith('honeypot_') for key in self.changes):
                 await log_embed(interaction.guild, _t('text.37ff4f395c5382'),
@@ -20563,7 +20564,7 @@ def configuration_review_value(guild, key, value):
             if isinstance(parsed, list):
                 names = [guild.get_role(int(rid)).name if guild and guild.get_role(int(rid))
                          else _t('text.56fafeb2d88742') for rid in parsed]
-                return ", ".join(discord.utils.escape_markdown(name) for name in names) or _t('text.3488019931bf2e')
+                return _i18n_join(", ", (discord.utils.escape_markdown(name) for name in names)) or _t('text.3488019931bf2e')
             if isinstance(parsed, dict):
                 return _t('text.cbdb9dca0791be', p0=f'{len(parsed)}')
         except (ValueError, TypeError):
@@ -20606,7 +20607,7 @@ def configuration_review_label(key):
         "moderation_reaction_kick_enabled": _t('text.f0560dcbe1756c'),
         "moderation_reaction_ban_enabled": _t('text.92963c3dfc8165'),
         "moderation_reaction_condemn_enabled": _t('text.81531874be6649'),
-        "verify_enabled": "Verificación",
+        "verify_enabled": _t("setup.module.verification.label"),
         "verify_role_id": _t('text.be08cd672b454c'),
         "verify_action": _t('text.2313157c5c6c33'),
         "raid_enabled": _t('text.987e037f4527d8'),
@@ -20634,7 +20635,7 @@ async def confirm_configuration(interaction, guild_id, changes, *, publish_honey
         before = configuration_review_value(guild, key, guild_config_get(guild_id, key))
         after = configuration_review_value(guild, key, value)
         lines.append(_t('text.905087274b6004', p0=f'{configuration_review_label(key)}', p1=f'{before}', p2=f'{after}'))
-    summary = "\n\n".join(lines)
+    summary = _i18n_join("\n\n", lines)
     if publish_honeypot_notice:
         summary = (
             (summary + "\n\n" if summary else "")
@@ -22059,7 +22060,7 @@ def fusion_preview_embed(
         value=_t('text.868889a5a341d0') if eliminar_origen else _t('text.424da7fa91cc30'),
         inline=True,
     )
-    embed.add_field(name=_t('text.22eab24a9708d8'), value="\n".join(sequence), inline=False)
+    embed.add_field(name=_t('text.22eab24a9708d8'), value=_i18n_join("\n", sequence), inline=False)
     embed.add_field(
         name=_t('text.3e7223731a5c78'),
         value=(
@@ -22471,7 +22472,7 @@ async def send_migrated_message(
                 # Solo si algún multimedia no pudo migrarse, dejamos sus enlaces
                 # como respaldo. No usamos embed para el caso normal.
                 await destino.send(
-                    content="\n".join(f"{url}" for url in fallback_urls),
+                    content=_i18n_join("\n", (f"{url}" for url in fallback_urls)),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             return len(attachments) - len(fallback_urls), len(fallback_urls)
@@ -22497,11 +22498,11 @@ async def send_migrated_message(
         embed.set_footer(text=_t('text.fc205f94045b12', p0=f'{index}', p1=f'{total}', p2=f'{message.id}'))
 
         if fallback_urls:
-            fallback_text = "\n".join(
+            fallback_text = _i18n_join("\n", (
                 f"[{a.filename}]({a.url})"
                 for a in attachments
                 if a.url in fallback_urls
-            )
+            ))
             if fallback_text:
                 embed.add_field(
                     name=_t('text.8c3b7b9b0c8e5d'),
@@ -22727,7 +22728,7 @@ async def execute_channel_merge(
             details.append(_t('text.d7801daac381ea', p0=f'{attachment_failures:,}'))
         result = (
             _t('text.241f0cf906a29d', p0=f'{migrated:,}', p1=f'{len(messages):,}')
-            + " · ".join(details)
+            + _i18n_join(" · ", details)
             + _t('text.84659e6a6eff98')
         )
         color = discord.Color.orange()
@@ -22824,7 +22825,7 @@ async def fusionar_canales(
         missing.append(_t('text.2af67eabf31108'))
     if missing:
         await interaction.response.send_message(
-            _t('text.bf5a3a8fdc8968') + ", ".join(missing) + "**.",
+            _t('text.bf5a3a8fdc8968') + _i18n_join(", ", missing) + "**.",
             ephemeral=True,
         )
         return
@@ -22950,7 +22951,7 @@ async def moderation_warnings(interaction: discord.Interaction, usuario: discord
         for row in rows
     ]
     heading = (_t('text.b851647c6d5585', p0=f'{discord.utils.escape_markdown(usuario.display_name)}', p1=f'{abiertas}', p2=f'{maximum}', p3=f'{total}', p4=f'{total - abiertas}'))
-    message = heading + ("\n\n" + "\n".join(lines) if lines else _t('text.b82ecab8fa87c5'))
+    message = heading + ("\n\n" + _i18n_join("\n", lines) if lines else _t('text.b82ecab8fa87c5'))
     await interaction.response.send_message(
         message[:1900], ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
@@ -23130,7 +23131,7 @@ async def moderation_caselist(interaction: discord.Interaction, usuario: Optiona
         await interaction.response.send_message(_t('text.ea0a17401e3391'), ephemeral=True)
         return
     lines = [f"{moderation_case_code(row['case_number'], int(row['guild_id']))} · {row['type']} · <@{row['user_id']}> · {_t('text.df3f924c2dce87') if row['open'] else _t('text.e53ed75c1535ff')} · {str(row['reason'])[:90]}" for row in rows]
-    await interaction.response.send_message("\n".join(lines)[:1900], ephemeral=True)
+    await interaction.response.send_message(_i18n_join("\n", lines)[:1900], ephemeral=True)
 
 
 @bot.tree.command(name="caseupdate", description="Actualiza motivo, duración o notas de un caso.")
@@ -23313,7 +23314,7 @@ async def purge_command(
         parts.append(_t('text.7a699bb19dfa0d', p0=f"{desde or '—'}", p1=f"{hasta or '0'}"))
     where = canal.mention if canal is not None else _t('text.78961d6c9a830c')
     parts.append(content_labels[content_type])
-    scope_text = " · ".join(parts) + _t('text.2c171d5f61e0b5', p0=f'{where}')
+    scope_text = _i18n_join(" · ", parts) + _t('text.2c171d5f61e0b5', p0=f'{where}')
 
     if todos:
         view = PurgeConfirmView(interaction.user.id)
@@ -23444,7 +23445,7 @@ def format_flex_duration(seconds: int) -> str:
         f"{mo} {_t('text.f1308241eb0241') if mo == 1 else _t('text.a0ca8cf00d2c89')}" if mo else "",
         f"{d} d" if d else "", f"{h} h" if h else "", _t('text.618d152970777c', p0=f'{m}') if m else "", f"{s} s" if s else "",
     ]
-    return " ".join(p for p in parts if p)
+    return _i18n_join(" ", (p for p in parts if p))
 
 
 # --- Configuración (DB) ---
@@ -23716,15 +23717,15 @@ async def raid_end(
             _t('text.5404d42b9ae053', p0=f"{stats['purged']}"),
         ]
         if stats["ids"]:
-            shown = ", ".join(f"<@{i}>" for i in stats["ids"][:25])
+            shown = _i18n_join(", ", (f"<@{i}>" for i in stats["ids"][:25]))
             lines.append(_t('text.4a29e9bb9ce56f', p0=f'{shown}') + (_t('text.ae7023b76cf9e6', p0=f"{len(stats['ids']) - 25}") if len(stats["ids"]) > 25 else ""))
     lines.append(_t('text.c16060804b4b4d', p0=f'{unlock_note}'))
     if release:
         lines.append(_t('text.31ce4fc0c041a8', p0=f'{released}') + (_t('text.3760cd0a4e44f9', p0=f'{failed_release}') if failed_release else ""))
     elif stats and stats["action"] == "condemn" and stats["acted"]:
         lines.append(_t('text.9b6092aec97a46'))
-    await raid_alert(guild, _t('text.056d8adafa2094'), "\n".join(lines), discord.Color.green())
-    return "\n".join(lines)
+    await raid_alert(guild, _t('text.056d8adafa2094'), _i18n_join("\n", lines), discord.Color.green())
+    return _i18n_join("\n", lines)
 
 
 @_i18n_context
@@ -23812,7 +23813,7 @@ def raid_config_summary(guild: discord.Guild) -> str:
         lines.append(_t('text.feb63aebfc131c', p0=f'{int(until.timestamp())}'))
     if raid_action(guild.id) == "condemn" and guild.get_role(condemnation_role_id(guild_id=guild.id)) is None:
         lines.append(_t('text.19d45ab4ceedff'))
-    return "\n".join(lines)
+    return _i18n_join("\n", lines)
 
 
 raid_group = HoneypotGroup(
@@ -23984,7 +23985,7 @@ class VarContext:
 def _var_key(text: str) -> str:
     """Minúsculas, sin tildes y solo letras/números: 'Server_Icon' -> 'servericon'."""
     text = unicodedata.normalize("NFKD", text)
-    return re.sub(r"[^a-z0-9]", "", "".join(c for c in text if not unicodedata.combining(c)).lower())
+    return re.sub(r"[^a-z0-9]", "", _i18n_join("", (c for c in text if not unicodedata.combining(c))).lower())
 
 
 _var_plain: contextvars.ContextVar[bool] = contextvars.ContextVar("var_plain", default=False)
@@ -24051,7 +24052,7 @@ VARIABLES: list[tuple[str, str, tuple[str, ...], str, object]] = [
      _t('text.46cddb0bc8a118'), _vg(lambda g: str(g.premium_subscription_count))),
     (_t('text.05e427a291c27f'), "servidor_nivel_boost", ("nivelboost", "boostlevel", "premiumtier"),
      _t('text.de29e2eb62583e'), _vg(lambda g: str(g.premium_tier))),
-    (_t('text.05e427a291c27f'), "servidor_dueno_mencion", ("dueno", _t('text.8eb0d859f5957c'), "owner"),
+    (_t('text.05e427a291c27f'), "servidor_dueno_mencion", ("dueno", "dueño", "owner"),
      _t('text.c30838172527de'), _vg(lambda g: f"<@{g.owner_id}>")),
     (_t('text.05e427a291c27f'), "servidor_fecha_creacion", ("creado", "servercreated", "guildcreated"),
      _t('text.234a978a0e3ed7'), _vg(lambda g: discord.utils.format_dt(g.created_at, "D"))),
@@ -24203,7 +24204,7 @@ def render_url_var(text: str, ctx: VarContext) -> str:
 def variables_embeds() -> list[discord.Embed]:
     groups: dict[str, list[str]] = {}
     for group, name, aliases, desc, _ in VARIABLES:
-        extra = " / ".join(f"`{{{a}}}`" for a in aliases[:2])
+        extra = _i18n_join(" / ", (f"`{{{a}}}`" for a in aliases[:2]))
         groups.setdefault(group, []).append(f"`{{{name}}}` — {desc}" + (f" · {extra}" if extra else ""))
     embed = discord.Embed(
         title=_t('text.2b9d2ff01dedc6'),
@@ -24213,7 +24214,7 @@ def variables_embeds() -> list[discord.Embed]:
         color=discord.Color.blurple(),
     )
     for group, lines in groups.items():
-        embed.add_field(name=group, value="\n".join(lines)[:1024], inline=False)
+        embed.add_field(name=group, value=_i18n_join("\n", lines)[:1024], inline=False)
     embed.add_field(
         name=_t('text.ffb94c3fd3c42b'),
         value=(
@@ -24250,7 +24251,7 @@ async def variables_command(
     result, unresolved = render_vars_report(texto, ctx, limit=1800)
     note = ""
     if unresolved:
-        note = _t('text.d562480b0867e8') + " ".join(f"`{u}`" for u in unresolved[:10])
+        note = _t('text.d562480b0867e8') + _i18n_join(" ", (f"`{u}`" for u in unresolved[:10]))
     await interaction.response.send_message(
         _t('text.25a98f5906fd59', p0=f'{result}', p1=f'{note}'), ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
     )
@@ -24482,7 +24483,7 @@ def server_footer_text(server_name: str, detail: str = "") -> str:
     if old_name:
         excluded.add(old_name.casefold())
     parts = [part for part in raw_parts if part and part.casefold() not in excluded]
-    extra = " · ".join(parts)
+    extra = _i18n_join(" · ", parts)
     if not extra:
         return name
     footer = f"{name} · {extra}"
@@ -25238,10 +25239,10 @@ def embed_schedule_human_details(mode: str, config: dict | None) -> str:
         return _t('text.77572d157c13aa', p0=f"{config['time']}")
     if mode == "weekly":
         days = ("lunes", "martes", _t('text.ba08108cd6d174'), "jueves", "viernes", _t('text.04bc66d1db77f0'), "domingo")
-        names = ", ".join(days[int(day)] for day in config["days"])
+        names = _i18n_join(", ", (days[int(day)] for day in config["days"]))
         return _t('text.d762e72956b58c', p0=f'{names}', p1=f"{config['time']}")
     if mode == "monthly":
-        names = ", ".join(str(day) for day in config["days"])
+        names = _i18n_join(", ", (str(day) for day in config["days"]))
         return _t('text.327fb33a1b0f9a', p0=f'{names}', p1=f"{config['time']}")
     return _t('text.7ba2afe619c750')
 
@@ -25607,9 +25608,9 @@ async def embed_refresh(interaction: discord.Interaction, name: str, new: bool =
     if synced:
         lines.append(_t('text.ff62bafed7d0f1', p0=f'{synced}'))
     if unresolved:
-        lines.append(_t('text.75bf2b65bd3db0') + " ".join(f"`{u}`" for u in unresolved[:8]) + f" · {EMBED_PERSON_NOTE}.")
+        lines.append(_t('text.75bf2b65bd3db0') + _i18n_join(" ", (f"`{u}`" for u in unresolved[:8])) + f" · {EMBED_PERSON_NOTE}.")
     view = EmbedEditorView(interaction.user.id, guild.id, name, data)
-    text = "\n".join(lines)[:1900]
+    text = _i18n_join("\n", lines)[:1900]
     kwargs = dict(content=text, embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
     if new:
         await interaction.response.send_message(ephemeral=True, **kwargs)
@@ -25927,7 +25928,7 @@ async def embed_schedules_command(interaction: discord.Interaction) -> None:
              + (_t('text.d6e7ad467a837e', p0=f'{due}') if due and enabled else "")
              for ident,name,channel,mode,enabled,due in rows]
     await interaction.response.send_message(
-        _t('text.042eeec17984ea') + ("\\n".join(lines) if lines else _t('text.f677867fd96736')),
+        _t('text.042eeec17984ea') + (_i18n_join("\\n", lines) if lines else _t('text.f677867fd96736')),
         view=EmbedSchedulesManageView(interaction.user.id, interaction.guild.id) if rows else None,
         ephemeral=True)
 
@@ -26778,7 +26779,7 @@ async def suggestions_list(interaction: discord.Interaction) -> None:
         reviewers.append(member.mention if member else f"<@{user_id}>")
     owner = f"<@{guild.owner_id}>" if suggestion_owner_enabled(guild.id) and guild.owner_id else _t('text.e252efe6974743')
     text = (
-        _t('text.b9c3bf93c71505', p0=f"{(channel.mention if channel else _t('text.67db68445a607d'))}", p1=f'{owner}') + (", ".join(reviewers) if reviewers else _t('text.9e3fc69d0d9cdc'))
+        _t('text.b9c3bf93c71505', p0=f"{(channel.mention if channel else _t('text.67db68445a607d'))}", p1=f'{owner}') + (_i18n_join(", ", reviewers) if reviewers else _t('text.9e3fc69d0d9cdc'))
     )
     await interaction.response.send_message(text, ephemeral=True)
 
@@ -26873,7 +26874,7 @@ class HeraldoMessagesView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Verificación", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label=_t("setup.module.verification.label"), style=discord.ButtonStyle.primary, row=0)
     @_i18n_context
     async def verification(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await open_default_message_studio(
@@ -26922,7 +26923,7 @@ class HeraldoMessagesView(discord.ui.View):
     async def custom_embeds(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         names = embed_names(self.guild_id)
         if names:
-            available = ", ".join(f"`{name}`" for name, _ in names[:20])
+            available = _i18n_join(", ", (f"`{name}`" for name, _ in names[:20]))
             text = (
                 _t('text.f9e1732fcbb557', p0=f'{available}')
             )

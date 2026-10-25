@@ -5,6 +5,7 @@ por categoría deben ligarse posteriormente a reglas locales aprobadas.
 """
 from __future__ import annotations
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
+from heraldo_i18n import join_text as _i18n_join
 
 import discord
 
@@ -121,10 +122,10 @@ class CustodioRuleActionsView(discord.ui.View):
             new != self.saved_actions[key]
             for key, new in self.pending_actions.items()
         )
-        entries = "\n".join(
+        entries = _i18n_join("\n", (
             f"• {entry.label}: {ACTION_LABELS[self.pending_actions[entry.key]]}"
             for entry in TEMPLATES
-        )
+        ))
         return (
             _t('text.8b54caa88de96f', p0=f'{entries}', p1=f'{category.label}', p2=f'{ACTION_LABELS[suggested_action(category.key)]}', p3=f'{ACTION_LABELS[pending]}', p4=f'{pending_count}', p5=f"{(_t('text.e524a9ec1211a5') if self.has_saved_policy else _t('text.f8b73aaaaf9da0'))}")
         )

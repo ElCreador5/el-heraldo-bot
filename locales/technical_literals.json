@@ -59,12 +59,6 @@
     "text": "Verificación",
     "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
   },
-  "401dd82658791771cea1": {
-    "file": "bot.py",
-    "scope": "configuration_review_label",
-    "text": "Verificación",
-    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
-  },
   "3aeaa8c1131f05bf0516": {
     "file": "bot.py",
     "scope": "fusion_clean_name",
@@ -136,12 +130,6 @@
     "scope": "",
     "text": "canal",
     "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
-  },
-  "d7e01666939bb05f01cb": {
-    "file": "bot.py",
-    "scope": "HeraldoMessagesView.verification",
-    "text": "Verificación",
-    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
   },
   "94ef15a872e26df00b3d": {
     "file": "bot.py",
@@ -334,12 +322,6 @@
     "scope": "variable_suggestions",
     "text": "miembro",
     "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
-  },
-  "aef67c4c8ea2198ab12e": {
-    "file": "bot.py",
-    "scope": "HeraldoMessagesSetupView.__init__",
-    "text": "Verificación",
-    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
   },
   "8bda709958ad2cce9c75": {
     "file": "bot.py",
@@ -910,5 +892,215 @@
     "scope": "HeraldoMessagesSetupView.__init__",
     "text": "Logs",
     "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "4fa374121f9efb7f0591": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "326b02c41a45949a72b7": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "8202c1bd0b1e5b4e76f6": {
+    "file": "bot.py",
+    "scope": "get_condenado_role_id",
+    "text": "condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "e5a90612f5f8cdd43ac6": {
+    "file": "bot.py",
+    "scope": "evaluate_member",
+    "text": "sin-guild",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "2f051f9dab4184be2ce6": {
+    "file": "bot.py",
+    "scope": "evaluate_member",
+    "text": "sin-plazo",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "8acb4a93996304e93ce3": {
+    "file": "bot.py",
+    "scope": "evaluate_member",
+    "text": "pendiente",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "017784b2ba071ffe8efc": {
+    "file": "bot.py",
+    "scope": "log_template_get",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "d06e32373b82d2e053c1": {
+    "file": "bot.py",
+    "scope": "LogTemplateEditorView.__init__",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "63322026c4417c77a3a1": {
+    "file": "bot.py",
+    "scope": "hp_punish_role_id",
+    "text": "condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "c911cea0ee4b6e87dcc0": {
+    "file": "bot.py",
+    "scope": "bootstrap_guild_configuration",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "a4c6a8437fe2d4895a7b": {
+    "file": "bot.py",
+    "scope": "heraldo_permissions_summary",
+    "text": "condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "fef54451e239e1fa4305": {
+    "file": "bot.py",
+    "scope": "heraldo_permissions_summary",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "b87de278827d698211d8": {
+    "file": "bot.py",
+    "scope": "_log_catalog_event",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "9b92b1d512323b7684ff": {
+    "file": "bot.py",
+    "scope": "log_template_editor_content",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "f839d217b8fb813f0d49": {
+    "file": "bot.py",
+    "scope": "LogTemplateEditorView.change_category",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "a34f697719a3b79bd180": {
+    "file": "bot.py",
+    "scope": "parse_purge_spec",
+    "text": "ninguno",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "8fb56dcc36bb30b69ee2": {
+    "file": "bot.py",
+    "scope": "condemnation_send_pardon_dm",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "2a97f0c2520e50cadfdf": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "dueño",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "df79fabaf90ea797b2ad": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "creado",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "320b1f6faa39f67ca191": {
+    "file": "bot.py",
+    "scope": "HeraldoRoleSetupView.__init__",
+    "text": "condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "c4e95003af640d9c67d5": {
+    "file": "bot.py",
+    "scope": "HeraldoRoleSetupView.__init__",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "0e45d28874b1d6c8c23b": {
+    "file": "bot.py",
+    "scope": "HeraldoAttachRoleModal.on_submit",
+    "text": "ninguno",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "961486f112761406b027": {
+    "file": "bot.py",
+    "scope": "HeraldoCondemnationSetupView.create_role",
+    "text": "condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "59baa15bef4092211247": {
+    "file": "bot.py",
+    "scope": "HeraldoCondemnationSetupView.create_role",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "03c9b54164bcb8b5fb10": {
+    "file": "bot.py",
+    "scope": "HeraldoCondemnationSetupView.save",
+    "text": "condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "bba6438a94bb8a4147f9": {
+    "file": "bot.py",
+    "scope": "synchronize_published_panels",
+    "text": "verificacion",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "5694035252b139cd26f0": {
+    "file": "bot.py",
+    "scope": "condemnation_update_pardoned_card",
+    "text": "Condenado",
+    "reason": "Nombre real del rol de Discord o clave de búsqueda del recurso; no traducir."
+  },
+  "cd96e2d0e1d1a1ff891f": {
+    "file": "bot.py",
+    "scope": "validate_setup_view_layouts",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "9d19bd25eefe252e1fb7": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesView.logs",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "619f9e051dce583b7744": {
+    "file": "bot.py",
+    "scope": "_log_special_vars",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "455d42dc6da7e9f14f79": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesSetupView.open_editor",
+    "text": "general",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "1f6e774cd8e52aa6cd4a": {
+    "file": "message_automation.py",
+    "scope": "next_occurrence",
+    "text": "ninguna",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "a61e57c8f6bd086c6a49": {
+    "file": "message_automation.py",
+    "scope": "install.create",
+    "text": "ninguna",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "7b5eb7f237a9ed3ddbf3": {
+    "file": "message_components.py",
+    "scope": "install.configure",
+    "text": "ninguno",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "98d8f7d28ef6346fce09": {
+    "file": "message_payload.py",
+    "scope": "import_kit",
+    "text": "ninguno",
+    "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
   }
 }

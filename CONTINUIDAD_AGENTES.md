@@ -1,3 +1,7 @@
+## 2026-10-25 — Segundo punto de control i18n
+
+Revisión editorial: 2793 de 3006 claves; 213 pendientes. Corregidas uniones/concatenaciones de textos propios creados al arrancar, literales breves de interfaz y etiquetas del submenú Mensajes. Se preservan estados internos de verificación (`sin-guild`, `sin-plazo`) y alias técnicos de variables. Auditoría ampliada con exenciones por contexto. Regresiones nuevas de payloads, resúmenes, tipos, aislamiento y constructores de paneles; suite completa ejecutada con 938 pruebas y dos omisiones existentes, sin fallos, antes de las dos últimas regresiones añadidas. Las traducciones continúan parciales. Railway Test sigue fijado a `74c2adf`; este punto de control no es un despliegue nuevo. Pendientes: últimos textos largos, plurales/entradas localizadas, metadatos nativos por servidor y validación integral final. `main` y producción intactos.
+
 ## 2026-10-25 — Reanudación de revisión editorial i18n
 
 Revisadas 1827 de 3000 claves, con 1173 pendientes. Corregidos sentidos administrativos, sanciones, estados, cargos, borradores, pies, fechas y ayudas en en-US/pt-BR. Identificadores, comandos, variables, nombres reales y textos personalizados se conservan. Los idiomas continúan parciales. El despliegue de Test permanece fijado en `74c2adfb2f101a5ad16af8d2fb2347947808437c` (Railway SUCCESS, deployment `d18cce3c-efa3-4392-8067-57d585804b8d`); estos cambios editoriales se publican como punto de control y todavía no sustituyen ese despliegue. Revisión integral y aceptación interactiva pendientes.

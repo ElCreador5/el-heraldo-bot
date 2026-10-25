@@ -6,6 +6,7 @@ de material de canales restringidos. Se conservan metadatos mínimos solamente.
 """
 from __future__ import annotations
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, variants as _i18n_variants
+from heraldo_i18n import join_text as _i18n_join
 
 import asyncio
 from dataclasses import dataclass
@@ -191,7 +192,7 @@ def observation_embed(evidence: ObservationEvidence) -> discord.Embed:
     embed.add_field(name=_t('text.98e5acddb6c46a'), value={
         "suspected": _t('text.1611d0206d0da4'), "ambiguous": _t('text.83820656fe4267')
     }[evidence.category], inline=True)
-    embed.add_field(name=_t('text.db8661d1e95a31'), value=", ".join(map(str, sorted(set(evidence.rule_numbers))))[:100], inline=True)
+    embed.add_field(name=_t('text.db8661d1e95a31'), value=_i18n_join(", ", map(str, sorted(set(evidence.rule_numbers))))[:100], inline=True)
     embed.add_field(name=_t('text.dbb654a486a5fc'), value={
         "sfw": _t('text.4126ef96750e46'), "age_restricted": _t('text.d7d3d194cdd9e0'),
         "unknown": _t('text.00c2263a2c37e6'),
