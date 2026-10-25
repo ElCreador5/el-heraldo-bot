@@ -414,3 +414,8 @@ La petición del propietario autoriza implementación y pruebas de respaldo/recu
 - La cita de la regla se obtiene del reglamento vigente del servidor, **nunca** de plantillas genéricas o reglas inventadas. La observación es provisional hasta revisión; cualquier sanción exige las garantías disciplinarias existentes.
 - **Alcance de esta decisión:** estándar NH aprobado para desarrollo en `Pruebas`; no constituye confirmación de implementación transversal, pruebas reales ni autorización para actualizar `main`.
 - **Rectificación de la decisión del 24 de octubre:** el editor actual de Custodio debe asociar las cinco acciones (Solo reportar, Warn, Temp Ban, Expulsar, Ban) a reglas oficiales concretas del servidor, no a las antiguas cinco categorías orientativas. El nombre del botón de plantilla `Usar sugerencia` ya no es interfaz principal de reglas reales.
+
+### 2026-10-25 — NH: fecha y hora localizada por Discord
+- Los informes y evidencias deben mostrar fechas mediante marcas de tiempo nativas de Discord (`<t:UNIX:F>`), para que cada moderador vea la hora en su zona horaria.
+- Mantener el instante real con fecha/hora conscientes de zona horaria; UTC es válido para cálculos internos, no como único formato visible.
+- Primer componente actualizado en `Pruebas`: `heraldo_evidence.py`; la adopción en otros módulos y las pruebas interactivas de Discord siguen pendientes.
