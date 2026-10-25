@@ -32,6 +32,13 @@ class LiteralEvidence:
         if bool(self.rule_quote) != (self.rule_number is not None):
             raise ValueError("rule_quote_and_number_required_together")
 
+def discord_local_timestamp(moment: datetime) -> str:
+    """Fecha completa que Discord presenta en la zona horaria del lector."""
+    if moment.tzinfo is None:
+        raise ValueError("timestamp_requires_timezone")
+    return f"<t:{int(moment.timestamp())}:F>"
+
+
 def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: str | None = None):
     """Trocea citas extensas sin presentar fragmentos truncados como completos.
 
@@ -59,7 +66,7 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
         if index == 0:
             item.add_field(name="Miembro", value=evidence.actor[:1024], inline=True)
             item.add_field(name="Servidor y canal", value=f"{evidence.guild} · {evidence.channel}"[:1024], inline=True)
-            item.add_field(name="Fecha y hora", value=stamp.strftime("%Y-%m-%d %H:%M:%S UTC"), inline=False)
+            item.add_field(name="Fecha y hora", value=discord_local_timestamp(evidence.occurred_at), inline=False)
             item.add_field(name="Conducta", value=evidence.conduct[:1024], inline=False)
             item.add_field(name="Resultado", value=evidence.outcome[:1024], inline=False)
         # Discord embeds no enlazan dinámicamente un campo sin volver a editarlo.
