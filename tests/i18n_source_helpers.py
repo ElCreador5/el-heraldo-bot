@@ -72,16 +72,28 @@ def semantic_source(source):
         position += len(line.encode())
     original = source.encode()
     edits = []
+    roots = {}
     for node in calls:
         parent = parents.get(id(node))
-        while parent is not None and id(parent) not in chosen:
+        enclosing_string = None
+        blocked = False
+        while parent is not None:
+            if id(parent) in chosen:
+                blocked = True
+                break
+            if isinstance(parent, ast.JoinedStr):
+                enclosing_string = parent
             parent = parents.get(id(parent))
-        if parent is not None:
+        if blocked:
             continue
+        root = enclosing_string or node
+        roots[id(root)] = root
+    # Rebuild enclosing f-strings together so quote choices remain valid in 3.11.
+    for node in roots.values():
         first = offsets[node.lineno-1] + node.col_offset
         last = offsets[node.end_lineno-1] + node.end_col_offset
         segment = original[first:last].decode()
-        result = SourcePresentation().visit(ast.parse(segment, mode='eval')).body
+        result = SourcePresentation().visit(ast.parse('(' + segment + ')', mode='eval')).body
         rendered = (json.dumps(result.value, ensure_ascii=False)
                     if isinstance(result, ast.Constant) else ast.unparse(ast.fix_missing_locations(result)))
         first = offsets[node.lineno-1] + node.col_offset
