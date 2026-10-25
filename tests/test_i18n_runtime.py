@@ -76,6 +76,41 @@ class CatalogAndSourceTests(unittest.TestCase):
                     self.assertNotIn('_t(', ast.unparse(node.value), (file.name, node.lineno))
 
 
+    def test_static_discord_text_limits_in_all_locales(self):
+        for file in ROOT.glob('*.py'):
+            if file.name.startswith('test') or file.name == 'heraldo_i18n.py':
+                continue
+            tree = ast.parse(file.read_text())
+            parents = {id(child): node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.keyword) or not isinstance(node.value, ast.Call):
+                    continue
+                value = node.value
+                if not (isinstance(value.func, ast.Name) and value.func.id == '_t') or value.keywords:
+                    continue
+                owner = parents[id(node)]
+                name = ast.unparse(owner.func) if isinstance(owner, ast.Call) else ''
+                limit = None
+                if name.endswith('TextInput'):
+                    limit = {'label': 45, 'placeholder': 100}.get(node.arg)
+                elif name.endswith('SelectOption'):
+                    limit = {'label': 100, 'description': 100}.get(node.arg)
+                elif name.endswith(('.button', '.Button')) and node.arg == 'label':
+                    limit = 80
+                elif 'Select' in name and node.arg == 'placeholder':
+                    limit = 150
+                elif node.arg == 'title':
+                    cls = owner
+                    while cls is not None and not isinstance(cls, ast.ClassDef):
+                        cls = parents.get(id(cls))
+                    if cls and any('Modal' in ast.unparse(base) for base in cls.bases):
+                        limit = 45
+                if limit is not None:
+                    for locale in i18n.TARGET_LOCALES:
+                        text = i18n.CATALOGS[locale].messages[value.args[0].value]
+                        self.assertLessEqual(len(text), limit, (file.name, node.lineno, locale, text))
+
+
 class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.resolver = i18n._locale_resolver
@@ -137,6 +172,18 @@ class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.guild_language(self.guild.id), 'es-419')
         await view.discard.callback(self.interaction())
         self.assertEqual(b.guild_language(self.guild.id), 'es-419')
+
+    async def test_stale_language_panel_uses_the_new_server_language(self):
+        self.choose('es-419')
+        view = b.HeraldoLanguageView(self.guild.id, self.owner)
+        self.choose('pt-BR')
+        interaction = self.interaction()
+        interaction.data = {'values': ['en-US']}
+        await view.select_language(interaction)
+        payload = interaction.response.edit_message.call_args.kwargs
+        self.assertEqual(payload['content'], i18n.translate('pt-BR', 'language.concurrent_change'))
+        self.assertIsNone(payload['view'])
+        self.assertEqual(b.guild_language(self.guild.id), 'pt-BR')
 
     async def test_save_is_shared_and_does_not_affect_other_servers(self):
         self.choose('es-419')
@@ -209,6 +256,9 @@ class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(quote, [field.value for field in embeds[0].fields])
         self.assertEqual(embeds[0].footer.text, "El Heraldo's Labs 🧪")
         self.assertEqual(embeds[0].title, 'El Heraldo · Evidence')
+        fields = {field.name: field.value for field in embeds[0].fields}
+        self.assertEqual(fields['Conduct'], 'Conduct pending review')
+        self.assertEqual(fields['Outcome'], 'Report only')
 
     async def test_translated_form_values_keep_internal_contracts(self):
         for locale, boolean, mode, action in [('en-US', 'Yes', 'Allowlist', 'toggle'), ('pt-BR', 'Sim', 'Lista de permissões', 'alternar')]:

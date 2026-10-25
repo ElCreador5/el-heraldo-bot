@@ -94,7 +94,7 @@
   "text.61cb3229d142f4": "**El Heraldo · Message centre**\n\nFrom here you can edit the persistent panels that do support customization. Changes are kept separate by server and, when a panel is already published, it is updated without creating duplicates.\n\n**No panels appear here** that only show actual bot or server information, such as variables, commands, diagnoses, states and lists.",
   "text.6902f6b5d77eb7": "**El Heraldo · Messages**\n\nChoose the message you want to edit. System messages have fixed names; templates with proper names are optional and are found in Custom Messages. Changes are isolated by server and the published panels are synchronized when appropriate.\n\n**It can be edited:** Verification, DM the verification, suggestions, Honeypot, Condemns and Logs.\n** Purposely excluded:** Variables, commands, lists, states, profiles, histories, rankings and any panel whose content represents real or real-time generated data.",
   "text.f3860dde87e39c": "Template editor",
-  "text.35b12105e46282": "Published JSON of a kind used in the manufacture of goods",
+  "text.35b12105e46282": "Edit template JSON",
   "text.63bedeb36a72bc": "New component of roles",
   "text.1ed3751ee0b8b7": "Linking component to template",
   "text.0ed31384410410": "Importing a message kit",

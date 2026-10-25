@@ -7,7 +7,7 @@ Revisión de `Pruebas`, 25 de octubre de 2026 (República Dominicana). Base de t
 **Integración transversal implementada y verificada automáticamente; aceptación integral PENDIENTE.** No se acredita el 100 % ni se retiran las advertencias de desarrollo.
 
 - Catálogo común: **3000 claves** en `es-419`, `en-US` y `pt-BR`, con paridad de variables comprobada.
-- **395 claves con revisión explícita** de textos/control o heredadas del catálogo manual. **2605 claves** continúan en la cola editorial, disponible en `locales/editorial_status.json`.
+- **397 claves con revisión explícita** de textos/control o heredadas del catálogo manual. **2603 claves** continúan en la cola editorial, disponible en `locales/editorial_status.json`.
 - `tools/i18n_audit.py` descubre claves realmente referenciadas y literales nuevos. Exenciones técnicas revisadas: **152**, con archivo, ámbito, texto y motivo. No son traducciones pendientes: incluyen SQL, parsers, nombres reales, marcas, contratos HTTP/GraphQL, CLI de mantenimiento y datos sintéticos.
 - Las propuestas iniciales se generaron localmente; **no equivalen a revisión profesional completa**. El bot no carga modelos ni consulta servicios de traducción en ejecución. Dependencias de Railway sin cambios.
 
@@ -36,9 +36,9 @@ Revisión de `Pruebas`, 25 de octubre de 2026 (República Dominicana). Base de t
 
 ## Pruebas
 
-- 25 pruebas específicas: catálogos, variables, referencias reales, nuevos literales, preferencias compartidas, aislamiento, guardado/descartar, permisos, DMs, contexto concurrente y serialización real.
+- 27 pruebas específicas: catálogos, variables, referencias reales, nuevos literales, preferencias compartidas, aislamiento, guardado/descartar, permisos, DMs, contexto concurrente y serialización real.
 - Matriz: nueve módulos principales × tres idiomas, con comprobación de que abrirlos no escribe SQLite. Modales, evidencia literal y formularios persistentes de DM ejecutados sin Gateway.
-- Suite `tests`: 933 pruebas; dos omisiones existentes. Regresiones de raíz: 39 pruebas. Compilación, gramática Python 3.11, `pip check` y `git diff --check`.
+- Suite `tests`: 935 pruebas; dos omisiones existentes. Regresiones de raíz: 39 pruebas. Compilación, gramática Python 3.11, `pip check` y `git diff --check`.
 - Las pruebas AST históricas usan `tests/i18n_source_helpers.py` para recuperar únicamente la presentación española. **Las pruebas nuevas de i18n examinan y ejecutan el código real**, sin esa adaptación.
 - CI incorpora auditoría y pruebas de idioma. El resultado remoto del commit y el recibo Railway se registran después de publicarlo.
 

@@ -6,7 +6,7 @@
     "pt-BR"
   ],
   "catalog_keys": 3000,
-  "explicitly_reviewed_keys": 395,
+  "explicitly_reviewed_keys": 397,
   "editorial_review_pending_keys": [
     "text.000135b3cd2a46",
     "text.002cb83752102d",
@@ -181,7 +181,6 @@
     "text.0f4386bd84f4de",
     "text.0f51bf3c9587b4",
     "text.0fd0d247e97552",
-    "text.0fd452b43bf5c7",
     "text.0fe688f0032f05",
     "text.0fef4eec60f270",
     "text.101414bee36ff4",
@@ -561,7 +560,6 @@
     "text.35896fa2cade69",
     "text.359a11ae7409b2",
     "text.35a78949240c6d",
-    "text.35b12105e46282",
     "text.35cc18ed6130f5",
     "text.35d0bfb16efe76",
     "text.3682162eb7d367",

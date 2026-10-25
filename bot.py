@@ -13248,6 +13248,11 @@ class HeraldoLanguageView(discord.ui.View):
 
     @_i18n_context
     async def select_language(self, interaction: discord.Interaction) -> None:
+        current = guild_language(self.guild_id)
+        if current != self.original:
+            await interaction.response.edit_message(
+                content=i18n.translate(current, "language.concurrent_change"), view=None)
+            return
         data = (interaction.data or {}).get("values") or []
         value = str(data[0]) if data else ""
         if value not in LANGUAGE_READY:
@@ -13267,7 +13272,7 @@ class HeraldoLanguageView(discord.ui.View):
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
         if guild_language(self.guild_id) != self.original:
             await interaction.response.edit_message(
-                content=i18n.translate(self.original, "language.concurrent_change"), view=None)
+                content=i18n.translate(guild_language(self.guild_id), "language.concurrent_change"), view=None)
             return
         if self.pending not in LANGUAGE_READY:
             await interaction.response.send_message(
@@ -13297,7 +13302,7 @@ class HeraldoLanguageView(discord.ui.View):
                 view=HeraldoSetupView(self.guild_id, self.owner_id))
         else:
             await interaction.response.edit_message(
-                content=i18n.translate(self.original, "language.closed"), view=None)
+                content=i18n.translate(guild_language(self.guild_id), "language.closed"), view=None)
 
 
 class HeraldoSetupView(discord.ui.View):

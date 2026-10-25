@@ -238,6 +238,9 @@ class DeferredText(str):
     def __format__(self, spec):
         return format(str(self), spec)
 
+    def __getitem__(self, key):
+        return str(self)[key]
+
     def format(self, *args, **kwargs):
         return str(self).format(*args, **kwargs)
 

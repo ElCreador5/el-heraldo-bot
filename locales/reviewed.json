@@ -1362,5 +1362,13 @@
   "text.0b202b1dc653c4": [
     "https://… or {servericon}",
     "https://… ou {servericon}"
+  ],
+  "text.35b12105e46282": [
+    "Edit template JSON",
+    "Edição de modelo JSON"
+  ],
+  "text.0fd452b43bf5c7": [
+    "Start date (YYYY-MM-DD, optional)",
+    "Data inicial (AAAA-MM-DD, opcional)"
   ]
 }
