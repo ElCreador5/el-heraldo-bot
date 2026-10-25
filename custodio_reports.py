@@ -261,6 +261,15 @@ async def publish_literal_observation(
     async with lock:
         channel = _get_safe_existing(guild, report_channel_id)
         key = (guild.id, source_message.id)
+        if key not in _published_evidence:
+            from custodio_evidence_index import find_reference, prepare_index
+            import os
+            db_path = os.environ.get("DB_PATH")
+            if db_path:
+                prepare_index(db_path)
+                previous_id = find_reference(db_path, guild.id, source_message.id)
+                if previous_id:
+                    _published_evidence[key] = previous_id
         if key in _published_evidence:
             try:
                 return await channel.fetch_message(_published_evidence[key])
@@ -284,6 +293,9 @@ async def publish_literal_observation(
         if len(_published_evidence) >= MAX_RECENT_EVIDENCE:
             _published_evidence.pop(next(iter(_published_evidence)))
         _published_evidence[key] = report.id
+        if db_path:
+            from custodio_evidence_index import save_reference
+            save_reference(db_path, guild.id, source_message.id, report.id)
         return report
 
 
@@ -297,7 +309,15 @@ async def unlink_deleted_original(*, guild: discord.Guild, deleted_message_id: i
     key = (guild.id, deleted_message_id)
     report_id = _published_evidence.get(key)
     if report_id is None:
-        return False
+        import os
+        from custodio_evidence_index import find_reference, prepare_index
+        db_path = os.environ.get("DB_PATH")
+        if db_path:
+            prepare_index(db_path)
+            report_id = find_reference(db_path, guild.id, deleted_message_id)
+        if report_id is None:
+            return False
+        _published_evidence[key] = report_id
     lock = _publish_locks.setdefault(guild.id, asyncio.Lock())
     async with lock:
         report_id = _published_evidence.get(key)
