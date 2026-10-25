@@ -41,9 +41,9 @@ class LanguageContract(unittest.TestCase):
                        and any(isinstance(t, ast.Name) and t.id == "LANGUAGE_READY"
                                for t in node.targets)]
         self.assertEqual(len(assignments), 1)
-        self.assertIn("es-419", ast.unparse(assignments[0]))
-        self.assertNotIn("en-US", ast.unparse(assignments[0]))
-        self.assertNotIn("pt-BR", ast.unparse(assignments[0]))
+        self.assertIn("i18n.SUPPORTED_LOCALES", ast.unparse(assignments[0]))
+        from heraldo_i18n import SUPPORTED_LOCALES
+        self.assertEqual(SUPPORTED_LOCALES, frozenset({"es-419"}))
 
     def test_guild_isolation_and_fallback(self):
         getter = ast.unparse(function("guild_language"))
