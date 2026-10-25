@@ -60,7 +60,7 @@ class ObserveBuffer:
             return None
         events.append((timestamp, message_id))
         # Evidencia mecánica, no prueba por sí sola de una infracción.
-        if len(events) >= REPEAT_MIN:
+        if len(events) == REPEAT_MIN:
             return Observation(guild_id, channel_id, actor_id, message_id,
                                "identical_text_repetition", len(events),
                                approved_rule_number)
