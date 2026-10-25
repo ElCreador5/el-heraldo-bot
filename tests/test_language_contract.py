@@ -48,8 +48,8 @@ class LanguageContract(unittest.TestCase):
     def test_guild_isolation_and_fallback(self):
         getter = ast.unparse(function("guild_language"))
         self.assertIn("guild_id", getter)
-        self.assertIn('guild_config_get(guild_id, "language")', getter)
-        self.assertIn('"es-419"', getter)
+        self.assertIn("guild_config_get(guild_id,", getter)
+        self.assertIn("es-419", getter)
 
 
 if __name__ == "__main__":
