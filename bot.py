@@ -12772,6 +12772,9 @@ class HeraldoLanguageView(discord.ui.View):
         self.from_setup = from_setup
         self.original = guild_language(guild_id)
         self.pending = self.original
+        self.save.label = i18n.translate(self.original, "language.save")
+        self.discard.label = i18n.translate(self.original, "language.discard")
+        self.back.label = i18n.translate(self.original, "language.back")
         selector = discord.ui.Select(
             placeholder=i18n.translate(self.original, "language.select"),
             options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
@@ -12793,7 +12796,7 @@ class HeraldoLanguageView(discord.ui.View):
         value = str(data[0]) if data else ""
         if value not in LANGUAGE_READY:
             await interaction.response.send_message(
-                "Este idioma todavía no está disponible.", ephemeral=True)
+                i18n.translate(self.original, "language.not_available"), ephemeral=True)
             return
         self.pending = value
         for item in self.children:
@@ -12807,16 +12810,16 @@ class HeraldoLanguageView(discord.ui.View):
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
         if guild_language(self.guild_id) != self.original:
             await interaction.response.edit_message(
-                content="El idioma cambió en otra sesión. Abre nuevamente el editor.", view=None)
+                content=i18n.translate(self.original, "language.concurrent_change"), view=None)
             return
         if self.pending not in LANGUAGE_READY:
             await interaction.response.send_message(
-                "Este idioma todavía no está disponible.", ephemeral=True)
+                i18n.translate(self.original, "language.not_available"), ephemeral=True)
             return
         if self.pending != self.original:
             guild_config_set(self.guild_id, "language", self.pending)
         await interaction.response.edit_message(
-            content=language_panel_text(self.guild_id) + "\n\n**Cambios guardados.**",
+            content=language_panel_text(self.guild_id) + "\n\n**" + i18n.translate(self.pending, "language.saved") + "**",
             view=HeraldoLanguageView(self.guild_id, self.owner_id,
                                      from_setup=self.from_setup))
 
@@ -12835,7 +12838,7 @@ class HeraldoLanguageView(discord.ui.View):
                 view=HeraldoSetupView(self.guild_id, self.owner_id))
         else:
             await interaction.response.edit_message(
-                content="Configuración de idioma cerrada.", view=None)
+                content=i18n.translate(self.original, "language.closed"), view=None)
 
 
 class HeraldoSetupView(discord.ui.View):
