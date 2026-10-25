@@ -39,14 +39,14 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
     no se publica una representación incompleta como evidencia literal.
     """
     text = evidence.verbatim
-    if len(text) > 24000:
+    if len(text) > 7200:
         raise ValueError("evidence_too_long_for_single_report")
     chunks = [text[i:i+900] for i in range(0, len(text), 900)]
     rule = evidence.rule_quote or ""
     if len(rule) > 2000:
         raise ValueError("rule_quote_too_long")
     parts = [rule[i:i+900] for i in range(0, len(rule), 900)] if rule else []
-    if len(chunks) + len(parts) > 30:
+    if len(chunks) + len(parts) > 10:
         raise ValueError("report_exceeds_embed_limits")
     embeds = []
     stamp = evidence.occurred_at.astimezone(timezone.utc)
@@ -66,7 +66,7 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
         # La transcripción siempre es visible, exista o no el mensaje original.
         displayed = chunk.replace("\\", "\\\\").replace("]", "\\]").replace("[", "\\[")
         if evidence.original_exists and evidence.original_url and index == 0:
-            displayed = f"[{displayed}]({evidence.original_url})"
+            displayed = f"{displayed}\\nOriginal disponible: {evidence.original_url}"
         item.add_field(name=f"Transcripción literal · {index+1}/{len(chunks)}", value=displayed, inline=False)
         item.set_footer(text=footer, icon_url=icon_url or None)
         embeds.append(item)
