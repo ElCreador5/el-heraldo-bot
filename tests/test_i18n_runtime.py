@@ -4,6 +4,7 @@ import ast
 from contextlib import closing
 from datetime import datetime, timezone
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace as NS
 import unittest
@@ -31,6 +32,23 @@ def labels(payload):
 
 
 class CatalogAndSourceTests(unittest.TestCase):
+    def test_translations_preserve_discord_markup_commands_and_proper_names(self):
+        def markers(value):
+            return {
+                'discord': set(re.findall(r'<(?:t:|@&?|#)[^>]+>', value)),
+                'commands': set(re.findall(r'(?<![\w:)/])/[a-z_][a-z0-9_]*', value)),
+                'names': {name for name in ['El Heraldo', "El Heraldo's Labs 🧪",
+                          'Tentad@', 'Sin Verificar', 'El Oráculo', 'EL ORÁCULO'] if name in value},
+            }
+        for key, source in i18n.CATALOGS['es-419'].messages.items():
+            expected = markers(source)
+            for locale in ['en-US', 'pt-BR']:
+                message = i18n.CATALOGS[locale].messages[key]
+                actual = markers(message)
+                for kind in expected:
+                    self.assertFalse(expected[kind] - actual[kind], (key, locale, kind))
+                self.assertEqual(message.count(']('), source.count(']('), (key, locale))
+
     def test_all_referenced_keys_exist_in_all_languages(self):
         report = audit()
         for locale in i18n.TARGET_LOCALES:
@@ -39,8 +57,14 @@ class CatalogAndSourceTests(unittest.TestCase):
         i18n.verify_catalogs()
 
     def test_new_untranslated_spanish_fails_the_gate(self):
-        source = 'async def panel(interaction):\n    await interaction.response.send_message("Nueva función sin traducción.")\n'
-        self.assertTrue(findings(source, 'new_module.py'))
+        for source in [
+            'async def panel(interaction):\n    await interaction.response.send_message("Nueva función sin traducción.")\n',
+            'async def panel(interaction):\n    await interaction.response.send_message("Hola")\n',
+            'async def panel(interaction):\n    await interaction.response.send_message(f"Hola {interaction.user.mention}")\n',
+            'embed.add_field(name="Detalles", value="Pendiente")',
+            'discord.ui.TextInput(label="HEX", default="Todos")',
+        ]:
+            self.assertTrue(findings(source, 'new_module.py'), source)
 
     def test_no_unreviewed_literal_exemptions(self):
         approved = json.loads((ROOT/'locales/technical_literals.json').read_text())
@@ -164,6 +188,35 @@ class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(b.validate_setup_view_layouts(self.guild.id), [], locale)
             self.assertEqual(sqlite_snapshot(), baseline, locale)
 
+    async def test_custodian_controls_survive_an_external_language_change(self):
+        from custodio_setup import CustodioSetupView
+        from custodio_preferences import CustodioPreferences
+        self.choose('es-419')
+        settings = CustodioPreferences().as_settings()
+        view = CustodioSetupView(self.guild.id, self.owner,
+            get_setting=lambda gid, key: settings.get(key), save_atomic=lambda *a, **kw: True,
+            access_check=AsyncMock(return_value=True), parent_factory=lambda: None)
+        self.assertTrue(view.save_button.disabled)
+        self.choose('pt-BR')
+        view.pending_sensitivity = 'strict'
+        view._sync_controls()
+        self.assertFalse(view.save_button.disabled)
+        self.assertFalse(view.discard_button.disabled)
+        self.assertIn(('label', i18n.translate('pt-BR', 'language.save')), list(labels(view.to_components())))
+
+    async def test_reminder_selection_survives_an_external_language_change_without_saving(self):
+        self.choose('es-419')
+        view = b.ReportReminderSetupView(self.guild.id, self.owner)
+        control = next(child for child in view.children if isinstance(child, b.discord.ui.Select)
+                       and any(option.value == 'weekly' for option in child.options))
+        self.choose('pt-BR')
+        baseline = sqlite_snapshot()
+        interaction = self.interaction()
+        interaction.data = {'values': ['weekly']}
+        await control.callback(interaction)
+        self.assertEqual([option.value for option in control.options if option.default], ['weekly'])
+        self.assertEqual(sqlite_snapshot(), baseline)
+
     async def test_owned_text_operators_preserve_custom_text_and_type_errors(self):
         own = i18n.text('language.saved')
         custom = 'Cambios guardados.'
@@ -199,6 +252,41 @@ class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
                            if row[1] == 'servidor_dueno_mencion')
             self.assertEqual(aliases, ('dueno', 'dueño', 'owner'))
             self.assertTrue(all(type(alias) is str for alias in aliases))
+
+    async def test_localized_duration_and_purge_inputs_preserve_numeric_rules(self):
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            with i18n.use_guild(self.guild.id):
+                for seconds in [10, 60, 3600, 86400, b.RAID_MONTH_SECONDS,
+                                2*b.RAID_MONTH_SECONDS + 86400 + 60]:
+                    rendered = b.format_flex_duration(seconds)
+                    self.assertEqual(b.parse_flex_duration(rendered, 1, 12*b.RAID_MONTH_SECONDS), seconds)
+                for minutes in [1, 60, 1440, 2175]:
+                    self.assertEqual(b.parse_duration(b.format_duration(minutes), 1, 10000), minutes)
+                for count in ['200 mensajes', '200 messages', '200 mensagens']:
+                    self.assertEqual(b.parse_purge_spec(count), ('count', 200))
+                for all_messages in ['todo', 'all', 'tudo']:
+                    self.assertEqual(b.parse_purge_spec(all_messages), ('all', 0))
+                for indefinite in ['indefinida', 'indefinite', 'sem prazo']:
+                    self.assertTrue(i18n.indefinite_input(indefinite))
+                with self.assertRaises(ValueError):
+                    b.parse_duration('29d', 1, 28*1440)
+
+    async def test_automatic_member_of_week_message_has_correct_portuguese_plural(self):
+        self.choose('pt-BR')
+        self.guild.get_member = lambda mid: NS(id=mid, guild=self.guild, roles=[], bot=False,
+            mention=f'<@{mid}>', display_avatar=NS(url='https://example.invalid/avatar.png'))
+        channel = NS(guild=self.guild, send=AsyncMock())
+        with patch.object(b.bot, 'get_channel', return_value=channel), \
+             patch.object(b, 'get_motw_channel_id', return_value=11), \
+             patch.object(b, 'hp_punish_role_id', return_value=0), \
+             patch.object(b, 'condemnation_get', return_value=None):
+            for lead, word in [(1, 'mensagem'), (2, 'mensagens')]:
+                with patch.object(b, 'db_week_ranking', return_value=[(10, 20), (20, 20-lead)]):
+                    await b.announce_member_of_the_week(self.guild.id, reset=False)
+                description = channel.send.call_args.kwargs['embed'].description
+                self.assertIn(f'**{lead} {word}**', description)
+                self.assertNotIn('mensagems', description)
 
     async def test_setup_selector_uses_guild_language_and_keeps_module_ids(self):
         expected = {row[0] for row in b.HeraldoSetupView.MODULES} - {'role_connections'}

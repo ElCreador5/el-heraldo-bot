@@ -1,3 +1,9 @@
+## 2026-10-25 — Catálogo revisado y ayuda nativa por servidor
+
+Implementación i18n transversal: 3113 claves revisadas, cero pendientes editoriales; 3102 referencias reales y 242 campos nativos de 51 comandos. Se completan mensajes largos, español residual, unidades/entradas localizadas y plurales. La ayuda nativa usa copias por servidor; Guardar idioma actualiza solo ese servidor y permite reintentar fallos en el mismo panel. IDs, permisos, valores, nombres reales, textos personalizados, SQL y footer Lab conservados.
+
+Validación: 950 pruebas en tests (948 aprobadas, dos omisiones existentes), 39 en raíz; 987 aprobadas en total. 38 pruebas i18n y cuatro de contrato de idioma incluidas. 38 constructores/modos de setup en los tres idiomas. Clics reales pendientes: Discord exige autenticación en el navegador disponible. Se mantienen avisos parciales y no se declara 100 %. Ver docs/I18N_COVERAGE.md. Railway Test se actualizará al commit validado y su recibo se registrará después; main y producción no se modifican.
+
 ## 2026-10-25 — Segundo punto de control i18n
 
 Revisión editorial: 2793 de 3006 claves; 213 pendientes. Corregidas uniones/concatenaciones de textos propios creados al arrancar, literales breves de interfaz y etiquetas del submenú Mensajes. Se preservan estados internos de verificación (`sin-guild`, `sin-plazo`) y alias técnicos de variables. Auditoría ampliada con exenciones por contexto. Regresiones nuevas de payloads, resúmenes, tipos, aislamiento y constructores de paneles; suite completa ejecutada con 938 pruebas y dos omisiones existentes, sin fallos, antes de las dos últimas regresiones añadidas. Las traducciones continúan parciales. Railway Test sigue fijado a `74c2adf`; este punto de control no es un despliegue nuevo. Pendientes: últimos textos largos, plurales/entradas localizadas, metadatos nativos por servidor y validación integral final. `main` y producción intactos.

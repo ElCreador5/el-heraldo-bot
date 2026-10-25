@@ -1102,5 +1102,11 @@
     "scope": "import_kit",
     "text": "ninguno",
     "reason": "Identificador, alias, estado de control o valor canónico de configuración; no es una etiqueta de presentación."
+  },
+  "c8f0c073e530ae05cce5": {
+    "file": "bot.py",
+    "scope": "moderation_case_embed",
+    "text": ">\nID: ",
+    "reason": "Marcador internacional ID y formato de mención de Discord; no contiene texto traducible."
   }
 }

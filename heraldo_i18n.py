@@ -380,6 +380,15 @@ def bool_input(value):
     return normalized
 
 
+def indefinite_input(value):
+    """Sinónimos de presentación; el valor persistido sigue siendo canónico."""
+    return value.strip().casefold() in {
+        "0", "indefinida", "indefinido", "permanente", "hasta retirar",
+        "indefinite", "permanent", "until removed", "sem prazo",
+        "até remover", "até retirar", "sem duração",
+    }
+
+
 def current_guild_id():
     return _current_guild.get()
 

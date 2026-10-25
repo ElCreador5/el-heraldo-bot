@@ -1,4 +1,420 @@
 {
+  "command.005065ae8a2d82c0": [
+    "Keep destination name",
+    "Manter nome do destino"
+  ],
+  "command.0056613826f54a44": [
+    "Included word or phrase",
+    "Palavra ou frase incluída"
+  ],
+  "command.012aa16ce2f57090": [
+    "Ban (permanent)",
+    "Banir (permanente)"
+  ],
+  "command.029ee779388e664c": [
+    "weekly",
+    "semanal"
+  ],
+  "command.0352803394aaa0c7": [
+    "Exact message",
+    "Mensagem exata"
+  ],
+  "command.035e42af9cecabd1": [
+    "Configure independent buttons and menus with a confirmed JSON file.",
+    "Configura botões e menus independentes com um arquivo JSON confirmado."
+  ],
+  "command.04348cbd39e80e1d": [
+    "Keep source name",
+    "Manter nome da origem"
+  ],
+  "command.075406ea8810008c": [
+    "Add one or more general join roles.",
+    "Adiciona um ou mais cargos de entrada gerais."
+  ],
+  "command.0fbc5d3dabe2416c": [
+    "Add a specific role to a Discord user ID.",
+    "Adiciona um cargo específico a um ID de usuário do Discord."
+  ],
+  "command.10e8d281f5597944": [
+    "View active raid status and current settings.",
+    "Consulta se há um raid ativo e a configuração atual."
+  ],
+  "command.11b0537f134cdf02": [
+    "Assign join roles to eligible members now.",
+    "Atribui agora os cargos de entrada aos membros elegíveis."
+  ],
+  "command.1392891aeedf662e": [
+    "Use custom name",
+    "Usar nome personalizado"
+  ],
+  "command.16426266b3cceff4": [
+    "Show your profile or another member's profile.",
+    "Mostra seu perfil ou o perfil de outro membro."
+  ],
+  "command.1817123631821b1c": [
+    "Show a moderation case's details.",
+    "Mostra os dados de um caso de moderação."
+  ],
+  "command.184fe7ed5eb1ad5b": [
+    "Change the channel where El Heraldo logs its activity.",
+    "Altera o canal onde El Heraldo registra sua atividade."
+  ],
+  "command.1a045cf243759ca3": [
+    "Links — messages containing links",
+    "Links — mensagens com links"
+  ],
+  "command.1e1c02d42d80a005": [
+    "View, edit, delete, or pause scheduled embeds.",
+    "Consulta, edita, exclui e pausa embeds agendados."
+  ],
+  "command.2513a614582e69a5": [
+    "Close a case and reverse a reversible punishment when applicable.",
+    "Encerra um caso e reverte a punição reversível quando aplicável."
+  ],
+  "command.25dcf532b1b3cd4e": [
+    "Set or replace a case's evidence.",
+    "Define ou substitui a prova de um caso."
+  ],
+  "command.275eeb17cad0f75c": [
+    "Create a new embed with a form.",
+    "Cria um novo embed por um formulário."
+  ],
+  "command.2b8721569172cf2b": [
+    "Exempt a role or member from the trap.",
+    "Isenta um cargo ou membro da armadilha."
+  ],
+  "command.2bb4cbdf99a144f1": [
+    "View El Heraldo's private listings.",
+    "Consulta as listagens privadas de El Heraldo."
+  ],
+  "command.2e4e3cd2a2ed09bb": [
+    "Add a person who receives and can resolve suggestions by DM.",
+    "Adiciona alguém que receberá e poderá resolver sugestões por mensagem privada."
+  ],
+  "command.2f2a3052ba78bc09": [
+    "Configure El Heraldo's general settings for this server.",
+    "Configura as opções gerais de El Heraldo neste servidor."
+  ],
+  "command.2ff9e1358fe1c4e3": [
+    "Merge two text channels through safe message migration.",
+    "Mescla dois canais de texto por migração segura de mensagens."
+  ],
+  "command.3051fb574bd5bd4f": [
+    "Delete a saved embed; already sent messages remain.",
+    "Exclui um embed salvo; mensagens já enviadas são preservadas."
+  ],
+  "command.308b666bfd216587": [
+    "none",
+    "nenhuma"
+  ],
+  "command.351f8ee5592da168": [
+    "Open the condemned members card form.",
+    "Abre o formulário do cartão de condenados."
+  ],
+  "command.3721ba04407212fa": [
+    "Joins that trigger raid mode (2 to 200)",
+    "Entradas que acionam o modo antirraid (2 a 200)"
+  ],
+  "command.3994ad55e30586a4": [
+    "Publish a server message template.",
+    "Publica um modelo de mensagens do servidor."
+  ],
+  "command.3d71cd4c3db354b7": [
+    "Propose a reply using a template, channel, and word or phrase.",
+    "Propõe uma resposta com modelo, canal e palavra ou frase."
+  ],
+  "command.42d848413cea11af": [
+    "View saved custom embeds by name.",
+    "Consulta os embeds personalizados salvos por nome."
+  ],
+  "command.45bb10d04b60b8b1": [
+    "Ban a member and create a moderation case.",
+    "Bane um membro e cria um caso de moderação."
+  ],
+  "command.473e4897b9b8e650": [
+    "Change the Member of the Week announcement channel.",
+    "Altera o canal de anúncio do Membro da Semana."
+  ],
+  "command.484d747f8cac3dc5": [
+    "Publish or rebuild the sticky suggestions panel in a channel.",
+    "Publica ou reconstrói o painel sticky de sugestões em um canal."
+  ],
+  "command.4c0dec2ea179d04a": [
+    "Configure and manage suggestions.",
+    "Configura e gerencia o sistema de sugestões."
+  ],
+  "command.4cdb03121982ee8d": [
+    "Keep a template at the end of a channel.",
+    "Mantém um modelo ao final de um canal."
+  ],
+  "command.5273767166b37221": [
+    "Remove a specific role or remove the user ID from the list.",
+    "Remove um cargo específico ou o ID do usuário da lista."
+  ],
+  "command.545012681b6d0d7d": [
+    "View sticky messages and errors requiring review.",
+    "Consulta mensagens sticky e erros que exigem revisão."
+  ],
+  "command.570a2519e6fbc8e1": [
+    "View all available El Heraldo commands.",
+    "Consulta todos os comandos disponíveis de El Heraldo."
+  ],
+  "command.57d65e356fe80492": [
+    "Show a welcome DM preview in the log channel.",
+    "Mostra uma prévia da mensagem privada de boas-vindas no canal de registros."
+  ],
+  "command.592bb05d30901e38": [
+    "Test text with El Heraldo's variables.",
+    "Testa um texto com as variáveis de El Heraldo."
+  ],
+  "command.5a8fb76ea399db08": [
+    "Lift a condemnation and restore saved roles.",
+    "Remove uma condenação e devolve os cargos salvos."
+  ],
+  "command.5af0c0a441b4f587": [
+    "Evaluate a member immediately, without waiting for the 10-minute timer.",
+    "Avalia um membro imediatamente, sem esperar o prazo de 10 minutos."
+  ],
+  "command.5c659a40251fecd1": [
+    "Remove a channel from Honeypot without deleting it.",
+    "Remove um canal do Honeypot sem excluí-lo."
+  ],
+  "command.5d7d2feb27f57530": [
+    "View the most recently trapped members.",
+    "Consulta os últimos membros capturados."
+  ],
+  "command.63bf882c5cfc7f95": [
+    "Condemn a member: save their roles, remove them, and apply Condenado.",
+    "Condena um membro: salva seus cargos, remove-os e aplica Condenado."
+  ],
+  "command.644a743dc8c76e11": [
+    "Text — no image or video",
+    "Texto — sem imagem nem vídeo"
+  ],
+  "command.6565f549545a8c72": [
+    "List the most recent moderation cases.",
+    "Lista os casos de moderação mais recentes."
+  ],
+  "command.66d50cbd0c9d3a5a": [
+    "Update a case's reason, duration, or notes.",
+    "Atualiza o motivo, duração ou notas de um caso."
+  ],
+  "command.6d77b1db250ab2e2": [
+    "Delete a user's messages: all, a count, or a time range.",
+    "Exclui mensagens de um usuário: todas, uma quantidade ou um intervalo."
+  ],
+  "command.7122b57dd492205c": [
+    "Edit the panel message, button text, and post-verification message.",
+    "Edita a mensagem do painel, texto do botão e mensagem após a verificação."
+  ],
+  "command.7ac1cc8252894d60": [
+    "Choose whether the server creator also receives suggestions by DM.",
+    "Define se o criador do servidor também recebe sugestões por mensagem privada."
+  ],
+  "command.7b9eba332b75753e": [
+    "End raid mode now and reopen invites.",
+    "Encerra agora o modo antirraid e reabre convites."
+  ],
+  "command.7e33e3cd896e22db": [
+    "Retry restoring roles that could not be returned when a condemnation ended.",
+    "Tenta restaurar os cargos que não puderam ser devolvidos ao remover uma condenação."
+  ],
+  "command.80ec9e4ac4fb7be6": [
+    "Edit an El Heraldo message with a template after confirmation.",
+    "Edita uma mensagem de El Heraldo com um modelo após confirmação."
+  ],
+  "command.822cd459c77156a5": [
+    "Publish the verification panel with a button in a channel.",
+    "Publica o painel de verificação com botão em um canal."
+  ],
+  "command.83c9e7c684178560": [
+    "Synchronize the server template now and view its link.",
+    "Sincroniza agora o modelo do servidor e mostra seu link."
+  ],
+  "command.83f532385a9a5b10": [
+    "Configure the channel for new condemnation announcements.",
+    "Configura o canal de anúncio de novas condenações."
+  ],
+  "command.875fc5727ea244b1": [
+    "All — any message",
+    "Tudo — qualquer mensagem"
+  ],
+  "command.889798a68f204cdd": [
+    "Register an existing text channel as a trap channel.",
+    "Registra um canal de texto existente como canal de armadilha."
+  ],
+  "command.8b40ccf12c3d9cdd": [
+    "View or change button verification settings.",
+    "Consulta ou altera a configuração da verificação por botão."
+  ],
+  "command.91de35d9325c1eac": [
+    "Warn a member and create a moderation case.",
+    "Adverte um membro e cria um caso de moderação."
+  ],
+  "command.9227ba8c2c272eb8": [
+    "Fully customize the pinned notice embed.",
+    "Personaliza por completo o embed do aviso fixado."
+  ],
+  "command.950ac76bac577b83": [
+    "Open a saved embed's editing panel.",
+    "Abre o painel de edição de um embed salvo."
+  ],
+  "command.9cc26bef16a00ce1": [
+    "Propose publishing a template on a date and in a time zone.",
+    "Propõe publicar um modelo em uma data e fuso horário."
+  ],
+  "command.9e979dc44a23434c": [
+    "View all variables available for text and embeds.",
+    "Consulta todas as variáveis disponíveis para textos e embeds."
+  ],
+  "command.9f8f97a2776ca712": [
+    "Import a template JSON file with review and confirmation.",
+    "Importa um arquivo JSON de modelos com revisão e confirmação."
+  ],
+  "command.a6ae7f123f29f968": [
+    "Resume Honeypot after a failure protection pause.",
+    "Retoma o Honeypot após uma pausa de proteção contra falhas."
+  ],
+  "command.adfaa02333927d4d": [
+    "Create #honeypot configured, visible, and with a pinned notice.",
+    "Cria #honeypot configurado, visível e com aviso fixado."
+  ],
+  "command.afda2ef5af478a3d": [
+    "daily",
+    "diária"
+  ],
+  "command.b1472b1450e6f9ef": [
+    "Test the Member of the Week announcement now without resetting real counters.",
+    "Testa agora o anúncio do Membro da Semana sem zerar os contadores reais."
+  ],
+  "command.b2c9845124e46492": [
+    "View upcoming scheduled runs and errors.",
+    "Consulta próximas execuções e erros dos agendamentos."
+  ],
+  "command.b315d337eab13a95": [
+    "Apply a timeout and create a moderation case.",
+    "Aplica timeout e cria um caso de moderação."
+  ],
+  "command.b9589f96afd0fba2": [
+    "View or change the server template synchronization schedule (backup).",
+    "Consulta ou altera quando o modelo do servidor é sincronizado (backup)."
+  ],
+  "command.bc0391525d476723": [
+    "Send a saved embed to a channel.",
+    "Envia um embed salvo a um canal."
+  ],
+  "command.c617003ac6229456": [
+    "Kick a member and create a moderation case.",
+    "Expulsa um membro e cria um caso de moderação."
+  ],
+  "command.c62bd53878363b64": [
+    "View or change raid protection settings.",
+    "Consulta ou altera a configuração da proteção antirraid."
+  ],
+  "command.c766bdc0fce3972c": [
+    "Edit El Heraldo's customizable panels and visual messages.",
+    "Edita os painéis e mensagens visuais personalizáveis de El Heraldo."
+  ],
+  "command.c7e6597cb4c22318": [
+    "View the suggestion channel and recipients.",
+    "Consulta o canal e as pessoas que recebem sugestões."
+  ],
+  "command.cae7954dfbcdcd3e": [
+    "Stop sticky posting after confirmation; preserve the latest post.",
+    "Interrompe o sticky após confirmação; preserva a última publicação."
+  ],
+  "command.cb3234ec1a480fb4": [
+    "Open the visual editor for text, embeds, fields, and images.",
+    "Abre o editor visual de texto, embeds, campos e imagens."
+  ],
+  "command.cdf055b93fbb5771": [
+    "View current join role settings.",
+    "Consulta a configuração atual de cargos de entrada."
+  ],
+  "command.cf833bb6b2f10127": [
+    "Manage join roles in the Sapphire style.",
+    "Gerencia cargos de entrada no estilo Sapphire."
+  ],
+  "command.db442408a9c18380": [
+    "Remove one or more general join roles.",
+    "Remove um ou mais cargos de entrada gerais."
+  ],
+  "command.dbd81a01a8aed31d": [
+    "Remove a rule after confirmation; preserve published replies.",
+    "Remove uma regra após confirmação; preserva respostas publicadas."
+  ],
+  "command.dd072f411980ffe5": [
+    "Edit the welcome DM; its footer automatically identifies the server.",
+    "Edita a mensagem privada de boas-vindas; o rodapé identifica o servidor automaticamente."
+  ],
+  "command.df4861a870b2c227": [
+    "Configure El Heraldo's language for this server.",
+    "Configura o idioma de El Heraldo neste servidor."
+  ],
+  "command.dfa7a1aa4d446cb9": [
+    "Publish a template through the bot's own webhook after confirmation.",
+    "Publica um modelo por um webhook do próprio bot após confirmação."
+  ],
+  "command.e25b9fa6f52e8fdf": [
+    "View a member's warning history.",
+    "Consulta o histórico de advertências de um membro."
+  ],
+  "command.e2b48cf7e722b0f5": [
+    "Permanently delete a moderation case.",
+    "Exclui definitivamente um caso de moderação."
+  ],
+  "command.e2b5e57c23510d87": [
+    "Evaluate ALL members with Tentad@ immediately.",
+    "Avalia imediatamente TODOS os membros com Tentad@."
+  ],
+  "command.e643bd8fbc51f717": [
+    "Word or phrase replies with rate limits.",
+    "Respostas por palavras ou frases com limites de frequência."
+  ],
+  "command.ea025e8ab975ed6e": [
+    "Enable raid mode manually, for example for an undetected raid.",
+    "Ativa o modo antirraid manualmente, por exemplo em um ataque não detectado."
+  ],
+  "command.ebf196aa493015b1": [
+    "View all active condemnations in this server.",
+    "Consulta todas as condenações ativas do servidor."
+  ],
+  "command.ec362672f7941de6": [
+    "Remove a schedule after confirmation; preserve sent messages.",
+    "Remove um agendamento após confirmação; preserva mensagens enviadas."
+  ],
+  "command.ee89363cd64dc9ce": [
+    "Change the Member of the Week announcement day and time.",
+    "Altera o dia e a hora do anúncio do Membro da Semana."
+  ],
+  "command.efeb8e7ec63baaed": [
+    "Remove a role or member's exemption.",
+    "Remove a isenção de um cargo ou membro."
+  ],
+  "command.f0847f0e500e274d": [
+    "View or change Honeypot settings.",
+    "Consulta ou altera a configuração do Honeypot."
+  ],
+  "command.f0b8accb9a246ae4": [
+    "Edit the pinned notice text in trap channels.",
+    "Edita o texto do aviso fixado nos canais de armadilha."
+  ],
+  "command.f2cfe10ae0212128": [
+    "Remove a person from suggestion recipients.",
+    "Remove uma pessoa dos destinatários de sugestões."
+  ],
+  "command.f44b6f0c02cf1d7c": [
+    "Propose a sticky post; confirmation enables publication.",
+    "Propõe uma publicação sticky; confirmar habilita a publicação."
+  ],
+  "command.f7b222c2dd8b244f": [
+    "Persistent template scheduling.",
+    "Agendamento persistente de modelos."
+  ],
+  "command.fea759719d82292c": [
+    "View automatic reply rules and their status.",
+    "Consulta as regras de respostas automáticas e seu estado."
+  ],
   "common.created_linked": [
     "created and linked.",
     "criado e vinculado."
@@ -19,6 +435,18 @@
     "private",
     "privada"
   ],
+  "language.command_sync_pending": [
+    "The language was saved, but command help could not be updated. Press Save changes to retry.",
+    "O idioma foi salvo, mas não foi possível atualizar a ajuda dos comandos. Pressione Salvar alterações para tentar novamente."
+  ],
+  "noun.message.many": [
+    "messages",
+    "mensagens"
+  ],
+  "noun.message.one": [
+    "message",
+    "mensagem"
+  ],
   "reaction.access_mode": [
     "Access mode",
     "Modo de acesso"
@@ -26,6 +454,10 @@
   "text.000135b3cd2a46": [
     "The bot lacks permissions to publish.",
     "Faltam permissões do bot para publicar."
+  ],
+  "text.002cb83752102d": [
+    "Variables: {usuario}, {usuario_id}, {servidor}, {servidor_id}, {canal}, and {fecha} (UTC). Resolved on publication; automatic mentions are disabled. JSON supports content and up to ten embeds with fields, author, footer, image, and thumbnail.",
+    "Variáveis: {usuario}, {usuario_id}, {servidor}, {servidor_id}, {canal} e {fecha} (UTC). São resolvidas ao publicar; menções automáticas estão desativadas. JSON admite content e até dez embeds com campos, autor, rodapé, imagem e miniatura."
   ],
   "text.004e5c3ee5d5a6": [
     "> **Members:** {p0}",
@@ -83,6 +515,10 @@
     "The maximum of 25 templates would be exceeded.",
     "O máximo de 25 modelos seria superado."
   ],
+  "text.012d36a942922d": [
+    "**4. Files and results.** Re-upload attachments where possible; otherwise leave backup links and record errors.",
+    "**4. Arquivos e resultados.** Reenviar os anexos quando possível; caso contrário, deixar links de backup e registrar os erros."
+  ],
   "text.01326245d7cbcc": [
     "Editable duration and purge",
     "Duração e limpeza editáveis"
@@ -130,6 +566,14 @@
   "text.01c2084aa97902": [
     "{p0} verified, but has DMs disabled or Discord rejected the message.",
     "{p0} se verificou, mas tem mensagens privadas desativadas ou o Discord rejeitou a mensagem."
+  ],
+  "text.01e9a63b2d41fb": [
+    "Error: Could not publish in the announcement channel: `{p0}`\nCheck that El Heraldo has **View Channel**, **Send Messages**, and **Embed Links** permissions there.",
+    "Erro: Não foi possível publicar no canal de anúncios: `{p0}`\nVerifique se El Heraldo tem **Ver Canal**, **Enviar Mensagens** e **Inserir Links** nesse canal."
+  ],
+  "text.01f3a452834b43": [
+    "The actual card uses the case, condemned member, and moderator data. The preview uses sample data without modifying a real case.",
+    "O cartão real usa os dados do caso, condenado e moderador. A prévia usa dados de exemplo sem alterar casos reais."
   ],
   "text.021db30ded1cd8": [
     "Information: The invitations were already paused (I do not touch them)",
@@ -199,6 +643,14 @@
     "No purge",
     "Sem limpeza"
   ],
+  "text.0383206f064812": [
+    "The settings were saved, but the published panel could not be synchronized. Retry publication from the editor.",
+    "A configuração foi salva, mas não foi possível sincronizar o painel publicado. Tente publicar novamente pelo editor."
+  ],
+  "text.038abcdd85c82f": [
+    "**El Heraldo · Templates**\n\nCreate, edit, and publish reusable templates. Use `/editar_plantilla` for the visual editor of content, multiple embeds, fields, images, author, and footer.",
+    "**El Heraldo · Modelos**\n\nCrie, edite e publique modelos reutilizáveis. Use `/editar_plantilla` para o editor visual de conteúdo, múltiplos embeds, campos, imagens, autor e rodapé."
+  ],
   "text.03b6a0dcd5f3f3": [
     "Case closed; I couldn't withdraw the timeout.",
     "Caso fechado, não consegui retirar o timeout."
@@ -220,16 +672,24 @@
     "Aplicar espera"
   ],
   "text.042eeec17984ea": [
-    "**Embed schedules**\\n",
-    "**Agendamentos de embeds**\\n"
+    "**Embed schedules**\n",
+    "**Agendamentos de embeds**\n"
   ],
   "text.04480e6edd7cf4": [
     "Duration: 30m, 12h, 2d…; empty = configured value; “indefinite” = until removed",
     "Duração: 30m, 12h, 2d…; vazio = valor configurado; «indefinida» = até remover"
   ],
+  "text.0483f6e3e9ee87": [
+    "Warning: The suggestion system has no configured recipients yet. Notify an administrator.",
+    "Advertência: O sistema de sugestões ainda não tem destinatários configurados. Avise um administrador."
+  ],
   "text.048c0bc061e066": [
     "Custodian Mode: create an authorized private observation channel",
     "Modo Custódio: criar canal privado autorizado de observações"
+  ],
+  "text.04b35dd633cec1": [
+    ".\n**Actions enabled for reports:** {p0}.\n\nConfigure the number of reports per reaction separately with **Configure conditions**. Disabled sanctions never execute, even if selected in an existing rule.\nReport only always preserves the message. Warn creates a WARN case file without purging. Condemn uses the condemnation engine.\nWhen a member reaches the maximum warning count, the selected action runs **only if enabled**. The default is Notify only. An uncertain sanction is not repeated.\n\nNo selection is saved until the proposal is confirmed.",
+    ".\n**Ações habilitadas para denúncias:** {p0}.\n\nConfigure a quantidade de denúncias por reação separadamente em **Configurar condições**. Sanções desativadas não são executadas, mesmo que selecionadas em uma regra existente.\nApenas denunciar sempre preserva a mensagem. Advertir cria um dossiê WARN sem limpeza. Condenar usa o motor de condenações.\nQuando um membro atingir o máximo de advertências, a ação selecionada será executada **somente se estiver habilitada**. O padrão é Apenas avisar. Uma sanção incerta não é repetida.\n\nNenhuma seleção é salva até confirmar a proposta."
   ],
   "text.04bc66d1db77f0": [
     "Saturday",
@@ -239,9 +699,17 @@
     "You do not have permission to use this command.",
     "Você não tem permissão para usar este comando."
   ],
+  "text.04cdf3210e29d4": [
+    "**Verification:** {p0}\n**Verification role:** {p1}\n**Timeout:** {p2}\n**Action on expiry:** {p3}\n**Panel:** {p4}",
+    "**Verificação:** {p0}\n**Cargo de verificação:** {p1}\n**Timeout:** {p2}\n**Ação ao vencer:** {p3}\n**Painel:** {p4}"
+  ],
   "text.04d36ae4a1f5b3": [
     "Invalid character limit",
     "Limite de caracteres inválido"
+  ],
+  "text.04e2aad8cda952": [
+    "**Condemned members card editor**\nSelect a section to open its form. Changes require confirmation with Save changes.",
+    "**Editor do cartão de condenados**\nSelecione uma seção para abrir seu formulário. As alterações exigem confirmação em Salvar alterações."
   ],
   "text.054697a998868e": [
     "The settings changed in another session. Reopen the editor; nothing was overwritten.",
@@ -355,6 +823,10 @@
     "Missing bot permissions or insufficient role hierarchy to apply the measure",
     "Faltam permissões do bot ou hierarquia suficiente para aplicar a medida"
   ],
+  "text.07bde19da22883": [
+    "**Variables · {p0}**\nModule: {p1}\n\nVariables for this log: {{titulo_log}}, {{detalle_log}}, {{categoria_log}}, {{tipo_log}}.\nThe log renderer uses server context; specific event data is preserved in {{titulo_log}} and {{detalle_log}}.",
+    "**Variáveis · {p0}**\nMódulo: {p1}\n\nVariáveis deste registro: {{titulo_log}}, {{detalle_log}}, {{categoria_log}}, {{tipo_log}}.\nO renderizador de registros usa o contexto do servidor; os dados específicos do evento são preservados em {{titulo_log}} e {{detalle_log}}."
+  ],
   "text.07c7f017a10022": [
     "You no longer have sufficient permissions to apply this condemnation.",
     "Você não tem mais permissões suficientes para aplicar esta condenação."
@@ -370,6 +842,10 @@
   "text.0821340782f5f5": [
     "Error: Both channels must belong to this server.",
     "Erro: Ambos os canais devem pertencer a este servidor."
+  ],
+  "text.0823214a0d69c9": [
+    "**Migration route**\n{p0} **→** {p1}\n\nMessages are not moved natively: El Heraldo recreates them at the destination. Messages already there **are preserved**.",
+    "**Rota da migração**\n{p0} **→** {p1}\n\nAs mensagens não são transferidas de forma nativa: El Heraldo as recria no destino. As mensagens que já existem lá **são preservadas**."
   ],
   "text.083d323517a055": [
     "HTTPS footer icon",
@@ -418,6 +894,10 @@
   "text.08ce64540577c3": [
     "Date: no",
     "Data: não"
+  ],
+  "text.08d6639f0e11d0": [
+    "Error: Verification was not enabled: no panel has been published yet. Use `/verify` first; otherwise nobody could verify and all new members would be sanctioned.",
+    "Erro: A verificação não foi ativada: ainda não há painel publicado. Use `/verify` primeiro; caso contrário, ninguém poderia se verificar e todos os novos membros seriam sancionados."
   ],
   "text.08dab6446d0e6f": [
     "Link",
@@ -511,6 +991,10 @@
     "ID of the channel where the message is posted",
     "ID do canal em que a mensagem é publicada"
   ],
+  "text.0aa9d8f9505853": [
+    "### Roles for new members\nStatus: **{p0}**\nRoles: {p1}\n\n### Additional options\nWait for rule acceptance: **{p2}**\nDelay: **{p3} s**\n\nConfigured roles are assigned to each new user. Warnings indicate hierarchy issues, deleted roles, or roles Discord does not allow the bot to assign.",
+    "### Cargos para novos membros\nEstado: **{p0}**\nCargos: {p1}\n\n### Opções adicionais\nAguardar aceitação das regras: **{p2}**\nAtraso: **{p3} s**\n\nOs cargos configurados são atribuídos a cada novo usuário. As advertências indicam problemas de hierarquia, cargos excluídos ou cargos que o Discord não permite atribuir."
+  ],
   "text.0abee72be05044": [
     "Action disabled in Moderation → Reports; no sanction was applied.",
     "Ação desativada em Moderação → Denúncias; nenhuma sanção foi aplicada."
@@ -526,6 +1010,10 @@
   "text.0af5f67f71847d": [
     "\n{p0} permission/hierarchy error(s).",
     "\n{p0} erro(s) de permissões/hierarquia."
+  ],
+  "text.0b07f20d44632d": [
+    "**Publication:** the saved notice will be sent or updated in trap channels. Existing notices will not be duplicated.",
+    "**Publicação:** o aviso salvo será enviado ou atualizado nos canais de armadilha. Os avisos existentes não serão duplicados."
   ],
   "text.0b1839cfeef7f8": [
     "<t:1792080000:F> (shown in each member’s time zone)",
@@ -563,6 +1051,10 @@
     "Error: An embed supports up to {p0} fields.",
     "Erro: Um embed admite no máximo {p0} campos."
   ],
+  "text.0bd59e37fa6a25": [
+    "A personality role grants permissions unsuitable for public assignment. Review the configured roles.",
+    "Um cargo de personalidade concede permissões inadequadas para atribuição pública. Revise os cargos configurados."
+  ],
   "text.0beb4bfedb51b9": [
     "Every {p0}",
     "A cada {p0}"
@@ -598,6 +1090,14 @@
   "text.0c247cd167ef75": [
     "Could not save the settings: {p0}. The draft was not applied.",
     "Não foi possível salvar a configuração: {p0}. O rascunho não foi aplicado."
+  ],
+  "text.0c2f151f1a25e5": [
+    "Write variables as `{nombre}` or `${nombre}` in any customizable El Heraldo text. Main names are explicit and in Spanish; old names remain supported as aliases.\nCase, accents, and separators do not matter. An unknown or inapplicable variable remains unchanged so you can detect the error.",
+    "Escreva as variáveis como `{nombre}` ou `${nombre}` em qualquer texto personalizável de El Heraldo. Os nomes principais são explícitos e em espanhol; nomes antigos continuam funcionando como aliases.\nMaiúsculas, acentos e separadores não importam. Variáveis inexistentes ou não aplicáveis permanecem intactas para facilitar a identificação do erro."
+  ],
+  "text.0c37c6a48a933c": [
+    "Error: The name must be 1 to 64 characters. Letters, accents, numbers, spaces, emoji, and common punctuation such as hyphens and parentheses are allowed. Mentions and control characters are not allowed.",
+    "Erro: O nome deve ter de 1 a 64 caracteres. São permitidos letras, acentos, números, espaços, emojis e sinais comuns como hífens e parênteses. Menções e caracteres de controle não são permitidos."
   ],
   "text.0c3ed8f329b9f3": [
     "Enter the link to a message from this server.",
@@ -651,6 +1151,10 @@
     "Verification role → {p0}",
     "Cargo de verificação → {p0}"
   ],
+  "text.0d4d41e32a950a": [
+    "Color `{p0}` is invalid: use a 6-digit hexadecimal code, e.g. `#E7CF7F`.",
+    "A cor `{p0}` é inválida: use um código hexadecimal de 6 dígitos, ex.: `#E7CF7F`."
+  ],
   "text.0d61b465b6101a": [
     "Maximum achieved: administrative review is required",
     "Máximo atingido: Requer revisão administrativa"
@@ -690,6 +1194,10 @@
   "text.0e3cb140568acd": [
     "The Honeypot channel already exists. Reopen the panel to register or view it.",
     "O canal Honeypot já existe. Abra o painel novamente para registrar ou consultar."
+  ],
+  "text.0e5542a9e970ee": [
+    "**Report channel:** {p0}\n**Configured reactions:** {p1}/{p2}\n**Direct condemnation:** {p3}",
+    "**Canal de denúncias:** {p0}\n**Reações configuradas:** {p1}/{p2}\n**Condenação direta:** {p3}"
   ],
   "text.0ebcd5deccd8af": [
     "**El Heraldo · Reaction Roles · Editor**",
@@ -775,6 +1283,10 @@
     "The punishment role is no longer valid or manageable.",
     "O cargo de castigo já não é válido ou manejável."
   ],
+  "text.10aae9b305ef28": [
+    "**El Heraldo · Reaction Roles**\n\nCreate a message, link an existing one, or select a panel to edit.\nRegistered panels: {p0}\nSelected channel: None",
+    "**El Heraldo · Cargos por reação**\n\nCrie uma mensagem, vincule uma existente ou selecione um painel para editar.\nPainéis registrados: {p0}\nCanal selecionado: Nenhum"
+  ],
   "text.10c1aeee46e43b": [
     "Message: `{p0}`",
     "Mensagem: `{p0}`"
@@ -809,11 +1321,15 @@
   ],
   "text.122287d27b6d16": [
     "It's no longer possible to manage that role.",
-    "Já não é possível gerir esse cargo."
+    "Já não é possível gerenciar esse cargo."
   ],
   "text.124ab038495d40": [
     "Template restored to default values.",
     "Modelo restaurado aos valores padrão."
+  ],
+  "text.124db6774d63c7": [
+    "Confirm the template components. Previous publications become outdated; publish the new version. Public actions require Manage Messages permission for the executing user; role actions revalidate hierarchy.",
+    "Confirme os componentes do modelo. Publicações anteriores ficam desatualizadas; publique a nova versão. Ações públicas exigem Gerenciar Mensagens do usuário que as executa; ações de cargos revalidam a hierarquia."
   ],
   "text.1271fcf9931940": [
     "; {p0} could not be restored",
@@ -855,6 +1371,10 @@
     "Timeout is invalid",
     "Timeout inválido"
   ],
+  "text.13513c22291112": [
+    "Your condemnation in case file **{p0}** was lifted. Your saved roles were restored as permitted by the server's role hierarchy.",
+    "Sua condenação no dossiê **{p0}** foi removida. Seus cargos salvos foram restaurados conforme a hierarquia de cargos do servidor permite."
+  ],
   "text.1372367d605704": [
     "not configured",
     "não configurado"
@@ -886,6 +1406,10 @@
   "text.1437f4226f110e": [
     "Example: 5",
     "Exemplo: 5"
+  ],
+  "text.1438403c6cd256": [
+    "**Automatic replies**\n\nUse `/autorespuesta crear` to select a channel, template, and word or phrase; confirmation is required. It can require an exact message or an included phrase. Manage rules with `/autorespuesta listar` and `/autorespuesta retirar`.\nThe cooldown is 30 seconds to 24 hours per rule, with an additional limit of one reply every 30 seconds per channel. Bots, webhooks, and members with an active condemnation are ignored; Message Content is required.",
+    "**Respostas automáticas**\n\nUse `/autorespuesta crear` para escolher canal, modelo e palavra ou frase; exige confirmação. Pode exigir mensagem exata ou frase incluída. Gerencie com `/autorespuesta listar` e `/autorespuesta retirar`.\nA espera é de 30 segundos a 24 horas por regra, com limite adicional de uma resposta a cada 30 segundos por canal. Bots, webhooks e membros com condenação ativa são ignorados; exige Message Content."
   ],
   "text.144281f3f5ec6e": [
     "{p0}: I could not read the notice (`{p1}`)",
@@ -923,6 +1447,14 @@
     "Label",
     "Etiqueta"
   ],
+  "text.156cb9416331c7": [
+    "Condenado role: removes all other assignable roles (including Tentad@ and Sin Verificar)",
+    "Cargo Condenado: remove todos os outros cargos atribuíveis (incluindo Tentad@ e Sin Verificar)"
+  ],
+  "text.158ba01903f338": [
+    "**El Heraldo · System roles**\n\n{p0} {p1} and was immediately configured as **{p2}**.",
+    "**El Heraldo · Cargos do sistema**\n\n{p0} {p1} e foi configurado imediatamente como **{p2}**."
+  ],
   "text.158db49caeebb6": [
     "The draft changed; reopen the form.",
     "O rascunho mudou; abra novamente o formulário."
@@ -931,8 +1463,12 @@
     "Example: 2026-11-01",
     "Exemplo: 2026-11-01"
   ],
+  "text.15e01183b72751": [
+    "**Custodian Mode · Create reports📢**\n\nA private channel will be created, hidden from regular members and accessible only to the bot and moderation staff with appropriate permissions.\n\n**No observations will be sent yet:** continuous analysis is disabled. Creating the channel does not sanction or log old messages.\n\nConfirm to create the channel or cancel without changes.",
+    "**Modo Custódio · Criar denúncias📢**\n\nSerá criado um canal privado, oculto para membros comuns e acessível somente ao bot e à equipe de moderação com permissões adequadas.\n\n**Ainda não serão enviadas observações:** a análise contínua está desativada. Criar o canal não sanciona nem registra mensagens antigas.\n\nConfirme para criar o canal ou cancele sem alterações."
+  ],
   "text.15ed27052e318c": [
-    "Cancelled publication; no webhook was created or used.",
+    "Canceled publication; no webhook was created or used.",
     "Publicação cancelada; nenhum webhook foi criado ou usado."
   ],
   "text.1611d0206d0da4": [
@@ -954,6 +1490,10 @@
   "text.16893088b5d310": [
     "The public action requires access and Manage Messages permission at the destination.",
     "A ação pública exige acesso e Gerenciar Mensagens no destino."
+  ],
+  "text.16aca8df1f3040": [
+    "The private report channel is already linked. No duplicate channels will be created. Monitoring and automatic observation publication remain disabled.",
+    "O canal privado de denúncias já está vinculado. Nenhum canal duplicado será criado. A supervisão e a publicação automática de observações permanecem desativadas."
   ],
   "text.16b1675a67d203": [
     "Only the moderator who initiated this condemnation can proceed.",
@@ -995,6 +1535,10 @@
     "{p0} condemned. **Duration:** {p1} · **Purge:** {p2}.",
     "{p0} condenado. **Duração:** {p1} · **Limpeza:** {p2}."
   ],
+  "text.177c0a9b213973": [
+    "**. To share why you left, use Leave a comment. Your response is voluntary and visible to authorized staff with access to the server's private log. You may ignore this message.",
+    "**. Para compartilhar o motivo da saída, use Deixar comentário. A resposta é voluntária e visível à equipe autorizada com acesso ao registro privado do servidor. Você pode ignorar esta mensagem."
+  ],
   "text.17a3223bfb129e": [
     "Error: The description cannot be left blank.",
     "Erro: A descrição não pode ficar vazia."
@@ -1031,6 +1575,14 @@
     "Optional alert role; not the Condenado role",
     "Cargo opcional para avisos; não é o cargo Condenado"
   ],
+  "text.183d0e6c7fee45": [
+    "**1. Verification.** Verify permissions and that there are still **{p0}** messages in the source.",
+    "**1. Verificação.** Verificar permissões e que ainda são **{p0}** mensagens na origem."
+  ],
+  "text.183e4fd8d7c9ce": [
+    "Case file: {p0}\nUser: {p1} ({p2})\nOriginal reason: {p3}\nSource: {p4}\nPardoned by: {p5}\nRoles: {p6}\nUnrestored roles (IDs): {p7}\nOriginal card: {p8}\nDM: {p9}",
+    "Dossiê: {p0}\nUsuário: {p1} ({p2})\nMotivo original: {p3}\nOrigem: {p4}\nPerdoado por: {p5}\nCargos: {p6}\nCargos não restaurados (IDs): {p7}\nCartão original: {p8}\nMensagem privada: {p9}"
+  ],
   "text.185bf7c31329e9": [
     "The condemnation emoji cannot match a report reaction.",
     "O emoji de condenação não pode coincidir com uma reação de denúncia."
@@ -1038,6 +1590,10 @@
   "text.1878f53c711ce0": [
     "Request expired or already answered.",
     "Solicitação expirada ou já respondida."
+  ],
+  "text.1893f60caa2f6d": [
+    "{p0} (`{p1}`) did not verify within the deadline. Configured action: log only.",
+    "{p0} (`{p1}`) não concluiu a verificação no prazo. Ação configurada: apenas registrar."
   ],
   "text.189dced1c43601": [
     "paused",
@@ -1102,6 +1658,10 @@
   "text.19d0d005628ee7": [
     "Delay before allocation (seconds)",
     "Atraso antes de atribuição (segundos)"
+  ],
+  "text.19d45ab4ceedff": [
+    "Warning: Action is Condemn, but no Condenado role is configured. Set it with `/honeypot setup rol_castigo`.",
+    "Advertência: A ação é Condenar, mas não há cargo Condenado. Configure com `/honeypot setup rol_castigo`."
   ],
   "text.19e961c1a5acc7": [
     "WARN, MUTE, KICK, BAN or CONDEMN",
@@ -1179,6 +1739,10 @@
     "Could not confirm the cause: audit log queries failed.",
     "Não foi possível confirmar a causa: as consultas à auditoria falharam."
   ],
+  "text.1b4376ad840926": [
+    "Import of **{p0}** templates pending. Role actions will not be imported and messages will not be overwritten.",
+    "Importação de **{p0}** modelos pendente. Ações de cargos não serão importadas e mensagens não serão sobrescritas."
+  ],
   "text.1b583966b12d21": [
     "There's already a purge going on for that user.",
     "Já há uma purga em andamento para esse usuário."
@@ -1207,6 +1771,10 @@
     "This editor does not publish, delete or modify channels.",
     "Este editor não publica, elimina ou modifica canais."
   ],
+  "text.1b962bfe039d02": [
+    "**Requirement:** Server Rules must be enabled in Discord. Open Server Rules to check availability manually; this does not enable AI or sanctions.",
+    "**Requisito:** as Regras do servidor (Server Rules) devem estar ativas no Discord. Abra Regras do servidor para consultar a disponibilidade manualmente; isso não ativa IA nem sanções."
+  ],
   "text.1bba8e8cbb56a4": [
     "Editing {p0}. Field {p1} will be removed on save.",
     "Editando {p0}. O campo {p1} será removido ao salvar."
@@ -1218,6 +1786,10 @@
   "text.1bdc509cca9933": [
     "Time of the announcement",
     "Hora do anúncio"
+  ],
+  "text.1c37bc924a7b7c": [
+    "Condenado role access configured. Private threads are open only to the invited member and moderators with Manage Threads. Main channel cards remain visible to anyone who can view the channel.",
+    "Acesso do cargo Condenado configurado. Tópicos privados são acessíveis somente ao membro convidado e a moderadores com Gerenciar Tópicos. Os cartões do canal principal continuam visíveis a quem pode ver o canal."
   ],
   "text.1c6c28763f9c3c": [
     "You do not have permission to manage these schedules.",
@@ -1459,6 +2031,10 @@
     "The settings changed. Reopen the editor before saving.",
     "A configuração mudou. Abra o editor novamente antes de salvar."
   ],
+  "text.22377b48925eb7": [
+    "Personality verification: **{p0}**\nRequired: **{p1}** · Choice changes: **{p2}**\nChannel: {p3}\nCard preserved: **{p4}**\nLinked roles: **{p5}/{p6}**\n\n",
+    "Verificação de personalidade: **{p0}**\nObrigatória: **{p1}** · Mudança de escolha: **{p2}**\nCanal: {p3}\nCartão preservado: **{p4}**\nCargos vinculados: **{p5}/{p6}**\n\n"
+  ],
   "text.2249bd503ec47d": [
     "Cases",
     "Casos"
@@ -1579,6 +2155,10 @@
     "Timeout Members",
     "Moderar Membros"
   ],
+  "text.24c5574feda7ed": [
+    "**El Heraldo · Logs · Members**\n\nEvent: **{p0}**\nStatus: **{p1}**\nChannel: {p2}\n\nChanges apply only on Save changes. Edit templates in Messages → Logs.",
+    "**El Heraldo · Registros · Membros**\n\nEvento: **{p0}**\nEstado: **{p1}**\nCanal: {p2}\n\nAs alterações só são aplicadas em Salvar alterações. Edite modelos em Mensagens → Registros."
+  ],
   "text.24f5b7f715f618": [
     "Suggestions panel",
     "Painel de sugestões"
@@ -1586,6 +2166,10 @@
   "text.2500449308a522": [
     "Manage Channels permission is required for this operation.",
     "É necessária a permissão Gerenciar Canais para esta operação."
+  ],
+  "text.2514819915f72a": [
+    "Personality verification notice\n\nHello!\n\nYou did not complete personality verification in {servidor} within the required time.\n\nReason: {razon}\n\nAs a result, you are scheduled to be kicked from the server.\n\nTo return, find the “{titulo_embed}” panel in the roles channel and select the role that best represents how you wish to participate in our community.\n\nThese roles help us understand your interest in the server and may allow access to different channels depending on the configured permissions.\n\nAge verification is separate and is not replaced by choosing a personality role.\n\nReturn invite: {invitacion}\n\nThank you for your understanding.",
+    "Aviso de verificação de personalidade\n\nOlá!\n\nVocê não concluiu a verificação de personalidade de {servidor} dentro do prazo estabelecido.\n\nMotivo: {razon}\n\nPor isso, está prevista sua expulsão do servidor.\n\nSe quiser retornar, encontre o painel «{titulo_embed}» no canal de cargos e selecione o cargo que melhor representa como deseja participar da nossa comunidade.\n\nEsses cargos nos ajudam a conhecer seu interesse no servidor e podem permitir acesso a diferentes canais conforme as permissões configuradas.\n\nA verificação de idade é independente e não é substituída pela escolha de um cargo de personalidade.\n\nConvite de retorno: {invitacion}\n\nAgradecemos sua compreensão."
   ],
   "text.25319b2ef20482": [
     "Notice published or updated in {p0} trap channel(s).",
@@ -1606,6 +2190,10 @@
   "text.25a98f5906fd59": [
     "**Result:**\n{p0}{p1}",
     "**Resultado:**\n{p0}{p1}"
+  ],
+  "text.25b7cb2ec5e804": [
+    "Only messages with archived evidence will be deleted. The actual purge result will be reported in Logs.",
+    "Somente mensagens com evidências arquivadas serão excluídas. O resultado real da limpeza será informado nos Registros."
   ],
   "text.25e04ba1ebcd7d": [
     "Assigned {p0} specific role(s).",
@@ -1678,6 +2266,10 @@
   "text.27aaa41ec82c9b": [
     "Closed",
     "Fechado"
+  ],
+  "text.27ab166caf064d": [
+    "\n\nThe moderation team will review reports. Moderator-only actions are excluded from this public system.",
+    "\n\nA equipe de moderação revisará as denúncias. As ações reservadas a moderadores não fazem parte deste sistema público."
   ],
   "text.27bb3ed6f7feb1": [
     "Could not verify El Heraldo's permissions.",
@@ -1755,6 +2347,10 @@
     "Select days of the month.",
     "Escolha os dias do mês."
   ],
+  "text.29d2920ebf559f": [
+    "**{p0}** was deleted, which was the last linked role. The module was disabled because it needs at least one existing role.",
+    "Foi eliminado **{p0}**, que era o último cargo vinculado. O módulo foi desativado porque precisa de pelo menos um cargo existente."
+  ],
   "text.2a0515602d3158": [
     "Reject",
     "Rejeitar"
@@ -1778,6 +2374,10 @@
   "text.2a3916e8138d70": [
     "Sanction duration (if applicable)",
     "Duração da sanção (se aplicável)"
+  ],
+  "text.2a3dc2ff51700e": [
+    "**Sticky messages**\n\nUse `/sticky crear` to select a channel and template; confirmation enables publication. The bot replaces its previous post after human activity, respecting a configurable delay. Use `/sticky listar` to review errors and `/sticky retirar` to stop it; the latest post is preserved. An uncertain send is stopped for review.",
+    "**Mensagens sticky**\n\nUse `/sticky crear` para escolher canal e modelo; confirmar habilita a publicação. O bot substitui sua publicação anterior após atividade humana, respeitando uma espera configurável. Use `/sticky listar` para consultar erros e `/sticky retirar` para interromper; a última publicação é preservada. Um envio incerto fica suspenso para revisão."
   ],
   "text.2a40b9eafe450f": [
     "Error: You need **Manage Channels** permission to use this command.",
@@ -1987,6 +2587,10 @@
     "Sanction or warning from a moderation reaction.",
     "Sanção ou advertência por reação de moderação."
   ],
+  "text.2e2c1ff499c328": [
+    "**Report reminders**\n\n{p0}\n\n**Proposed state:** {p1}\n**Frequency:** {p2}\n**Time:** {p3}:00 (Santo Domingo)\n**Channel:** <#{p4}>\nCustom: 1d–365d or equivalent; Test also allows 30s, 2m, or 1h. Only administrative confirmation saves these changes.\n**Estimated next publication:** {p5}",
+    "**Lembretes de denúncias**\n\n{p0}\n\n**Estado proposto:** {p1}\n**Frequência:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** <#{p4}>\nPersonalizar: 1d–365d ou equivalente; em Test também 30s, 2m ou 1h. Somente a confirmação administrativa salva estas alterações.\n**Próxima publicação estimada:** {p5}"
+  ],
   "text.2e2ea18f980de9": [
     "Warning: Private conversation pending",
     "Advertência: Conversa privada pendente"
@@ -1994,6 +2598,10 @@
   "text.2eaaf547035da1": [
     "Delete the messages the sanctioned sent since they entered.",
     "Eliminar as mensagens que os sancionados enviaram desde que entraram"
+  ],
+  "text.2eb03796ac8a31": [
+    "**Unsaved draft.** Press **{p0}** to review the settings before confirming. Cancel discards the draft.",
+    "**Rascunho não salvo.** Pressione **{p0}** para revisar a configuração antes de confirmar. Cancelar descarta o rascunho."
   ],
   "text.2eba946b2e1ee4": [
     "Edit",
@@ -2287,9 +2895,17 @@
     "This draft does not belong to you.",
     "Este rascunho não pertence a você."
   ],
+  "text.34745d9f1f2e4b": [
+    "The reference may become unavailable if the message is deleted. Its contents were not archived.",
+    "A referência pode deixar de estar disponível se a mensagem for apagada. O seu conteúdo não foi arquivado."
+  ],
   "text.34845b77024b64": [
     "The embeds together exceed 6000 characters.",
     "Os embeds juntos superam 6000 caracteres."
+  ],
+  "text.3487aaf925f307": [
+    "Missing DISCORD_TOKEN environment variable. Configure it in Railway (service variables) before deploying.",
+    "Falta a variável de ambiente DISCORD_TOKEN. Configure no Railway (variáveis do serviço) antes de implantar."
   ],
   "text.3488019931bf2e": [
     "No role",
@@ -2314,6 +2930,10 @@
   "text.3540949cd79f3c": [
     "The original channel has been preserved.",
     "O canal de origem foi conservado."
+  ],
+  "text.3553196d4c1170": [
+    "Error: Nothing was saved: Condemn requires the Condenado role. Configure it with `/honeypot setup rol_castigo` or choose another action.",
+    "Erro: Nada foi salvo: Condenar exige o cargo Condenado. Configure com `/honeypot setup rol_castigo` ou escolha outra ação."
   ],
   "text.3553c58f96b29c": [
     "**{p0}:** {p1} exists but is not selected yet",
@@ -2420,8 +3040,8 @@
     "sem-prazo"
   ],
   "text.3799c393778b6e": [
-    "**New schedule (unsaved)**\\nSelect channel, frequency, and options.",
-    "**Novo agendamento (não salvo)**\\nSelecione canal, frequência e opções."
+    "**New schedule (unsaved)**\nSelect channel, frequency, and options.",
+    "**Novo agendamento (não salvo)**\nSelecione canal, frequência e opções."
   ],
   "text.37ad1f8c7a9080": [
     "The emoji can't be empty.",
@@ -2430,6 +3050,10 @@
   "text.37ae072b3fc80e": [
     "Register the case for human review.",
     "Registre o caso para revisão humana."
+  ],
+  "text.37dd3fcdb335d9": [
+    "**El Heraldo · Moderation · Report and warning policy**\n\n**Maximum warnings:** {p0}/{p1} (1 to 5).\n**On reaching the maximum:** {p2}",
+    "**El Heraldo · Moderação · Política de denúncias e advertências**\n\n**Máximo de advertências:** {p0}/{p1} (1 a 5).\n**Ao atingir o máximo:** {p2}"
   ],
   "text.37dddb486c6741": [
     "Name of the author",
@@ -2454,6 +3078,10 @@
   "text.381eacf890e270": [
     "No additional purge is applied to the ban.",
     "Não se aplica limpeza adicional ao banimento."
+  ],
+  "text.382de606e84361": [
+    "**El Heraldo · Logging**\n\nCurrent channel: {p0}\nConfigure log events and channels here. Edit visual templates from Messages.",
+    "**El Heraldo · Registros**\n\nCanal atual: {p0}\nConfigure aqui os eventos e canais de registro. Edite os modelos visuais em Mensagens."
   ],
   "text.38368cd246f348": [
     "Warning: Corrupted reference; publish it again with /verify",
@@ -2482,6 +3110,10 @@
   "text.38dc370d6a0322": [
     "Unauthorized action",
     "Ação não autorizada"
+  ],
+  "text.38f433a153bd0c": [
+    "\n\n**Selected:** {p0} **{p1}**\nAction: {p2} · Threshold: {p3} · Duration: {p4} · Purge window: {p5}",
+    "\n\n**Selecionado:** {p0} **{p1}**\nAção: {p2} · Limite: {p3} · Duração: {p4} · Janela de limpeza: {p5}"
   ],
   "text.38f8449200ecb6": [
     "Change canceled. Nothing was saved.",
@@ -2671,6 +3303,14 @@
     "Apply to draft",
     "Aplicar ao rascunho"
   ],
+  "text.3cff1e8dc308ab": [
+    "Before you lose yourself among the gates of paradise, two steps separate the curious from those who truly belong:\n\n**Verify** in the verification channel — until then, you remain outside the gate.\n\nThen choose your personality roles when no one is watching.\n\nEach role opens a different door. Choose wisely.\n\nQuestions? Visit the server's questions channel.",
+    "Antes de se perder entre as portas do paraíso, dois passos separam os curiosos daqueles que realmente pertencem:\n\n**Verifique-se** no canal de verificação — sem isso, você continua do outro lado do portão.\n\nDepois, escolha seus cargos de personalidade quando ninguém estiver olhando.\n\nCada cargo abre uma porta diferente. Escolha bem.\n\nDúvidas? Consulte o canal de dúvidas do servidor."
+  ],
+  "text.3d0fc502c4cd37": [
+    "Confirm creating the first Honeypot channel and registering it as a trap. If it is the first trap, the bot will enable protection automatically.",
+    "Confirme a criação do primeiro canal Honeypot e seu registro como armadilha. Se for a primeira armadilha, o bot ativará a proteção automaticamente."
+  ],
   "text.3d15e61f2ccd51": [
     "Canceled",
     "Cancelada"
@@ -2698,6 +3338,10 @@
   "text.3dd8e19c8c84d0": [
     "Date has passed.",
     "Data vencida."
+  ],
+  "text.3ddb986a49f806": [
+    "{p0} (`{p1}`) rejoined with an active condemnation. The Condenado role was restored and verification evaluation was prevented.",
+    "{p0} (`{p1}`) retornou ao servidor com condenação ativa. O cargo Condenado foi restaurado e a avaliação de verificação foi impedida."
   ],
   "text.3de15698e2b468": [
     "Could not understand `{p0}`. {p1}",
@@ -2735,6 +3379,10 @@
     "Edit message",
     "Editar mensagem"
   ],
+  "text.3eaf2f7e758b56": [
+    "\n\n**Ambiguity analysis:** not configured. AI will run only through a manual administrative action when a verified model is available. This panel modifies no rules and applies no sanctions.",
+    "\n\n**Análise de ambiguidades:** não configurada. A IA só será executada por ação administrativa manual quando houver um modelo verificado. Este painel não modifica regras nem aplica sanções."
+  ],
   "text.3ed02e5dbf8759": [
     "Warning: Could not send a suggestion by DM",
     "Advertência: Não foi possível enviar uma sugestão por mensagem privada"
@@ -2746,6 +3394,10 @@
   "text.3ef181ed6e0a1e": [
     "The selected settings are already saved. No pending changes.",
     "A configuração selecionada já está salva. Nenhuma alteração pendente."
+  ],
+  "text.3f09b4c7e1a213": [
+    "**El Heraldo · AutoMod · Custodian Mode · {p0}**\n\n{p1}\n\nThere are no changes to save or active automatic actions in this section.",
+    "**El Heraldo · AutoMod · Modo Custódio · {p0}**\n\n{p1}\n\nNão há alterações para salvar nem ações automáticas ativas nesta seção."
   ],
   "text.3f0ed7d099331a": [
     "{p0} · Add: {p1} · Remove: {p2}",
@@ -2803,6 +3455,10 @@
     "Create",
     "Criar"
   ],
+  "text.4003145b252cdc": [
+    "**El Heraldo · Member of the Week · Schedule**\n\nCurrent schedule: **{p0} at {p1}:00** (Dominican Republic time)\nProposed schedule: **{p2} at {p3}:00** (Dominican Republic time)\n\nSelecting options does not save changes. Review and confirm the schedule.",
+    "**El Heraldo · Membro da Semana · Horário**\n\nHorário atual: **{p0} às {p1}:00** (horário da República Dominicana)\nHorário proposto: **{p2} às {p3}:00** (horário da República Dominicana)\n\nSelecionar opções não salva alterações. Revise e confirme o horário."
+  ],
   "text.401bad1c0eb9ca": [
     "Every day at {p0}",
     "Todos os dias às {p0}"
@@ -2826,6 +3482,10 @@
   "text.409c3c30aa7e34": [
     "Join roles → ",
     "Cargos de entrada → "
+  ],
+  "text.40a3e81f6086b6": [
+    "**El Heraldo · Member of the Week**\n\nSaved channel: {p0}\nSchedule: **{p1} at {p2}:00** (Dominican Republic time)",
+    "**El Heraldo · Membro da Semana**\n\nCanal salvo: {p0}\nHorário: **{p1} às {p2}:00** (horário da República Dominicana)"
   ],
   "text.40a7d6acff21a1": [
     "Channel for {p0}",
@@ -2955,6 +3615,10 @@
     "Released by {p0}",
     "Liberado por {p0}"
   ],
+  "text.439f006c73dad9": [
+    "The panel message uses server and channel context. The success message also receives the member who verified.",
+    "A mensagem do painel usa o contexto do servidor e canal. A mensagem de sucesso também recebe o membro que se verificou."
+  ],
   "text.43a32a636822ea": [
     "Color (hexadecimal)",
     "Cor (hexadecimal)"
@@ -2999,6 +3663,10 @@
     "Day (weekly)",
     "Dia (semanal)"
   ],
+  "text.444096c851f9f3": [
+    "The {p0} URL must start with `http://` or `https://` (or be a variable such as `{{servericon}}`).",
+    "A URL de {p0} deve começar com `http://` ou `https://` (ou ser uma variável como `{{servericon}}`)."
+  ],
   "text.445233b81ce892": [
     "Wait",
     "Aguardar"
@@ -3026,6 +3694,10 @@
   "text.4510716a223e76": [
     "Warning: Private conversation unavailable",
     "Advertência: Conversa privada indisponível"
+  ],
+  "text.4514c576adb2d9": [
+    "**El Heraldo · Components**\n\nSet up reusable role buttons. For buttons and menus with independent options and multiple actions, use `/componentes_mensaje` with a JSON file.",
+    "**El Heraldo · Componentes**\n\nConfigure botões de cargos reutilizáveis. Para botões e menus com opções independentes e várias ações, use `/componentes_mensaje` com um arquivo JSON."
   ],
   "text.453b728c093cf9": [
     "Timeout from reports or WARN limit",
@@ -3075,6 +3747,10 @@
     "El Heraldo lacks Manage Roles permission.",
     "El Heraldo não tem a permissão Gerenciar Cargos."
   ],
+  "text.45f85832f565f9": [
+    "**El Heraldo · Reaction Roles**\n\nCreate a message, link an existing one, or select a panel to edit.\nRegistered panels: {p0}\nSelected channel: <#{p1}>",
+    "**El Heraldo · Cargos por reação**\n\nCrie uma mensagem, vincule uma existente ou selecione um painel para editar.\nPainéis registrados: {p0}\nCanal selecionado: <#{p1}>"
+  ],
   "text.45fad5eae866be": [
     "The bot doesn't have enough permissions for the panel anymore.",
     "O bot já não tem permissões suficientes para o painel."
@@ -3094,6 +3770,10 @@
   "text.461894817fa0a2": [
     "Select a section of Messages",
     "Selecione uma seção de Mensagens"
+  ],
+  "text.462e4fbb19675b": [
+    "Choose an orientation profile or modify each parameter. A shorter window requires more concentrated entrances.",
+    "Escolha um perfil de orientação ou modifique cada parâmetro. Uma janela mais curta requer entradas mais concentradas."
   ],
   "text.4647d65e92605f": [
     "Unsupported template properties.",
@@ -3155,6 +3835,10 @@
     "The bot doesn't have any more permissions on that channel.",
     "O bot já não tem permissões naquele canal."
   ],
+  "text.4766e9baaf7007": [
+    "Personality roles let members choose how they wish to participate in this community. They may select an option and change it later if they wish and the server allows it.\n\n**How does it work?**\nReact with the emoji for the chosen option to receive its associated role. Only one choice may be kept at a time.\n\nThe choice expresses your interest and offers a personalized server experience. It may unlock channels based on role permissions; it is not proof of identity and does not replace age verification.",
+    "Os cargos de personalidade permitem ao membro escolher como deseja participar desta comunidade. Ele pode selecionar uma opção e alterá-la depois, se desejar e o servidor permitir.\n\n**Como funciona?**\nO membro reage com o emoji da opção escolhida para obter o cargo associado. Só pode manter uma escolha por vez.\n\nA escolha expressa seu interesse e oferece uma experiência personalizada no servidor. Pode liberar canais conforme as permissões dos cargos; não constitui prova de identidade nem substitui a verificação de idade."
+  ],
   "text.4769b78fef3f43": [
     "Inline with other fields? (yes / no)",
     "Na mesma linha de outros campos? (sim / não)"
@@ -3202,6 +3886,10 @@
   "text.4865f7e3ff28d7": [
     "Unselected",
     "Sem seleção"
+  ],
+  "text.486c59c418f18f": [
+    "Error: I was unable to deliver the suggestion via private message. Check that the recipients allow DMs.",
+    "Erro: Não pude entregar a sugestão por mensagem privada. Verifique se os destinatários permitem DMs."
   ],
   "text.489a22513362a4": [
     "Could not access the saved personality card.",
@@ -3295,6 +3983,10 @@
     "Comment received. Adding it to the record is pending.",
     "Comentário recebido. Sua inclusão no registro está pendente."
   ],
+  "text.4a54ef0bbf3d0a": [
+    "**Variables · {p0}**\n{p1}\n\nSee the full catalog with /list variables. Variables without the required context remain unresolved.",
+    "**Variáveis · {p0}**\n{p1}\n\nConsulte o catálogo completo com /list variables. Variáveis sem o contexto necessário ficam sem resolver."
+  ],
   "text.4a78781461afb1": [
     " · Warnings: {p0}/{p1}",
     " · Advertências: {p0}/{p1}"
@@ -3387,6 +4079,10 @@
     "Honeypot — Configure notice",
     "Honeypot — Configurar aviso"
   ],
+  "text.4c9a8de4b59d03": [
+    "The role contains administrative permissions and cannot be assigned through a public component.",
+    "O cargo contém permissões administrativas e não pode ser atribuído por meio de um componente público."
+  ],
   "text.4c9e4a198ac444": [
     "The proposed settings already match the saved values.",
     "A configuração proposta já corresponde aos valores salvos."
@@ -3412,8 +4108,8 @@
     "• Ação: **{p0}**"
   ],
   "text.4de13fa534bb43": [
-    "Single-use invite: {p0}\\n",
-    "Convite de uso único: {p0}\\n"
+    "Single-use invite: {p0}\n",
+    "Convite de uso único: {p0}\n"
   ],
   "text.4e05dd02466bfb": [
     "Custom name",
@@ -3589,7 +4285,7 @@
   ],
   "text.520ed297c96f7b": [
     "Ban",
-    "Ban"
+    "Banir"
   ],
   "text.52749e2dae55d4": [
     "CONDEMNATION PARDONED",
@@ -3751,6 +4447,10 @@
     "Select a template.",
     "Escolha um modelo."
   ],
+  "text.55aba7aaa0f6dd": [
+    "Recreated messages appear as El Heraldo posts; text messages show the original author and date. Some files may require backup links, and replies do not retain their original links. If counts change or permissions are missing, the operation stops before modifying channels.",
+    "As mensagens recriadas aparecem como publicações de El Heraldo; mensagens de texto mostram o autor e a data originais. Alguns arquivos podem exigir links de backup, e respostas não mantêm seus links originais. Se a contagem mudar ou faltarem permissões, a operação será interrompida antes de modificar os canais."
+  ],
   "text.55c7696b2a26c7": [
     "Date: ",
     "Data: "
@@ -3762,6 +4462,10 @@
   "text.560bdcdd9b4bbd": [
     "Temporary ban",
     "Banimento temporário"
+  ],
+  "text.561c6a40e7d38d": [
+    "The embed will be published every {p0} new messages written by members in the selected channel. Bot and webhook messages do not count.",
+    "O embed será publicado a cada {p0} novas mensagens de membros no canal selecionado. Mensagens de bots e webhooks não contam."
   ],
   "text.5642273dfbf438": [
     "Custodian Mode · Observation for review",
@@ -3778,6 +4482,10 @@
   "text.56a1d44d6c3ce0": [
     "purge failed; review the warning log",
     "falha na limpeza; revise o registro de advertências"
+  ],
+  "text.56a2f654e88782": [
+    "Error: Could not rename the destination channel. Check Manage Channels permission and bot hierarchy.",
+    "Erro: Não foi possível renomear o canal de destino. Verifique Gerenciar Canais e a hierarquia do bot."
   ],
   "text.56ab7c45f6f2f6": [
     "Text channel where logs will be published",
@@ -3868,8 +4576,8 @@
     "Alteração cancelada. A isenção não foi salva."
   ],
   "text.58ef1b48f146cf": [
-    " Led the runner-up by **{p0} message{p1}**.",
-    " Ficou **{p0} mensagem{p1}** à frente do segundo lugar."
+    " Led the runner-up by **{p0} {p1}**.",
+    " Ficou **{p0} {p1}** à frente do segundo lugar."
   ],
   "text.58f0aceb523f31": [
     "Creation or registration discarded. No changes.",
@@ -3983,6 +4691,10 @@
     "Disabled",
     "Desativadas"
   ],
+  "text.5aa657464cd546": [
+    "Centralized warnings, condemnations and reviews. Disciplinary connections aren't activated yet.",
+    "Advertências centralizadas, condenações e revisões. As ligações disciplinares ainda não estão ativadas."
+  ],
   "text.5ae2b0688bfb86": [
     "{p0} was added as a trap channel.",
     "{p0} foi adicionado como canal de armadilha."
@@ -3990,6 +4702,10 @@
   "text.5b0f1790dee350": [
     "ban",
     "banir"
+  ],
+  "text.5b16c305693555": [
+    "**Frequency:** {p0}\n**Next backup:** {p1}\n**Last scheduled backup:** {p2}\n**Link sent by DM to:** server creator/owner",
+    "**Frequência:** {p0}\n**Próximo backup:** {p1}\n**Último backup agendado:** {p2}\n**Link por mensagem privada para:** criador/proprietário do servidor"
   ],
   "text.5b373ecb7adddf": [
     "Punishment role, purge, timeout, mention, and retention: `/honeypot setup`.",
@@ -4043,6 +4759,10 @@
     "Unknown IANA time zone; use UTC or America/Santo_Domingo.",
     "Fuso horário IANA desconhecido; use UTC ou America/Santo_Domingo."
   ],
+  "text.5bdf2e75e1c129": [
+    "**El Heraldo · Departure comments**\n\nRequests: **{p0}**\nOne voluntary request after departures with no detected sanction. No further messages if unanswered. Responses of up to 500 characters are accepted for seven days and added to the original log.\nPrivate, accessible channel: **{p1}**\n\nChanging an option does not save automatically.",
+    "**El Heraldo · Comentários de saída**\n\nSolicitações: **{p0}**\nUma solicitação voluntária após saídas sem sanção detectada. Não há mensagens adicionais se não houver resposta. Respostas de até 500 caracteres durante sete dias são incorporadas ao registro original.\nCanal privado e acessível: **{p1}**\n\nAlterar uma opção não salva automaticamente."
+  ],
   "text.5becbad6f622f4": [
     "Check the channel permissions and a word or phrase up to 100 characters.",
     "Verifique as permissões do canal e uma palavra ou frase de até 100 caracteres."
@@ -4071,6 +4791,14 @@
     "Footer",
     "Rodapé"
   ],
+  "text.5c9edb4274f19d": [
+    "We are running tests to improve server security and operation. You may receive test notifications. We apologize for the inconvenience. If this message includes a moderation measure, contact the server staff to confirm your status.",
+    "Estamos realizando testes para melhorar a segurança e o funcionamento do servidor. Você pode receber notificações de teste. Pedimos desculpas pelo transtorno. Se esta mensagem contiver uma medida de moderação, consulte a equipe do servidor para confirmar sua situação."
+  ],
+  "text.5ccf4f5f85c482": [
+    "Reminders explain how members can help moderation using the available report reactions. They explain each reaction without presenting moderator-only condemnation as a public option. Use reminders sparingly to avoid excessive messages and unnecessary reports.",
+    "Os lembretes explicam como os membros podem colaborar com a moderação usando as reações de denúncia disponíveis. Explicam cada reação sem apresentar a condenação exclusiva de moderadores como opção pública. Use com moderação para evitar mensagens excessivas e denúncias desnecessárias."
+  ],
   "text.5cd499e9d3f7dd": [
     "Text or message link",
     "Texto ou link da mensagem"
@@ -4078,6 +4806,10 @@
   "text.5cea459f919bb7": [
     "Role assigned manually",
     "Cargo atribuído manualmente"
+  ],
+  "text.5cf6292ea64e4a": [
+    "El Heraldo needs View Channel, Read Message History, Create Private Threads, and Send Messages in Threads in the condemned members channel.",
+    "El Heraldo precisa de Ver Canal, Ler Histórico de Mensagens, Criar Tópicos Privados e Enviar Mensagens em Tópicos no canal de condenados."
   ],
   "text.5d08cdf4ecdece": [
     "Could not save your comment. Try again later.",
@@ -4094,6 +4826,10 @@
   "text.5d43f833b8e272": [
     "Example: 7d · 0 = no account age filter",
     "Ex.: 7d · 0 = não filtrar por idade da conta"
+  ],
+  "text.5d4decf366f299": [
+    "**How to help with moderation**\n\nTo report possible violations, react with the emoji that best describes the message. Avoid unnecessary reports.\n\n",
+    "**Como colaborar com a moderação**\n\nPara comunicar possíveis infrações, reaja com o emoji que melhor descreve a mensagem. Evite denúncias desnecessárias.\n\n"
   ],
   "text.5d564802a7325c": [
     "Case file {p0} · {p1}",
@@ -4158,6 +4894,10 @@
   "text.5eab36d33062fd": [
     "0 = disabled. Minimum percentage of recent accounts.",
     "0 = desativado. Porcentagem mínima de contas recentes."
+  ],
+  "text.5eb47535e4c700": [
+    "Settings saved, but Discord rejected the card update. Retry Publish / update. The previous panel is not considered updated.",
+    "Configuração salva, mas o Discord rejeitou a atualização do cartão. Tente Publicar / atualizar novamente. O painel anterior não é considerado atualizado."
   ],
   "text.5ee32d24cca2ca": [
     "Saved: ",
@@ -4239,6 +4979,10 @@
     "Personality synced to {p0}.",
     "Personalidade sincronizada em {p0}."
   ],
+  "text.608db877de3aa6": [
+    "Role **{p0}** was deleted. El Heraldo removed its binding and reaction; no new role was created.\n\n",
+    "O cargo **{p0}** foi excluído. El Heraldo removeu seu vínculo e reação; nenhum cargo novo foi criado.\n\n"
+  ],
   "text.60a553467bfe99": [
     "### Roles per user\n",
     "### Cargos por usuário\n"
@@ -4246,6 +4990,14 @@
   "text.60a768691b6ae3": [
     "Response mode",
     "Modo de resposta"
+  ],
+  "text.60bc5514eb78ef": [
+    "Discord rejected the kick of {p0}; review permissions and hierarchy. The pending deadline is preserved for retry.",
+    "O Discord rejeitou a expulsão de {p0}; revise permissões e hierarquia. O prazo pendente é preservado para nova tentativa."
+  ],
+  "text.61080b9bcd7ec2": [
+    "El Heraldo lacks permissions for action {p0}. Review its permissions before saving the rule.",
+    "El Heraldo não tem permissões para a ação {p0}. Revise as permissões antes de salvar a regra."
   ],
   "text.610a7f60eb0179": [
     "Import canceled: it would exceed the maximum of 25 templates.",
@@ -4295,6 +5047,10 @@
     "Each option requires a label of up to 100 characters.",
     "Cada opção requer uma etiqueta de até 100 caracteres."
   ],
+  "text.61cb3229d142f4": [
+    "**El Heraldo · Message center**\n\nEdit persistent panels that support customization here. Changes are isolated per server, and existing published panels are updated without duplicates.\n\nPanels that only show actual bot or server data **do not appear here**, such as Variables, commands, diagnostics, states, and listings.",
+    "**El Heraldo · Centro de mensagens**\n\nEdite aqui os painéis persistentes que admitem personalização. As alterações são isoladas por servidor e painéis já publicados são atualizados sem duplicação.\n\nPainéis que só mostram dados reais do bot ou servidor **não aparecem aqui**, como Variáveis, comandos, diagnósticos, estados e listagens."
+  ],
   "text.6224525a1b1caf": [
     " · new accounts: {p0}% (minimum: {p1}%)",
     " · contas novas: {p0}% (mínimo: {p1}%)"
@@ -4314,6 +5070,10 @@
   "text.62d370ef7bb5b3": [
     "Recovery by personality test of El Heraldo",
     "Recuperação por teste de personalidade de El Heraldo"
+  ],
+  "text.63162429e5e260": [
+    "**Message scheduling**\n\nUse `/programar_mensaje crear` to select a template, channel, local date, and time zone. Supports a single publication or daily/weekly recurrence; confirmation is required.\nUse `/programar_mensaje listar` to view status and `/programar_mensaje retirar` to cancel future runs. A send already in progress may finish. After an uncertain interruption, review the channel before creating another schedule.",
+    "**Agendamento de mensagens**\n\nUse `/programar_mensaje crear` para escolher modelo, canal, data local e fuso horário. Admite uma publicação ou repetição diária/semanal; exige confirmação.\nUse `/programar_mensaje listar` para consultar o estado e `/programar_mensaje retirar` para cancelar próximas execuções. Um envio já iniciado pode terminar. Após uma interrupção incerta, revise o canal antes de criar outro agendamento."
   ],
   "text.6350e55d60f80d": [
     "Custom notice embed",
@@ -4346,6 +5106,10 @@
   "text.63c7823303894e": [
     "The emoji **{p0}** is repeated. Each role needs a different one.",
     "O emoji **{p0}** é repetido. Cada cargo precisa de um diferente."
+  ],
+  "text.63cfa4873699f1": [
+    "\n\nRole created and selected: {p0}. Press **{p1}** to use it in this configuration. The role already exists even if you discard the draft.",
+    "\n\nCargo criado e selecionado: {p0}. Pressione **{p1}** para usar nesta configuração. O cargo já existe mesmo que você descarte o rascunho."
   ],
   "text.63dedb86276394": [
     "I was unable to sync the template: `{p0}`",
@@ -4531,6 +5295,10 @@
     "Error: The icon must be a URL `http(s)://…` or a variable such as `{servericon}`.",
     "Erro: O ícone deve ser um URL `http(s)://…` ou uma variável como `{servericon}`."
   ],
+  "text.678e2d5eab4062": [
+    "**Response mode:** Observe (no sanctions)\n**Sensitivity:** {p0}\n**Scope:** Eligible and authorized channels\n**Rule change notices:** Disabled\n**Continuous monitoring:** Not enabled\n\nPreferences prepare future monitoring. The bot does not yet classify messages with AI or apply sanctions.",
+    "**Modo de resposta:** Observar (sem sanções)\n**Sensibilidade:** {p0}\n**Escopo:** Canais elegíveis e autorizados\n**Avisos de alterações nas regras:** Desativados\n**Supervisão contínua:** Não ativada\n\nAs preferências preparam a supervisão futura. O bot ainda não classifica mensagens por IA nem aplica sanções."
+  ],
   "text.679e80c4ba72df": [
     "Interval outside the allowable range.",
     "Intervalo fora do limite permitido."
@@ -4591,6 +5359,10 @@
     "Channel merged with #{p0} by {p1}",
     "Canal mesclado com #{p0} por {p1}"
   ],
+  "text.6902f6b5d77eb7": [
+    "**El Heraldo · Messages**\n\nChoose a message to edit. System messages have fixed names; optional named templates are under Custom messages. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
+    "**El Heraldo · Mensagens**\n\nEscolha a mensagem a editar. Mensagens do sistema têm nomes fixos; modelos opcionais com nomes próprios ficam em Mensagens personalizadas. As alterações são isoladas por servidor e painéis publicados são sincronizados quando aplicável.\n\n**Editáveis:** Verificação, mensagem privada de verificação, Sugestões, Honeypot, Condenações e Registros.\n**Excluídos intencionalmente:** Variáveis, comandos, listas, estados, perfis, históricos, rankings e qualquer painel que mostre dados reais ou gerados em tempo real."
+  ],
   "text.690539f1e42528": [
     "Error: The URL should start with https:// or http://.",
     "Erro: O URL deve começar por https:// ou http://."
@@ -4598,6 +5370,10 @@
   "text.69102c5732d1cd": [
     "Member whose data fills {usuario}, {mencion}, {avatar}… (optional)",
     "Membro cujos dados preenchem {usuario}, {mencion}, {avatar}… (opcional)"
+  ],
+  "text.6982631f6a5311": [
+    "The ratio requires an account age greater than zero. This duration does NOT end a condemnation or ban. Log only avoids sanctions but may pause invites if configured.",
+    "A proporção exige idade de conta maior que zero. Esta duração NÃO encerra condenações ou banimentos. Apenas registrar evita sanções, mas pode pausar convites se configurado."
   ],
   "text.6998e40316b326": [
     "The limit action was already recorded; it will not be repeated.",
@@ -4610,6 +5386,10 @@
   "text.69d17ca1683468": [
     "Enabled",
     "Ativada"
+  ],
+  "text.69d4f4e6aed4b8": [
+    "Private conversation for case file {p0}. The main resolution is available at {p1}. The condemned member can communicate with administrators here.",
+    "Conversa privada do dossiê {p0}. A resolução principal está disponível em {p1}. O condenado pode se comunicar aqui com os administradores."
   ],
   "text.69f89336b1e086": [
     "Discord rejected report publication.",
@@ -4638,6 +5418,10 @@
   "text.6a9401c16dab60": [
     "Requires channel access, sending messages, and managing webhooks.",
     "Precisa de acesso, envio de mensagens e gerenciamento de webhooks nesse canal."
+  ],
+  "text.6ac2c47b506198": [
+    "**Webhook publication**\n\nUse `/webhook_mensaje` to select a template and channel and confirm publication. The administrator and bot need Manage Webhooks permission at the destination. El Heraldo creates or reuses only its own webhook; it does not request or store tokens. Supports visual templates and links. Role buttons and selectors are published through the bot.",
+    "**Publicação por webhook**\n\nUse `/webhook_mensaje` para escolher modelo e canal e confirmar a publicação. O administrador e o bot precisam de Gerenciar Webhooks no destino. El Heraldo cria ou reutiliza apenas seu próprio webhook; não solicita nem armazena tokens. Admite modelos visuais e links. Botões e seletores de cargos são publicados pelo bot."
   ],
   "text.6acbbdc5a32fb1": [
     "Outside the server (kick or departure cannot be verified)",
@@ -4699,6 +5483,10 @@
     "Official rule quoted verbatim",
     "Regra oficial citada literalmente"
   ],
+  "text.6bbbfa47640d16": [
+    "**El Heraldo · Verification**\n\nSelect the module to configure. The deadlines are independent.\n\n",
+    "**El Heraldo · Verificação**\n\nSelecione o módulo que deseja configurar. Os prazos são independentes.\n\n"
+  ],
   "text.6be52b14d2af42": [
     "**5. Source channel.** Keep it without deleting messages.",
     "**5. Canal de origem.** Conservar sem excluir mensagens."
@@ -4707,13 +5495,29 @@
     "Confirm save",
     "Confirmar salvamento"
   ],
+  "text.6c16114ce1c7bd": [
+    "Every soul has something to ask for, and this paradise is ready to listen.\n\nHave an idea to improve this world? A concern? A missing channel, an event you dream of seeing, a rule that deserves to change — El Oráculo receives it.\n\n**How do you invoke your wish?**\nPress **Create suggestion** and complete the private form.\n\nYour proposal goes directly to those who govern this paradise. Suggestions will not fill the channel.\n\nNo wish is too small, and no sin too great to propose.",
+    "Toda alma tem algo a pedir, e este paraíso está disposto a ouvir.\n\nVocê tem uma ideia para melhorar este mundo? Alguma preocupação? Um canal que falta, um evento que sonha ver, uma regra que merece mudar — El Oráculo recebe.\n\n**Como invocar seu desejo?**\nPressione **Criar sugestão** e preencha o formulário privado.\n\nSua proposta será enviada diretamente a quem governa este paraíso. O canal não ficará cheio de sugestões.\n\nNão há desejo pequeno demais, nem pecado grande demais para propor."
+  ],
   "text.6c30269a26a2c6": [
     "Raid Protection · Customize",
     "Proteção antirraid · Personalizar"
   ],
+  "text.6c47b9a839572f": [
+    "Done — {p0} verified, {p1} kicked (personality), {p2} kicked (Sin Verificar).",
+    "Concluído — {p0} verificado(s), {p1} expulso(s) (personalidade), {p2} expulso(s) (Sin Verificar)."
+  ],
   "text.6c68dd7c8d1c34": [
     "\nReview the configured measure before enabling protection.",
     "\nRevise a medida configurada antes de ativar a proteção."
+  ],
+  "text.6c951aad14615d": [
+    "[Go to original message]({p0}) · Message: `{p1}`\nRules revision: `{p2}`\nContent hash: `{p3}`",
+    "[Ir à mensagem original]({p0}) · Mensagem: `{p1}`\nRevisão das regras: `{p2}`\nHash do conteúdo: `{p3}`"
+  ],
+  "text.6ca49525fa1c16": [
+    "\n\nWarning: The server has no template yet. Create one in Server Settings → Server Template, or the backup will fail.",
+    "\n\nAdvertência: O servidor ainda não tem modelo. Crie um em Configurações do Servidor → Modelo do Servidor, ou o backup falhará."
   ],
   "text.6cbb555353f07c": [
     "Welcome DM updated",
@@ -4763,6 +5567,10 @@
     "Manage Roles permission is required.",
     "É necessária a permissão Gerenciar Cargos."
   ],
+  "text.6dd8290f2d4082": [
+    "**El Heraldo · System roles**\n\nSelections apply only after pressing **Save changes**.",
+    "**El Heraldo · Cargos do sistema**\n\nAs seleções só são aplicadas ao pressionar **Salvar alterações**."
+  ],
   "text.6dde1ddc4718e6": [
     "Starting purge…",
     "Iniciando limpeza…"
@@ -4806,6 +5614,10 @@
   "text.6e7c0122e9fa57": [
     "**El Heraldo · Age verification**\n\n",
     "**El Heraldo · Verificação de idade**\n\n"
+  ],
+  "text.6e7f7239c7d7d5": [
+    "The bot needs Manage Channels, View Channel, Send Messages, Embed Links, and Read Message History.",
+    "O bot precisa de Gerenciar Canais, Ver Canal, Enviar Mensagens, Inserir Links e Ler Histórico de Mensagens."
   ],
   "text.6ea72006c79ddd": [
     "Source condemnation case file: {p0}",
@@ -5039,6 +5851,10 @@
     "Reason (optional only in El Heraldo Test)",
     "Motivo (opcional apenas em El Heraldo Test)"
   ],
+  "text.73b34f2b864d7f": [
+    "`#{p0}` was deleted in Discord and automatically removed from Honeypot. {p1} trap channel(s) remain.",
+    "`#{p0}` foi excluído no Discord e removido automaticamente do Honeypot. Restam {p1} canal(is) de armadilha."
+  ],
   "text.73e94bd4b8c379": [
     "Restoration canceled. The template hasn't been changed.",
     "Restauração cancelada. Não foi alterado o modelo."
@@ -5082,6 +5898,14 @@
   "text.7470e245a922ce": [
     "**Preview · {p0}**\nPreview using the currently saved settings.",
     "**Prévia · {p0}**\nPrévia com a configuração salva atualmente."
+  ],
+  "text.74a0a559e2418a": [
+    "**Confirmation pending.** Review the details and press **{p0}** to save. You may cancel without saving.",
+    "**Confirmação pendente.** Confira os dados e pressione **{p0}** para salvar. Você pode cancelar sem salvar."
+  ],
+  "text.74aeef5fb7cb25": [
+    "El Heraldo will give the Condenado role access to the channel and its history, and permission to reply in threads, but not to post directly in the channel, create threads, or manage them. This changes channel permissions. Main cards will be visible to all members with channel access. Confirm the change?",
+    "El Heraldo dará ao cargo Condenado acesso ao canal e histórico e permissão para responder em tópicos, mas não para publicar diretamente no canal, criar ou gerenciar tópicos. Esta ação altera as permissões do canal. Os cartões principais serão visíveis a todos os membros com acesso ao canal. Confirma a alteração?"
   ],
   "text.74cdafaa67ed0e": [
     "Internal notes",
@@ -5203,6 +6027,10 @@
     "Export kit",
     "Exportar kit"
   ],
+  "text.789ef15c62e51b": [
+    "Use s (seconds), m (minutes), h (hours), d (days), and month (months), e.g. `30s`, `10m`, `12h`, `2d`, `1 month`, or `1d 12h`.",
+    "Use s (segundos), m (minutos), h (horas), d (dias) e mês (meses), ex.: `30s`, `10m`, `12h`, `2d`, `1 mês` ou `1d 12h`."
+  ],
   "text.78e8f95c9c2dab": [
     "Discord could not create the channel at this time.",
     "Discord não conseguiu criar o canal neste momento."
@@ -5250,6 +6078,10 @@
   "text.79e01ba1713b62": [
     "You are requesting deletion of **",
     "Você está solicitando a exclusão de **"
+  ],
+  "text.79ed7f1af303ff": [
+    "**El Heraldo general settings**\n\nAutomatic resource creation: **{p0}**.\nConfigure channels, roles, verification, personality, deadlines, permissions, and other options through `/setup`.",
+    "**Configuração geral de El Heraldo**\n\nCriação automática de recursos: **{p0}**.\nConfigure canais, cargos, verificação, personalidade, prazos, permissões e demais opções em `/setup`."
   ],
   "text.7a3072bf51b38b": [
     "The channel is no longer available.",
@@ -5319,6 +6151,10 @@
     "manually",
     "manualmente"
   ],
+  "text.7b4239b5f9e2fb": [
+    "Error: Cannot publish the preview in {p0}: View Channel, Send Messages, and Embed Links are required.",
+    "Erro: Não é possível publicar a prévia em {p0}: são necessários Ver Canal, Enviar Mensagens e Inserir Links."
+  ],
   "text.7b42fea6d7378e": [
     "> **Ends:** {p0}",
     "> **Termina:** {p0}"
@@ -5378,6 +6214,10 @@
   "text.7c9c0a4e853d20": [
     "The schedule changed while you were editing. Reopen the editor.",
     "O horário mudou durante a edição. Abra o editor novamente."
+  ],
+  "text.7cb87385497004": [
+    "Detection of text, similar images, flooding, and collective patterns. Connection to verifiable detectors is pending.",
+    "Detecção de texto, imagens semelhantes, saturação e padrões coletivos. Conexão com detectores verificáveis pendente."
   ],
   "text.7cd84b585f26b6": [
     "The channel is unavailable or publishing permissions are missing.",
@@ -5487,6 +6327,14 @@
     "{p0} joins",
     "{p0} entradas"
   ],
+  "text.805599945103ce": [
+    "Warning: Could not reopen invites ({p0}); reopen them manually in Server Settings",
+    "Advertência: Não foi possível reabrir os convites ({p0}); reabra manualmente em Configurações do Servidor"
+  ],
+  "text.808abf752571ba": [
+    "**Selected action:** {p0}\n{p1}\n\nSelect an action and use **Configure measure** to adjust its parameters. Return to the main panel and press **Save changes** to apply the draft.",
+    "**Ação selecionada:** {p0}\n{p1}\n\nSelecione uma ação e use **Configurar medida** para ajustar seus parâmetros. Volte ao painel principal e pressione **Salvar alterações** para aplicar o rascunho."
+  ],
   "text.809853d64fec84": [
     "Sensitivity",
     "Sensibilidade"
@@ -5495,6 +6343,10 @@
     "Member of the Week Channel",
     "Canal de Membro da Semana"
   ],
+  "text.80a8aaa3381b15": [
+    "Editor for **{p0}** · {p1} embeds. Selected: {p2}.\nChanges remain in the draft until Save and confirm.\n",
+    "Editor de **{p0}** · {p1} embeds. Selecionado: {p2}.\nAs alterações permanecem no rascunho até Salvar e confirmar.\n"
+  ],
   "text.80c7f2b683e48d": [
     "This button only works inside the server.",
     "Este botão só funciona dentro do servidor."
@@ -5502,6 +6354,10 @@
   "text.80ca383e9c8d3e": [
     "Discard changes",
     "Descartar alterações"
+  ],
+  "text.80ec337088547b": [
+    "Error: Nothing was saved: the Punishment role action requires a role. Choose one with `rol_castigo`.",
+    "Erro: Nada foi salvo: a ação Cargo de punição exige um cargo. Escolha com `rol_castigo`."
   ],
   "text.810106546c2a6b": [
     "HEX color (e.g. F1C40F or #F1C40F)",
@@ -5555,6 +6411,10 @@
     "Discord refused the measure: `{p0}`",
     "Discord rejeitou a medida: `{p0}`"
   ],
+  "text.821d702d043c0a": [
+    "Your suggestion **#{p0}** was sent privately to {p1} recipient(s). You will receive a DM when it is accepted or rejected.",
+    "Sua sugestão **#{p0}** foi enviada de forma privada a {p1} destinatário(s). Você receberá uma mensagem privada quando for aceita ou rejeitada."
+  ],
   "text.826276a51ed85b": [
     "Error: An embed named `{p0}` already exists. Edit it with `/embed editar`.",
     "Erro: Já existe um embed chamado `{p0}`. Edite com `/embed editar`."
@@ -5587,6 +6447,10 @@
     "Could not reserve the automatic action; administrative review required.",
     "Não foi possível reservar a ação automática; requer revisão administrativa."
   ],
+  "text.8348e279630516": [
+    "Exemptions by role, rule, and channel. The owner and moderators do not receive automatic sanctions. Advanced configuration pending.",
+    "Isenções por cargos, regras e canais. O proprietário e os moderadores não recebem sanções automáticas. Configuração avançada pendente."
+  ],
   "text.835dc419f06c32": [
     "Texts",
     "Textos"
@@ -5614,6 +6478,10 @@
   "text.83ab3fe7e2e100": [
     "Protection enabled automatically.",
     "Proteção ativada automaticamente."
+  ],
+  "text.83beb5900bb693": [
+    "**Report log:** {p0}\n**Report reactions:**\n{p1}\n**Condemnation reaction:** {p2}\n\nThe rules above show effective settings or the current draft. Warnings require a moderator and do not delete messages. Direct condemnation works separately from report rules.",
+    "**Registro de denúncias:** {p0}\n**Reações de denúncia:**\n{p1}\n**Reação para condenar:** {p2}\n\nAs regras acima mostram a configuração efetiva ou o rascunho atual. Advertências exigem um moderador e não excluem mensagens. A condenação direta funciona separadamente das regras de denúncias."
   ],
   "text.83e4a94cefc9df": [
     "Configuration panel closed.",
@@ -5647,6 +6515,10 @@
     "Warning: Verification is misconfigured. Notify an administrator.",
     "Advertência: A verificação está mal configurada. Avise um administrador."
   ],
+  "text.847728fe58c5ad": [
+    "Warning: The source channel changed during migration or its history could not be checked again. It was preserved to avoid data loss.",
+    "Advertência: O canal de origem mudou durante a migração ou não foi possível verificar seu histórico novamente. Ele foi preservado para evitar perdas."
+  ],
   "text.8497e7a6d63289": [
     "Review this template edit. It will only be saved on confirmation.",
     "Revise a edição deste modelo. Ela só será salva ao confirmar."
@@ -5671,6 +6543,10 @@
     "{p0} applied, but its case file could not be recorded. Administrative review required.",
     "{p0} aplicado, mas não foi possível registrar o dossiê. Requer revisão administrativa."
   ],
+  "text.8542250eb9bab2": [
+    "**El Heraldo · Date format**\n\n**Current:** {p0}\n**Example:** {p1}\n\nCustom formats apply to new messages and supported dynamic panels. Historical case files are not altered. Discord uses each user's local time when its native format is selected.",
+    "**El Heraldo · Formato de data**\n\n**Atual:** {p0}\n**Exemplo:** {p1}\n\nFormatos personalizados são usados em novas mensagens e painéis dinâmicos compatíveis. Dossiês históricos não são alterados. O Discord usa a hora local de cada usuário quando seu formato nativo é selecionado."
+  ],
   "text.856641d2b3eef4": [
     "Completed",
     "Concluído"
@@ -5690,6 +6566,10 @@
   "text.85b4d6ad13aaf9": [
     "Personality verification completed",
     "Verificação de personalidade concluída"
+  ],
+  "text.85e01856411baa": [
+    "This template exceeds the size of the form. Export the kit and use /importkit with replacement to check it without truncing content.",
+    "Este modelo excede o tamanho do formulário. Exporte o kit e use o /importkit com substituição para revisá-lo sem truncar conteúdo."
   ],
   "text.85fc734bfe28fc": [
     "Server | {servidor}\nType | {tipo_log} | inline",
@@ -5822,6 +6702,10 @@
   "text.881de47ec9a982": [
     "Delete ALL their messages (cannot combine with count or range)",
     "Excluir TODAS as mensagens do usuário (sem quantidade ou intervalo)"
+  ],
+  "text.88210e50a12a22": [
+    "\n\n**UNSAVED draft:** {p0}\nPress Review and confirm to propose the change, then Save changes in the final confirmation.",
+    "\n\n**Rascunho NÃO SALVO:** {p0}\nPressione Revisar e confirmar para propor a alteração, e Salvar alterações na confirmação final."
   ],
   "text.882460ddc9dd41": [
     "Error: Invalid Discord user ID.",
@@ -5963,6 +6847,10 @@
     "Confirm creation",
     "Confirmar criação"
   ],
+  "text.8b54caa88de96f": [
+    "**El Heraldo · AutoMod · Custodian Mode · Actions by type**\n\nThese are suggested templates, not universal rules. Each server must link them to its own approved server rules.\nNH refers to the bot's internal standards.\n\n**Templates:**\n{p0}\n\n**Selected type:** {p1}\n**Suggestion:** {p2}\n**Current selection:** {p3}\n**Pending changes:** {p4}\n**Configuration:** {p5}\n\n**Important:** this panel saves preferences for future use. Custodian Mode remains in Observe mode, without an operational classifier, active monitoring, or automatic kicks or bans.",
+    "**El Heraldo · AutoMod · Modo Custódio · Ações por tipo**\n\nEstes são modelos sugeridos, não regras universais. Cada servidor deve vinculá-los às suas próprias regras aprovadas.\nNH se refere às normas internas do bot.\n\n**Modelos:**\n{p0}\n\n**Tipo selecionado:** {p1}\n**Sugestão:** {p2}\n**Seleção atual:** {p3}\n**Alterações pendentes:** {p4}\n**Configuração:** {p5}\n\n**Importante:** este painel salva preferências para uso futuro. O Modo Custódio permanece em Observar, sem classificador operacional, supervisão ativa, expulsões ou banimentos automáticos."
+  ],
   "text.8b7f7ae6e8ef22": [
     "canal_mencion:  → mention a channel",
     "canal_mencion:  → mencionar um canal"
@@ -5978,6 +6866,10 @@
   "text.8bd1a2812a098b": [
     "The rule changed while you were editing. Reopen the form.",
     "A regra mudou durante a edição. Abra o formulário novamente."
+  ],
+  "text.8bdd081a95a692": [
+    "Verification panel not available: the previous message has been deleted. Use /verify to publish it.",
+    "Painel de verificação não disponível: a mensagem anterior foi apagada. Use o /verify para publicá-lo."
   ],
   "text.8c108d8a6a2298": [
     "You can't punish the server owner.",
@@ -6103,6 +6995,10 @@
     "Owner",
     "proprietário"
   ],
+  "text.8ebb76f88f1091": [
+    "We are running moderation tests in El Heraldo Test. This measure is part of those checks. We apologize for the inconvenience.\n\n{p0}\n{p1}\nIf you need help, contact the server administrators.",
+    "Estamos realizando testes de moderação no El Heraldo Test. A medida faz parte dessas verificações. Pedimos desculpas pelo transtorno.\n\n{p0}\n{p1}\nSe precisar de ajuda, entre em contato com os administradores do servidor."
+  ],
   "text.8ec0ece1fbf9b4": [
     "Review and confirm the creation of the exemption for {p0}.",
     "Verifique e confirme a criação da isenção para {p0}."
@@ -6174,6 +7070,10 @@
   "text.8fcb17ca802b4a": [
     "Member: {p0}\nWarnings: {p1}/{p2}\nCase file: {p3}\n{p4}",
     "Membro: {p0}\nAdvertências: {p1}/{p2}\nDossiê: {p3}\n{p4}"
+  ],
+  "text.8fe578c3d95e39": [
+    "Roles: **{p0}** · Members: **{p1}**\nManage with `/honeypot exempt_add` and `/honeypot exempt_remove`.",
+    "Cargos: **{p0}** · Membros: **{p1}**\nGerencie com `/honeypot exempt_add` e `/honeypot exempt_remove`."
   ],
   "text.8fedd65695df32": [
     "Its role is equal to or greater than that of the bot (role hierarchy)",
@@ -6247,6 +7147,10 @@
     "Year-month-day, clock of 24 hours",
     "Ano-mes-dia, relógio de 24 horas"
   ],
+  "text.90ce9a436aa048": [
+    "Discord could not create the role. Check Manage Roles permission and the server limit. Your draft is preserved.",
+    "O Discord não pôde criar o cargo. Verifique Gerenciar Cargos e o limite do servidor. Seu rascunho é preservado."
+  ],
   "text.911d1179bfed6c": [
     "Balanced",
     "Equilibrada"
@@ -6298,6 +7202,10 @@
   "text.9270b5186eae02": [
     " The channel was registered, but the notice could not be synchronized: {p0}",
     " O canal foi registrado, mas não foi possível sincronizar o aviso: {p0}"
+  ],
+  "text.928acf9ad6b34f": [
+    "✏️ **Edit · {p0}**\nModule: {p1}\n{p2}\n\nEdits only this template. Other events keep their settings.",
+    "✏️ **Editar · {p0}**\nMódulo: {p1}\n{p2}\n\nEdita somente este modelo. Os demais eventos mantêm sua configuração."
   ],
   "text.92963c3dfc8165": [
     "Ban through reports",
@@ -6359,6 +7267,10 @@
     "Use d (days), h (hours) and m (minutes), for example `30m`, `12h`, `2d` or `1d 12h 30m`.",
     "Usa d (dias), h (horas) e m (minutos), por exemplo `30m`, `12h`, `2d` ou `1d 12h 30m`."
   ],
+  "text.93db647131ce45": [
+    "Warning: The template synchronized, but could not send the link by DM to the server creator. They must have DMs enabled.",
+    "Advertência: O modelo foi sincronizado, mas não foi possível enviar o link por mensagem privada ao criador do servidor. Ele precisa permitir mensagens privadas."
+  ],
   "text.93e36f506d4e4e": [
     " Tied with the runner-up and won on a tiebreaker.",
     " Empatou com o segundo lugar e venceu pelo critério de desempate."
@@ -6379,6 +7291,10 @@
     "Roles assigned to all new users",
     "Cargos atribuídos a todos os novos usuários"
   ],
+  "text.945ced8381d4c3": [
+    "**El Heraldo · Role Connections**\n\nModule reserved. The configuration will be implemented when we define its scope.",
+    "**El Heraldo · Role Connections**\n\nMódulo reservado. A configuração será implementada quando definirmos o seu alcance."
+  ],
   "text.946de52c187b55": [
     "Enter another value without saving yet",
     "Informar outro valor sem salvar ainda"
@@ -6394,6 +7310,10 @@
   "text.94a9eac404c8c6": [
     "Spam",
     "Spam"
+  ],
+  "text.94eb691744f517": [
+    "**5. Source channel.** Delete only if all messages and attachments are migrated correctly and no new messages appear.",
+    "**5. Canal de origem.** Eliminar apenas se todas as mensagens e anexos forem migradas corretamente e não aparecerem novas mensagens."
   ],
   "text.94ebf1baeecc79": [
     "Sensitivity · Choose according to your server activity",
@@ -6427,6 +7347,10 @@
     "Verification panel",
     "Painel de verificação"
   ],
+  "text.95823f94c892b9": [
+    "Warn always requires only one moderator reaction, has no duration, and never deletes messages.",
+    "Advertir sempre exige uma única reação de um moderador, não tem duração e nunca exclui mensagens."
+  ],
   "text.958389f724dfb6": [
     "the thumbnail",
     "a miniatura"
@@ -6451,6 +7375,10 @@
     "Title of the embed (optional)",
     "Título do embed (opcional)"
   ],
+  "text.95e9609afa3a9b": [
+    "Notice published or updated, but the panel could not be refreshed. Return to the module to check the current status.",
+    "Aviso publicado ou atualizado, mas não foi possível refrescar o painel. Volte ao módulo para consultar o estado atual."
+  ],
   "text.9603cc5f726b83": [
     "Settings saved. Publishing the notice in the trap channels…",
     "Configuração salva. Publicando o aviso nos canais de armadilha…"
@@ -6466,6 +7394,10 @@
   "text.966db8fecc102e": [
     "Updated Member of the Week channel",
     "Canal de Membro da Semana atualizado"
+  ],
+  "text.9685a12648ed47": [
+    "Case file **{p0}** was resolved by pardon. This card records the case resolution.",
+    "O dossiê **{p0}** foi resolvido por perdão. Este cartão registra a resolução do caso."
   ],
   "text.968bcb1d3401a3": [
     "Merge stopped: Manage Channels permission is required to delete the source.",
@@ -6526,6 +7458,10 @@
   "text.9827a31d3da8e2": [
     "Edit channel merge",
     "Editar fusão de canais"
+  ],
+  "text.98372568b6db1c": [
+    "That emoji belongs to report **{p0}**: {p1}, with a threshold of {p2} different people. Review it in **/setup → Moderation → Reports → Conditions**. Choose another emoji for reaction condemnation.",
+    "Esse emoji pertence à denúncia **{p0}**: {p1}, com limite de {p2} pessoas distintas. Revise em **/setup → Moderação → Denúncias → Condições**. Escolha outro emoji para condenar por reação."
   ],
   "text.98393c0f6986bc": [
     "The settings changed while you were editing. Reopen the panel.",
@@ -6603,9 +7539,17 @@
     "role managed by Discord/integration",
     "cargo gerenciado pelo Discord/integração"
   ],
+  "text.99cbc620dd0de2": [
+    "**Delete schedule #{p0}?**\nEmbed: `{p1}` · Channel: <#{p2}> · {p3}\nThe embed and its historical messages will not be deleted.",
+    "**Excluir agendamento #{p0}?**\nEmbed: `{p1}` · Canal: <#{p2}> · {p3}\nO embed e suas mensagens históricas não serão excluídos."
+  ],
   "text.99d6cca06ae564": [
     "Ban pending integration.",
     "Banimento pendente de integração."
+  ],
+  "text.9a064584b48c48": [
+    "Enable departure logging, use a private moderation channel, and grant audit log access before enabling this option.",
+    "Ative o registro de saídas, use um canal privado de moderação e conceda acesso à auditoria antes de ativar esta opção."
   ],
   "text.9a110ec8c6442d": [
     "This editor is not yours. Use /condenar template to open your own.",
@@ -6671,6 +7615,10 @@
     "Channel to publish the template",
     "Canal para publicar o modelo"
   ],
+  "text.9b6092aec97a46": [
+    "Information: Raid condemnations remain active. Review with `/condenados` or release with `/raid end liberar:True`.",
+    "Informação: As condenações do raid continuam ativas. Revise com `/condenados` ou libere com `/raid end liberar:True`."
+  ],
   "text.9bb0e81f4d5d66": [
     "The role could not be prepared.",
     "Não foi possível preparar o cargo."
@@ -6723,6 +7671,10 @@
     "Additional date or time",
     "Data ou hora adicional"
   ],
+  "text.9d0d3475ebb54a": [
+    "**3. Copy messages.** Read {p0} from oldest to newest and recreate its **{p1}** messages at the end of {p2}.",
+    "**3. Cópia de mensagens.** Ler {p0} da mais antiga à mais recente e recriar suas **{p1}** mensagens ao final de {p2}."
+  ],
   "text.9d15f25e1ef27d": [
     "That channel no longer exists.",
     "Esse canal já não existe."
@@ -6739,6 +7691,10 @@
     "Verification, personality, and access.",
     "Verificação, personalidade e acessos."
   ],
+  "text.9d7fe7b69eaa51": [
+    "Cannot find the configured announcement channel (deleted or inaccessible to the bot?). Choose another with /motw_set_channel.",
+    "Não foi possível encontrar o canal de anúncios configurado (foi excluído ou o bot perdeu acesso?). Escolha outro com /motw_set_channel."
+  ],
   "text.9d890c8de81d9c": [
     "Cannot assign {p0}. Move El Heraldo's role above that role.",
     "Não é possível atribuir {p0}. Coloque o cargo de El Heraldo acima desse cargo."
@@ -6750,6 +7706,10 @@
   "text.9de4fff354d065": [
     "Case file · {p0}",
     "Dossiê · {p0}"
+  ],
+  "text.9e0b38fb1b91b0": [
+    "\nThe full editor opens directly from **Configure notice**. Its confirmation saves and publishes the notice without duplicating it.",
+    "\nO editor completo abre diretamente em **Configurar aviso**. A confirmação permite salvar e publicar o aviso sem duplicar."
   ],
   "text.9e2221a13c2b51": [
     "Automatic report: {p0} · {p1} distinct report(s)",
@@ -6907,6 +7867,10 @@
     "\nHoneypot enabled automatically.",
     "\nHoneypot ativado automaticamente."
   ],
+  "text.a0ddda0a56485d": [
+    "\n\nEditing reaction: {p0}\nChoose existing roles in the selectors or create one from the active reaction menu.",
+    "\n\nEditando reação: {p0}\nEscolha cargos existentes nos seletores ou crie um no menu da reação ativa."
+  ],
   "text.a0e7ffa13d846c": [
     "The role does not exist or cannot be managed by El Heraldo.",
     "O cargo não existe ou não pode ser administrado por El Heraldo."
@@ -6963,6 +7927,10 @@
     "Maximum of 25 templates was reached.",
     "O máximo de 25 modelos foi alcançado."
   ],
+  "text.a1bc0587a9ea32": [
+    "Error: Deleting **all** of someone's messages requires Manage Server permission. With Manage Messages, use `cantidad` or a range.",
+    "Erro: Excluir **todas** as mensagens de alguém exige Gerenciar Servidor. Com Gerenciar Mensagens, use `cantidad` ou um intervalo."
+  ],
   "text.a1bf68846fa1e7": [
     "their last {p0} messages",
     "suas últimas {p0} mensagens"
@@ -6998,6 +7966,10 @@
   "text.a25384f629cab7": [
     "Text outside the embed: {p0}",
     "Texto fora do embed: {p0}"
+  ],
+  "text.a255305f583f35": [
+    "Confirm publishing the saved notice in all trap channels. Existing notices will be updated without duplicates. ",
+    "Confirme a publicação do aviso salvo em todos os canais de armadilha. Avisos existentes serão atualizados sem duplicação. "
   ],
   "text.a279ab82b21808": [
     "There are no configured components.",
@@ -7131,9 +8103,13 @@
     "Publication confirmed from Messages",
     "Publicação confirmada em Mensagens"
   ],
+  "text.a4f8be88ae396d": [
+    "Role components require publication through the bot; select a visual template.",
+    "Os componentes de cargos exigem publicação pelo bot; selecione um modelo visual."
+  ],
   "text.a5111e8c495371": [
     "The person isn't on the server. This action requires a member to be present.",
-    "A pessoa não está no servidor. Esta acção requer a presença de um membro."
+    "A pessoa não está no servidor. Esta ação requer a presença de um membro."
   ],
   "text.a540dceed895e4": [
     "Time to verify from entry (use d, h and m; e.g. 5m, 1h or 1d)",
@@ -7195,6 +8171,10 @@
     "line break",
     "quebra de linha"
   ],
+  "text.a67400cb80a95c": [
+    "✏️ **Edit · {p0}**\nModify only properties this message actually uses. Changes are saved per server.",
+    "✏️ **Editar · {p0}**\nModifique somente propriedades que esta mensagem usa de fato. As alterações são salvas por servidor."
+  ],
   "text.a677a44e56fbba": [
     "Field {p0}: {p1}",
     "Campo {p0}: {p1}"
@@ -7251,6 +8231,10 @@
     "Server protection through trap channels.",
     "Proteção do servidor por canais de armadilha."
   ],
+  "text.a80c48cf580c36": [
+    "Automatic replies require the Message Content intent enabled for the laboratory bot.",
+    "As respostas automáticas exigem o intent Message Content ativado no bot de laboratório."
+  ],
   "text.a8172aaca83e4a": [
     "Assign to bots → {p0}",
     "Atribuir a bots → {p0}"
@@ -7287,6 +8271,10 @@
     "Sin Verificar role → {p0}",
     "Cargo Sin Verificar → {p0}"
   ],
+  "text.a8bc15ea02218f": [
+    "\n\n**Raid in progress:** {p0}\nSanctioned: {p1} · Logged: {p2} · Skipped: {p3} · Failed: {p4} · Messages deleted: {p5}",
+    "\n\n**Raid em andamento:** {p0}\nSancionados: {p1} · Registrados: {p2} · Ignorados: {p3} · Falhos: {p4} · Mensagens excluídas: {p5}"
+  ],
   "text.a8c747c989c054": [
     "**Preview · {p0}**\nModule: {p1}\n{p2}",
     "**Prévia · {p0}**\nMódulo: {p1}\n{p2}"
@@ -7302,6 +8290,10 @@
   "text.a8f312a08f77fe": [
     "Maximum of reactions (0 = without limit)",
     "Máximo de reações (0 = sem limite)"
+  ],
+  "text.a91394be5d7ebe": [
+    "**El Heraldo · Moderation · Temporary ban**\n\nDefault duration: **{p0}**.\nAn explicit /ban or reaction duration takes priority.\nIf unset: 5 minutes in El Heraldo Test; permanent in production.\n\nSelect or enter a duration and confirm Save changes. Cancel never saves.",
+    "**El Heraldo · Moderação · Banimento temporário**\n\nDuração padrão: **{p0}**.\nA duração explícita de /ban ou de uma reação tem prioridade.\nSem configurar: 5 minutos no El Heraldo Test; permanente em produção.\n\nSelecione ou personalize uma duração e confirme Salvar alterações. Cancelar nunca salva."
   ],
   "text.a918d507ed5ae2": [
     "Condemnation engine and evidence preservation",
@@ -7439,6 +8431,10 @@
     "Only the person who opened this editor can modify it.",
     "Somente quem abriu este editor pode modificá-lo."
   ],
+  "text.abe773fdbebe91": [
+    "Information: The variable catalog moved to `/list variables`. Use this command with `texto` to test variable resolution.",
+    "Informação: O catálogo de variáveis foi movido para `/list variables`. Use este comando com `texto` para testar a resolução das variáveis."
+  ],
   "text.abecc1fe93a934": [
     "Raid mode duration: 30s, 10m, 12h, 2d, 1 month… (10s to 12 months)",
     "Duração do modo antirraid: 30s, 10m, 12h, 2d, 1 mês… (10s a 12 meses)"
@@ -7450,6 +8446,10 @@
   "text.ac24f020f7fcb5": [
     "First add a trap channel from Honeypot.",
     "Primeiro, adicione um canal de armadilha a partir de Honeypot."
+  ],
+  "text.ac2a68bc242472": [
+    "This DM receives server and verified member context. It doesn't depend on a server channel.",
+    "Este DM recebe contexto de servidor e membro verificado. Não depende de um canal do servidor."
   ],
   "text.ac3f091ca34109": [
     "Test",
@@ -7595,6 +8595,10 @@
     "Close",
     "Fechar"
   ],
+  "text.aede6a839f0c06": [
+    "Changes saved after administrator confirmation. Published messages are not automatically modified.",
+    "Alterações salvas após confirmação do administrador. As mensagens publicadas não são modificadas automaticamente."
+  ],
   "text.aee418052feb1c": [
     "{p0} confirmed {p1}.",
     "{p0} confirmou {p1}."
@@ -7671,6 +8675,10 @@
     "Honeypot has pending changes. Save or discard them before publishing.",
     "Há alterações pendentes no Honeypot. Salve ou descarte antes de publicar."
   ],
+  "text.b02ab8f2aced14": [
+    "Content with the server footer exceeds 6000 characters. Shorten the embed before sending; none of your information was truncated.",
+    "O conteúdo com o rodapé do servidor excede 6000 caracteres. Reduza o embed antes de enviar; nenhuma informação foi truncada."
+  ],
   "text.b0553346e6abfb": [
     "current time",
     "hora atual"
@@ -7686,6 +8694,10 @@
   "text.b1224fd23a3f95": [
     "Final name if you chose 'Custom'",
     "Nome final se escolheu 'Personalizado'"
+  ],
+  "text.b130526bb37dff": [
+    "This value exceeds Discord's form capacity. Edit it through JSON to preserve it in full.",
+    "Este valor excede a capacidade do formulário do Discord. Edite por JSON para preservá-lo por completo."
   ],
   "text.b148590c0b0b8f": [
     "Completed",
@@ -7859,6 +8871,10 @@
     "Image URL (optional)",
     "URL da imagem (opcional)"
   ],
+  "text.b6cb41871cea18": [
+    "Error: The source channel has at least {p0} messages. The tool stops before starting to prevent incomplete migration.",
+    "Erro: O canal de origem tem pelo menos {p0} mensagens. A ferramenta é interrompida antes do início para evitar uma migração incompleta."
+  ],
   "text.b6cec808f437ea": [
     "For example: 2",
     "Por exemplo: 2"
@@ -7891,9 +8907,17 @@
     "Publish a pinned notice in each trap channel",
     "Publicar um aviso fixado em cada canal de armadilha"
   ],
+  "text.b7334ef09fe43d": [
+    "\n\n**Analysis pending:** no free model is installed and verified yet. You may review ambiguities manually; no text has been sent to AI.",
+    "\n\n**Análise pendente:** ainda não há modelo gratuito instalado e verificado. Você pode revisar as ambiguidades manualmente; nenhum texto foi enviado a uma IA."
+  ],
   "text.b74a0dfb510c93": [
     "I can't verify the bot's permissions.",
     "Não consigo verificar as permissões do bot."
+  ],
+  "text.b74d22c0bda1ce": [
+    "This screen prepares preferences. Continuous message reading and monitoring are not enabled yet. No content is sent to AI systems, no messages are deleted, and no sanctions are applied.",
+    "Esta tela prepara preferências. A leitura e supervisão contínua de mensagens ainda não estão ativas. Nenhum conteúdo é enviado a sistemas de IA, nenhuma mensagem é excluída e nenhuma sanção é aplicada."
   ],
   "text.b74d6d6309ba55": [
     "The options labels cannot be repeated.",
@@ -7938,6 +8962,10 @@
   "text.b82ecab8fa87c5": [
     "\n\nNo warnings recorded.",
     "\n\nNenhuma advertência registrada."
+  ],
+  "text.b851647c6d5585": [
+    "**El Heraldo · Warnings for {p0}**\nWarnings: **{p1}/{p2}** · Total history: **{p3}** · Inactive: **{p4}**",
+    "**El Heraldo · Advertências de {p0}**\nAdvertências: **{p1}/{p2}** · Histórico total: **{p3}** · Não vigentes: **{p4}**"
   ],
   "text.b882a3fcabc604": [
     "The schedule no longer exists.",
@@ -8030,6 +9058,10 @@
   "text.ba194c6c2b0da0": [
     " State record pending; review without repeating the sanction.",
     " Registro de estado pendente; revisar sem repetir a sanção."
+  ],
+  "text.ba197b2069f756": [
+    "Use 1d–365d, 24h, or equivalent. Test only: from 10s (e.g. 30s, 2m). Date YYYY-MM-DD.",
+    "Use 1d–365d, 24h ou equivalente. Só em Test: a partir de 10s (ex.: 30s, 2m). Data AAAA-MM-DD."
   ],
   "text.ba23e1dfd5670e": [
     "Discord could not create the role: {p0}",
@@ -8143,6 +9175,10 @@
     "Review and confirm",
     "Revisar e confirmar"
   ],
+  "text.bc822ac120dec7": [
+    "**Condemn by reaction**\nServer: **{p0}**\nMember: **{p1}** (`{p2}`)\nChannel: {p3}\n[Open message]({p4})\n\nA reason is required. Press **Enter reason** to continue.",
+    "**Condenar por reação**\nServidor: **{p0}**\nMembro: **{p1}** (`{p2}`)\nCanal: {p3}\n[Abrir mensagem]({p4})\n\nO motivo é obrigatório. Pressione **Informar motivo** para continuar."
+  ],
   "text.bc97ecb2182318": [
     "Interval in minutes",
     "Intervalo em minutos"
@@ -8170,6 +9206,10 @@
   "text.bd22abbadb4287": [
     "Buttons and role menus.",
     "Botões e menus de cargos."
+  ],
+  "text.bd37c0c7497884": [
+    "The publication could not be confirmed. Check the channel before you try again; the message could have been sent.",
+    "Não foi possível confirmar a publicação. Verifique o canal antes de tentar novamente; a mensagem pode ter sido enviada."
   ],
   "text.bd627250fd43b1": [
     "**El Heraldo · System roles**\n\nSaved {p0} change(s).",
@@ -8226,6 +9266,10 @@
   "text.be9dfe88b977e9": [
     "The date must be in the future.",
     "A data deve estar no futuro."
+  ],
+  "text.beb979b97776a6": [
+    "{p0} merged {p1} → {p2}.\nMessages: {p3}/{p4} · Failed: {p5} · Attachments not migrated: {p6}.\nFinal name: `#{p7}` · Source deleted: {p8}.",
+    "{p0} mesclou {p1} → {p2}.\nMensagens: {p3}/{p4} · Falhas: {p5} · Anexos não migrados: {p6}.\nNome final: `#{p7}` · Origem excluída: {p8}."
   ],
   "text.bec33c8b9b8402": [
     "Select a maximum between 0 and 20.",
@@ -8287,6 +9331,10 @@
     "{p0} confirmed the texts of the panel.",
     "{p0} confirmou os textos do painel."
   ],
+  "text.bfefbb40e50c94": [
+    "Custodian Mode helps maintain a safe, organized, respectful community. Guided by server rules, it seeks fairness and proportionality. It prioritizes guidance before sanctions where possible: kind, patient, and discreet, yet firm with repeated or serious violations. It invents no prohibitions: ambiguous rules require administrative clarification. Its principle is to educate when possible, correct when necessary, and sanction only when justified.",
+    "O Modo Custódio ajuda a manter uma comunidade segura, organizada e respeitosa. Orienta-se pelas regras do servidor e busca agir com justiça e proporcionalidade. Prioriza orientar antes de sancionar quando possível: é gentil, paciente e discreto, mas firme diante de reincidências ou infrações graves. Não inventa proibições: diante de regras ambíguas, solicita esclarecimento administrativo. Seu princípio é educar quando possível, corrigir quando necessário e sancionar somente quando justificado."
+  ],
   "text.c0007eb4826acb": [
     "The draft was not applied: {p0}",
     "O rascunho não foi aplicado: {p0}"
@@ -8310,6 +9358,10 @@
   "text.c0249187eb24d3": [
     "Honeypot ban duration: {p0}",
     "Duração do banimento do Honeypot: {p0}"
+  ],
+  "text.c040284e65f9e2": [
+    "**Custodian Mode · Server Rules**\n\n**Status:** enabled · **Rules:** {p0}\n**Revision:** {p1}\n\n",
+    "**Modo Custódio · Regras do servidor**\n\n**Estado:** ativadas · **Regras:** {p0}\n**Revisão:** {p1}\n\n"
   ],
   "text.c05ec440a8b5af": [
     "Private conversation",
@@ -8555,6 +9607,10 @@
     "Notice saved and published or updated in the trap channels.",
     "Aviso salvo e publicado ou atualizado nos canais de armadilha."
   ],
+  "text.c789041ae009ae": [
+    "Person variables like `{usuario}` are only solved if you choose `miembro` when sending",
+    "As variáveis de pessoa como `{usuario}` só são resolvidas se você escolher `miembro` ao enviar"
+  ],
   "text.c7b288b1c0bb65": [
     "Reason",
     "Motivo"
@@ -8574,6 +9630,18 @@
   "text.c7fe421ea6a046": [
     "**El Heraldo · System roles**\n\nPending changes discarded.",
     "**El Heraldo · Cargos do sistema**\n\nAlterações pendentes descartadas."
+  ],
+  "text.c819d9064ccaa1": [
+    "The registered conversation is unavailable. Another will not be created automatically, to avoid duplicate case files.",
+    "A conversa registrada está indisponível. Outra não será criada automaticamente, para evitar dossiês duplicados."
+  ],
+  "text.c83ba333c7f57d": [
+    "You may continue in this new /setup session. Previous drafts are not recovered.",
+    "Você pode continuar nesta nova sessão de /setup. Os rascunhos anteriores não são recuperados."
+  ],
+  "text.c84819cc002314": [
+    "**El Heraldo · Moderation · Condemnations**\n\nCondemned members channel: {p0}\nCondenado role: {p1}\nDefault duration: **{p2}**",
+    "**El Heraldo · Moderação · Condenações**\n\nCanal de condenados: {p0}\nCargo Condenado: {p1}\nDuração padrão: **{p2}**"
   ],
   "text.c851b894c97790": [
     "Replace: ",
@@ -8626,6 +9694,14 @@
   "text.c947d5f95f039f": [
     "You cannot pardon this condemnation. Only the moderator who applied it or an administrator may do so.",
     "Você não pode perdoar esta condenação. Somente quem a aplicou ou um administrador pode fazer isso."
+  ],
+  "text.c951de664a51e5": [
+    "Could not understand `{p0}`. Use `all`, a count (`200 messages`), a time window (`30m`, `12h`, `2d`, `1d 12h 30m`), or `0` for no deletion.",
+    "Não foi possível entender `{p0}`. Use `tudo`, uma quantidade (`200 mensagens`), uma janela de tempo (`30m`, `12h`, `2d`, `1d 12h 30m`) ou `0` para não excluir."
+  ],
+  "text.c95dcf0662fb8e": [
+    "**Draft not saved or executed.** Modify channels, final name, or source retention. Then press **Update preview** to check the actual message count before confirming.",
+    "**Rascunho não salvo nem executado.** Modifique canais, nome final ou preservação da origem. Depois, pressione **Atualizar prévia** para conferir a quantidade real de mensagens antes de confirmar."
   ],
   "text.c9636a3c670270": [
     "Day of the month, 1-28 (monthly frequency)",
@@ -8683,6 +9759,10 @@
     "Message kept at the end of a channel.",
     "Mensagem mantida no final de um canal."
   ],
+  "text.cb35cf1e126175": [
+    "\n\n**Configuring now:** {p0}\nSelect an existing channel or use **Create if missing** to create **#{p1}**.",
+    "\n\n**Configurando agora:** {p0}\nSelecione um canal existente ou use **Criar se não existir** para criar **#{p1}**."
+  ],
   "text.cb3b2eb4c5172a": [
     " · None configured",
     " · Nenhum configurado"
@@ -8698,6 +9778,10 @@
   "text.cb5a761240123d": [
     "Server departures and voluntary comments.",
     "Saídas do servidor e comentários voluntários."
+  ],
+  "text.cb80a3d3306241": [
+    "\n**Warning ❗ not configured.** Press Add to prepare it, then confirm with Save changes.",
+    "\n**Advertência ❗ não configurada.** Pressione Adicionar para preparar e confirme com Salvar alterações."
   ],
   "text.cb99a42f984137": [
     "Server and channel",
@@ -8803,6 +9887,10 @@
     "Enter a valid integer.",
     "Digite um número inteiro válido."
   ],
+  "text.cdf37bc5779ea5": [
+    "**El Heraldo · AutoMod · Custodian Mode · Actions by rule**\n\n**Verified official rules:** {p0}\n**Revision:** {p1}\n\n**Rule {p2}:** {p3}\n\n**Proposed response:** {p4}\n**Pending changes:** {p5}\n\nEach rule comes from the current server. There are no universal categories or automatic suggestions. Saving does not enable monitoring or sanctions. If the rules in Discord change, these preferences become invalid.",
+    "**El Heraldo · AutoMod · Modo Custódio · Ações por regra**\n\n**Regras oficiais verificadas:** {p0}\n**Revisão:** {p1}\n\n**Regra {p2}:** {p3}\n\n**Resposta proposta:** {p4}\n**Alterações pendentes:** {p5}\n\nCada regra vem do servidor atual. Não há categorias universais nem sugestões automáticas. Salvar não ativa supervisão nem sanções. Se as regras no Discord mudarem, estas preferências ficam invalidadas."
+  ],
   "text.ce135d1d5f9c48": [
     "Error: The title and description cannot be left blank.",
     "Erro: O título e a descrição não podem ficar vazios."
@@ -8822,6 +9910,10 @@
   "text.ce58ab35b189fe": [
     "2. Select channel for {p0}",
     "2. Selecione o canal para {p0}"
+  ],
+  "text.ce654e82446ee5": [
+    "The module follows the join role structure: general settings, user-specific roles, bot roles, and synchronization.\n\n**General join roles:** {p0}\n**Specific users:** {p1}\n**Roles for bots:** {p2}\n**Periodic synchronization:** {p3}",
+    "O módulo segue a estrutura de Cargos de entrada: configuração geral, cargos por usuário, cargos para bots e sincronização.\n\n**Cargos de entrada gerais:** {p0}\n**Usuários específicos:** {p1}\n**Cargos para bots:** {p2}\n**Sincronização periódica:** {p3}"
   ],
   "text.ce6ae50f2c28a4": [
     "Condemnation channel: {p0}",
@@ -8850,6 +9942,10 @@
   "text.cedd873b560092": [
     "Case",
     "Caso"
+  ],
+  "text.cef0650db563d1": [
+    "\n\nWarn: moderators only, one warning per message, no purge. El Heraldo takes over the reaction if it has permission.",
+    "\n\nAdvertir: somente moderadores, uma advertência por mensagem, sem limpeza. El Heraldo assume a reação se tiver permissões."
   ],
   "text.cef68156804e56": [
     "do not delete",
@@ -9031,6 +10127,18 @@
     "Condemnation ({p0})",
     "Condenação ({p0})"
   ],
+  "text.d3555de6d2fdb9": [
+    "\n\nRemove the user from the list after joining: **{p0}**\n\nThese roles are added **in addition to** general join roles when that ID rejoins.",
+    "\n\nRemover o usuário da lista após entrar: **{p0}**\n\nEstes cargos são adicionados **além** dos cargos de entrada gerais quando esse ID reingressa."
+  ],
+  "text.d38c3a6f251f96": [
+    "The measure was not applied: {p0}. It will not be repeated from this button without administrative review.",
+    "A medida não foi aplicada: {p0}. Não será repetido a partir deste botão sem revisão administrativa."
+  ],
+  "text.d3bcefb1e8ee42": [
+    "**Condemned members card editor**\nEach section is edited through a form. Changes are saved automatically and the preview reflects the current settings.",
+    "**Editor do cartão de condenados**\nCada seção é editada por um formulário. As alterações são salvas automaticamente e a prévia reflete a configuração atual."
+  ],
   "text.d3cb12b485eb4b": [
     "Include {invitacion} to retain the recovery link.",
     "Inclui {invitacion} para manter a ligação de recuperação."
@@ -9103,6 +10211,10 @@
     "Enable Server Rules in Discord before configuring Custodian Mode.",
     "Ative as Regras do servidor no Discord antes de configurar o Modo Custódio."
   ],
+  "text.d537aaf254aab2": [
+    "Error: `nombre_personalizado` is only used when `nombre` is `Use custom name`.",
+    "Erro: `nombre_personalizado` só é usado quando `nombre` é `Usar nome personalizado`."
+  ],
   "text.d54f9a5458877d": [
     "; **{p0}** could not be restored.",
     "; **{p0}** não puderam ser restaurados."
@@ -9110,6 +10222,10 @@
   "text.d562480b0867e8": [
     "\n\nWarning: Unresolved (check the name or whether it applies here): ",
     "\n\nAdvertência: Não resolvido (revise o nome ou se é aplicável aqui): "
+  ],
+  "text.d5676d1f7fcbbd": [
+    "Panel published in {p0}. To start enforcing the timeout, use `/verify_setup activado:True`.",
+    "Painel publicado em {p0}. Para começar a aplicar o timeout, use `/verify_setup activado:True`."
   ],
   "text.d5a804455b3392": [
     "Duration",
@@ -9135,9 +10251,17 @@
     "\n\n**Preferences saved successfully.**",
     "\n\n**Preferências salvas com sucesso.**"
   ],
+  "text.d64d9ae4cb8b1c": [
+    "Sync completed. **{p0}** member(s) received join roles; **{p1}** needed no changes.",
+    "Sincronização concluída. **{p0}** membro(s) recebeu(ram) cargos de entrada; **{p1}** não precisaram de alterações."
+  ],
   "text.d67febde94a035": [
     "You've already reached a maximum of {p0} reactions.",
     "Já alcançou o máximo de {p0} reações."
+  ],
+  "text.d6964f891ddc2d": [
+    "Purges the member's messages from the last 24 hours; the window can be extended. Evidence for Honeypot-originated measures is not archived.",
+    "Limpa as mensagens do membro das últimas 24 horas; a janela pode ser ampliada. Não se arquivam evidências de medidas originadas no Honeypot."
   ],
   "text.d6c7149f724cbc": [
     "Warning: Verification is not configured yet. Notify an administrator.",
@@ -9173,7 +10297,7 @@
   ],
   "text.d762e72956b58c": [
     "Every {p0} at {p1} (Dominican Republic time).",
-    "Às/Aos {p0}, às {p1} (horário da República Dominicana)."
+    "Semanalmente: {p0}, às {p1} (horário da República Dominicana)."
   ],
   "text.d767fd87be203e": [
     "Exemption saved.",
@@ -9203,9 +10327,17 @@
     "enabled",
     "ativado"
   ],
+  "text.d7f86f84211cd8": [
+    "This channel is a **honeypot**: a trap that catches spam bots and is visible to all bots. **Any message sent here triggers automatic punishment.** If you can read this, do not send messages in this channel.",
+    "Este canal é um **honeypot**: uma armadilha que captura bots de spam e que todos os bots podem ver. **Qualquer mensagem enviada aqui aciona uma punição automática.** Se você pode ler isto, não envie mensagens neste canal."
+  ],
   "text.d81d9ca94206a7": [
     "No saved custom embeds. Create the first with `/embed crear`.",
     "Nenhum embed personalizado salvo. Crie o primeiro com `/embed crear`."
+  ],
+  "text.d8293b359dbc4e": [
+    "El Heraldo needs View Channel, Read Message History, Add Reactions, and Manage Messages to replace the moderator's reaction.",
+    "El Heraldo precisa de Ver Canal, Ler Histórico de Mensagens, Adicionar Reações e Gerenciar Mensagens para substituir a reação do moderador."
   ],
   "text.d846ea7409c7a6": [
     "Person who will no longer receive new suggestions",
@@ -9344,8 +10476,8 @@
     "Uma condenação foi aplicada a {usuario}. Os detalhes do caso registrado estão abaixo."
   ],
   "text.dadf4065bc2a26": [
-    "THE ORACLE IS LISTENING",
-    "O ORÁCULO ESTÁ OUVINDO"
+    "EL ORÁCULO IS LISTENING",
+    "EL ORÁCULO ESTÁ OUVINDO"
   ],
   "text.daf147fed20bee": [
     "Action not valid.",
@@ -9379,9 +10511,17 @@
     "Editable ban duration",
     "Duração de banimento editável"
   ],
+  "text.db8bf54b7e2fa6": [
+    "\n\n**How does it work?**\nPersonality roles let members choose how they wish to participate in this community. They may select an option and change it later if they wish and the server allows changes.\nReact with the chosen option's emoji to receive its associated role. Only one choice may be kept at a time. The choice expresses your interest and offers a personalized experience; it may unlock channels based on role permissions, but is not proof of identity and does not replace age verification.\n\n**Requirements and rejoining**\nIf verification is enabled and required, anyone who fails to choose a personality within the configured time is automatically kicked. Before the kick, El Heraldo tries to send a message with a single-use invite: an opportunity to rejoin and complete the choice. The aim is to distinguish those who wish to participate, without assuming anyone's intentions. Moderators and the owner are exempt. If disabled or optional, there is no kick for not choosing.\n\n**Access permissions**\nRoles may allow View Channel in specific channels. Also check permissions inherited from categories and other roles. The bot preserves existing roles when enabling or disabling the feature.",
+    "\n\n**Como funciona?**\nOs cargos de personalidade permitem ao membro escolher como deseja participar desta comunidade. Ele pode selecionar uma opção e alterá-la depois, se desejar e o servidor permitir mudanças.\nO membro reage com o emoji da opção escolhida para obter o cargo associado. Só pode manter uma escolha por vez. A escolha expressa seu interesse e oferece uma experiência personalizada; pode liberar canais conforme as permissões dos cargos, mas não constitui prova de identidade nem substitui a verificação de idade.\n\n**Obrigatoriedade e reingresso**\nSe a verificação estiver ativada e for obrigatória, quem não definir sua personalidade no prazo configurado será expulso automaticamente. Antes da expulsão, El Heraldo tenta enviar uma mensagem com convite de uso único: uma oportunidade de reingressar para concluir a escolha. O objetivo é distinguir quem deseja participar, sem atribuir intenções a ninguém. Moderadores e o proprietário estão isentos. Se estiver desativada ou for opcional, não há expulsão por não escolher.\n\n**Permissões de acesso**\nOs cargos podem permitir Ver Canal em canais específicos. Confira também permissões herdadas de categorias e outros cargos. O bot preserva os cargos existentes ao ativar ou desativar o recurso."
+  ],
   "text.dba327ecb10f83": [
     "> **Responsible moderator:** {p0}",
     "> **Responsável:** {p0}"
+  ],
+  "text.dbb413c4fa004b": [
+    "\n\n**Actions not available:** It was not possible to verify the official rules of the server. No templates or invented rules will be shown.",
+    "\n\n**Ações não disponíveis:** Não foi possível verificar as regras oficiais do servidor. Não serão exibidos modelos ou regras inventadas."
   ],
   "text.dbb6421d1340ad": [
     "The proposal has already been resolved.",
@@ -9551,6 +10691,10 @@
     "Maximum active warnings",
     "Máximo de advertências vigentes"
   ],
+  "text.df9dbe04dfa479": [
+    "\n\nReview the operation and use the confirmation button to execute it, or **Cancel** to discard it.",
+    "\n\nRevise a operação e use o botão de confirmação para executar, ou **Cancelar** para descartar."
+  ],
   "text.dfac44d76d02b5": [
     "Save and publish notice",
     "Salvar e publicar aviso"
@@ -9558,6 +10702,10 @@
   "text.dffa0694823acb": [
     "The role is at or above El Heraldo's highest role.",
     "O cargo está no mesmo nível ou acima do cargo mais alto de El Heraldo."
+  ],
+  "text.dffce88b3c324d": [
+    "**Custodian Mode · Confirm preferences**\n\nMode: Observe (not operational yet).\nSensitivity: {p0}.\nScope: Eligible and authorized channels.\nChange notices: Disabled.\nMonitoring: Not enabled.\n\nConfirm only saves these preferences; it does not enable sanctions or AI.",
+    "**Modo Custódio · Confirmar preferências**\n\nModo: Observar (ainda não operacional).\nSensibilidade: {p0}.\nEscopo: Canais elegíveis e autorizados.\nAvisos de alterações: Desativados.\nSupervisão: Não ativada.\n\nConfirmar só salva estas preferências; não ativa sanções nem IA."
   ],
   "text.e00cad1a9c4d3a": [
     "Days of the month (1 to 31)",
@@ -9586,6 +10734,10 @@
   "text.e0e2d97fe70b0e": [
     "Message not supported: {p0}",
     "Mensagem não suportada: {p0}"
+  ],
+  "text.e1119c5fd1920b": [
+    "**Reason:** {p0}\n**Duration:** {p1} (ends <t:{p2}:R>)\n**Action on suspected accounts:** {p3}\n**Invites:** {p4}\n**Enabled by:** {p5}",
+    "**Motivo:** {p0}\n**Duração:** {p1} (termina <t:{p2}:R>)\n**Ação sobre os suspeitos:** {p3}\n**Convites:** {p4}\n**Ativado por:** {p5}"
   ],
   "text.e1136ad76ebb7e": [
     "One of the proposed roles was eliminated.",
@@ -9622,6 +10774,10 @@
   "text.e1867c7f9bb33f": [
     "Frequency",
     "Frequência"
+  ],
+  "text.e1a91c76fcb0e2": [
+    "**{p0}** verified on time.\n**{p1}** kicked for lacking a personality role.\n**{p2}** kicked for failing to verify (Sin Verificar).",
+    "**{p0}** verificado(s) no prazo.\n**{p1}** expulso(s) por falta de cargo de personalidade.\n**{p2}** expulso(s) por não se verificar (Sin Verificar)."
   ],
   "text.e1bbe06a1ae0e8": [
     "El Heraldo: reaction role created by {p0}",
@@ -9678,6 +10834,10 @@
   "text.e2d4572d506142": [
     "Uses the condemnation engine",
     "Usa o motor de condenações"
+  ],
+  "text.e2eb438c7c930c": [
+    "This measure has already been processed or is pending review. It won't repeat itself automatically.",
+    "Esta medida já foi processada ou pendente de revisão. Não se repetirá automaticamente."
   ],
   "text.e306d46cbb0040": [
     "Discord did not allow you to consult the rules. They cannot be approved or interpreted.",
@@ -9791,6 +10951,10 @@
     "The server rules changed. Reopen Actions to review them.",
     "As regras do servidor mudaram. Abra Ações novamente para revisar."
   ],
+  "text.e56d88f8cb6ae7": [
+    "Error: The {p0} URL must start with `http://` or `https://` (or be a variable such as `{{servericon}}`).",
+    "Erro: A URL de {p0} deve começar com `http://` ou `https://` (ou ser uma variável como `{{servericon}}`)."
+  ],
   "text.e57f389344d2ea": [
     "Time out",
     "Aplicar timeout"
@@ -9822,6 +10986,14 @@
   "text.e6433256d5eda2": [
     "One of the channels no longer exists.",
     "Um dos canais já não existe."
+  ],
+  "text.e6581cf0cdbfd0": [
+    "The persistent panel is rendered with server context. It uses server and image variables like {servericon} or {serverbanner}.",
+    "O painel persistente é renderizado com contexto do servidor. Usa variáveis de servidor e imagens como {servericon} ou {serverbanner}."
+  ],
+  "text.e67153314b9596": [
+    "**El Heraldo · Reaction Roles · Options**\n\nAccess: **{p0}**\nReversed reactions: **{p1}**\nMaximum reactions: **{p2}**\n\nSelect options and press **Apply to draft** to return to the editor. Then press **Save** to publish the settings. **Discard** preserves previous values.",
+    "**El Heraldo · Cargos por reação · Opções**\n\nAcesso: **{p0}**\nReações invertidas: **{p1}**\nMáximo de reações: **{p2}**\n\nSelecione as opções e pressione **Aplicar ao rascunho** para voltar ao editor. Depois, pressione **Salvar** para publicar a configuração. **Descartar** preserva os valores anteriores."
   ],
   "text.e67c75c35dacbb": [
     "is the verification panel channel",
@@ -9975,6 +11147,14 @@
     "Channel not found.",
     "Canal não encontrado."
   ],
+  "text.ea4f4962c7cf0c": [
+    "Error: Nothing was saved: a new account ratio also requires an account age greater than 0.",
+    "Erro: Nada foi salvo: a proporção de contas novas também exige idade de conta maior que 0."
+  ],
+  "text.ea552f09923b00": [
+    "No channels or roles were created automatically. Use /setup to decide if you want to allow the creation of missing resources.",
+    "Não foram criados canais nem cargos automaticamente. Use o /setup para decidir se quer permitir a criação de recursos faltantes."
+  ],
   "text.ea5a05077f3d08": [
     "Synchronization failed: ",
     "A sincronização falhou: "
@@ -10011,6 +11191,10 @@
     "Reddit",
     "Reddit"
   ],
+  "text.eb1bb265181682": [
+    "**{p0}**\n**Embed:** {p1}\n**Destination channel:** {p2}\n**Frequency:** {p3}\n**Condition:** {p4}\n**State on save:** {p5}\n\n{p6}",
+    "**{p0}**\n**Embed:** {p1}\n**Canal de destino:** {p2}\n**Frequência:** {p3}\n**Condição:** {p4}\n**Estado ao salvar:** {p5}\n\n{p6}"
+  ],
   "text.eb2e58c4c66eb4": [
     "Trap channel created",
     "Canal armadilha criado"
@@ -10042,6 +11226,10 @@
   "text.ebcff43cd1f739": [
     "Unknown action: compulsory review",
     "Ação desconhecida: revisão obrigatória"
+  ],
+  "text.ebefc2244d3d4e": [
+    "Error: Specify what to delete: `todos:True`, a `cantidad`, or a range using `desde` / `hasta` (count and range may be combined).",
+    "Erro: Informe o que excluir: `todos:True`, uma `cantidad` ou um intervalo com `desde` / `hasta` (quantidade e intervalo podem ser combinados)."
   ],
   "text.ebf7fffd23a15f": [
     "That channel could not be found.",
@@ -10119,6 +11307,10 @@
     "Read Message History",
     "Ler Histórico de Mensagens"
   ],
+  "text.ed74eb30303cdf": [
+    "Raid mode enabled by {p0}: new joins from now on receive the configured action.",
+    "Modo antirraid ativado por {p0}: as próximas entradas receberão a ação configurada."
+  ],
   "text.ed830162445a73": [
     "You have left **",
     "Você saiu de **"
@@ -10142,6 +11334,10 @@
   "text.edbb5243b436a7": [
     "could not verify El Heraldo's role hierarchy",
     "não foi possível verificar a hierarquia de El Heraldo"
+  ],
+  "text.edc8a2252d2019": [
+    "Warning: Could not update the published panel: `{p0}`. Publish it again with /verify.",
+    "Advertência: Não foi possível atualizar o painel publicado: `{p0}`. Publique novamente com /verify."
   ],
   "text.edde48456e91c5": [
     "New reason",
@@ -10171,9 +11367,17 @@
     "Accepted",
     "Aceita"
   ],
+  "text.ee28ab0a012bcb": [
+    "New deadlines started: **{p0}**. Members requiring manual review: **{p1}**. Roles conflicting with verification: **{p2}**. No members were kicked or roles changed during this review. Old cases are not sanctioned retroactively.",
+    "Novos prazos iniciados: **{p0}**. Membros que precisam de revisão manual: **{p1}**. Cargos em conflito com a verificação: **{p2}**. Nenhum membro foi expulso nem cargo alterado nesta revisão. Casos antigos não são sancionados retroativamente."
+  ],
   "text.ee2bc5a98b39d8": [
     "Access: Everyone / Allowlist / Denylist",
     "Acesso: Todos / Lista de permissões / Lista de bloqueios"
+  ],
+  "text.ee2ebb1dd6d565": [
+    "Could not complete the invite or case file link. Check permissions and private thread availability.",
+    "Não foi possível concluir o convite ou link do dossiê. Verifique permissões e disponibilidade de tópicos privados."
   ],
   "text.ee730d9608b630": [
     "Could not identify @everyone.",
@@ -10190,6 +11394,10 @@
   "text.eedff76384fce5": [
     "[Reference to the original message]({p0}) · does not count as preserved evidence.",
     "[Referência à mensagem original]({p0}) · não conta como evidência preservada."
+  ],
+  "text.eee9dd399821cc": [
+    "**El Heraldo · Message kits**\n\nExport or import templates. For files and confirmed replacements, use /importkit.",
+    "**El Heraldo · Kits de mensagens**\n\nExporte ou importe modelos. Para arquivos e substituições confirmadas, use /importkit."
   ],
   "text.ef0f50b049e00c": [
     "missing bot permissions",
@@ -10311,6 +11519,10 @@
     "No next run",
     "Sem próxima execução"
   ],
+  "text.f277eb624de5e0": [
+    "{p0} members who have been in the server for over 30 days posted in trap channels within the last 5 minutes. The configuration may be incorrect.\nThe message from {p1} in {p2} was preserved and no sanction was applied to this member.\nReview trap channels with `/honeypot setup` and enable protection again with `/honeypot resume` after correcting the settings.",
+    "{p0} membros com mais de 30 dias no servidor escreveram em canais de armadilha nos últimos 5 minutos. A configuração pode estar incorreta.\nA mensagem de {p1} em {p2} foi preservada e nenhuma sanção foi aplicada a esse membro.\nRevise os canais de armadilha com `/honeypot setup` e reative a proteção com `/honeypot resume` após corrigir a configuração."
+  ],
   "text.f28f897e2c3dcc": [
     "is El Heraldo's log channel",
     "é o canal de registros de El Heraldo"
@@ -10346,6 +11558,10 @@
   "text.f316f3ec618f81": [
     "The Condenado role was assigned manually.",
     "O cargo Condenado foi atribuído manualmente."
+  ],
+  "text.f361be5d408a19": [
+    "### Roles for bots\nAssign join roles to bots: **{p0}**\nApply assignment delay for bots: **{p1}**\nUse different roles for bots: **{p2}**\nEffective roles: {p3}",
+    "### Cargos para bots\nAtribuir cargos de entrada aos bots: **{p0}**\nAplicar atraso de atribuição aos bots: **{p1}**\nUsar cargos diferentes para bots: **{p2}**\nCargos efetivos: {p3}"
   ],
   "text.f3790dd2e5e480": [
     "You don't have access to publish on that channel.",
@@ -10467,6 +11683,10 @@
     "No fields",
     "Sem campos"
   ],
+  "text.f5310090aedd59": [
+    "Warning: You will delete **all** messages from {p0} matching **{p1}** in {p2}. This cannot be undone.",
+    "Advertência: Você excluirá **todas** as mensagens de {p0} que correspondam a **{p1}** em {p2}. Não é possível desfazer."
+  ],
   "text.f5392be7f841de": [
     "Retry restoration",
     "Tentar restaurar novamente"
@@ -10494,6 +11714,10 @@
   "text.f58c3be9752d71": [
     "Protection paused.",
     "Proteção pausada."
+  ],
+  "text.f5b2a6341e92f7": [
+    "The source changed from **{p0}** to **{p1}** messages. No channels were modified. Review the new preview to confirm again.",
+    "A origem mudou de **{p0}** para **{p1}** mensagens. Os canais não foram alterados. Revise a nova prévia para confirmar novamente."
   ],
   "text.f5b397a636a054": [
     "Condemnations",
@@ -10583,6 +11807,14 @@
     "kick",
     "expulsar"
   ],
+  "text.f743fb90806a9f": [
+    "### Synchronization\nPotentially pending join roles: **{p0}**\nLast synchronization: {p1}\nRoles excluded from sync: {p2}\nSchedule regular sync: **{p3}**\n\nSync now assigns configured general join roles to all eligible users. Members with any excluded role remain unchanged.",
+    "### Sincronização\nCargos de entrada possivelmente pendentes: **{p0}**\nÚltima sincronização: {p1}\nCargos excluídos da sincronização: {p2}\nAgendar sincronização periódica: **{p3}**\n\nSincronizar agora atribui os cargos de entrada gerais configurados a todos os usuários elegíveis. Membros com qualquer cargo excluído permanecem sem alterações."
+  ],
+  "text.f74417da50136f": [
+    "Error: I didn't activate it: add at least one trap channel with `/honeypot add` or `/honeypot create`.",
+    "Erro: Não o ativei: adicione pelo menos um canal de armadilha com `/honeypot add` ou `/honeypot create`."
+  ],
   "text.f7448742c88fe0": [
     "There's already a condemnation pending for this member.",
     "Já há uma condenação em curso para este membro."
@@ -10623,6 +11855,10 @@
     "Select the schedule to manage",
     "Selecione o agendamento a gerenciar"
   ],
+  "text.f83401f78fc307": [
+    "Error: Only the bot creator, server creator or administrator can consult these lists.",
+    "Erro: Somente o criador do bot, o criador de servidor ou um administrador pode consultar essas listas."
+  ],
   "text.f83adc1b8bab8b": [
     "Error: Suggestion rejected",
     "Erro: Sugestão rejeitada"
@@ -10634,6 +11870,10 @@
   "text.f86866a282e2a2": [
     "This editor is not yours: use /embed editar.",
     "Este editor não é seu: use /embed editar."
+  ],
+  "text.f8735343a9b590": [
+    "Error: An error occurred while processing the pardon. It was recorded in the bot logs.",
+    "Erro: Ocorreu um erro ao processar o perdão. Ele foi registrado nos logs do bot."
   ],
   "text.f8a967df5d0e57": [
     "4/5 · Color HEX of 6 characters, for example 4F5BDC.",
@@ -10654,6 +11894,10 @@
   "text.f8d0785f2d5976": [
     "purge depends on secure evidence archiving",
     "a limpeza depende do arquivamento seguro da evidência"
+  ],
+  "text.f8f47b4d6bb589": [
+    "Template synchronized. The link was sent by DM to the server creator.",
+    "Modelo sincronizado. O link foi enviado por mensagem privada ao criador do servidor."
   ],
   "text.f942fe90afc8fb": [
     "Select report channel",
@@ -10686,6 +11930,14 @@
   "text.f9c24856aad3fd": [
     "Confirm posting the suggestion panel at {p0}?",
     "Confirma publicar o painel de sugestões em {p0}?"
+  ],
+  "text.f9d8ea6c28a138": [
+    "Import canceled: the kit contains existing names. Rename them before importing.",
+    "Importação cancelada: o kit contém nomes que já existem. Renomeie antes de importar."
+  ],
+  "text.f9e1732fcbb557": [
+    "**Custom embeds**\nSaved: {p0}\n\nUse `/embed editar` to open one or `/embed crear` to create another.",
+    "**Embeds personalizados**\nSalvos: {p0}\n\nUse `/embed editar` para abrir um ou `/embed crear` para criar outro."
   ],
   "text.f9e8c63c2240df": [
     "Invalid template.",
@@ -10730,6 +11982,10 @@
   "text.faa76480f7f9f5": [
     "**. This action requires confirmation.",
     "**. Esta ação requer confirmação."
+  ],
+  "text.faed972736a746": [
+    "**Reaction reports**\nChoose a reaction, select its action, and adjust its conditions.\n**Direct condemnation** and **Warnings and sanctions** have their own settings.\n\n",
+    "**Denúncias por reação**\nEscolha uma reação, selecione sua ação e ajuste as condições.\n**Condenação direta** e **Advertências e sanções** têm ajustes próprios.\n\n"
   ],
   "text.fafc3fe984c376": [
     "No reactions are available.",
@@ -10779,6 +12035,10 @@
     "Role",
     "Cargo"
   ],
+  "text.fba8788ef90a61": [
+    "Could not verify the result. Automatic retry was blocked to avoid duplicate sanctions; review the logs.",
+    "Não foi possível verificar o resultado. A nova tentativa automática foi bloqueada para evitar sanções duplicadas; revise os registros."
+  ],
   "text.fbba2f3b88360e": [
     "Every week, {p0} at {p1}",
     "Toda semana, {p0} às {p1}"
@@ -10814,6 +12074,10 @@
   "text.fcc24033edcb78": [
     "Field name",
     "Nome do campo"
+  ],
+  "text.fccfffb00e11b1": [
+    "Error: The merger was stopped because the source has at least {p0} messages. To avoid an incomplete migration, first divide the work into a migration by parts.",
+    "Erro: A fusão foi interrompida porque a origem tem pelo menos {p0} mensagens. Para evitar uma migração incompleta, primeiro divide o trabalho em uma migração por partes."
   ],
   "text.fcfac3b0c4823b": [
     "Write a comment between 1 and 500 characters.",
@@ -10851,6 +12115,10 @@
     "Warnings on the proposal:\n",
     "Advertências sobre a proposta:\n"
   ],
+  "text.fdf33446c7e5e5": [
+    "The footer with El Heraldo's Labs 🧪 identity exceeds 2048 characters. Shorten the custom detail; none of your information was truncated.",
+    "O rodapé com a identidade El Heraldo's Labs 🧪 excede 2048 caracteres. Reduza o detalhe personalizado; nenhuma informação foi truncada."
+  ],
   "text.fe271c8e9d957b": [
     "The Sin Verificar role is no longer manageable. Nothing was saved.",
     "O cargo Sin Verificar não pode mais ser gerenciado. Nada foi salvo."
@@ -10866,6 +12134,10 @@
   "text.fe70aab64f9d05": [
     "Re-entry with active condemnation",
     "Reentrada com condenação ativa"
+  ],
+  "text.fe8f9760696bae": [
+    "The copy was made, but I couldn't send you the link by private text. Use /template_sync to see it.",
+    "A cópia foi feita, mas não consegui enviar o link por mensagem privada. Use o /template_sync para vê-lo."
   ],
   "text.feb63aebfc131c": [
     "• Raid mode ends <t:{p0}:R>",
@@ -10950,6 +12222,14 @@
   "text.ffb94c3fd3c42b": [
     "Search for server resources by name or ID",
     "Buscar recursos do servidor por nome ou ID"
+  ],
+  "text.ffe4eebf612d10": [
+    "`{canal_mencion:reglas}` → mention a channel by name or ID\n`{rol_mencion:Moderador}` → mention a role by name or ID\n`{usuario_mencion:Nombre}` → mention a member by name or ID\n`{emoji:fuego}` → custom server emoji\nSupported shortcuts: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nExample: `Hello {usuario_mencion}, read {canal_mencion:reglas}` · image: `{servidor_icono_url}`",
+    "`{canal_mencion:reglas}` → mencionar um canal por nome ou ID\n`{rol_mencion:Moderador}` → mencionar um cargo por nome ou ID\n`{usuario_mencion:Nombre}` → mencionar um membro por nome ou ID\n`{emoji:fuego}` → emoji personalizado do servidor\nAtalhos compatíveis: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nExemplo: `Olá {usuario_mencion}, leia {canal_mencion:reglas}` · imagem: `{servidor_icono_url}`"
+  ],
+  "text.fff331093852fa": [
+    "\n\nRole created: {p0}. It was selected in **{p1}**. Press **Save** to apply the reaction settings. The role already exists in the server even if you leave without saving.",
+    "\n\nCargo criado: {p0}. Foi selecionado em **{p1}**. Pressione **Salvar** para aplicar a configuração da reação. O cargo já existe no servidor mesmo que você saia sem salvar."
   ],
   "text.fff8867b824e73": [
     "Tuesday",

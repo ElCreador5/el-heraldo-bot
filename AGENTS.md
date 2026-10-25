@@ -133,7 +133,7 @@ Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro ag
 - Etiquetas, ayudas, errores y textos propios deben usar claves estables y las mismas variables. Los equivalentes de «Volver» son `Back` y `Voltar`; conservar la navegación y la paleta NH.
 - No traducir nombres/IDs de comandos, claves SQLite, parámetros API, identificadores persistentes, variables técnicas, nombres reales ni textos personalizados. La evidencia literal nunca se traduce.
 - Mantener los avisos de idioma parcial hasta comprobar cobertura semántica y rutas completas; no confundir claves existentes con cobertura real. Registrar cola editorial y aceptación Discord pendiente.
-- El esquema global nativo de comandos no cambia en esta revisión. El cliente Discord controla sus textos estándar.
+- Los nombres globales de comandos y parámetros se conservan. Las descripciones y etiquetas de opciones fijas se traducen en el payload de sincronización de cada servidor, con copia aislada y según su preferencia guardada; Guardar idioma reintenta la sincronización sin afectar otros servidores. El cliente Discord controla sus textos estándar.
 - `main` y producción continúan fuera del alcance de esta autorización. La identidad Lab de UX-03C permanece exacta.
 
 ### UX-04 — Funcionamiento real y resiliencia

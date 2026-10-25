@@ -4,7 +4,7 @@ El modo Observar todavía no está en funcionamiento: estas preferencias no
 activan supervisión. Todos los cambios requieren una segunda confirmación.
 """
 from __future__ import annotations
-from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, variants as _i18n_variants
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 from heraldo_i18n import join_text as _i18n_join
 
 import os
@@ -90,11 +90,13 @@ class CustodioSetupView(discord.ui.View):
         save_button = discord.ui.Button(
             label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=2)
         save_button.callback = self.save_changes
+        self.save_button = save_button
         self.add_item(save_button)
 
         discard_button = discord.ui.Button(
             label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=2)
         discard_button.callback = self.discard_changes
+        self.discard_button = discard_button
         self.add_item(discard_button)
 
         back_button = discord.ui.Button(
@@ -108,13 +110,8 @@ class CustodioSetupView(discord.ui.View):
         for option in self.selector.options:
             option.default = option.value == self.pending_sensitivity
         current = load_preferences(self.get_setting, self.guild_id).sensitivity
-        for item in self.children:
-            if isinstance(item, discord.ui.Button) and item.label in (_t('text.14bdfaf2face3a'), _t('text.80ca383e9c8d3e')):
-                item.disabled = (
-                    not self._raw_changes()
-                    if item.label in _i18n_variants('text.14bdfaf2face3a')
-                    else self.pending_sensitivity == current
-                )
+        self.save_button.disabled = not self._raw_changes()
+        self.discard_button.disabled = self.pending_sensitivity == current
 
     @_i18n_context
     def _raw_changes(self) -> dict[str, str]:

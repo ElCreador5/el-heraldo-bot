@@ -37,7 +37,7 @@ jobs:
           PYTHONPATH: "tests:."
         run: |
           python tools/i18n_audit.py
-          python -m unittest -v test_i18n_catalog test_language_contract test_i18n_runtime
+          python -m unittest -v test_i18n_catalog test_language_contract test_i18n_runtime test_i18n_commands
       - name: Contrato y matriz dinámica de todos los módulos visibles de setup
         env:
           PYTHONPATH: "tests:."

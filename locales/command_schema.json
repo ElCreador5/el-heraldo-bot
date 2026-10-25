@@ -1,0 +1,970 @@
+{
+  "importkit.description": {
+    "key": "command.9f8f97a2776ca712",
+    "source": "Importa un archivo JSON de plantillas con revisión y confirmación."
+  },
+  "sendtemplate.description": {
+    "key": "command.3994ad55e30586a4",
+    "source": "Publica una plantilla de mensajes del servidor."
+  },
+  "edittemplate.description": {
+    "key": "command.80ec9e4ac4fb7be6",
+    "source": "Edita un mensaje del Heraldo con una plantilla, previa confirmación."
+  },
+  "language.description": {
+    "key": "command.df4861a870b2c227",
+    "source": "Configura el idioma de El Heraldo en este servidor."
+  },
+  "setup.description": {
+    "key": "command.2f2a3052ba78bc09",
+    "source": "Configura las opciones generales de El Heraldo en este servidor."
+  },
+  "heraldo_check.description": {
+    "key": "command.5af0c0a441b4f587",
+    "source": "Fuerza la evaluación inmediata de un miembro (sin esperar el timer de 10 min)."
+  },
+  "heraldo_check_all.description": {
+    "key": "command.e2b5e57c23510d87",
+    "source": "Fuerza la evaluación inmediata de TODOS los miembros que tengan Tentad@."
+  },
+  "heraldo_log_channel.description": {
+    "key": "command.184fe7ed5eb1ad5b",
+    "source": "Cambiar el canal donde El Heraldo reporta su actividad (logs)."
+  },
+  "heraldo_log_channel.canal.description": {
+    "key": "text.56ab7c45f6f2f6",
+    "source": "Canal de texto donde se publicarán los logs"
+  },
+  "verify.description": {
+    "key": "command.822cd459c77156a5",
+    "source": "Publicar el panel de verificación (botón) en un canal."
+  },
+  "verify.canal.description": {
+    "key": "text.8c72bff1e087c1",
+    "source": "Canal donde publicarlo (por defecto, este)"
+  },
+  "verify_dm_texts.description": {
+    "key": "command.dd072f411980ffe5",
+    "source": "Editar el DM de bienvenida; el pie identifica automáticamente al servidor."
+  },
+  "verify_dm_texts.titulo.description": {
+    "key": "text.b995eb49bdbb63",
+    "source": "1/5 · Título del embed (máx. 256 caracteres)."
+  },
+  "verify_dm_texts.campo.description": {
+    "key": "text.f0a0a02ddd0218",
+    "source": "2/5 · Nombre del campo (máx. 256 caracteres)."
+  },
+  "verify_dm_texts.mensaje.description": {
+    "key": "text.5e28cf570913d2",
+    "source": "3/5 · Contenido del mensaje; admite Markdown y menciones."
+  },
+  "verify_dm_texts.color.description": {
+    "key": "text.f8a967df5d0e57",
+    "source": "4/5 · Color HEX de 6 caracteres, por ejemplo 4F5BDC."
+  },
+  "verify_dm_texts.icono_footer.description": {
+    "key": "text.981cc03cfb57dc",
+    "source": "5/5 · Icono opcional; utiliza {servericon} para mostrar el del servidor."
+  },
+  "verify_dm_preview.description": {
+    "key": "command.57d65e356fe80492",
+    "source": "Mostrar en el canal de logs una vista previa del DM de bienvenida."
+  },
+  "verify_texts.description": {
+    "key": "command.7122b57dd492205c",
+    "source": "Editar el mensaje del panel, el texto del botón y el mensaje tras verificarse."
+  },
+  "verify_setup.description": {
+    "key": "command.8b40ccf12c3d9cdd",
+    "source": "Ver o cambiar la configuración de la verificación por botón."
+  },
+  "verify_setup.rol.description": {
+    "key": "text.c9234aa160f7a2",
+    "source": "Rol que se otorga al verificarse"
+  },
+  "verify_setup.timeout.description": {
+    "key": "text.a540dceed895e4",
+    "source": "Tiempo para verificarse desde que entra (usa d, h y m; por ejemplo 5m, 1h o 1d)"
+  },
+  "verify_setup.accion.description": {
+    "key": "text.dd94b5b2f93f63",
+    "source": "Qué hacer con quien no se verifica a tiempo"
+  },
+  "verify_setup.accion.choice.80754db4df56": {
+    "key": "text.ffb1a9c946e708",
+    "source": "Expulsar"
+  },
+  "verify_setup.accion.choice.11818fc94fe6": {
+    "key": "command.012aa16ce2f57090",
+    "source": "Banear (permanente)"
+  },
+  "verify_setup.accion.choice.30a0924a3360": {
+    "key": "text.55326575841ece",
+    "source": "Solo registrar (sin acción)"
+  },
+  "verify_setup.activado.description": {
+    "key": "text.1445e008919d15",
+    "source": "Activar o desactivar el timeout automático"
+  },
+  "joinroles.description": {
+    "key": "command.cf833bb6b2f10127",
+    "source": "Gestionar Roles de ingreso al estilo Sapphire."
+  },
+  "joinroles.status.description": {
+    "key": "command.cdf055b93fbb5771",
+    "source": "Ver la configuración actual de Roles de ingreso."
+  },
+  "joinroles.sync.description": {
+    "key": "command.11b0537f134cdf02",
+    "source": "Asignar ahora los Roles de ingreso a los miembros elegibles."
+  },
+  "joinroles.add.description": {
+    "key": "command.075406ea8810008c",
+    "source": "Añadir uno o varios Roles de ingreso generales."
+  },
+  "joinroles.remove.description": {
+    "key": "command.db442408a9c18380",
+    "source": "Quitar uno o varios Roles de ingreso generales."
+  },
+  "joinroles.user_add.description": {
+    "key": "command.0fbc5d3dabe2416c",
+    "source": "Añadir un rol específico a un ID de usuario de Discord."
+  },
+  "joinroles.user_remove.description": {
+    "key": "command.5273767166b37221",
+    "source": "Quitar un rol específico o eliminar el ID de usuario de la lista."
+  },
+  "server_template_setup.description": {
+    "key": "command.b9589f96afd0fba2",
+    "source": "Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad)."
+  },
+  "server_template_setup.frecuencia.description": {
+    "key": "text.a3ef8ae0b265eb",
+    "source": "Cada cuánto se hace la copia"
+  },
+  "server_template_setup.frecuencia.choice.9f3becba6e4b": {
+    "key": "text.987d904d7afee2",
+    "source": "Desactivada"
+  },
+  "server_template_setup.frecuencia.choice.fa6a92cf80cf": {
+    "key": "text.102a46cd799661",
+    "source": "Cada día"
+  },
+  "server_template_setup.frecuencia.choice.abc95b719e85": {
+    "key": "text.81df48e603d156",
+    "source": "Cada semana"
+  },
+  "server_template_setup.frecuencia.choice.42fab36cf9bc": {
+    "key": "text.d140d2a39e5f86",
+    "source": "Cada mes"
+  },
+  "server_template_setup.frecuencia.choice.46fd1bc277d2": {
+    "key": "text.481b8bb36d811a",
+    "source": "Cada X horas"
+  },
+  "server_template_setup.hora.description": {
+    "key": "text.9bb8d070f80cc5",
+    "source": "Hora del día (0-23, hora de RD)"
+  },
+  "server_template_setup.dia_semana.description": {
+    "key": "text.5036e49eb8357d",
+    "source": "Día de la semana (frecuencia semanal)"
+  },
+  "server_template_setup.dia_semana.choice.5feceb66ffc8": {
+    "key": "text.d0e80862185ff7",
+    "source": "Lunes"
+  },
+  "server_template_setup.dia_semana.choice.6b86b273ff34": {
+    "key": "text.fff8867b824e73",
+    "source": "Martes"
+  },
+  "server_template_setup.dia_semana.choice.d4735e3a265e": {
+    "key": "text.0635bc16ddbe4c",
+    "source": "Miércoles"
+  },
+  "server_template_setup.dia_semana.choice.4e07408562be": {
+    "key": "text.ca7b8cbccb8fd8",
+    "source": "Jueves"
+  },
+  "server_template_setup.dia_semana.choice.4b227777d4dd": {
+    "key": "text.7e9a9f126f1f58",
+    "source": "Viernes"
+  },
+  "server_template_setup.dia_semana.choice.ef2d127de37b": {
+    "key": "text.f7a8575b1a8fe0",
+    "source": "Sábado"
+  },
+  "server_template_setup.dia_semana.choice.e7f6c011776e": {
+    "key": "text.424e93aa513406",
+    "source": "Domingo"
+  },
+  "server_template_setup.dia_mes.description": {
+    "key": "text.c9636a3c670270",
+    "source": "Día del mes, 1-28 (frecuencia mensual)"
+  },
+  "server_template_setup.intervalo.description": {
+    "key": "text.8596cf0912b3e7",
+    "source": "Intervalo entre copias (frecuencia por intervalo): usa d, h y m, por ejemplo 30m, 6h o 1d"
+  },
+  "template_sync.description": {
+    "key": "command.83c9e7c684178560",
+    "source": "Sincronizar ahora la plantilla del servidor y ver su enlace."
+  },
+  "profile.description": {
+    "key": "command.16426266b3cceff4",
+    "source": "Muestra tu perfil o el de otro miembro."
+  },
+  "profile.user.description": {
+    "key": "text.5a69a6cd666b87",
+    "source": "Miembro a consultar (déjalo vacío para ver el tuyo)"
+  },
+  "motw_set_schedule.description": {
+    "key": "command.ee89363cd64dc9ce",
+    "source": "Cambiar el día/hora del anuncio de Miembro de la Semana."
+  },
+  "motw_set_schedule.dia.description": {
+    "key": "text.ac75c2babdd40e",
+    "source": "Día de la semana"
+  },
+  "motw_set_schedule.dia.choice.5feceb66ffc8": {
+    "key": "text.d0e80862185ff7",
+    "source": "Lunes"
+  },
+  "motw_set_schedule.dia.choice.6b86b273ff34": {
+    "key": "text.fff8867b824e73",
+    "source": "Martes"
+  },
+  "motw_set_schedule.dia.choice.d4735e3a265e": {
+    "key": "text.0635bc16ddbe4c",
+    "source": "Miércoles"
+  },
+  "motw_set_schedule.dia.choice.4e07408562be": {
+    "key": "text.ca7b8cbccb8fd8",
+    "source": "Jueves"
+  },
+  "motw_set_schedule.dia.choice.4b227777d4dd": {
+    "key": "text.7e9a9f126f1f58",
+    "source": "Viernes"
+  },
+  "motw_set_schedule.dia.choice.ef2d127de37b": {
+    "key": "text.f7a8575b1a8fe0",
+    "source": "Sábado"
+  },
+  "motw_set_schedule.dia.choice.e7f6c011776e": {
+    "key": "text.424e93aa513406",
+    "source": "Domingo"
+  },
+  "motw_set_schedule.hora.description": {
+    "key": "text.9bb8d070f80cc5",
+    "source": "Hora del día (0-23, hora de RD)"
+  },
+  "motw_set_channel.description": {
+    "key": "command.473e4897b9b8e650",
+    "source": "Cambiar el canal donde se anuncia el Miembro de la Semana."
+  },
+  "motw_set_channel.canal.description": {
+    "key": "text.8e2975c51be08f",
+    "source": "Canal de texto o de anuncios donde se publicará"
+  },
+  "motw_test.description": {
+    "key": "command.b1472b1450e6f9ef",
+    "source": "Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales."
+  },
+  "condenar.description": {
+    "key": "command.63bf882c5cfc7f95",
+    "source": "Condenar a un miembro: guarda sus roles, los retira y aplica Condenado."
+  },
+  "condenar.miembro.description": {
+    "key": "text.aa1c67d9753b73",
+    "source": "Miembro que será condenado"
+  },
+  "condenar.motivo.description": {
+    "key": "text.73af3adcc24251",
+    "source": "Motivo (opcional únicamente en El Heraldo Test)"
+  },
+  "condenar.duracion.description": {
+    "key": "text.04480e6edd7cf4",
+    "source": "Duración: 30m, 12h, 2d…; vacío = usa la configurada; «indefinida» = hasta retirar"
+  },
+  "condenar.purga.description": {
+    "key": "text.41dd1fc1084263",
+    "source": "Qué borrar del condenado; vacío = últimas 24h, 0 = no borrar"
+  },
+  "restaurar_roles_pendientes.description": {
+    "key": "command.7e33e3cd896e22db",
+    "source": "Reintentar los roles que no se pudieron devolver al levantar una condena."
+  },
+  "restaurar_roles_pendientes.miembro.description": {
+    "key": "text.4956cb5aec15f0",
+    "source": "Miembro con roles pendientes de restauración"
+  },
+  "liberar.description": {
+    "key": "command.5a8fb76ea399db08",
+    "source": "Levantar una condena y devolver los roles guardados."
+  },
+  "liberar.miembro.description": {
+    "key": "text.a33f3a21603cfc",
+    "source": "Miembro condenado que será liberado"
+  },
+  "condenar_setup.description": {
+    "key": "command.83f532385a9a5b10",
+    "source": "Configurar el canal donde se anuncian las nuevas condenas."
+  },
+  "condenar_setup.canal.description": {
+    "key": "text.a0b75404effab2",
+    "source": "Canal de texto para los avisos de condena; vacío = ver configuración"
+  },
+  "condenar_template.description": {
+    "key": "command.351f8ee5592da168",
+    "source": "Abrir el formulario profesional de la tarjeta de condenados."
+  },
+  "honeypot.description": {
+    "key": "text.cffadab7b22ff1",
+    "source": "Canales trampa que atrapan bots de spam."
+  },
+  "honeypot.setup.description": {
+    "key": "command.f0847f0e500e274d",
+    "source": "Ver o cambiar la configuración del honeypot."
+  },
+  "honeypot.setup.activado.description": {
+    "key": "text.64a2595b7e31dc",
+    "source": "Activar o desactivar el honeypot"
+  },
+  "honeypot.setup.accion.description": {
+    "key": "text.d295cf31ea1a6c",
+    "source": "Qué hacer con quien caiga en la trampa"
+  },
+  "honeypot.setup.accion.choice.2bc933aff126": {
+    "key": "text.ed15151a66c575",
+    "source": "Purgar y aplicar rol de castigo"
+  },
+  "honeypot.setup.accion.choice.2ce5a984f81a": {
+    "key": "text.3bbbd734b49e10",
+    "source": "Solo registrar (prueba segura)"
+  },
+  "honeypot.setup.accion.choice.492bd0204b74": {
+    "key": "text.793c8b2e371f68",
+    "source": "Aislar (timeout)"
+  },
+  "honeypot.setup.accion.choice.6c04834a389e": {
+    "key": "text.ffb1a9c946e708",
+    "source": "Expulsar"
+  },
+  "honeypot.setup.accion.choice.7858a9ebb511": {
+    "key": "text.e1e571bc9280a3",
+    "source": "Banear"
+  },
+  "honeypot.setup.rol_castigo.description": {
+    "key": "text.156cb9416331c7",
+    "source": "Rol Condenado: se le quitan todos los demás roles asignables (incluidos Tentad@ y Sin Verificar)"
+  },
+  "honeypot.setup.purga.description": {
+    "key": "text.d84f89283250b4",
+    "source": "Qué borrar: todo, una cantidad (200 mensajes) o un rango (30m, 2d…); 0 = nada"
+  },
+  "honeypot.setup.timeout.description": {
+    "key": "text.feee6477ad0d0a",
+    "source": "Duración del timeout si la acción es Aislar: 30m, 12h, 2d… (1m a 28d)"
+  },
+  "honeypot.setup.aviso.description": {
+    "key": "text.b72e12b3f5a688",
+    "source": "Publicar un aviso fijado en cada canal trampa"
+  },
+  "honeypot.setup.ping_rol.description": {
+    "key": "text.98961433bcd3ec",
+    "source": "Rol a mencionar en cada reporte"
+  },
+  "honeypot.setup.retencion.description": {
+    "key": "text.82c0266877b627",
+    "source": "Cuánto guardar el historial y los textos capturados: 12h, 7d, 30d… (por defecto 30d)"
+  },
+  "honeypot.add.description": {
+    "key": "command.889798a68f204cdd",
+    "source": "Convertir un canal de texto existente en canal trampa."
+  },
+  "honeypot.add.canal.description": {
+    "key": "text.5a64ee449ee931",
+    "source": "Canal de texto que todos puedan ver y en el que puedan escribir"
+  },
+  "honeypot.create.description": {
+    "key": "command.adfaa02333927d4d",
+    "source": "Crear #honeypot ya configurado (visible, con aviso fijado)."
+  },
+  "honeypot.remove.description": {
+    "key": "command.5c659a40251fecd1",
+    "source": "Quitar un canal del honeypot (no lo borra)."
+  },
+  "honeypot.warning_embed.description": {
+    "key": "command.9227ba8c2c272eb8",
+    "source": "Personalizar por completo el embed del aviso fijado."
+  },
+  "honeypot.warning_text.description": {
+    "key": "command.f0b8accb9a246ae4",
+    "source": "Editar el texto del aviso fijado en los canales trampa."
+  },
+  "honeypot.exempt_add.description": {
+    "key": "command.2b8721569172cf2b",
+    "source": "Eximir a un rol o miembro de la trampa."
+  },
+  "honeypot.exempt_add.rol.description": {
+    "key": "text.2ba0880b1788f7",
+    "source": "Rol a eximir"
+  },
+  "honeypot.exempt_add.miembro.description": {
+    "key": "text.554989b8bd2598",
+    "source": "Miembro a eximir"
+  },
+  "honeypot.exempt_remove.description": {
+    "key": "command.efeb8e7ec63baaed",
+    "source": "Quitar la exención de un rol o miembro."
+  },
+  "honeypot.exempt_remove.rol.description": {
+    "key": "text.fb9f51fe92502d",
+    "source": "Rol"
+  },
+  "honeypot.exempt_remove.miembro.description": {
+    "key": "text.e841f8bfd02f85",
+    "source": "Miembro"
+  },
+  "honeypot.history.description": {
+    "key": "command.5d7d2feb27f57530",
+    "source": "Ver los últimos miembros atrapados."
+  },
+  "honeypot.history.cantidad.description": {
+    "key": "text.5fe39b7299b369",
+    "source": "Cuántos mostrar (1-10)"
+  },
+  "honeypot.resume.description": {
+    "key": "command.a6ae7f123f29f968",
+    "source": "Reanudar el honeypot tras una pausa por protección contra fallos."
+  },
+  "fusionar_canales.description": {
+    "key": "command.2ff9e1358fe1c4e3",
+    "source": "Fusionar dos canales de texto mediante una migración segura de mensajes."
+  },
+  "fusionar_canales.origen.description": {
+    "key": "text.0b7801aaee4a4e",
+    "source": "Canal que contiene los mensajes que quieres migrar"
+  },
+  "fusionar_canales.destino.description": {
+    "key": "text.efba0069b5f85f",
+    "source": "Canal que conservará los mensajes migrados"
+  },
+  "fusionar_canales.nombre.description": {
+    "key": "text.c6b4eb55614a70",
+    "source": "Qué nombre conservará el canal destino"
+  },
+  "fusionar_canales.nombre.choice.6524844e4890": {
+    "key": "command.005065ae8a2d82c0",
+    "source": "Conservar nombre del destino"
+  },
+  "fusionar_canales.nombre.choice.cc3f9bddae5b": {
+    "key": "command.04348cbd39e80e1d",
+    "source": "Conservar nombre del origen"
+  },
+  "fusionar_canales.nombre.choice.bf85be80347e": {
+    "key": "command.1392891aeedf662e",
+    "source": "Usar nombre personalizado"
+  },
+  "fusionar_canales.nombre_personalizado.description": {
+    "key": "text.b1224fd23a3f95",
+    "source": "Nombre final si elegiste 'Personalizado'"
+  },
+  "fusionar_canales.eliminar_origen.description": {
+    "key": "text.090f21b6097b0e",
+    "source": "Eliminar el canal origen solo si TODOS los mensajes se migran correctamente"
+  },
+  "warn.description": {
+    "key": "command.91de35d9325c1eac",
+    "source": "Advierte a un miembro y crea un caso de Moderation."
+  },
+  "warn.usuario.description": {
+    "key": "text.e841f8bfd02f85",
+    "source": "Miembro"
+  },
+  "warn.motivo.description": {
+    "key": "text.c7b288b1c0bb65",
+    "source": "Motivo"
+  },
+  "warn.duracion.description": {
+    "key": "text.c8d8364ddf1dea",
+    "source": "Opcional: 30m, 2h, 7d"
+  },
+  "warn.prueba.description": {
+    "key": "text.a1c6c077c0ef04",
+    "source": "Enlace o texto de prueba"
+  },
+  "advertencias.description": {
+    "key": "command.e25b9fa6f52e8fdf",
+    "source": "Consulta el historial de advertencias de un miembro."
+  },
+  "advertencias.usuario.description": {
+    "key": "text.fb5299afaeae8a",
+    "source": "Miembro cuyo historial desea consultar"
+  },
+  "mute.description": {
+    "key": "command.b315d337eab13a95",
+    "source": "Aplica timeout y crea un caso de Moderation."
+  },
+  "mute.usuario.description": {
+    "key": "text.e841f8bfd02f85",
+    "source": "Miembro"
+  },
+  "mute.duracion.description": {
+    "key": "text.7db1fe35384ba4",
+    "source": "Ej.: 30m, 2h, 7d"
+  },
+  "mute.motivo.description": {
+    "key": "text.c7b288b1c0bb65",
+    "source": "Motivo"
+  },
+  "mute.prueba.description": {
+    "key": "text.a1c6c077c0ef04",
+    "source": "Enlace o texto de prueba"
+  },
+  "kick.description": {
+    "key": "command.c617003ac6229456",
+    "source": "Expulsa a un miembro y crea un caso de Moderation."
+  },
+  "kick.usuario.description": {
+    "key": "text.e841f8bfd02f85",
+    "source": "Miembro"
+  },
+  "kick.motivo.description": {
+    "key": "text.c7b288b1c0bb65",
+    "source": "Motivo"
+  },
+  "kick.prueba.description": {
+    "key": "text.a1c6c077c0ef04",
+    "source": "Enlace o texto de prueba"
+  },
+  "ban.description": {
+    "key": "command.45bb10d04b60b8b1",
+    "source": "Banea a un miembro y crea un caso de Moderation."
+  },
+  "ban.usuario.description": {
+    "key": "text.e841f8bfd02f85",
+    "source": "Miembro"
+  },
+  "ban.motivo.description": {
+    "key": "text.c7b288b1c0bb65",
+    "source": "Motivo"
+  },
+  "ban.duracion.description": {
+    "key": "text.18f367cf453537",
+    "source": "Opcional: ban temporal"
+  },
+  "ban.prueba.description": {
+    "key": "text.a1c6c077c0ef04",
+    "source": "Enlace o texto de prueba"
+  },
+  "caseinfo.description": {
+    "key": "command.1817123631821b1c",
+    "source": "Muestra la información de un caso de Moderation."
+  },
+  "caselist.description": {
+    "key": "command.6565f549545a8c72",
+    "source": "Lista los casos más recientes de Moderation."
+  },
+  "caselist.usuario.description": {
+    "key": "text.f6e36c14d69aa0",
+    "source": "Filtrar por usuario"
+  },
+  "caselist.tipo.description": {
+    "key": "text.19e961c1a5acc7",
+    "source": "WARN, MUTE, KICK, BAN o CONDEMN"
+  },
+  "caselist.abiertos.description": {
+    "key": "text.b150d46771a2ca",
+    "source": "True: abiertos; False: cerrados"
+  },
+  "caseupdate.description": {
+    "key": "command.66d50cbd0c9d3a5a",
+    "source": "Actualiza motivo, duración o notas de un caso."
+  },
+  "caseupdate.caso.description": {
+    "key": "text.c0fdd2a9a67701",
+    "source": "Código del expediente (7 caracteres)"
+  },
+  "caseupdate.motivo.description": {
+    "key": "text.edde48456e91c5",
+    "source": "Nuevo motivo"
+  },
+  "caseupdate.duracion.description": {
+    "key": "text.9dc183e549257d",
+    "source": "Nueva duración; 0 = sin duración"
+  },
+  "caseupdate.notas.description": {
+    "key": "text.74cdafaa67ed0e",
+    "source": "Notas internas"
+  },
+  "setproof.description": {
+    "key": "command.25dcf532b1b3cd4e",
+    "source": "Establece o reemplaza la prueba de un caso."
+  },
+  "setproof.caso.description": {
+    "key": "text.c0fdd2a9a67701",
+    "source": "Código del expediente (7 caracteres)"
+  },
+  "setproof.prueba.description": {
+    "key": "text.5cd499e9d3f7dd",
+    "source": "Texto o enlace de mensaje"
+  },
+  "caseclose.description": {
+    "key": "command.2513a614582e69a5",
+    "source": "Cierra un caso y revierte el castigo reversible cuando corresponde."
+  },
+  "caseclose.caso.description": {
+    "key": "text.c0fdd2a9a67701",
+    "source": "Código del expediente (7 caracteres)"
+  },
+  "caseclose.motivo.description": {
+    "key": "text.c5aa5f60f4e63f",
+    "source": "Resolución o motivo de cierre"
+  },
+  "casedelete.description": {
+    "key": "command.e2b48cf7e722b0f5",
+    "source": "Elimina definitivamente un caso de Moderation."
+  },
+  "purge.description": {
+    "key": "command.6d77b1db250ab2e2",
+    "source": "Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo."
+  },
+  "purge.usuario.description": {
+    "key": "text.932a4dc0aab747",
+    "source": "Usuario cuyos mensajes borrar (puede haber salido del servidor)"
+  },
+  "purge.tipo.description": {
+    "key": "text.7694dea3bd45ef",
+    "source": "Qué tipo de contenido borrar: todo, links o solo texto"
+  },
+  "purge.tipo.choice.5cf7504d9781": {
+    "key": "command.875fc5727ea244b1",
+    "source": "Todo — cualquier mensaje"
+  },
+  "purge.tipo.choice.30a74f913836": {
+    "key": "command.1a045cf243759ca3",
+    "source": "Links — mensajes con enlaces"
+  },
+  "purge.tipo.choice.1e1d0f251d3a": {
+    "key": "command.644a743dc8c76e11",
+    "source": "Texto — sin imagen ni vídeo"
+  },
+  "purge.todos.description": {
+    "key": "text.881de47ec9a982",
+    "source": "Borrar TODOS sus mensajes (no se combina con cantidad ni rango)"
+  },
+  "purge.cantidad.description": {
+    "key": "text.87aa336c7ad0de",
+    "source": "Borrar solo sus N mensajes más recientes"
+  },
+  "purge.desde.description": {
+    "key": "text.1016a2fcdba001",
+    "source": "Inicio del rango: hace cuánto (30m, 12h, 2d, 1d 12h…)"
+  },
+  "purge.hasta.description": {
+    "key": "text.49a6c92238df02",
+    "source": "Fin del rango: hace cuánto (por defecto, ahora)"
+  },
+  "purge.canal.description": {
+    "key": "text.b43abe6d11544f",
+    "source": "Limitar a un canal o hilo (por defecto, todo el servidor)"
+  },
+  "raid.description": {
+    "key": "text.af198c41cdb062",
+    "source": "Protección contra raids (ingresos masivos)."
+  },
+  "raid.setup.description": {
+    "key": "command.c62bd53878363b64",
+    "source": "Ver o cambiar la configuración de la protección anti-raid."
+  },
+  "raid.setup.activado.description": {
+    "key": "text.727087e7edd467",
+    "source": "Activar o desactivar la protección anti-raid"
+  },
+  "raid.setup.ingresos.description": {
+    "key": "command.3721ba04407212fa",
+    "source": "Cuántos ingresos disparan el raid (2 a 200)"
+  },
+  "raid.setup.ventana.description": {
+    "key": "text.6176913da73773",
+    "source": "En cuánto tiempo deben llegar: 10s, 1m… (1s a 1h)"
+  },
+  "raid.setup.duracion.description": {
+    "key": "text.abecc1fe93a934",
+    "source": "Cuánto dura el modo raid: 30s, 10m, 12h, 2d, 1 mes… (10s a 12 meses)"
+  },
+  "raid.setup.accion.description": {
+    "key": "text.014c2298801f42",
+    "source": "Qué hacer con los sospechosos durante el raid"
+  },
+  "raid.setup.accion.choice.60d337f09a55": {
+    "key": "text.39a9a924a02f50",
+    "source": "Condenar (rol Condenado, reversible)"
+  },
+  "raid.setup.accion.choice.80754db4df56": {
+    "key": "text.ffb1a9c946e708",
+    "source": "Expulsar"
+  },
+  "raid.setup.accion.choice.11818fc94fe6": {
+    "key": "text.e1e571bc9280a3",
+    "source": "Banear"
+  },
+  "raid.setup.accion.choice.2ce5a984f81a": {
+    "key": "text.3bbbd734b49e10",
+    "source": "Solo registrar (prueba segura)"
+  },
+  "raid.setup.edad_cuenta.description": {
+    "key": "text.0067f18dc5bfe0",
+    "source": "Considerar nueva una cuenta más joven que esto: 30m, 7d, 1 mes…; 0 = sin filtro"
+  },
+  "raid.setup.proporcion_cuentas_nuevas.description": {
+    "key": "text.9741dff579544f",
+    "source": "Porcentaje mínimo de cuentas nuevas en la ráfaga: 0 a 100; 0 = desactivado"
+  },
+  "raid.setup.pausar_invitaciones.description": {
+    "key": "text.9897885eca32da",
+    "source": "Pausar las invitaciones del servidor mientras dure el raid"
+  },
+  "raid.setup.purgar.description": {
+    "key": "text.2eaaf547035da1",
+    "source": "Borrar los mensajes que los sancionados mandaron desde que entraron"
+  },
+  "raid.setup.ping_rol.description": {
+    "key": "text.d3fde0a65c6fee",
+    "source": "Rol a mencionar en la alerta de raid"
+  },
+  "raid.status.description": {
+    "key": "command.10e8d281f5597944",
+    "source": "Ver si hay un raid activo y la configuración actual."
+  },
+  "raid.start.description": {
+    "key": "command.ea025e8ab975ed6e",
+    "source": "Activar el modo raid a mano (p. ej. si ves un ataque que no detectó)."
+  },
+  "raid.end.description": {
+    "key": "command.7b9eba332b75753e",
+    "source": "Terminar el modo raid ahora y reabrir invitaciones."
+  },
+  "raid.end.liberar.description": {
+    "key": "text.e3b28593963ffb",
+    "source": "Liberar también a quienes el raid dejó condenados"
+  },
+  "variables.description": {
+    "key": "command.592bb05d30901e38",
+    "source": "Probar un texto con las variables de El Heraldo."
+  },
+  "variables.texto.description": {
+    "key": "text.e5b3a9a6621a60",
+    "source": "Texto con variables para probar, por ejemplo: Hola {usuario}, lee {#reglas}"
+  },
+  "variables.miembro.description": {
+    "key": "text.2be62ce1ca557d",
+    "source": "Miembro con cuyos datos se prueba (por defecto, tú)"
+  },
+  "variables.canal.description": {
+    "key": "text.53e73fed2e6b96",
+    "source": "Canal con cuyos datos se prueba (por defecto, este)"
+  },
+  "list.description": {
+    "key": "command.2bb4cbdf99a144f1",
+    "source": "Consultar los listados privados de El Heraldo."
+  },
+  "list.comandos.description": {
+    "key": "command.570a2519e6fbc8e1",
+    "source": "Ver todos los comandos disponibles del Heraldo."
+  },
+  "list.variables.description": {
+    "key": "command.9e979dc44a23434c",
+    "source": "Ver todas las variables disponibles para textos y embeds."
+  },
+  "list.condenados.description": {
+    "key": "command.ebf196aa493015b1",
+    "source": "Ver todas las condenas activas del servidor."
+  },
+  "list.embeds.description": {
+    "key": "command.42d848413cea11af",
+    "source": "Ver los embeds personalizados guardados por nombre."
+  },
+  "embed.description": {
+    "key": "text.2fc5deecbebc20",
+    "source": "Crear, editar y enviar embeds personalizados."
+  },
+  "embed.crear.description": {
+    "key": "command.275eeb17cad0f75c",
+    "source": "Crear un embed nuevo con un formulario."
+  },
+  "embed.crear.nombre.description": {
+    "key": "text.1e3ad0d604937b",
+    "source": "Nombre de hasta 64 caracteres; admite espacios, tildes y emojis"
+  },
+  "embed.editar.description": {
+    "key": "command.950ac76bac577b83",
+    "source": "Abrir el panel de edición de un embed guardado."
+  },
+  "embed.editar.nombre.description": {
+    "key": "text.08c0b7ec39b4e0",
+    "source": "Embed a editar"
+  },
+  "embed.enviar.description": {
+    "key": "command.bc0391525d476723",
+    "source": "Enviar un embed guardado a un canal."
+  },
+  "embed.enviar.nombre.description": {
+    "key": "text.f8cef1c465705d",
+    "source": "Embed a enviar"
+  },
+  "embed.enviar.canal.description": {
+    "key": "text.f1e7032cb52b15",
+    "source": "Canal de destino (por defecto, este)"
+  },
+  "embed.enviar.miembro.description": {
+    "key": "text.69102c5732d1cd",
+    "source": "Miembro cuyos datos usan {usuario}, {mencion}, {avatar}… (opcional)"
+  },
+  "embed.programaciones.description": {
+    "key": "command.1e1c02d42d80a005",
+    "source": "Consultar, editar, eliminar y pausar embeds programados."
+  },
+  "embed.borrar.description": {
+    "key": "command.3051fb574bd5bd4f",
+    "source": "Borrar un embed guardado (los mensajes ya enviados se quedan)."
+  },
+  "embed.borrar.nombre.description": {
+    "key": "text.94406b2c8c0b92",
+    "source": "Embed a borrar"
+  },
+  "suggestions.description": {
+    "key": "command.4c0dec2ea179d04a",
+    "source": "Configurar y administrar el sistema de sugerencias."
+  },
+  "suggestions.panel.description": {
+    "key": "command.484d747f8cac3dc5",
+    "source": "Publicar o reconstruir el panel sticky de sugerencias en un canal."
+  },
+  "suggestions.panel.canal.description": {
+    "key": "text.5b4d21f6430682",
+    "source": "Canal donde quedará el botón para crear sugerencias"
+  },
+  "suggestions.setup.description": {
+    "key": "command.7ac1cc8252894d60",
+    "source": "Elegir si el creador del servidor también recibe las sugerencias por DM."
+  },
+  "suggestions.setup.dueno.description": {
+    "key": "text.904fd75a152a47",
+    "source": "Sí = el dueño/creador recibe las sugerencias; No = solo destinatarios añadidos"
+  },
+  "suggestions.revisor_add.description": {
+    "key": "command.2e4e3cd2a2ed09bb",
+    "source": "Añadir una persona que recibirá y podrá resolver sugerencias por DM."
+  },
+  "suggestions.revisor_add.usuario.description": {
+    "key": "text.589cef2c7915a7",
+    "source": "Persona que recibirá las sugerencias"
+  },
+  "suggestions.revisor_remove.description": {
+    "key": "command.f2cfe10ae0212128",
+    "source": "Quitar una persona de los destinatarios de sugerencias."
+  },
+  "suggestions.revisor_remove.usuario.description": {
+    "key": "text.d846ea7409c7a6",
+    "source": "Persona que dejará de recibir nuevas sugerencias"
+  },
+  "suggestions.lista.description": {
+    "key": "command.c7e6597cb4c22318",
+    "source": "Ver el canal y las personas que reciben las sugerencias."
+  },
+  "mensajes.description": {
+    "key": "command.c766bdc0fce3972c",
+    "source": "Editar los paneles y mensajes visuales personalizables de El Heraldo."
+  },
+  "programar_mensaje.description": {
+    "key": "command.f7b222c2dd8b244f",
+    "source": "Programación persistente de plantillas."
+  },
+  "programar_mensaje.crear.description": {
+    "key": "command.9cc26bef16a00ce1",
+    "source": "Propone publicar una plantilla en una fecha y zona horaria."
+  },
+  "programar_mensaje.crear.fecha.description": {
+    "key": "text.5b617234bc1705",
+    "source": "Fecha local: AAAA-MM-DD HH:MM"
+  },
+  "programar_mensaje.crear.zona.description": {
+    "key": "text.7288daf3b35948",
+    "source": "Zona IANA, por ejemplo America/Santo_Domingo"
+  },
+  "programar_mensaje.crear.repeticion.choice.4f32a84368e9": {
+    "key": "command.308b666bfd216587",
+    "source": "ninguna"
+  },
+  "programar_mensaje.crear.repeticion.choice.0fd40abf5464": {
+    "key": "command.afda2ef5af478a3d",
+    "source": "diaria"
+  },
+  "programar_mensaje.crear.repeticion.choice.b0cae07d63d1": {
+    "key": "command.029ee779388e664c",
+    "source": "semanal"
+  },
+  "programar_mensaje.listar.description": {
+    "key": "command.b2c9845124e46492",
+    "source": "Consulta próximas ejecuciones y errores de las programaciones."
+  },
+  "programar_mensaje.retirar.description": {
+    "key": "command.ec362672f7941de6",
+    "source": "Retira una programación tras confirmación; conserva mensajes enviados."
+  },
+  "autorespuesta.description": {
+    "key": "command.e643bd8fbc51f717",
+    "source": "Respuestas por palabras o frases con límites de frecuencia."
+  },
+  "autorespuesta.crear.description": {
+    "key": "command.3d71cd4c3db354b7",
+    "source": "Propone una respuesta con plantilla, canal y palabra o frase."
+  },
+  "autorespuesta.crear.coincidencia.choice.3bea7671a89e": {
+    "key": "command.0352803394aaa0c7",
+    "source": "Mensaje exacto"
+  },
+  "autorespuesta.crear.coincidencia.choice.b1fe98217e13": {
+    "key": "command.0056613826f54a44",
+    "source": "Palabra o frase incluida"
+  },
+  "autorespuesta.listar.description": {
+    "key": "command.fea759719d82292c",
+    "source": "Consulta las reglas de autorespuesta y su estado."
+  },
+  "autorespuesta.retirar.description": {
+    "key": "command.dbd81a01a8aed31d",
+    "source": "Retira una regla tras confirmar; conserva las respuestas publicadas."
+  },
+  "sticky.description": {
+    "key": "command.4cdb03121982ee8d",
+    "source": "Mantiene una plantilla al final de un canal."
+  },
+  "sticky.crear.description": {
+    "key": "command.f44b6f0c02cf1d7c",
+    "source": "Propone una publicación sticky; confirmar habilita su publicación."
+  },
+  "sticky.listar.description": {
+    "key": "command.545012681b6d0d7d",
+    "source": "Consulta los mensajes sticky y errores que requieren revisión."
+  },
+  "sticky.retirar.description": {
+    "key": "command.cae7954dfbcdcd3e",
+    "source": "Detiene el sticky previa confirmación; conserva la última publicación."
+  },
+  "webhook_mensaje.description": {
+    "key": "command.dfa7a1aa4d446cb9",
+    "source": "Publica una plantilla mediante un webhook del propio bot, previa confirmación."
+  },
+  "componentes_mensaje.description": {
+    "key": "command.035e42af9cecabd1",
+    "source": "Configura botones y menús independientes mediante un archivo JSON confirmado."
+  },
+  "editar_plantilla.description": {
+    "key": "command.cb3234ec1a480fb4",
+    "source": "Abre el editor visual de texto, embeds, campos e imágenes."
+  }
+}

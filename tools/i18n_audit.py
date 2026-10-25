@@ -27,8 +27,22 @@ def findings(source, filename):
             continue
         natural = HUMAN.search(value) or re.search(r'[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}\s+[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}', value)
         owner = parents.get(id(node))
+        rendered = node
+        if isinstance(owner, ast.JoinedStr):
+            rendered = owner
+            owner = parents.get(id(owner))
         if isinstance(owner, ast.keyword) and owner.arg in {'label', 'title', 'description', 'placeholder', 'content', 'text'}:
             natural = natural or re.search(r'[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}', value)
+        if isinstance(owner, ast.Call) and rendered in owner.args[:1]:
+            function = ast.unparse(owner.func)
+            if function.endswith(('.send_message', '.send', '.edit_message', '.edit_original_response')):
+                natural = natural or re.search(r'[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}', value)
+        if isinstance(owner, ast.keyword) and owner.arg in {'name', 'value', 'default'}:
+            call = parents.get(id(owner))
+            function = ast.unparse(call.func) if isinstance(call, ast.Call) else ''
+            if (function.endswith(('.add_field', '.set_author'))
+                    or owner.arg == 'default' and function.endswith('.TextInput')):
+                natural = natural or re.search(r'[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}', value)
         if not natural or value.lstrip().startswith(SQL):
             continue
         if len(value) < 2:
@@ -47,7 +61,8 @@ def findings(source, filename):
         if any(name == 'print'
                or name in {'re.compile', 're.sub', 're.search', 're.match', 're.fullmatch', 're.findall', 're.split'} for name in call_names):
             continue
-        # Discord's global command schema is not a per-server message.
+        # La prueba de esquema nativo recorre estos campos y exige su clave
+        # en command_schema.json; no usa localizaciones personales de Discord.
         if any(name.endswith(('.command', '.describe', '.Group', '.Choice')) for name in call_names):
             continue
         scope = '.'.join(n.name for n in reversed(ancestors)
@@ -74,6 +89,9 @@ def audit(root=ROOT):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 if node.value.startswith(('text.', 'setup.', 'language.', 'common.', 'access.', 'personality.', 'suggestion.', 'input.', 'footer.')):
                     used.add(node.value)
+    schema = root / 'locales' / 'command_schema.json'
+    if schema.exists():
+        used.update(item['key'] for item in json.loads(schema.read_text()).values())
     return {'literals': found, 'used_keys': sorted(used)}
 
 

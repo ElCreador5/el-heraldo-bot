@@ -10276,7 +10276,7 @@ class ModerationReactionRuleModal(discord.ui.Modal, title=_t('text.514dd71bd7e5a
             return
         duration_raw = str(self.duration).strip().lower()
         duration_minutes = None
-        if duration_raw not in {"", "-", "0", "none", "indefinida"}:
+        if duration_raw not in {"", "-", "none"} and not i18n.indefinite_input(duration_raw):
             try:
                 duration_minutes = parse_duration(duration_raw, 1, (365 if action == "ban" else 28) * 24 * 60)
             except ValueError as exc:
@@ -10623,21 +10623,15 @@ class ReportReminderSetupView(discord.ui.View):
                 "report_reminder_day": _t('text.443602a5f76f49'), "report_reminder_hour": _t('text.a956c649a226cc')}[field],
                 row=row, options=[discord.SelectOption(label=label, value=value, default=value == self.pending[field]) for value, label in options])
             @_i18n_context
-            async def change(interaction, name=field):
+            async def change(interaction, name=field, control=select):
                 value = (interaction.data or {}).get("values", [None])[0]
                 valid = set(dict(next(o for k, _r, o in menus if k == name)))
                 if value not in valid:
                     await interaction.response.send_message(_t('text.a7c68929bd9fe8'), ephemeral=True)
                     return
                 self.pending[name] = value
-                for item in self.children:
-                    if isinstance(item, discord.ui.Select) and item.placeholder == {
-                        "report_reminder_frequency": _t('text.e1867c7f9bb33f'),
-                        "report_reminder_day": _t('text.443602a5f76f49'),
-                        "report_reminder_hour": _t('text.a956c649a226cc'),
-                    }[name]:
-                        for option in item.options:
-                            option.default = option.value == value
+                for option in control.options:
+                    option.default = option.value == value
                 await interaction.response.edit_message(content=self.summary(), view=self)
             select.callback = change
             self.add_item(select)
@@ -11278,7 +11272,7 @@ class HeraldoCondemnationDurationModal(discord.ui.Modal, title=_t('text.08a1d617
     @_i18n_context
     async def on_submit(self, interaction: discord.Interaction) -> None:
         raw = str(self.duration).strip()
-        if raw.casefold() in {"0", "indefinida", "indefinido", "permanente", "hasta retirar"}:
+        if i18n.indefinite_input(raw):
             minutes = None
             setting = "indefinida"
         else:
@@ -12268,7 +12262,7 @@ class HeraldoReactionEmojiModal(discord.ui.Modal, title=_t('text.51ced4ce20b298'
 
 class HeraldoReactionOptionsModal(discord.ui.Modal, title=_t('text.2046b60ec4f504')):
     maximum = discord.ui.TextInput(label=_t('text.a8f312a08f77fe'), default="0", max_length=2)
-    mode = discord.ui.TextInput(label=_t('reaction.access_mode'), placeholder=_t('text.ee2bc5a98b39d8'), default="Todos", max_length=20)
+    mode = discord.ui.TextInput(label=_t('reaction.access_mode'), placeholder=_t('text.ee2bc5a98b39d8'), default=_t('access.all'), max_length=20)
     reverse_mode = discord.ui.TextInput(label=_t('text.728733b87fc656'), default=_t("common.no"), max_length=3)
 
     @_i18n_context
@@ -13202,6 +13196,9 @@ def guild_language(guild_id: int) -> str:
 
 i18n.set_locale_resolver(guild_language)
 
+import heraldo_command_i18n
+heraldo_command_i18n.install(bot.http, guild_language)
+
 
 @_i18n_context
 def language_panel_text(guild_id: int, selected: str | None = None) -> str:
@@ -13285,6 +13282,14 @@ class HeraldoLanguageView(discord.ui.View):
             content=language_panel_text(self.guild_id) + "\n\n**" + i18n.translate(self.pending, "language.saved") + "**",
             view=HeraldoLanguageView(self.guild_id, self.owner_id,
                                      from_setup=self.from_setup))
+        if interaction.guild is not None and bot.is_ready():
+            try:
+                await bot.tree.sync(guild=interaction.guild)
+            except Exception as exc:
+                print(f"LANGUAGE_COMMAND_SYNC status=FAILED exception={type(exc).__name__}")
+                await interaction.edit_original_response(
+                    content=language_panel_text(self.guild_id) + "\n\n"
+                            + i18n.translate(guild_language(self.guild_id), 'language.command_sync_pending'))
 
     @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=1)
     @_i18n_context
@@ -15323,7 +15328,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
     if len(ranking) > 1:
         lead = winner_count - ranking[1][1]
         if lead > 0:
-            description += _t('text.58ef1b48f146cf', p0=f'{lead:,}', p1=f"{('s' if lead != 1 else '')}")
+            description += _t('text.58ef1b48f146cf', p0=f'{lead:,}', p1=f"{(_t('noun.message.one') if lead == 1 else _t('noun.message.many'))}")
         else:
             description += _t('text.93e36f506d4e4e')
 
@@ -17477,7 +17482,7 @@ def hp_role_problem(role: discord.Role, guild: discord.Guild) -> str | None:
     return None
 
 
-_DURATION_RE = re.compile(r"(\d+)\s*(d(?:[ií]as?)?|h(?:oras?)?|m(?:in(?:utos?)?)?)(?![a-záéíóú])", re.IGNORECASE)
+_DURATION_RE = re.compile(r"(\d+)\s*(d(?:[ií]as?|ays?)?|h(?:oras?|ours?)?|m(?:in(?:utos?|utes?)?)?)(?![a-záéíóú])", re.IGNORECASE)
 
 
 def parse_duration(text: str, min_minutes: int, max_minutes: int) -> int:
@@ -17491,7 +17496,7 @@ def parse_duration(text: str, min_minutes: int, max_minutes: int) -> int:
             raise ValueError(_t('text.d094bf5ff3ade3', p0=f'{format_duration(min_minutes)}', p1=f'{example}'))
         return 0
     matches = list(_DURATION_RE.finditer(raw))
-    leftover = _DURATION_RE.sub("", raw).replace(",", "").replace(" y ", "").strip()
+    leftover = _DURATION_RE.sub("", raw).replace(",", "").replace(" y ", "").replace(" and ", "").replace(" e ", "").strip()
     if not matches or leftover:
         raise ValueError(_t('text.3de15698e2b468', p0=f'{text}', p1=f'{example}'))
     total = 0
@@ -17832,11 +17837,11 @@ def parse_purge_spec(text: str) -> tuple[str, int]:
     """'todo' | '200 mensajes' | '30m' / '12h' / '2d' / '1d 12h' | '0' -> (tipo, valor).
     Tipos: none, all, count (N mensajes), time (minutos hacia atrás)."""
     raw = text.strip().lower()
-    if raw in ("0", "ninguno", "nada", "no"):
+    if raw in ("0", "ninguno", "nada", "no", "none", "nenhum", "nenhuma", "não", "nao"):
         return "none", 0
-    if raw in ("todo", "todos", "all", "siempre"):
+    if raw in ("todo", "todos", "all", "siempre", "tudo", "todas"):
         return "all", 0
-    m = re.fullmatch(r"(\d+)\s*(?:msgs?|mensajes?)", raw)
+    m = re.fullmatch(r"(\d+)\s*(?:msgs?|mensajes?|messages?|mensagem|mensagens)", raw)
     if m:
         n = int(m.group(1))
         if n < 1:
@@ -20064,7 +20069,7 @@ async def condenar(
     try:
         if duracion is not None:
             raw_duration = duracion.strip()
-            if raw_duration.lower() in {"0", "indefinida", "indefinido", "permanente", "hasta retirar"}:
+            if i18n.indefinite_input(raw_duration):
                 duration_minutes = None
             else:
                 duration_minutes = parse_duration(raw_duration, 1, get_condemnation_max_minutes(guild.id))
@@ -20764,7 +20769,7 @@ class CondemnationDurationModal(discord.ui.Modal, title=_t('text.212e6698f1c1e9'
     @_i18n_context
     async def on_submit(self, interaction: discord.Interaction) -> None:
         value = str(self.duration_input).strip()
-        if value.lower() in {"indefinida", "indefinido", "permanente", "hasta retirar", "0"}:
+        if i18n.indefinite_input(value):
             await confirm_configuration(interaction, self.guild_id, {"condemnation_default_duration": "indefinida"})
             return
         try:
@@ -23395,7 +23400,7 @@ RAID_ACTION_HELP = {
 RAID_MONTH_SECONDS = 30 * 24 * 3600
 
 _RAID_UNIT_RE = re.compile(
-    r"(\d+)\s*(meses|mes|mo|seg(?:undos?)?|s|min(?:utos?)?|m|h(?:oras?)?|d(?:[ií]as?)?)(?![a-záéíóú])",
+    r"(\d+)\s*(meses|mês|mes|months?|mo|seg(?:undos?)?|seconds?|s|min(?:utos?|utes?)?|m|h(?:oras?|ours?)?|d(?:[ií]as?|ays?)?)(?![a-záéíóú])",
     re.IGNORECASE,
 )
 
@@ -23410,13 +23415,13 @@ def parse_flex_duration(text: str, min_seconds: int, max_seconds: int) -> int:
             raise ValueError(_t('text.d094bf5ff3ade3', p0=f'{format_flex_duration(min_seconds)}', p1=f'{example}'))
         return 0
     matches = list(_RAID_UNIT_RE.finditer(raw))
-    leftover = _RAID_UNIT_RE.sub("", raw).replace(",", "").replace(" y ", "").strip()
+    leftover = _RAID_UNIT_RE.sub("", raw).replace(",", "").replace(" y ", "").replace(" and ", "").replace(" e ", "").strip()
     if not matches or leftover:
         raise ValueError(_t('text.3de15698e2b468', p0=f'{text}', p1=f'{example}'))
     total = 0
     for m in matches:
         unit = m.group(2).lower()
-        if unit.startswith("mes") or unit == "mo":
+        if unit.startswith(("mes", "mês", "month")) or unit == "mo":
             mult = RAID_MONTH_SECONDS
         elif unit.startswith("s"):
             mult = 1
@@ -26453,7 +26458,7 @@ async def finalize_suggestion_decision(
     if guild is not None:
         await log_embed(
             guild,
-            f"{_t('text.96a9d1e8ddff70') if status == SUGGESTION_STATUS_ACCEPTED else _t('text.f83adc1b8bab8b')}",
+            (_t('text.96a9d1e8ddff70') if status == SUGGESTION_STATUS_ACCEPTED else _t('text.f83adc1b8bab8b')),
             _t('text.89ae43cb0b588b', p0=f'{suggestion_id}', p1=f"{row['user_id']}", p2=f'{interaction.user.mention}')
             + (_t('text.8acfce1d29d4d3', p0=f'{rejection_reason.strip()}') if status == SUGGESTION_STATUS_REJECTED else ""),
             decision_color,

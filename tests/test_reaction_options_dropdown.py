@@ -22,7 +22,7 @@ class ReactionOptionSelectTests(unittest.TestCase):
         node = find_class("HeraldoReactionOptionsSelectView")
         init = next(node for node in node.body if isinstance(node, ast.FunctionDef) and node.name == "__init__")
         code = ast.unparse(init)
-        self.assertIn('Acceso al panel de Reaction Roles', code)
+        self.assertIn('Acceso al panel de Roles por reacción', code)
         self.assertIn('Reacciones invertidas', code)
         self.assertIn('Máximo de reacciones por miembro', code)
         self.assertIn("range(21)", code)
