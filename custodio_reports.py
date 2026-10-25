@@ -285,3 +285,39 @@ async def publish_literal_observation(
             _published_evidence.pop(next(iter(_published_evidence)))
         _published_evidence[key] = report.id
         return report
+
+
+async def unlink_deleted_original(*, guild: discord.Guild, deleted_message_id: int,
+                                  report_channel_id: int) -> bool:
+    """Quitar el enlace de un reporte existente sin tocar la copia literal.
+
+    Solo sirve mientras subsista la referencia efímera en memoria. Tras reiniciar
+    el proceso no se puede reconstruir el índice sin persistencia adicional.
+    """
+    key = (guild.id, deleted_message_id)
+    report_id = _published_evidence.get(key)
+    if report_id is None:
+        return False
+    lock = _publish_locks.setdefault(guild.id, asyncio.Lock())
+    async with lock:
+        report_id = _published_evidence.get(key)
+        if report_id is None:
+            return False
+        channel = _get_safe_existing(guild, report_channel_id)
+        try:
+            message = await channel.fetch_message(report_id)
+            embeds = list(message.embeds)
+            for embed in embeds:
+                fields = list(embed.fields)
+                embed.clear_fields()
+                for field in fields:
+                    if field.name != "Original disponible":
+                        embed.add_field(name=field.name, value=field.value, inline=field.inline)
+            await message.edit(embeds=embeds, allowed_mentions=discord.AllowedMentions.none())
+        except discord.NotFound:
+            _published_evidence.pop(key, None)
+            return False
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            raise ReportChannelError("No se pudo actualizar la referencia del mensaje eliminado.") from exc
+        _published_evidence.pop(key, None)
+        return True
