@@ -1,4 +1,8 @@
 {
+  "channel.purpose.questions": [
+    "Questions",
+    "Dúvidas"
+  ],
   "command.005065ae8a2d82c0": [
     "Keep destination name",
     "Manter nome do destino"
@@ -446,6 +450,22 @@
   "noun.message.one": [
     "message",
     "mensagem"
+  ],
+  "raid.profile.balanced": [
+    "Balanced",
+    "Equilibrada"
+  ],
+  "raid.profile.custom": [
+    "Custom",
+    "Personalizada"
+  ],
+  "raid.profile.moderate": [
+    "Moderate",
+    "Moderada"
+  ],
+  "raid.profile.strict": [
+    "Strict",
+    "Rigorosa"
   ],
   "reaction.access_mode": [
     "Access mode",

@@ -3428,7 +3428,7 @@ async def bootstrap_guild_configuration(guild: discord.Guild, create_missing: bo
     """
     desired_channels = {
         "logs": "El Heraldo",
-        "condemned": _t('text.5c855e784bb201'),
+        "condemned": "Condenados",
         "honeypot": "Honeypot",
         "verification": "Verificación",
         "questions": "Dudas",
@@ -3612,11 +3612,11 @@ class PersonalityVerificationTimeModal(discord.ui.Modal, title=_t('text.968cdc99
 
 
 HERALDO_CHANNEL_DEFINITIONS = {
-    "logs": ("Logs", "El Heraldo"),
-    "condemned": (_t('text.5c855e784bb201'), _t('text.5c855e784bb201')),
+    "logs": (_t('setup.module.logging.label'), "El Heraldo"),
+    "condemned": (_t('text.5c855e784bb201'), "Condenados"),
     "honeypot": ("Honeypot", "Honeypot"),
-    "verification": ("Verificación", "Verificación"),
-    "questions": ("Dudas", "Dudas"),
+    "verification": (_t('setup.module.verification.label'), "Verificación"),
+    "questions": (_t('channel.purpose.questions'), "Dudas"),
 }
 
 
@@ -4066,7 +4066,7 @@ class HeraldoRoleSetupView(discord.ui.View):
         self.pending_roles: dict[str, int] = {}
         definitions = (
             ("sin_verificar", "Sin Verificar", "Sin Verificar"),
-            ("tentado", "Verificación", "Tentad@"),
+            ("tentado", _t('setup.module.verification.label'), "Tentad@"),
             ("condenado", "Condenado", "Condenado"),
         )
         for row_index, (key, label, _default_name) in enumerate(definitions):
@@ -4101,9 +4101,11 @@ class HeraldoRoleSetupView(discord.ui.View):
     @_i18n_context
     def _pending_text(self, guild: discord.Guild) -> str:
         items = []
+        labels = {"sin_verificar": "Sin Verificar",
+                  "tentado": _t('setup.module.verification.label'), "condenado": "Condenado"}
         for key, role_id in self.pending_roles.items():
             role = guild.get_role(role_id)
-            items.append(f"{key.replace('_', ' ').title()} → {role.mention if role else role_id}")
+            items.append(f"{labels[key]} → {role.mention if role else role_id}")
         return _pending_config_text(items)
 
     @_i18n_context
@@ -6740,13 +6742,7 @@ class HeraldoHoneypotDetailsView(HeraldoHoneypotSubView):
 @_i18n_context
 def heraldo_permissions_summary(guild: discord.Guild) -> str:
     lines: list[str] = []
-    channel_defs = (
-        ("logs", "Logs"),
-        ("condemned", _t('text.5c855e784bb201')),
-        ("honeypot", "Honeypot"),
-        ("verification", "Verificación"),
-        ("questions", "Dudas"),
-    )
+    channel_defs = ((key, definition[0]) for key, definition in HERALDO_CHANNEL_DEFINITIONS.items())
     for key, label in channel_defs:
         channel_id = get_guild_channel_id(guild.id, key)
         channel = guild.get_channel(channel_id) if channel_id else None
@@ -6963,7 +6959,7 @@ class HeraldoVerificationSetupView(discord.ui.View):
     async def create_verify_role(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer(ephemeral=True)
         role, created_now, error = await _setup_get_or_create_system_role(
-            interaction.guild, "tentado", "Verificación", "Tentad@"
+            interaction.guild, "tentado", _t('setup.module.verification.label'), "Tentad@"
         )
         if error or role is None:
             await interaction.followup.send(error or _t('text.9bb0e81f4d5d66'), ephemeral=True)
@@ -7244,6 +7240,15 @@ RAID_PRESETS = {
     "equilibrada": (10, 30, 7 * 86400, 60, 900),
     "estricta": (5, 10, 14 * 86400, 50, 1800),
 }
+
+
+def raid_profile_label(value):
+    return {"moderada": _t('raid.profile.moderate'),
+            "equilibrada": _t('raid.profile.balanced'),
+            "estricta": _t('raid.profile.strict'),
+            "personalizada": _t('raid.profile.custom')}[value]
+
+
 RAID_FIELDS = (
     "raid_threshold", "raid_window_seconds", "raid_min_age_seconds",
     "raid_new_account_ratio", "raid_duration_seconds",
@@ -7366,7 +7371,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
             if self.page == 0 else
             _t('text.6982631f6a5311')
         )
-        return (_t('text.8af733400a5d07', p0=f'{self.active_profile().capitalize()}')
+        return (_t('text.8af733400a5d07', p0=f'{raid_profile_label(self.active_profile())}')
                 + _i18n_join("\n", items) + _t('text.55754648d55b18') + help_text
                 + _t('text.daad5f0b250052'))
 
@@ -7422,7 +7427,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
                 placeholder=_t('text.94ebf1baeecc79'),
                 options=[
                     discord.SelectOption(
-                        label=name.capitalize(), value=name,
+                        label=raid_profile_label(name), value=name,
                         description={
                             "moderada": _t('text.387863003a5a7b'),
                             "equilibrada": _t('text.913290398f0372'),
@@ -8319,7 +8324,7 @@ async def open_default_message_studio(
 LOG_TEMPLATE_CATEGORIES = {
     "general": (_t('text.c910d474dcd724'), _t('text.787c3b87df9e73')),
     "members": (_t('text.0d00d93befb181'), _t('text.bd8ea86fe14c75')),
-    "verification": ("Verificación", _t('text.9d49bbd09381e3')),
+    "verification": (_t('setup.module.verification.label'), _t('text.9d49bbd09381e3')),
     "condemnation": (_t('text.f5b397a636a054'), _t('text.1e63dfee898739')),
     "honeypot": ("Honeypot", _t('text.9154d24ba13dbe')),
     "raid": (_t('text.dcedd9e3b0f563'), _t('text.ecca83542a4be1')),
@@ -11524,7 +11529,7 @@ class HeraldoCondemnationSetupView(discord.ui.View):
             await interaction.response.defer(ephemeral=True)
             try:
                 channel = await guild.create_text_channel(
-                    _t('text.5c855e784bb201'),
+                    "Condenados",
                     reason=_t('text.4ef2cf66020ec5'),
                 )
                 created_now = True

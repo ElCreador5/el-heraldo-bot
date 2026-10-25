@@ -83,12 +83,6 @@
     "text": "Sin Verificar",
     "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
   },
-  "6d5ddaf5d3862673f1a9": {
-    "file": "bot.py",
-    "scope": "heraldo_permissions_summary",
-    "text": "Verificación",
-    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
-  },
   "a9a0200a19808efbbec7": {
     "file": "bot.py",
     "scope": "heraldo_permissions_summary",
@@ -135,18 +129,6 @@
     "file": "bot.py",
     "scope": "HeraldoRoleSetupView.__init__",
     "text": "Sin Verificar",
-    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
-  },
-  "7aa1c3cbc32e33ad9dbc": {
-    "file": "bot.py",
-    "scope": "HeraldoRoleSetupView.__init__",
-    "text": "Verificación",
-    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
-  },
-  "49ec53c83dad8ddf949f": {
-    "file": "bot.py",
-    "scope": "HeraldoVerificationSetupView.create_verify_role",
-    "text": "Verificación",
     "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
   },
   "7d505ea73722551fc429": {
@@ -641,12 +623,6 @@
     "text": "no-store",
     "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
   },
-  "55cc5deb780b52092b74": {
-    "file": "bot.py",
-    "scope": "HeraldoCondemnationDurationModal.on_submit",
-    "text": "hasta retirar",
-    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
-  },
   "0024a7c7898038ee46c0": {
     "file": "bot.py",
     "scope": "rr_can_use",
@@ -669,12 +645,6 @@
     "file": "bot.py",
     "scope": "HeraldoReactionOptionsSelectView.select_access_mode",
     "text": "Lista negra",
-    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
-  },
-  "4002c4f50f539f5cce9e": {
-    "file": "bot.py",
-    "scope": "CondemnationDurationModal.on_submit",
-    "text": "hasta retirar",
     "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
   },
   "3a57a28d83b4d6f8cd76": {
@@ -711,12 +681,6 @@
     "file": "bot.py",
     "scope": "HeraldoReactionOptionsModal.on_submit",
     "text": "Lista negra",
-    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
-  },
-  "00af4e8ae6cfb19b71e7": {
-    "file": "bot.py",
-    "scope": "condenar",
-    "text": "hasta retirar",
     "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
   },
   "b532908a432f626aaaf8": {
@@ -1108,5 +1072,17 @@
     "scope": "moderation_case_embed",
     "text": ">\nID: ",
     "reason": "Marcador internacional ID y formato de mención de Discord; no contiene texto traducible."
+  },
+  "f86e607b73753eee0730": {
+    "file": "bot.py",
+    "scope": "HeraldoRoleSetupView._pending_text",
+    "text": "Sin Verificar",
+    "reason": "Nombre propio del rol existente; se conserva separado de la etiqueta funcional traducida."
+  },
+  "60821a91589ee0540473": {
+    "file": "bot.py",
+    "scope": "HeraldoRoleSetupView._pending_text",
+    "text": "Condenado",
+    "reason": "Nombre propio del rol existente; se conserva separado de la etiqueta funcional traducida."
   }
 }

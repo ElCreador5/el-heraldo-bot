@@ -98,6 +98,19 @@ class CatalogAndSourceTests(unittest.TestCase):
             for node in ast.walk(ast.parse(file.read_text())):
                 if isinstance(node, ast.keyword) and node.arg in {'custom_id', 'filename'}:
                     self.assertNotIn('_t(', ast.unparse(node.value), (file.name, node.lineno))
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                    if node.func.attr in {'create_text_channel', 'create_role'}:
+                        names = node.args[:1] if node.func.attr == 'create_text_channel' else []
+                        names += [kw.value for kw in node.keywords if kw.arg == 'name']
+                        for value in names:
+                            self.assertNotIn('_t(', ast.unparse(value), (file.name, node.lineno))
+                if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+                        and target.id in {'desired_channels', 'desired_roles'} for target in node.targets):
+                    self.assertNotIn('_t(', ast.unparse(node.value), (file.name, node.lineno))
+        self.assertEqual({key: value[1] for key, value in b.HERALDO_CHANNEL_DEFINITIONS.items()},
+                         {'logs': 'El Heraldo', 'condemned': 'Condenados', 'honeypot': 'Honeypot',
+                          'verification': 'Verificación', 'questions': 'Dudas'})
+        self.assertTrue(all(type(value[1]) is str for value in b.HERALDO_CHANNEL_DEFINITIONS.values()))
 
 
     def test_static_discord_text_limits_in_all_locales(self):
@@ -187,6 +200,37 @@ class GuildLanguageRuntimeTests(unittest.IsolatedAsyncioTestCase):
             baseline = sqlite_snapshot()
             self.assertEqual(b.validate_setup_view_layouts(self.guild.id), [], locale)
             self.assertEqual(sqlite_snapshot(), baseline, locale)
+
+    async def test_raid_profile_labels_and_summary_use_guild_language_with_stable_values(self):
+        keys = {'moderada': 'raid.profile.moderate', 'equilibrada': 'raid.profile.balanced',
+                'estricta': 'raid.profile.strict', 'personalizada': 'raid.profile.custom'}
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            baseline = sqlite_snapshot()
+            view = b.HeraldoRaidDetectionView(b.HeraldoRaidSetupView(self.guild.id, self.owner))
+            self.assertEqual({x.value for x in view.profile_select.options}, set(keys))
+            for option in view.profile_select.options:
+                self.assertEqual(str(option.label), i18n.translate(locale, keys[option.value]))
+            for name, values in b.RAID_PRESETS.items():
+                view.draft = dict(zip(b.RAID_FIELDS, values))
+                self.assertEqual(view.active_profile(), name)
+                self.assertIn(i18n.translate(locale, keys[name]), view.summary())
+            self.assertEqual(sqlite_snapshot(), baseline)
+
+    async def test_resource_purpose_labels_localize_without_translating_resource_names(self):
+        for locale in i18n.TARGET_LOCALES:
+            self.choose(locale)
+            view = b.HeraldoRoleSetupView(self.guild.id, self.owner)
+            view.pending_roles['tentado'] = 123
+            self.assertIn(i18n.translate(locale, 'setup.module.verification.label'), view._pending_text(self.guild))
+            with i18n.use_guild(self.guild.id):
+                self.assertEqual(str(b.HERALDO_CHANNEL_DEFINITIONS['verification'][0]),
+                                 i18n.translate(locale, 'setup.module.verification.label'))
+                self.assertEqual(b.HERALDO_CHANNEL_DEFINITIONS['verification'][1], 'Verificación')
+            summary = b.heraldo_permissions_summary(self.guild)
+            for key in ['setup.module.logging.label', 'setup.module.verification.label',
+                        'channel.purpose.questions']:
+                self.assertIn(i18n.translate(locale, key), summary)
 
     async def test_custodian_controls_survive_an_external_language_change(self):
         from custodio_setup import CustodioSetupView

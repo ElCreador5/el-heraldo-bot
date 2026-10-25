@@ -1,8 +1,8 @@
 ## 2026-10-25 — Catálogo revisado y ayuda nativa por servidor
 
-Implementación i18n transversal: 3113 claves revisadas, cero pendientes editoriales; 3102 referencias reales y 242 campos nativos de 51 comandos. Se completan mensajes largos, español residual, unidades/entradas localizadas y plurales. La ayuda nativa usa copias por servidor; Guardar idioma actualiza solo ese servidor y permite reintentar fallos en el mismo panel. IDs, permisos, valores, nombres reales, textos personalizados, SQL y footer Lab conservados.
+Implementación i18n transversal: 3118 claves revisadas, cero pendientes editoriales; 3107 referencias reales y 242 campos nativos de 51 comandos. Se completan mensajes largos, español residual, perfiles antirraid, unidades/entradas localizadas y plurales. Los nombres de recursos para búsqueda/creación quedan separados de sus etiquetas traducidas. La ayuda nativa usa copias por servidor; Guardar idioma actualiza solo ese servidor y permite reintentar fallos en el mismo panel. IDs, permisos, valores, nombres reales, textos personalizados, SQL y footer Lab conservados.
 
-Validación: 950 pruebas en tests (948 aprobadas, dos omisiones existentes), 39 en raíz; 987 aprobadas en total. 38 pruebas i18n y cuatro de contrato de idioma incluidas. 38 constructores/modos de setup en los tres idiomas. Clics reales pendientes: Discord exige autenticación en el navegador disponible. Se mantienen avisos parciales y no se declara 100 %. Ver docs/I18N_COVERAGE.md. Railway Test se actualizará al commit validado y su recibo se registrará después; main y producción no se modifican.
+Validación: 952 pruebas en tests (950 aprobadas, dos omisiones existentes), 39 en raíz; 989 aprobadas en total. 40 pruebas i18n y cuatro de contrato de idioma incluidas. 38 constructores/modos de setup en los tres idiomas. Clics reales pendientes: Discord exige autenticación en el navegador disponible. Se mantienen avisos parciales y no se declara 100 %. Ver docs/I18N_COVERAGE.md. Railway Test se actualizará al commit validado y su recibo se registrará después; main y producción no se modifican.
 
 ## 2026-10-25 — Segundo punto de control i18n
 

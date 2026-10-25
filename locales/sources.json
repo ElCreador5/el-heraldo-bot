@@ -3096,7 +3096,12 @@
     "command.dfa7a1aa4d446cb9": "Publica una plantilla mediante un webhook del propio bot, previa confirmación.",
     "command.035e42af9cecabd1": "Configura botones y menús independientes mediante un archivo JSON confirmado.",
     "command.cb3234ec1a480fb4": "Abre el editor visual de texto, embeds, campos e imágenes.",
-    "language.command_sync_pending": "El idioma se guardó, pero no se pudo actualizar la ayuda de comandos. Pulse Guardar cambios para reintentar."
+    "language.command_sync_pending": "El idioma se guardó, pero no se pudo actualizar la ayuda de comandos. Pulse Guardar cambios para reintentar.",
+    "raid.profile.moderate": "Moderada",
+    "raid.profile.balanced": "Equilibrada",
+    "raid.profile.strict": "Estricta",
+    "raid.profile.custom": "Personalizada",
+    "channel.purpose.questions": "Dudas"
   },
   "uses": {
     "text.d93c9b9a2a26ac": [
