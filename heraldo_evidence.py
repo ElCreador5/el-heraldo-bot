@@ -64,9 +64,9 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
             item.add_field(name="Resultado", value=evidence.outcome[:1024], inline=False)
         # Discord embeds no enlazan dinámicamente un campo sin volver a editarlo.
         # La transcripción siempre es visible, exista o no el mensaje original.
-        displayed = chunk.replace("\\", "\\\\").replace("]", "\\]").replace("[", "\\[")
+        displayed = chunk
         if evidence.original_exists and evidence.original_url and index == 0:
-            displayed = f"{displayed}\\nOriginal disponible: {evidence.original_url}"
+            item.add_field(name="Original disponible", value=evidence.original_url[:1024], inline=False)
         item.add_field(name=f"Transcripción literal · {index+1}/{len(chunks)}", value=displayed, inline=False)
         item.set_footer(text=footer, icon_url=icon_url or None)
         embeds.append(item)
