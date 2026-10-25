@@ -1,8 +1,9 @@
 """Regresiones NH: guardados atómicos y sanciones de Verificación."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
-SRC = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+SRC = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SRC)
 def block(name):
     node = next(n for n in TREE.body if isinstance(n, (ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)

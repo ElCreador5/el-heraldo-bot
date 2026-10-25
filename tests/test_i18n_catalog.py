@@ -21,8 +21,10 @@ class I18nCatalogTests(unittest.TestCase):
         self.assertEqual(PARTIAL_LOCALES, frozenset({"en-US", "pt-BR"}))
         for locale in PARTIAL_LOCALES:
             self.assertTrue(translate(locale, "language.title"))
-            self.assertIn("partial" if locale == "en-US" else "parciais",
-                          translate(locale, "language.help"))
+            self.assertEqual(translate(locale, "language.help"), {
+                "en-US": "Other bot features may appear in Spanish. In development.",
+                "pt-BR": "Outras funções do bot podem aparecer em espanhol. Em desenvolvimento.",
+            }[locale])
 
     def test_missing_key_raises_instead_of_using_spanish(self):
         with self.assertRaises(TranslationUnavailable):

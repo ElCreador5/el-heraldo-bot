@@ -1,4 +1,5 @@
 """Pruebas del panel de Custodio: borradores y configuración no destructiva."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
@@ -108,7 +109,7 @@ class CustodioSetupTests(unittest.TestCase):
         self.assertEqual(self.db[(123, KEY_SENSITIVITY)], "strict")
 
     def test_automod_entry_is_present_and_back_not_to_setup_home(self):
-        source = Path(__file__).resolve().parents[1].joinpath("bot.py").read_text(encoding="utf-8")
+        source = _source_text(Path(__file__).resolve().parents[1].joinpath('bot.py'), encoding='utf-8')
         tree = ast.parse(source)
         cls = next(c for c in tree.body if isinstance(c, ast.ClassDef)
                    and c.name == "HeraldoAutomodSetupView")

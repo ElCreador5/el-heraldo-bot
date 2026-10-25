@@ -8,6 +8,7 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 import discord
+import heraldo_i18n as i18n
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from message_components import validate, build_view, ActionConfirm
 from message_editor import VisualEditor, VisualModal
@@ -100,7 +101,7 @@ class EditorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(modal.inputs['index'].default, '1')
         self.assertEqual(modal.inputs['name'].default, 'Nombre')
         self.assertEqual(modal.inputs['value'].default, 'Valor')
-        self.assertEqual(modal.inputs['inline'].default, 'si')
+        self.assertEqual(i18n.bool_input(modal.inputs['inline'].default), 'si')
         await view.select_embed(self.interaction)
         self.assertTrue(view.field_selector.disabled)
         self.assertEqual(view.field_index, 0)

@@ -2,6 +2,7 @@
 
 No importa bot.py ni se conecta a Discord. Las llamadas de sanción son simuladas.
 """
+from i18n_source_helpers import source_text as _source_text
 import ast
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -11,7 +12,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 
-TREE = ast.parse((Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8"))
+TREE = ast.parse(_source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8'))
 
 
 def isolated_function(name, dependencies):

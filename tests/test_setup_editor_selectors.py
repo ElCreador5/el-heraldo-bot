@@ -2,12 +2,13 @@
 
 No se importa bot.py ni se conecta Discord durante estas pruebas.
 """
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
 
 BOT = Path(__file__).resolve().parents[1] / "bot.py"
-TREE = ast.parse(BOT.read_text(encoding="utf-8"))
+TREE = ast.parse(_source_text(BOT, encoding='utf-8'))
 
 
 def cls(name):

@@ -2,6 +2,7 @@
 
 Estas pruebas inspeccionan métodos reales y simulan el descarte sin conectar al bot.
 """
+from i18n_source_helpers import source_text as _source_text
 import ast
 import asyncio
 import unittest
@@ -9,7 +10,7 @@ from honeypot_interactions import honeypot_operation
 from pathlib import Path
 from types import SimpleNamespace
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 
 

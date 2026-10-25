@@ -1,9 +1,10 @@
 """Contrato de presentación de Custodio sin ejecutar Discord ni sanciones."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
 
-SOURCE = (Path(__file__).resolve().parents[1] / "custodio_setup.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'custodio_setup.py', encoding='utf-8')
 TREE = ast.parse(SOURCE)
 
 

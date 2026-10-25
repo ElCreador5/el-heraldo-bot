@@ -2,6 +2,7 @@
 
 Extrae solo las funciones necesarias: no importa el bot ni utiliza Discord/SQLite real.
 """
+from i18n_source_helpers import source_text as _source_text
 import ast
 import asyncio
 from datetime import datetime
@@ -33,7 +34,7 @@ class FakeColor:
 
 
 def load_functions(*names):
-    source = BOT_SOURCE.read_text(encoding="utf-8")
+    source = _source_text(BOT_SOURCE, encoding='utf-8')
     tree = ast.parse(source, filename=str(BOT_SOURCE))
     found = [node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name in names]
     if {node.name for node in found} != set(names):
@@ -121,7 +122,7 @@ class ConsolidatedCondemnationLogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.ns["log_embed"].await_args.args[1], "Purga completada")
 
     def test_condemnation_handler_uses_consolidating_helper(self):
-        source = BOT_SOURCE.read_text(encoding="utf-8")
+        source = _source_text(BOT_SOURCE, encoding='utf-8')
         tree = ast.parse(source)
         handler = next(
             n for n in tree.body

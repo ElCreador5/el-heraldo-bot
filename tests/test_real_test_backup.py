@@ -1,4 +1,5 @@
 """Offline failure/concurrency checks; real service evidence is documented separately."""
+from i18n_source_helpers import source_text as _source_text
 import asyncio
 from contextlib import closing, redirect_stdout
 from datetime import datetime, timezone
@@ -42,7 +43,7 @@ class RealTestBackupTests(unittest.TestCase):
 
     def upload(self, package, environment, *, object_name):
         # Assert the reference survives even if the HTTP response is lost.
-        receipt = json.loads((self.state / 'heraldo-test-20261018.json').read_text())
+        receipt = json.loads(_source_text(self.state / 'heraldo-test-20261018.json'))
         self.assertEqual(receipt['object'], object_name)
         self.assertEqual(receipt['status'], 'upload_unconfirmed')
         self.assertNotIn(object_name, self.objects)

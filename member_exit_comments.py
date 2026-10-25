@@ -4,6 +4,7 @@ No importa discord.py ni inicia conexiones de red. La migración crea únicament
 una tabla propia; no modifica las tablas de miembros, moderación o mensajes.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,7 @@ def init_storage(conn: sqlite3.Connection) -> None:
     )
 
 
+@_i18n_context
 def create_pending(
     conn: sqlite3.Connection, *,
     guild_id: int, user_id: int,
@@ -62,6 +64,7 @@ def create_pending(
     return cur.rowcount == 1
 
 
+@_i18n_context
 def attach_dm(conn: sqlite3.Connection, *, guild_id: int, log_message_id: int,
               dm_message_id: int) -> bool:
     cur = conn.execute(
@@ -90,7 +93,7 @@ def submit_comment(conn: sqlite3.Connection, *, dm_message_id: int,
                    user_id: int, comment: str, now: datetime | None = None) -> bool:
     value = comment.strip()
     if not value or len(value) > COMMENT_LIMIT:
-        raise ValueError("El comentario debe contener entre 1 y 500 caracteres.")
+        raise ValueError(_t('text.459b161da6266b'))
     timestamp = now or utcnow()
     cur = conn.execute(
         """UPDATE member_exit_comments SET comment=?, submitted_at=?
@@ -101,6 +104,7 @@ def submit_comment(conn: sqlite3.Connection, *, dm_message_id: int,
     return cur.rowcount == 1
 
 
+@_i18n_context
 def mark_applied(conn: sqlite3.Connection, *, guild_id: int,
                  log_message_id: int, now: datetime | None = None) -> bool:
     cur = conn.execute(

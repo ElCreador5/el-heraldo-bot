@@ -1,4 +1,5 @@
 """Regresiones estructurales: opciones de Reaction Roles sin escritura manual."""
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 from pathlib import Path
@@ -8,7 +9,7 @@ SRC = Path(__file__).resolve().parents[1] / "bot.py"
 
 
 def find_class(name):
-    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    tree = ast.parse(_source_text(SRC, encoding='utf-8'))
     return next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name)
 
 

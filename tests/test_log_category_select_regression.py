@@ -1,4 +1,5 @@
 """Regression test: log category options must not send invalid emoji payloads."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
@@ -6,7 +7,7 @@ import unittest
 
 class LogCategorySelectTests(unittest.TestCase):
     def test_log_category_options_do_not_use_invalid_emoji(self):
-        source = Path(__file__).resolve().parents[1].joinpath("bot.py").read_text(encoding="utf-8")
+        source = _source_text(Path(__file__).resolve().parents[1].joinpath('bot.py'), encoding='utf-8')
         module = ast.parse(source)
         categories = next(
             ast.literal_eval(node.value)

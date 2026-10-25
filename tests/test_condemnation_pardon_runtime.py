@@ -1,5 +1,6 @@
 """Ensayos aislados de la edición REAL del mensaje, sin iniciar bot ni tocar Discord."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 from datetime import datetime, timezone
@@ -14,7 +15,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
 
 
 def isolated_card():
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"), filename=str(SOURCE))
+    tree = ast.parse(_source_text(SOURCE, encoding='utf-8'), filename=str(SOURCE))
     selected = [node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)
                 and node.name == "condemnation_update_pardoned_card"]
     assert len(selected) == 1
@@ -124,7 +125,7 @@ class PardonCardRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.message.edit.assert_not_awaited()
 
     def test_release_prioritizes_card_before_optional_thread_close(self):
-        code = SOURCE.read_text(encoding="utf-8")
+        code = _source_text(SOURCE, encoding='utf-8')
         block = code[code.index("async def _release_condemned_member_inner("):
                      code.index("async def check_expired_condemnations(", code.index("async def _release_condemned_member_inner("))]
         self.assertLess(block.index("card_ok = await condemnation_update_pardoned_card("),

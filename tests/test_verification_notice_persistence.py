@@ -1,4 +1,5 @@
 """Regresión: avisos de verificación idempotentes y aislamiento del bot Test."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import copy
 import hashlib
@@ -9,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE = ast.parse(SOURCE)
 
 

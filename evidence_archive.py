@@ -3,6 +3,7 @@
 El ledger guarda referencias/hashes, no credenciales ni adjuntos. Un envío cuyo
 resultado se desconoce permanece pendiente: nunca se reenvía automáticamente.
 """
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 import asyncio
 from contextlib import closing
 import hashlib
@@ -13,6 +14,7 @@ import sqlite3
 import discord
 
 
+@_i18n_context
 def private_channel(guild, channel):
     if not isinstance(channel, discord.TextChannel) or guild.me is None:
         return False
@@ -33,6 +35,7 @@ def private_channel(guild, channel):
     return bool(p.view_channel and p.send_messages and p.attach_files and p.read_message_history)
 
 
+@_i18n_context
 def snapshot(message):
     # Estos formatos contienen recursos que aún no se copian íntegramente.
     if message.stickers or message.poll or getattr(message, 'message_snapshots', []):
@@ -72,6 +75,7 @@ def ledger(db_path, key, operation, value=None):
                      (operation, json.dumps(value), key))
 
 
+@_i18n_context
 async def verify(channel, receipts):
     if not receipts:
         return False
@@ -88,6 +92,7 @@ async def verify(channel, receipts):
     return True
 
 
+@_i18n_context
 async def preserve(message, archive_channel, db_path):
     """Devuelve referencia solo tras lectura íntegra. Los errores los maneja el llamador."""
     guild = message.guild

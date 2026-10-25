@@ -1,4 +1,5 @@
 """Pruebas aisladas de H-03: sin red, Discord ni SQLite de producción."""
+from i18n_source_helpers import source_text as _source_text
 import json
 import os
 import sys
@@ -244,7 +245,7 @@ class StartupGateTests(unittest.TestCase):
 
 class BootWiringTests(unittest.TestCase):
     def test_main_process_runs_gate_before_creating_bot(self):
-        code = (Path(__file__).resolve().parent.parent / "bot.py").read_text(encoding="utf-8")
+        code = _source_text(Path(__file__).resolve().parent.parent / 'bot.py', encoding='utf-8')
         self.assertLess(code.index("_h03_enforce_startup()"), code.index("bot = commands.Bot("))
         self.assertIn('if __name__ == "__main__":\n    from h03_startup_gate', code)
 

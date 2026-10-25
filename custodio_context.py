@@ -4,6 +4,7 @@ Un marcador de edad no modifica ni sustituye las Server Rules aprobadas.
 Discord Guild NSFW: 0=indeterminado, 1=explicit, 2=safe, 3=age_restricted.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 
 from dataclasses import dataclass
 from enum import Enum
@@ -30,10 +31,12 @@ class CommunityContext:
     rules_approved: bool
 
     @property
+    @_i18n_context
     def can_evaluate(self) -> bool:
         return bool(self.rules_revision and self.rules_approved)
 
 
+@_i18n_context
 def classify_community(
     guild_id: int, channel_id: int,
     guild_nsfw_level: Any, channel_is_nsfw: bool | None,
@@ -71,20 +74,20 @@ def may_collect_evidence(context: CommunityContext, is_accessible: bool, is_excl
 
 PUBLIC_NETWORKS = (
     {
-        "name": "Reddit",
-        "role": "Estudio de patrones generales y políticas de moderación",
+        "name": _t('text.eb0050f72303bc'),
+        "role": _t('text.d9ed49787a687f'),
         "source": "https://redditinc.com/policies/data-api-terms",
         "training": "not_authorized",
     },
     {
         "name": "X",
-        "role": "Estudio de conversaciones públicas y normas de automatización",
-        "source": "https://x.com/en/tos",
+        "role": _t('text.5925eccab1dffa'),
+        "source": _t('text.3e344b07d5ed24'),
         "training": "not_authorized",
     },
     {
-        "name": "Instagram",
-        "role": "Estudio de mecanismos públicos de denuncia y normas de plataforma",
+        "name": _t('text.bad57ef7837c8e'),
+        "role": _t('text.81df47bd1eed5c'),
         "source": "https://www.facebook.com/legal/automated_data_collection_terms",
         "training": "not_authorized",
     },

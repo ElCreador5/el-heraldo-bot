@@ -1,4 +1,5 @@
 """Regresiones aisladas: máximo configurable de advertencias vigentes 1–5."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -6,7 +7,7 @@ import sqlite3
 import tempfile
 import unittest
 
-TREE = ast.parse((Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8"))
+TREE = ast.parse(_source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8'))
 
 
 def isolate(name, context):

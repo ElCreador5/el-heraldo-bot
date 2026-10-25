@@ -4,14 +4,15 @@ El control no certifica por sí solo todas las vistas: esas requieren tests espe
 y comprobaciones reales en Heraldo's Lab. Falla si se pierde el estándar o la cobertura CI.
 """
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-BOT = ast.parse((ROOT / "bot.py").read_text(encoding="utf-8"))
+AGENTS = _source_text(ROOT / 'AGENTS.md', encoding='utf-8')
+BOT = ast.parse(_source_text(ROOT / 'bot.py', encoding='utf-8'))
 
 
 def button_decorators():
@@ -71,7 +72,7 @@ class UxContractGate(unittest.TestCase):
         self.assertGreater(found["back"], 0)
 
     def test_core_ux_regressions_are_run_by_existing_ci(self):
-        workflow = (ROOT / ".github/workflows/heraldo-lab-checks.yml").read_text("utf-8")
+        workflow = _source_text(ROOT / '.github/workflows/heraldo-lab-checks.yml', 'utf-8')
         self.assertIn("unittest discover -s tests -p 'test_*.py'", workflow)
         for test in (
             "test_button_palette.py",

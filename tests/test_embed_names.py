@@ -1,5 +1,6 @@
 """Pruebas aisladas: nombres naturales en /embed y compatibilidad SQLite."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 import ast
 import json
 import re
@@ -12,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
-CODE = SOURCE.read_text("utf-8")
+CODE = _source_text(SOURCE, 'utf-8')
 TREE = ast.parse(CODE)
 FUNCS = {n.name: n for n in TREE.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
 

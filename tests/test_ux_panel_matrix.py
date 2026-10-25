@@ -6,6 +6,7 @@ navegar no persiste cambios en SQLite. No simula acciones de administración
 destructivas ni declara cubiertos todos los subpaneles profundos.
 """
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import unittest
 from types import SimpleNamespace as NS
@@ -124,7 +125,7 @@ class SetupSelectorDraftPersistenceTests(unittest.TestCase):
         import ast
         from pathlib import Path
         source = Path(__file__).resolve().parents[1] / "bot.py"
-        tree = ast.parse(source.read_text(encoding="utf-8"))
+        tree = ast.parse(_source_text(source, encoding='utf-8'))
         forbidden = {
             "guild_config_set", "guild_resource_set",
             "hp_setting_set", "hp_add_trap", "hp_remove_trap",

@@ -44,7 +44,11 @@ class HoneypotConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             release.set()
             await task
             add.assert_called_once()
-            save.assert_called_once_with(901, "honeypot_action", "timeout")
+            writes = [call.args for call in save.call_args_list]
+            self.assertEqual(writes.count((901, "honeypot_action", "timeout")), 1)
+            self.assertEqual({key for gid, key, val in writes}, {
+                "honeypot_action", "honeypot_enabled", "honeypot_paused", "honeypot_warning_enabled"
+            })
             self.assertIn("en curso", second.followup.send.call_args.args[0])
 
     async def test_concurrent_warning_sync_creates_one_message(self):

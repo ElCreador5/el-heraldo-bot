@@ -1,5 +1,6 @@
 """Regresiones aisladas del flujo de fusión de canales y su seguridad."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 import asyncio
@@ -9,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 TOP = {node.name: node for node in TREE.body if isinstance(
     node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)

@@ -4,6 +4,7 @@ El informe de Discord es una copia explícita en un canal privado; el vínculo
 solo se agrega si el mensaje original fue verificado como disponible.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import discord
@@ -17,11 +18,12 @@ class LiteralEvidence:
     verbatim: str
     rule_quote: str | None = None
     rule_number: int | None = None
-    conduct: str = "Conducta pendiente de revisión"
-    outcome: str = "Solo reportar"
+    conduct: str = _t('text.5f7cc9faf6c801')
+    outcome: str = _t('text.fb57b92cfc0723')
     original_url: str | None = None
     original_exists: bool = False
 
+    @_i18n_context
     def __post_init__(self):
         if self.occurred_at.tzinfo is None:
             raise ValueError("timestamp_requires_timezone")
@@ -59,27 +61,27 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
     stamp = evidence.occurred_at.astimezone(timezone.utc)
     for index, chunk in enumerate(chunks):
         item = discord.Embed(
-            title="El Heraldo · Evidencia" if index == 0 else f"Evidencia · Parte {index+1}/{len(chunks)}",
-            description="Registro literal para revisión; no constituye prueba concluyente.",
+            title=_t('text.ddee76accf5041') if index == 0 else _t('text.325a947cbeea43', p0=f'{index + 1}', p1=f'{len(chunks)}'),
+            description=_t('text.46f21fb5b47836'),
             color=discord.Color.orange(), timestamp=stamp,
         )
         if index == 0:
-            item.add_field(name="Miembro", value=evidence.actor[:1024], inline=True)
-            item.add_field(name="Servidor y canal", value=f"{evidence.guild} · {evidence.channel}"[:1024], inline=True)
-            item.add_field(name="Fecha y hora", value=discord_local_timestamp(evidence.occurred_at), inline=False)
-            item.add_field(name="Conducta", value=evidence.conduct[:1024], inline=False)
-            item.add_field(name="Resultado", value=evidence.outcome[:1024], inline=False)
+            item.add_field(name=_t('text.e841f8bfd02f85'), value=evidence.actor[:1024], inline=True)
+            item.add_field(name=_t('text.cb99a42f984137'), value=f"{evidence.guild} · {evidence.channel}"[:1024], inline=True)
+            item.add_field(name=_t('text.b0bddd1a69b779'), value=discord_local_timestamp(evidence.occurred_at), inline=False)
+            item.add_field(name=_t('text.0c46011974c95e'), value=evidence.conduct[:1024], inline=False)
+            item.add_field(name=_t('text.a71bc39fe3f33e'), value=evidence.outcome[:1024], inline=False)
         # Discord embeds no enlazan dinámicamente un campo sin volver a editarlo.
         # La transcripción siempre es visible, exista o no el mensaje original.
         displayed = chunk
         if evidence.original_exists and evidence.original_url and index == 0:
-            item.add_field(name="Original disponible", value=evidence.original_url[:1024], inline=False)
-        item.add_field(name=f"Transcripción literal · {index+1}/{len(chunks)}", value=displayed, inline=False)
+            item.add_field(name=_t('text.a376d1351c3f23'), value=evidence.original_url[:1024], inline=False)
+        item.add_field(name=_t('text.ed432ad50b8d94', p0=f'{index + 1}', p1=f'{len(chunks)}'), value=displayed, inline=False)
         item.set_footer(text=footer, icon_url=icon_url or None)
         embeds.append(item)
     for index, fragment in enumerate(parts):
-        item = discord.Embed(title="Regla oficial citada literalmente", color=discord.Color.orange(), timestamp=stamp)
-        item.add_field(name=f"Regla {evidence.rule_number} · Parte {index+1}/{len(parts)}", value=fragment, inline=False)
+        item = discord.Embed(title=_t('text.6bbb7c3704b1b8'), color=discord.Color.orange(), timestamp=stamp)
+        item.add_field(name=_t('text.b9ea7f24caa539', p0=f'{evidence.rule_number}', p1=f'{index + 1}', p2=f'{len(parts)}'), value=fragment, inline=False)
         item.set_footer(text=footer, icon_url=icon_url or None)
         embeds.append(item)
     return embeds

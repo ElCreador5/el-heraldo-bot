@@ -3,13 +3,14 @@
 Revisión estática de todas las vistas más ejecución aislada de los dos retornos
 corregidos; no requiere conectar al Gateway de Discord.
 """
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock, patch
 
-CODE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+CODE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(CODE)
 
 
@@ -40,7 +41,7 @@ def buttons(name):
 
 class NHButtonsNavigation(unittest.TestCase):
     def test_nh_is_mandatory_and_honest_about_discord_width(self):
-        text = (Path(__file__).resolve().parents[1] / "AGENTS.md").read_text("utf-8")
+        text = _source_text(Path(__file__).resolve().parents[1] / 'AGENTS.md', 'utf-8')
         policy = text.split("### UX-03B", 1)[1].split("### UX-04", 1)[0]
         for phrase in ("Volver", "submenú inmediatamente anterior", "ancho arbitrario",
                        "cinco botones", "filas", "futuros", "Heraldo's Lab"):

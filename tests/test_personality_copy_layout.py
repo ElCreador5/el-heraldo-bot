@@ -1,8 +1,9 @@
 """NH: contrato del texto y controles de Verificación de personalidad."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
-SRC=(Path(__file__).resolve().parents[1]/"bot.py").read_text("utf-8")
+SRC=_source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE=ast.parse(SRC)
 def get(name):
     return next(n for n in TREE.body if isinstance(n,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)

@@ -1,5 +1,6 @@
 """Pruebas ejecutables de privacidad y auditoría, sin iniciar Discord."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 import asyncio
@@ -8,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace as NS
 
-TEXT = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+TEXT = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE = ast.parse(TEXT)
 
 

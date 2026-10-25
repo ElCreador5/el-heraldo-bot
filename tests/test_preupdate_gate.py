@@ -1,4 +1,5 @@
 """Synthetic SQLite/AES-GCM round trips; remote HTTP and release are simulated."""
+from i18n_source_helpers import source_text as _source_text
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -67,7 +68,7 @@ class PreupdateTests(unittest.TestCase):
         return self.state / ("lab-preupdate-" + self.request + ".json")
 
     def change_receipt(self, **values):
-        data = json.loads(self.receipt().read_text())
+        data = json.loads(_source_text(self.receipt()))
         data.update(values)
         self.receipt().write_text(json.dumps(data))
 
@@ -107,7 +108,7 @@ class PreupdateTests(unittest.TestCase):
 
     def test_forged_local_receipt_cannot_authorize_daily_object(self):
         job.run_once(self.db, self.state, environment="lab", revision=self.source, now=self.started)
-        data = json.loads(next(self.state.glob("lab-*.json")).read_text())
+        data = json.loads(_source_text(next(self.state.glob('lab-*.json'))))
         data.update(version=2, operation=gate._binding(self.request, self.source, self.target))
         job._write_receipt(self.receipt(), data, initial=True)
         with self.assertRaisesRegex(job.BackupJobError, "remote_binding_mismatch"):
@@ -148,7 +149,7 @@ class PreupdateTests(unittest.TestCase):
 
     def test_old_future_naive_and_slow_receipts_block_controller(self):
         self.prepare()
-        original = json.loads(self.receipt().read_text())
+        original = json.loads(_source_text(self.receipt()))
         cases = [
             {"started_at": (self.started - timedelta(hours=1)).isoformat()},
             {"finished_at": (self.now + timedelta(seconds=1)).isoformat()},
@@ -171,8 +172,8 @@ class PreupdateTests(unittest.TestCase):
             self.publish()
         self.apply.assert_called_once()
         authorization = next(self.state.glob("*.authorization.json"))
-        self.assertIn("needs_manual_review", authorization.read_text())
-        self.assertNotIn("private-provider-error", authorization.read_text())
+        self.assertIn("needs_manual_review", _source_text(authorization))
+        self.assertNotIn("private-provider-error", _source_text(authorization))
 
     def test_same_lock_covers_verification_and_update(self):
         self.prepare()
@@ -206,7 +207,7 @@ class PreupdateTests(unittest.TestCase):
         with self.assertRaisesRegex(RecoveryError, "foreign_keys_failed"):
             self.prepare()
         self.up.assert_not_called()
-        self.assertEqual(json.loads(self.receipt().read_text())["status"], "needs_manual_review")
+        self.assertEqual(json.loads(_source_text(self.receipt()))["status"], "needs_manual_review")
 
     def test_ambiguous_preupdate_upload_never_retried(self):
         self.up.side_effect = TimeoutError("private-url")

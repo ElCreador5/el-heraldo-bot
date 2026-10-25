@@ -1,0 +1,914 @@
+{
+  "c833fdf6bec5470a81f0": {
+    "file": "backup_job.py",
+    "scope": "main",
+    "text": "Ejecutar H-03 remoto una sola vez; sin Discord",
+    "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
+  },
+  "462aeeebf19d010d259b": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "{servidor}",
+    "reason": "Variable técnica o pista de identidad; no sustituir su identificador."
+  },
+  "f61f67505c511b26d213": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "El Heraldo's Labs 🧪",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "5b4e0ebde9d3b81a330c": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "Español (Latinoamérica)",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "d2b359b170a20cd742e0": {
+    "file": "bot.py",
+    "scope": "",
+    "text": " -_.(),!:;¿?¡+#&",
+    "reason": "Conjunto de caracteres permitido por el validador."
+  },
+  "7ec5348505c7a3385918": {
+    "file": "bot.py",
+    "scope": "evaluate_member",
+    "text": "no-obligatorio",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "5cf4dce6659d6fc4dbb3": {
+    "file": "bot.py",
+    "scope": "bootstrap_guild_configuration",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "5ed36ea29dd7617c16c2": {
+    "file": "bot.py",
+    "scope": "bootstrap_guild_configuration",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "c0eb222696051074cad4": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "b58c8c8a016a938a5b8e": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "401dd82658791771cea1": {
+    "file": "bot.py",
+    "scope": "configuration_review_label",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "3aeaa8c1131f05bf0516": {
+    "file": "bot.py",
+    "scope": "fusion_clean_name",
+    "text": "canal-fusionado",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "a8984b68d62ab4cb6e2f": {
+    "file": "bot.py",
+    "scope": "server_footer_text",
+    "text": "{servidor}",
+    "reason": "Variable técnica o pista de identidad; no sustituir su identificador."
+  },
+  "da58e919b1a06506c3ba": {
+    "file": "bot.py",
+    "scope": "server_footer_text",
+    "text": "${servidor}",
+    "reason": "Variable técnica o pista de identidad; no sustituir su identificador."
+  },
+  "f1f4958d16a661b335e9": {
+    "file": "bot.py",
+    "scope": "bootstrap_guild_configuration",
+    "text": "Sin Verificar",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "6d5ddaf5d3862673f1a9": {
+    "file": "bot.py",
+    "scope": "heraldo_permissions_summary",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "a9a0200a19808efbbec7": {
+    "file": "bot.py",
+    "scope": "heraldo_permissions_summary",
+    "text": "Sin Verificar",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "5ebb3b20b6e95cb5ef88": {
+    "file": "bot.py",
+    "scope": "heraldo_template_payload",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "db57f744860d94029f46": {
+    "file": "bot.py",
+    "scope": "parse_purge_spec",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "c89945c4103ac9b123da": {
+    "file": "bot.py",
+    "scope": "_build_condemnation_embed",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "57a4b36d4a5076c99244": {
+    "file": "bot.py",
+    "scope": "_condemnation_render_template",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "fdda7d23788065a1c3b2": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "servidor",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "166b40d287e66ccdc0f5": {
+    "file": "bot.py",
+    "scope": "",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "d7e01666939bb05f01cb": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesView.verification",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "94ef15a872e26df00b3d": {
+    "file": "bot.py",
+    "scope": "HeraldoRoleSetupView.__init__",
+    "text": "Sin Verificar",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "7aa1c3cbc32e33ad9dbc": {
+    "file": "bot.py",
+    "scope": "HeraldoRoleSetupView.__init__",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "49ec53c83dad8ddf949f": {
+    "file": "bot.py",
+    "scope": "HeraldoVerificationSetupView.create_verify_role",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "7d505ea73722551fc429": {
+    "file": "bot.py",
+    "scope": "HeraldoVerificationSetupView.create_sin_role",
+    "text": "Sin Verificar",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "5cc7bc897faf53cf0e89": {
+    "file": "bot.py",
+    "scope": "LogTemplateVisualModal.on_submit",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "a1326cf6a58d8160f2cc": {
+    "file": "bot.py",
+    "scope": "LogTemplateVisualModal.on_submit",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "72c76fbf5a7cdbf2a9d0": {
+    "file": "bot.py",
+    "scope": "heraldo_message_components_dispatch",
+    "text": "añadir",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "d401ba3dc992d3372185": {
+    "file": "bot.py",
+    "scope": "ModerationReactionRuleModal.on_submit",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "bdc073a3fd4328780f22": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsModal.on_submit",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "1121c3bfe9eec94a0048": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsModal.on_submit",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "c5f20d5f401c983da3b1": {
+    "file": "bot.py",
+    "scope": "synchronize_published_panels",
+    "text": "No se pudo",
+    "reason": "Clasificación interna de diagnósticos; no se emite este literal."
+  },
+  "a542fbef8de09b598df6": {
+    "file": "bot.py",
+    "scope": "moderation_case_embed",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "ed801047b1c876fdaf84": {
+    "file": "bot.py",
+    "scope": "_var_resolve",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "ddb5d51777554dc6b137": {
+    "file": "bot.py",
+    "scope": "_var_resolve",
+    "text": "miembro",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "8cb7d20b527ee4b63cf1": {
+    "file": "bot.py",
+    "scope": "EmbedFieldModal.__init__",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "06860980603878a3b475": {
+    "file": "bot.py",
+    "scope": "EmbedFieldModal.on_submit",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "9dd6d71fa8787bca9296": {
+    "file": "bot.py",
+    "scope": "EmbedEditorView.__init__",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "9cb32afc78a5d9b57a29": {
+    "file": "bot.py",
+    "scope": "EmbedEditorView.__init__",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "acdd836f9732f3dd1a71": {
+    "file": "bot.py",
+    "scope": "EmbedEditorView.toggle_time",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "0668658e54b119a8052d": {
+    "file": "bot.py",
+    "scope": "EmbedEditorView.toggle_time",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "9bea69ce1bf7174bfd3b": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "no pude",
+    "reason": "Clasificación interna de diagnósticos; no se emite este literal."
+  },
+  "cdecacd1409da535cda6": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "ce89c79c4dde35ea7562": {
+    "file": "bot.py",
+    "scope": "_log_parse_fields",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "d178572b015cfa076b22": {
+    "file": "bot.py",
+    "scope": "LogTemplateVisualModal.__init__",
+    "text": "sí",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "7591b16a22030080a132": {
+    "file": "bot.py",
+    "scope": "LogTemplateVisualModal.__init__",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "ea4f03a60c6c0e6b548b": {
+    "file": "bot.py",
+    "scope": "HeraldoMessageRoleModal.on_submit",
+    "text": "añadir",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "57b27a9a25766edf8b8f": {
+    "file": "bot.py",
+    "scope": "heraldo_message_role_action",
+    "text": "añadir",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "6fb428a165ddfbe7b2a3": {
+    "file": "bot.py",
+    "scope": "variable_suggestions",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "6cd68ce180b0641925b3": {
+    "file": "bot.py",
+    "scope": "HeraldoVerificationSetupView.create_verify_channel",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "f00160327b7510da102a": {
+    "file": "bot.py",
+    "scope": "HeraldoLoggingSetupView.create_channel",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "6d41e81e547e98363a1e": {
+    "file": "bot.py",
+    "scope": "_condemn_member_inner",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "dccf0ac4b8799f915755": {
+    "file": "bot.py",
+    "scope": "variable_suggestions",
+    "text": "miembro",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "aef67c4c8ea2198ab12e": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesSetupView.__init__",
+    "text": "Verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "8bda709958ad2cce9c75": {
+    "file": "bot.py",
+    "scope": "HeraldoLoggingSetupView.create_channel",
+    "text": "el heraldo",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "bc5ec0061e4e133f7eb8": {
+    "file": "bot.py",
+    "scope": "_release_condemned_member_inner",
+    "text": "El Heraldo",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "8558ac405308bb8400bc": {
+    "file": "bot.py",
+    "scope": "HeraldoVerificationSetupView.create_verify_channel",
+    "text": "verificación",
+    "reason": "Nombre real o predeterminado de un recurso de Discord; conservar identidad."
+  },
+  "e47798e5e9d2842917b2": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Debates públicos, contexto de respuesta y categorías de toxicidad",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "06f12bae5b4f3cd46328": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Comentarios de debates colaborativos con anotaciones humanas",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "4627ddfa2dfb28c2e31e": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Pruebas funcionales de errores y falsos positivos en español",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "2ec417d138a470e09eef": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Creo que tu estrategia no funciona porque deja el equipo expuesto.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "fed1447b2ba0360d636c": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Una persona intenta abandonar una conversación; la otra insiste.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "ca40440cab33f0dee36b": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Te seguiré enviando mensajes aunque me pidas que pare.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "9f332dcac5e833843863": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Entre compañeros hay bromas frecuentes, sin contexto suficiente.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "37dd6408c9ca46db0b35": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Un miembro denuncia un mensaje recibido.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "e24680c4b80b53d97320": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Alguien me insultó en privado; ¿pueden revisar mi reporte?",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "bd5b44694aa92f165e03": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Un miembro cita una frase ajena para reportarla.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "c20a0fe37eb9a865653a": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Esta frase fue ofensiva; la comparto únicamente para denunciarla.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "52b16dccf60cac45e376": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Usuario publica repetidamente el mismo anuncio sin autorización.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "48f80140c68462e10eb8": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "¡Entren todos al enlace del anuncio!",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "f08ac98f499073a3c7c9": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Mensaje único de celebración en un canal general.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "313be3963ecc99292403": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "¡Qué bien! 🎉🎉",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "919dc64890c36adfe95a": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Miembro pregunta por una noticia tecnológica.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "3ef35a8bbd8d718bac7e": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "¿Alguien tiene una fuente fiable que explique este cambio?",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "d8242ecc1efde3164d43": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Para recibir el premio debes entregar la contraseña.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "17380ba4600f9a9447b5": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "No se dispone de información para confirmar la identidad.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "f19230b80833f6a4b4c7": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Soy parte del equipo, escríbeme por privado.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "9e393c1acbbf4b80abdd": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Un miembro busca ayuda para eliminar datos expuestos.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "fd1b54a39f6fc2607f56": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Alguien compartió mi teléfono sin permiso; necesito ayuda.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "37ec7e1ca4115dc0dd76": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Publiquemos el número privado de otra persona.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "d84641d7aaf413ec48c4": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Miembro quiere impugnar una decisión de moderación.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "b888cb11efe691165427": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "No estoy de acuerdo con la sanción; ¿dónde puedo apelar?",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "753826302df8e2058b8d": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Un miembro comenta que piensa usar otra cuenta para esquivar medidas.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "e43df1a64dc064887d05": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Si me sancionan, entraré con otra cuenta para continuar.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "b31f64a96833f50d6f75": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Un miembro expresa frustración pero no evade medidas.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "cd3b3569301810b8f1d2": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Si me sancionan otra vez, dejaré de participar.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "b34999d196589cd2ed47": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Conversación educativa sin descalificar colectivos.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "578f063e297af3bebe25": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Estamos estudiando por qué la discriminación es perjudicial.",
+    "reason": "Texto sintético del benchmark; no es un mensaje del bot."
+  },
+  "fa0fedd1ac0b2257d111": {
+    "file": "custodio_reports.py",
+    "scope": "",
+    "text": "El Heraldo · Modo Custodio · Reportes privados",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "9eeb7b6e8020ab84117b": {
+    "file": "h03_railway_test_api.py",
+    "scope": "",
+    "text": "ElCreador5/el-heraldo-bot",
+    "reason": "Contrato de infraestructura o cabecera HTTP."
+  },
+  "2c84fc831a8282f390a8": {
+    "file": "issue23_https_backup.py",
+    "scope": "run_once",
+    "text": "no-store",
+    "reason": "Contrato de infraestructura o cabecera HTTP."
+  },
+  "3e5498d5def30b26cfff": {
+    "file": "message_automation.py",
+    "scope": "WebhookTemplateConfirmView.publish",
+    "text": "El Heraldo - Mensajes",
+    "reason": "Nombre propio, identidad de laboratorio, idioma o marcador persistente."
+  },
+  "d631c18e70c8c240b5bf": {
+    "file": "message_components.py",
+    "scope": "",
+    "text": "añadir_rol",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "afea21a9d1e9252a4f5f": {
+    "file": "message_components.py",
+    "scope": "",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "7b152ac3a9f72b32f523": {
+    "file": "message_components.py",
+    "scope": "describe_actions",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "54f07f0edfb324e3a000": {
+    "file": "message_components.py",
+    "scope": "validate",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "a61f08e9b72ae40f353f": {
+    "file": "message_components.py",
+    "scope": "ActionConfirm.execute",
+    "text": "añadir_rol",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "a801356640a0c1f130df": {
+    "file": "message_components.py",
+    "scope": "ActionConfirm.execute",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "3d9f8a89dc81080cc5b2": {
+    "file": "message_editor.py",
+    "scope": "VisualModal.on_submit",
+    "text": "guardar",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "bf331d84e08bd371d47c": {
+    "file": "message_editor.py",
+    "scope": "VisualModal.on_submit",
+    "text": "no",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "cbe8be8328bb1e600ece": {
+    "file": "message_payload.py",
+    "scope": "",
+    "text": "servidor",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "85767d74475a7a2c8229": {
+    "file": "message_payload.py",
+    "scope": "",
+    "text": "canal",
+    "reason": "Valor interno o entrada canónica; se localiza su etiqueta visible."
+  },
+  "f068c93f1173051526a6": {
+    "file": "preupdate_gate.py",
+    "scope": "main",
+    "text": "H-03 previo: ejecutar solo dentro del servicio dueño de /data",
+    "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
+  },
+  "b1bc75fe8bf28d711fcb": {
+    "file": "sqlite_recovery.py",
+    "scope": "main",
+    "text": "Respaldos privados SQLite; restauración offline",
+    "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
+  },
+  "73d9cfcd69411b10c6ea": {
+    "file": "sqlite_recovery.py",
+    "scope": "main",
+    "text": "Recuperación fallida: ",
+    "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
+  },
+  "6b000e0e7ce4e94f8bc0": {
+    "file": "supabase_backup.py",
+    "scope": "main",
+    "text": "Subida cifrada H-03 y verificacion remota; sin iniciar el bot",
+    "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
+  },
+  "b24563d15f159f66323d": {
+    "file": "supabase_backup.py",
+    "scope": "upload",
+    "text": "no-store",
+    "reason": "Interfaz CLI de mantenimiento; no se envía a Discord."
+  },
+  "55cc5deb780b52092b74": {
+    "file": "bot.py",
+    "scope": "HeraldoCondemnationDurationModal.on_submit",
+    "text": "hasta retirar",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "0024a7c7898038ee46c0": {
+    "file": "bot.py",
+    "scope": "rr_can_use",
+    "text": "Lista blanca",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "12768d5f17d34ea828b4": {
+    "file": "bot.py",
+    "scope": "rr_can_use",
+    "text": "Lista negra",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "f2838c39c4791cfc4ec9": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsSelectView.select_access_mode",
+    "text": "Lista blanca",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "adf4128ce1cb9e9117c0": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsSelectView.select_access_mode",
+    "text": "Lista negra",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "4002c4f50f539f5cce9e": {
+    "file": "bot.py",
+    "scope": "CondemnationDurationModal.on_submit",
+    "text": "hasta retirar",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "3a57a28d83b4d6f8cd76": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "sin permisos",
+    "reason": "Clasificador interno; opera sobre la clave canónica del título."
+  },
+  "89e35efa94cb7353996d": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "sin verificar",
+    "reason": "Clasificador interno; opera sobre la clave canónica del título."
+  },
+  "b5d73ef1db08d3099cc9": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "copia de seguridad",
+    "reason": "Clasificador interno; opera sobre la clave canónica del título."
+  },
+  "d5c9234f685d84eaf96f": {
+    "file": "bot.py",
+    "scope": "log_event_category",
+    "text": "rol actualizado",
+    "reason": "Clasificador interno; opera sobre la clave canónica del título."
+  },
+  "cb4f477c53910e4a5614": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsModal.on_submit",
+    "text": "Lista blanca",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "0d699589dd6350a11903": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsModal.on_submit",
+    "text": "Lista negra",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "00af4e8ae6cfb19b71e7": {
+    "file": "bot.py",
+    "scope": "condenar",
+    "text": "hasta retirar",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "b532908a432f626aaaf8": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsSelectView.__init__",
+    "text": "Lista blanca",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "60d44397b3d40cc8a848": {
+    "file": "bot.py",
+    "scope": "HeraldoReactionOptionsSelectView.__init__",
+    "text": "Lista negra",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "3edbdd3430700054278d": {
+    "file": "bot.py",
+    "scope": "report_reminders_loop",
+    "text": "naive datetime",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "e25e6f57997632855e83": {
+    "file": "bot.py",
+    "scope": "HeraldoSetupView.configure",
+    "text": "Role Connections",
+    "reason": "Contrato de SQL, parser, recurso o valor interno; la etiqueta visible se traduce."
+  },
+  "32cca515517a00fedd0e": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Civil Comments",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "ce2a3fd4b7fb3d0dff0a": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Wikipedia Talk Labels: Toxicity",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "68e40adced3c016f87f2": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Multilingual HateCheck, Spanish",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "672548bd7a332b7affce": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Dos miembros debaten sobre un videojuego.",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "9b4315eceaffe427398d": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Eres muy lento, de verdad.",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "bf962f60b2c5b15684c4": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Se anuncia una supuesta recompensa a cambio de credenciales.",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "f6f1324944cacd2bc4b8": {
+    "file": "custodio_benchmark.py",
+    "scope": "",
+    "text": "Alguien propone difundir datos de un tercero.",
+    "reason": "Datos y frases sintéticas del benchmark; no se envían a Discord."
+  },
+  "8005b5a6b7f4334ab408": {
+    "file": "h03_railway_test_api.py",
+    "scope": "",
+    "text": "query($input:DeploymentListInput!, $first:Int){\n  deployments(input:$input,first:$first){\n    edges{node{id status serviceId environmentId meta}}\n  }\n}",
+    "reason": "API GraphQL o interfaz CLI de mantenimiento."
+  },
+  "02e58941b599df414a96": {
+    "file": "h03_railway_test_api.py",
+    "scope": "",
+    "text": "query($id:String!){\n  deployment(id:$id){id status serviceId environmentId meta}\n}",
+    "reason": "API GraphQL o interfaz CLI de mantenimiento."
+  },
+  "67167d5d1cbb4500272a": {
+    "file": "h03_test_railway_release.py",
+    "scope": "main",
+    "text": "H-03 TEST: controlador Railway",
+    "reason": "API GraphQL o interfaz CLI de mantenimiento."
+  },
+  "dbedf6b7705b33555d6f": {
+    "file": "bot.py",
+    "scope": "honeypot_db_init",
+    "text": "Condena heredada del honeypot",
+    "reason": "Motivo histórico para migrar condenas heredadas, sin recrear su evidencia ni reescribir datos previos."
+  },
+  "ce4346207a3e91b3c9d4": {
+    "file": "bot.py",
+    "scope": "HeraldoTemplateSetupView.edit_raw",
+    "text": "JSON",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "7b11fe71d1f72bd20697": {
+    "file": "bot.py",
+    "scope": "HeraldoAutomodSetupView.honeypot",
+    "text": "Honeypot",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "e860961c78e16de72b48": {
+    "file": "bot.py",
+    "scope": "CondemnationButtonUrlModal",
+    "text": "https://…",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "de02fb989ef567cb3b68": {
+    "file": "bot.py",
+    "scope": "SuggestionPanelEditorModal",
+    "text": "4F5BDC",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "e2e40b64b9d896e03ad8": {
+    "file": "bot.py",
+    "scope": "SuggestionPanelEditorModal",
+    "text": "https://…",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "4279cc4097dd54721e69": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesView.honeypot",
+    "text": "Honeypot",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "9b0182886267ba83d89e": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesView.logs",
+    "text": "Logs",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "c8da53e5ce27cfdca1e5": {
+    "file": "bot.py",
+    "scope": "VerifyDmEditorContentModal.__init__",
+    "text": "4F5BDC",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "510015261c66f459ffc3": {
+    "file": "bot.py",
+    "scope": "SuggestionPanelContentModal.__init__",
+    "text": "4F5BDC",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "855893c8b73fa2e4a275": {
+    "file": "bot.py",
+    "scope": "LogTemplateContentModal.__init__",
+    "text": "{titulo_log}",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "6bf8d637aaacf99601bf": {
+    "file": "bot.py",
+    "scope": "LogTemplateContentModal.__init__",
+    "text": "{detalle_log}",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "d4fd7bdefc7f06f5b499": {
+    "file": "bot.py",
+    "scope": "EmbedContentModal.__init__",
+    "text": "#E7CF7F",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "ced73ae19768aba46c3c": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesSetupView.__init__",
+    "text": "Honeypot",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  },
+  "c05233c3f1501708fc96": {
+    "file": "bot.py",
+    "scope": "HeraldoMessagesSetupView.__init__",
+    "text": "Logs",
+    "reason": "Nombre técnico, formato de URL/HEX o identificador de variable; conservarlo literalmente."
+  }
+}

@@ -2,15 +2,16 @@
 
 Estas comprobaciones no sustituyen pruebas interactivas en Discord.
 """
+from i18n_source_helpers import source_text as _source_text
 from pathlib import Path
 import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock, MagicMock, patch
 from test_safety_regressions import b
 
-SOURCE = Path(__file__).resolve().parents[1].joinpath("bot.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1].joinpath('bot.py'), encoding='utf-8')
 
-ARCHIVE_SOURCE = Path(b.evidence_archive.__file__).read_text(encoding="utf-8")
+ARCHIVE_SOURCE = _source_text(Path(b.evidence_archive.__file__), encoding='utf-8')
 
 class EvidenceAndRoleSafetyTests(unittest.TestCase):
     def test_evidence_archive_rejects_non_admin_role_access(self):

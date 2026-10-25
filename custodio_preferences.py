@@ -4,6 +4,7 @@ El sistema todavía no procesa mensajes. Estos ajustes solo preparan el
 futuro modo Observar, y nunca habilitan el bot o sanciones automáticamente.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 from dataclasses import dataclass
 from typing import Callable
 
@@ -30,22 +31,22 @@ ALLOWED = {
     KEY_ENABLED: frozenset({"0"}),
 }
 LABELS = {
-    KEY_MODE: "Modo de respuesta",
-    KEY_SENSITIVITY: "Sensibilidad",
-    KEY_SCOPE: "Alcance",
-    KEY_NOTIFY: "Avisos de cambios",
-    KEY_ENABLED: "Supervisión continua",
+    KEY_MODE: _t('text.60a768691b6ae3'),
+    KEY_SENSITIVITY: _t('text.809853d64fec84'),
+    KEY_SCOPE: _t('text.477f2a69f25fbe'),
+    KEY_NOTIFY: _t('text.29b7e825b434dd'),
+    KEY_ENABLED: _t('text.1f286c36208889'),
 }
 DISPLAY = {
-    KEY_MODE: {"observe": "Observar"},
+    KEY_MODE: {"observe": _t('text.1eb041c4d73c8d')},
     KEY_SENSITIVITY: {
-        "conservative": "Conservadora",
-        "balanced": "Equilibrada",
-        "strict": "Estricta",
+        "conservative": _t('text.4227fbef304d05'),
+        "balanced": _t('text.911d1179bfed6c'),
+        "strict": _t('text.87956eb4fc2585'),
     },
-    KEY_SCOPE: {"eligible": "Canales elegibles y autorizados"},
-    KEY_NOTIFY: {"0": "Desactivados"},
-    KEY_ENABLED: {"0": "No activada"},
+    KEY_SCOPE: {"eligible": _t('text.8ba04df688d575')},
+    KEY_NOTIFY: {"0": _t('text.1b70e48efeecce')},
+    KEY_ENABLED: {"0": _t('text.77317410e35649')},
 }
 
 
@@ -57,6 +58,7 @@ class CustodioPreferences:
     notify_changes: str = "0"
     enabled: str = "0"
 
+    @_i18n_context
     def as_settings(self) -> dict[str, str]:
         return dict(zip(DEFAULTS, (
             self.mode, self.sensitivity, self.scope, self.notify_changes, self.enabled,
@@ -72,6 +74,7 @@ def validate_settings(values: dict[str, str]) -> dict[str, str]:
     return values.copy()
 
 
+@_i18n_context
 def load_preferences(get_setting: Callable[[int, str], str | None], guild_id: int) -> CustodioPreferences:
     if type(guild_id) is not int or guild_id <= 0:
         raise ValueError("invalid_guild_id")
@@ -100,11 +103,5 @@ def pending_changes(
 
 def display_preferences(prefs: CustodioPreferences) -> str:
     return (
-        "**Modo de respuesta:** Observar (sin sanciones)\n"
-        f"**Sensibilidad:** {DISPLAY[KEY_SENSITIVITY][prefs.sensitivity]}\n"
-        "**Alcance:** Canales elegibles y autorizados\n"
-        "**Avisos sobre cambios en las reglas:** Desactivados\n"
-        "**Supervisión continua:** No activada\n"
-        "\nLas preferencias preparan la futura supervisión. El bot todavía "
-        "no clasifica mensajes mediante IA ni aplica sanciones."
+        _t('text.678e2d5eab4062', p0=f'{DISPLAY[KEY_SENSITIVITY][prefs.sensitivity]}')
     )

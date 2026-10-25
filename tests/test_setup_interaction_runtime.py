@@ -1,4 +1,5 @@
 """Protocolo de ACK: ejecuta el despacho real de discord.py sin Gateway."""
+from i18n_source_helpers import source_text as _source_text
 import asyncio
 import inspect
 import itertools
@@ -143,7 +144,7 @@ class SetupInteractionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         import ast
         from pathlib import Path
         from test_safety_regressions import b
-        source = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+        source = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
         count = 0
         for klass in ast.parse(source).body:
             if not isinstance(klass, ast.ClassDef):

@@ -1,9 +1,10 @@
 """Contrato conductual de la encuesta de salidas sin Discord Gateway."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
 
-SRC = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+SRC = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE = ast.parse(SRC)
 
 
@@ -21,7 +22,7 @@ class ExitCommentsFlowTests(unittest.TestCase):
         handler = source("heraldo_member_departure")
         self.assertIn('kind == "member_leave"', handler)
         self.assertIn("original is not None", handler)
-        self.assertIn('uncertainty.startswith("Salida observada;', handler)
+        self.assertIn('uncertainty in i18n.variants(', handler)
         audit = source("classify_member_departure")
         self.assertIn("audit_checked = False", audit)
         self.assertIn("if not audit_checked:", audit)

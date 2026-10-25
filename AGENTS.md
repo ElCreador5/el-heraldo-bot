@@ -17,7 +17,7 @@ Este archivo es el punto de entrada para ChatGPT, Codex, Claude y cualquier agen
 - Comenzar con `git fetch` / `git pull` de la rama correcta; no sobrescribir cambios remotos ni forzar pushes.
 - Usar el bot de pruebas y el servidor de laboratorio; evitar acciones de prueba en servidores reales.
 - Antes de alterar una función, inspeccionar código existente, dependencias y tests; no borrar capacidades silenciosamente.
-- Mantener mensajes del bot en español formal y sin emojis decorativos; usar emojis únicamente si son funcionalmente necesarios.
+- Mantener mensajes formales en el idioma configurado (español predeterminado) y sin emojis decorativos; usar emojis únicamente si son funcionalmente necesarios.
 - Cualquier modificación de configuración debe requerir confirmación explícita del administrador; cancelar no debe guardar.
 - Comprobar permisos, jerarquía de roles, aislamiento por servidor, persistencia y fallos en interacciones.
 - Ejecutar compilación y regresiones; diferenciar claramente pruebas automáticas de pruebas realmente realizadas en Discord.
@@ -127,11 +127,14 @@ Estas cinco reglas se aplican a ChatGPT, Codex, Claude, Work y cualquier otro ag
 - Cada editor de footer debe mostrar pistas claras de `{servidor}` (nombre real en otros textos, sustituido por el distintivo Lab únicamente en el pie de Test) y `{servericon}` (icono real). Los envíos exclusivamente multimedia deben llevar la misma identidad.
 - Ejecutar regresiones aisladas y CI en `Pruebas`; una prueba automática no equivale a aceptación visual real en Discord. Esta excepción jamás debe propagarse a `main` por accidente.
 
-### UX-03D — Idioma obligatorio: español (2026-10-24)
-- **Todo texto redactado por El Heraldo para usuarios y moderadores debe estar en español** en `main` y `Pruebas`: comandos y sus descripciones cuando no rompa compatibilidad, títulos de tarjetas, menús, botones, formularios, placeholders, explicaciones, confirmaciones, errores, DMs, registros, ayuda y mensajes de prueba. Usar terminología comprensible y consistente; preferir «Roles de ingreso», «Sincronizar ahora», «ID de usuario» y «Reglas del servidor» a etiquetas en inglés.
-- **No traducir contratos técnicos**: claves SQLite, identificadores de componentes persistentes, nombres de APIs, variables (`{servidor}`, `{servericon}`), identificadores de comandos existentes, nombres de librerías/protocolos ni código interno. No reemplazar el contenido que escribieron administradores ni los nombres propios de las comunidades. «Honeypot», «AutoMod», «embed», «HEX», «URL» e «ID» pueden conservarse como términos técnicos si es necesario.
-- **Discord controla la interfaz nativa**: los botones y textos estándar generados por el cliente (p. ej. el envío de un modal) dependen del idioma del usuario en Discord; el bot sí controla los títulos, campos y componentes personalizados. No afirmar que puede traducir el cliente Discord desde el bot.
-- Al introducir o modificar un módulo, revisar los textos visibles en ambos entornos y mantener cobertura de regresiones; en el laboratorio se conserva la identidad especial del footer establecida en UX-03C.
+### UX-03D — Idioma por servidor en Pruebas (2026-10-25)
+- En `Pruebas`, español latinoamericano (`es-419`), inglés estadounidense (`en-US`) y portugués brasileño (`pt-BR`) comparten la preferencia SQLite entre `/language` y `/setup → Idioma`. El español es el valor predeterminado. No usar el idioma personal de Discord.
+- Panel y componentes usan el idioma guardado del servidor; los DMs y tareas recuperan su origen. Los cambios de selector son borradores y se guardan explícitamente.
+- Etiquetas, ayudas, errores y textos propios deben usar claves estables y las mismas variables. Los equivalentes de «Volver» son `Back` y `Voltar`; conservar la navegación y la paleta NH.
+- No traducir nombres/IDs de comandos, claves SQLite, parámetros API, identificadores persistentes, variables técnicas, nombres reales ni textos personalizados. La evidencia literal nunca se traduce.
+- Mantener los avisos de idioma parcial hasta comprobar cobertura semántica y rutas completas; no confundir claves existentes con cobertura real. Registrar cola editorial y aceptación Discord pendiente.
+- El esquema global nativo de comandos no cambia en esta revisión. El cliente Discord controla sus textos estándar.
+- `main` y producción continúan fuera del alcance de esta autorización. La identidad Lab de UX-03C permanece exacta.
 
 ### UX-04 — Funcionamiento real y resiliencia
 - Revalidar permisos del usuario y del bot y jerarquía de roles en **cada interacción y antes de guardar/ejecutar**, incluidos canales borrados y permisos revocados; comunicar el error específico sin fingir éxito.

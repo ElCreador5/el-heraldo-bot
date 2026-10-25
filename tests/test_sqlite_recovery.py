@@ -1,4 +1,5 @@
 """H-03: SQLite real, WAL, concurrencia, errores y restauración aislada."""
+from i18n_source_helpers import source_text as _source_text
 from contextlib import closing
 import json
 import os
@@ -222,7 +223,7 @@ r.create_backup(sys.argv[1], sys.argv[2], environment='test', revision='crash')
         with self.assertRaisesRegex(recovery.RecoveryError, 'backup_checksum_failed'):
             self.restore(package, self.root / 'lab.db')
         other = self.backup()
-        manifest = json.loads((other / 'manifest.json').read_text())
+        manifest = json.loads(_source_text(other / 'manifest.json'))
         manifest['rows']['guild_cases'] = 999
         (other / 'manifest.json').write_text(json.dumps(manifest))
         with self.assertRaisesRegex(recovery.RecoveryError, 'backup_metadata_mismatch'):
@@ -274,7 +275,7 @@ r.create_backup(sys.argv[1], sys.argv[2], environment='test', revision='crash')
     def test_retention_plan_keeps_last_copy_and_never_deletes(self):
         packages = [self.backup(), self.backup()]
         for package in packages:
-            manifest = json.loads((package / 'manifest.json').read_text())
+            manifest = json.loads(_source_text(package / 'manifest.json'))
             manifest['created_at'] = '2020-01-01T00:00:00+00:00'
             (package / 'manifest.json').write_text(json.dumps(manifest))
         partial = self.backups / '.partial-crash'

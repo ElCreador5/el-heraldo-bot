@@ -5,6 +5,7 @@ Discord. Si deja de funcionar, el módulo devuelve un error controlado y
 NUNCA sustituye el reglamento por reglas inventadas.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context
 
 import asyncio
 import json
@@ -39,20 +40,20 @@ async def load_server_rules(
         raise ValueError("bot_token_missing")
 
     async def run(get: Fetcher) -> RulesSnapshot:
-        status, guild = await get(f"/guilds/{guild_id}")
+        status, guild = await get(f'/guilds/{guild_id}')
         if status != 200:
             raise RulesUnavailable("guild_unavailable", status)
         features = guild.get("features") if isinstance(guild, dict) else None
         if not isinstance(features, list) or "MEMBER_VERIFICATION_GATE_ENABLED" not in features:
             raise RulesUnavailable("screening_disabled_or_unknown")
-        verification_status, verification = await get(f"/guilds/{guild_id}/member-verification")
+        verification_status, verification = await get(f'/guilds/{guild_id}/member-verification')
         return read_snapshot(guild_id, status, guild, verification_status, verification)
 
     if fetcher is not None:
         return await run(fetcher)
 
     headers = {
-        "Authorization": f"Bot {bot_token}",
+        "Authorization": _t('text.6ed95b9df34151', p0=f'{bot_token}'),
         "Accept": "application/json",
         "User-Agent": "ElHeraldo-Custodio/1.0",
     }

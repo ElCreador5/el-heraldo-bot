@@ -3,6 +3,7 @@
 No inicia Discord; prueba los generadores de tarjetas en aislamiento AST.
 """
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 import ast
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,7 @@ import message_payload
 
 LAB_NAME = "El Heraldo's Labs 🧪"
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 FUNCS = {n.name: n for n in TREE.body
          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
@@ -169,7 +170,8 @@ class ServerFooterTests(unittest.TestCase):
         self.assertIn('template_report_embed(interaction.guild, template,', manual)
         self.assertIn("stamp_embed(embed, guild)", scheduled)
         self.assertIn("stamp_embed(embed, interaction.guild)", manual)
-        self.assertIn('f"{interaction.guild.name} · El Heraldo"', profile)
+        self.assertIn('interaction.guild.name', profile)
+        self.assertIn(' · El Heraldo', profile)
 
     def test_dms_sent_through_user_or_dmchannel_keep_source_server(self):
         for name in ("send_recovery_dm", "send_test_removal_notice"):

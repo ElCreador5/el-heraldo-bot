@@ -1,5 +1,6 @@
 """Regresiones offline: hilo privado asociado a tarjeta de condena existente."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 import asyncio
@@ -42,7 +43,7 @@ class FakeChannel:
 
 
 def isolated(*names):
-    tree = ast.parse(SOURCE.read_text("utf-8"), filename=str(SOURCE))
+    tree = ast.parse(_source_text(SOURCE, 'utf-8'), filename=str(SOURCE))
     selected = [n for n in tree.body if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef))
                 and n.name in names]
     assert len(selected) == len(names)
@@ -149,7 +150,7 @@ class ThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(thread.edit.await_args.kwargs["locked"])
 
     def test_setup_duration_presets_require_explicit_confirmation(self):
-        src = SOURCE.read_text("utf-8")
+        src = _source_text(SOURCE, 'utf-8')
         tree = ast.parse(src)
         view = next(n for n in tree.body if isinstance(n, ast.ClassDef)
                     and n.name == "HeraldoCondemnationSetupView")
@@ -163,7 +164,7 @@ class ThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('value="custom"', src)
 
     def test_channel_permissions_only_after_confirm(self):
-        src = SOURCE.read_text("utf-8")
+        src = _source_text(SOURCE, 'utf-8')
         tree = ast.parse(src)
         view = next(n for n in tree.body if isinstance(n, ast.ClassDef)
                     and n.name == "CondemnationChannelAccessConfirmView")
@@ -174,7 +175,7 @@ class ThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("set_permissions", ast.unparse(funcs["cancel"]))
 
     def test_embed_unchanged_and_ping_precedes_thread(self):
-        src = SOURCE.read_text("utf-8")
+        src = _source_text(SOURCE, 'utf-8')
         tree = ast.parse(src)
         func = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef)
                     and n.name == "_condemn_member_inner")

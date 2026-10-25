@@ -32,6 +32,12 @@ jobs:
         run: python -m pip install -r requirements-ci.txt -r requirements-backup.txt
       - name: Comprobar entorno de pruebas
         run: python -m pip check
+      - name: Internacionalización por servidor y detección de textos sin catálogo
+        env:
+          PYTHONPATH: "tests:."
+        run: |
+          python tools/i18n_audit.py
+          python -m unittest -v test_i18n_catalog test_language_contract test_i18n_runtime
       - name: Contrato y matriz dinámica de todos los módulos visibles de setup
         env:
           PYTHONPATH: "tests:."

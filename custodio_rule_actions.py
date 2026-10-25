@@ -5,6 +5,7 @@ Ninguna plantilla concede permiso para sancionar: la supervisión y el
 motor de clasificación/ejecución siguen desactivados.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 
 from dataclasses import dataclass
 import json
@@ -27,16 +28,16 @@ class RuleTemplate:
 # Sugerencias editoriales, NO reglas universales. Cada servidor decide
 # cuáles de estas categorías existen realmente en sus Server Rules.
 TEMPLATES: tuple[RuleTemplate, ...] = (
-    RuleTemplate("spam", "Spam y publicidad", "report",
-                 "Mensajes repetidos o publicidad prohibida por el servidor."),
-    RuleTemplate("harassment", "Acoso reiterado", "kick",
-                 "Hostigamiento corroborado según las reglas locales."),
-    RuleTemplate("scams", "Fraude y suplantación", "ban",
-                 "Fraude comprobado o suplantación prohibida."),
-    RuleTemplate("threats", "Amenazas graves", "ban",
-                 "Amenazas creíbles y verificadas, no citas ni denuncias."),
-    RuleTemplate("channel_content", "Contenido fuera de lugar", "report",
-                 "Publicaciones contrarias a las reglas del canal; respetar SFW/NSFW."),
+    RuleTemplate("spam", _t('text.090fd35f177791'), "report",
+                 _t('text.39ee6639190158')),
+    RuleTemplate("harassment", _t('text.56de88ffe67f9c'), "kick",
+                 _t('text.b6e1efc74bf814')),
+    RuleTemplate("scams", _t('text.b58a2f9e69dcda'), "ban",
+                 _t('text.fb2549fa63fc7e')),
+    RuleTemplate("threats", _t('text.5450aa32a6a149'), "ban",
+                 _t('text.fd32a76f892466')),
+    RuleTemplate("channel_content", _t('text.9f9b89e10d9909'), "report",
+                 _t('text.4eff24aed2411b')),
 )
 TEMPLATE_BY_KEY = {item.key: item for item in TEMPLATES}
 DEFAULT_ACTIONS = {item.key: "report" for item in TEMPLATES}
@@ -89,6 +90,7 @@ def decode_actions(raw: str | None) -> tuple[dict[str, str], bool]:
         return DEFAULT_ACTIONS.copy(), False
 
 
+@_i18n_context
 def load_actions(
     get_setting: Callable[[int, str], str | None], guild_id: int
 ) -> tuple[dict[str, str], bool]:

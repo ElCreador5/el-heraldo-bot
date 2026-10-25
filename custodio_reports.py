@@ -5,6 +5,7 @@ No contiene procesador de mensajes, sanciones, lectura de historiales ni copias
 de material de canales restringidos. Se conservan metadatos mínimos solamente.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, variants as _i18n_variants
 
 import asyncio
 from dataclasses import dataclass
@@ -33,22 +34,24 @@ def _has_staff_role_permissions(role: discord.Role) -> bool:
     )
 
 
+@_i18n_context
 def _get_safe_existing(guild: discord.Guild, channel_id: int) -> discord.TextChannel:
     channel = guild.get_channel(channel_id)
     if not isinstance(channel, discord.TextChannel):
-        raise ReportChannelError("El canal vinculado no existe o no es de texto.")
+        raise ReportChannelError(_t('text.6706892064e584'))
     if channel.topic != CHANNEL_TOPIC or not private_report_channel(channel):
-        raise ReportChannelError("El canal vinculado cambió o perdió privacidad; requiere revisión administrativa.")
+        raise ReportChannelError(_t('text.b49cbe741692d2'))
     me = guild.me
     if me is None:
-        raise ReportChannelError("No se puede verificar el acceso del bot.")
+        raise ReportChannelError(_t('text.1f8a4320668846'))
     permissions = channel.permissions_for(me)
     if not (permissions.view_channel and permissions.send_messages and
             permissions.embed_links and permissions.read_message_history):
-        raise ReportChannelError("El bot no puede publicar registros en el canal.")
+        raise ReportChannelError(_t('text.33bf93ed9e1134'))
     return channel
 
 
+@_i18n_context
 def private_report_channel(channel: discord.TextChannel) -> bool:
     """Se exige denegación explícita del acceso de @everyone."""
     everyone = channel.guild.default_role
@@ -70,6 +73,7 @@ def private_report_channel(channel: discord.TextChannel) -> bool:
     return True
 
 
+@_i18n_context
 async def create_private_report_channel(
     guild: discord.Guild,
     get_setting: Callable[[int, str], str | None],
@@ -81,13 +85,13 @@ async def create_private_report_channel(
     SQLite gracias al marcador fijo en el topic. No reemplaza canales ajenos.
     """
     if guild is None or guild.me is None:
-        raise ReportChannelError("No está disponible la identidad del bot.")
+        raise ReportChannelError(_t('text.40b79b84a5c754'))
     lock = _channel_creation_locks.setdefault(guild.id, asyncio.Lock())
     async with lock:
         raw = get_setting(guild.id, SETTING_KEY)
         if raw:
             if not raw.isdecimal():
-                raise ReportChannelError("La referencia guardada del canal no es válida.")
+                raise ReportChannelError(_t('text.9d3604ce8d7e62'))
             return _get_safe_existing(guild, int(raw)), False
 
         # Recuperar únicamente el canal creado previamente por Custodio.
@@ -102,13 +106,12 @@ async def create_private_report_channel(
                 perms.send_messages and perms.embed_links and
                 perms.read_message_history):
             raise ReportChannelError(
-                "El bot necesita Gestionar canales, Ver canal, Enviar mensajes, "
-                "Insertar enlaces y Leer historial."
+                _t('text.6e7f7239c7d7d5')
             )
 
         everyone = guild.default_role
         if everyone is None:
-            raise ReportChannelError("No se pudo identificar @everyone.")
+            raise ReportChannelError(_t('text.ee730d9608b630'))
         overwrites = {
             everyone: discord.PermissionOverwrite(view_channel=False),
             guild.me: discord.PermissionOverwrite(
@@ -123,17 +126,17 @@ async def create_private_report_channel(
                     send_messages=True, embed_links=True,
                 )
         if len(overwrites) > 90:
-            raise ReportChannelError("Demasiados roles administrativos para crear el canal con seguridad.")
+            raise ReportChannelError(_t('text.cf0f4a1430a6ae'))
         try:
             channel = await guild.create_text_channel(
                 CHANNEL_NAME,
                 topic=CHANNEL_TOPIC,
                 overwrites=overwrites,
                 nsfw=False,
-                reason="Modo Custodio: crear canal privado autorizado de observaciones",
+                reason=_t('text.048c0bc061e066'),
             )
         except (discord.Forbidden, discord.HTTPException) as exc:
-            raise ReportChannelError("Discord rechazó la creación del canal privado.") from exc
+            raise ReportChannelError(_t('text.f9fd154c084353')) from exc
 
         # Fail closed: nunca vincular un canal que sea público.
         _get_safe_existing(guild, channel.id)
@@ -153,6 +156,7 @@ class ObservationEvidence:
     timestamp: datetime
     content_sha256: str | None = None
 
+    @_i18n_context
     def __post_init__(self) -> None:
         if any(type(n) is not int or n <= 0 for n in (
             self.guild_id, self.channel_id, self.message_id
@@ -179,27 +183,25 @@ def observation_embed(evidence: ObservationEvidence) -> discord.Embed:
         f"{evidence.channel_id}/{evidence.message_id}"
     )
     embed = discord.Embed(
-        title="Modo Custodio · Observación para revisión",
-        description="Detección provisional. No constituye una sanción ni prueba concluyente.",
+        title=_t('text.5642273dfbf438'),
+        description=_t('text.56eab2d5e86cdd'),
         color=discord.Color.orange(),
         timestamp=evidence.timestamp.astimezone(timezone.utc),
     )
-    embed.add_field(name="Estado", value={
-        "suspected": "Posible incumplimiento", "ambiguous": "Contexto insuficiente"
+    embed.add_field(name=_t('text.98e5acddb6c46a'), value={
+        "suspected": _t('text.1611d0206d0da4'), "ambiguous": _t('text.83820656fe4267')
     }[evidence.category], inline=True)
-    embed.add_field(name="Reglas", value=", ".join(map(str, sorted(set(evidence.rule_numbers))))[:100], inline=True)
-    embed.add_field(name="Contexto", value={
-        "sfw": "Canal ordinario", "age_restricted": "Canal o servidor restringido por edad",
-        "unknown": "Sin clasificación concluyente",
+    embed.add_field(name=_t('text.db8661d1e95a31'), value=", ".join(map(str, sorted(set(evidence.rule_numbers))))[:100], inline=True)
+    embed.add_field(name=_t('text.dbb654a486a5fc'), value={
+        "sfw": _t('text.4126ef96750e46'), "age_restricted": _t('text.d7d3d194cdd9e0'),
+        "unknown": _t('text.00c2263a2c37e6'),
     }[evidence.classification], inline=False)
     embed.add_field(
-        name="Evidencia de referencia",
-        value=f"[Ir al mensaje original]({link}) · Mensaje: \x60{evidence.message_id}\x60\n"
-              f"Revisión del reglamento: \x60{evidence.rules_revision[:12]}\x60\n"
-              f"Huella de contenido: \x60{evidence.content_sha256[:16] if evidence.content_sha256 else 'no disponible'}\x60",
+        name=_t('text.b5b41b06d9c08e'),
+        value=_t('text.6c951aad14615d', p0=f'{link}', p1=f'{evidence.message_id}', p2=f'{evidence.rules_revision[:12]}', p3=f"{(evidence.content_sha256[:16] if evidence.content_sha256 else _t('text.a759af6e809102'))}"),
         inline=False,
     )
-    embed.set_footer(text="La referencia puede dejar de estar disponible si se elimina el mensaje. No se archivó su contenido.")
+    embed.set_footer(text=_t('text.34745d9f1f2e4b'))
     return embed
 
 
@@ -221,8 +223,8 @@ def custodio_literal_report(
             occurred_at=occurred_at, verbatim=verbatim,
             rule_quote=rule_text, rule_number=rule_number,
             original_url=original_url, original_exists=original_exists,
-            conduct="Posible incumplimiento pendiente de revisión",
-            outcome="Solo reportar",
+            conduct=_t('text.3d57a85390b5c0'),
+            outcome=_t('text.fb57b92cfc0723'),
         ),
         footer=footer, icon_url=icon_url,
     )
@@ -234,6 +236,7 @@ _publish_locks: dict[int, asyncio.Lock] = {}
 MAX_RECENT_EVIDENCE = 2048
 
 
+@_i18n_context
 async def publish_literal_observation(
     *, guild: discord.Guild, report_channel_id: int,
     source_message: discord.Message, rule_text: str, rule_number: int,
@@ -246,17 +249,17 @@ async def publish_literal_observation(
     no archiva localmente y no consulta IA.
     """
     if source_message.guild is None or source_message.guild.id != guild.id:
-        raise ReportChannelError("La evidencia no pertenece a este servidor.")
+        raise ReportChannelError(_t('text.ab2a51e5e3cf6e'))
     if source_message.author.bot or source_message.webhook_id:
-        raise ReportChannelError("No se reportan mensajes automatizados.")
+        raise ReportChannelError(_t('text.bbc165288f8c22'))
     if not isinstance(source_message.channel, discord.TextChannel):
-        raise ReportChannelError("El origen no es un canal de texto autorizado.")
+        raise ReportChannelError(_t('text.745b4b3080cb03'))
     if source_message.channel.is_nsfw():
-        raise ReportChannelError("La publicación automática de material restringido no está autorizada.")
+        raise ReportChannelError(_t('text.4e20ebf238207f'))
     if not isinstance(rule_text, str) or not rule_text.strip() or rule_number <= 0:
-        raise ReportChannelError("No hay una regla literal autorizada.")
+        raise ReportChannelError(_t('text.7cfb6c510e4124'))
     if not isinstance(source_message.content, str) or not source_message.content:
-        raise ReportChannelError("No existe transcripción textual verificable.")
+        raise ReportChannelError(_t('text.a951b5fa2dbce1'))
     lock = _publish_locks.setdefault(guild.id, asyncio.Lock())
     async with lock:
         channel = _get_safe_existing(guild, report_channel_id)
@@ -278,7 +281,7 @@ async def publish_literal_observation(
             except discord.NotFound:
                 _published_evidence.pop(key, None)
             except discord.HTTPException as exc:
-                raise ReportChannelError("No se pudo verificar el reporte anterior.") from exc
+                raise ReportChannelError(_t('text.7fd3f44c21a889')) from exc
         embeds = custodio_literal_report(
             actor=str(source_message.author), guild_name=guild.name,
             channel_name=source_message.channel.name,
@@ -291,7 +294,7 @@ async def publish_literal_observation(
             # No permitir menciones en el reporte aunque la cita las contenga.
             report = await channel.send(embeds=embeds, allowed_mentions=discord.AllowedMentions.none())
         except (discord.Forbidden, discord.HTTPException) as exc:
-            raise ReportChannelError("Discord rechazó la publicación del reporte.") from exc
+            raise ReportChannelError(_t('text.69f89336b1e086')) from exc
         if len(_published_evidence) >= MAX_RECENT_EVIDENCE:
             _published_evidence.pop(next(iter(_published_evidence)))
         _published_evidence[key] = report.id
@@ -301,6 +304,7 @@ async def publish_literal_observation(
         return report
 
 
+@_i18n_context
 async def unlink_deleted_original(*, guild: discord.Guild, deleted_message_id: int,
                                   report_channel_id: int) -> bool:
     """Quitar el enlace de un reporte existente sin tocar la copia literal.
@@ -333,14 +337,14 @@ async def unlink_deleted_original(*, guild: discord.Guild, deleted_message_id: i
                 fields = list(embed.fields)
                 embed.clear_fields()
                 for field in fields:
-                    if field.name != "Original disponible":
+                    if field.name not in _i18n_variants('text.a376d1351c3f23'):
                         embed.add_field(name=field.name, value=field.value, inline=field.inline)
             await message.edit(embeds=embeds, allowed_mentions=discord.AllowedMentions.none())
         except discord.NotFound:
             _published_evidence.pop(key, None)
             return False
         except (discord.Forbidden, discord.HTTPException) as exc:
-            raise ReportChannelError("No se pudo actualizar la referencia del mensaje eliminado.") from exc
+            raise ReportChannelError(_t('text.cdd5936f9eed18')) from exc
         _published_evidence.pop(key, None)
         import os
         db_path = os.environ.get("DB_PATH")

@@ -1,3 +1,9 @@
+## 2026-10-25 — i18n transversal en Pruebas
+
+Internacionalización extendida a bot y módulos auxiliares: 3000 claves para es-419/en-US/pt-BR; selector de setup corregido; contexto por servidor en callbacks, DMs, filas persistidas y tareas; serialización de componentes de clase y entradas localizadas con valores internos estables. Preferencia única en SQLite, guardar explícito y footer Lab conservados. SQL sin cambios. Catálogos parciales: 395 claves revisadas explícitamente y 2605 en cola editorial; no se declara 100 %. Ver `docs/I18N_COVERAGE.md` y `locales/editorial_status.json`.
+
+Validación local: 25 pruebas específicas; suite 933 con dos omisiones existentes; 39 regresiones raíz; sintaxis/gramática 3.11, dependencias y diff. CI y recibo Railway del commit se añadirán tras publicar. Pruebas de clics reales en Discord: NO realizadas. `main` y producción intactos.
+
 ## Pie único de identidad del laboratorio — 2026-10-24
 **Candidato a publicar en `Pruebas`**: sello obligatorio `El Heraldo's Labs 🧪` y `{servericon}` en el pie de todos los embeds; soporte de plantillas múltiples, ediciones, DMs de origen conocido, mensajes exclusivamente multimedia y pistas en editores. No modifica SQLite ni el nombre de servidores. Validaciones y estado de Railway Test deben observarse después de publicar. `main` no se toca.
 

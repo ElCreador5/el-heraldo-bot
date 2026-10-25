@@ -1,4 +1,5 @@
 """Regresiones offline del ejecutor H-03, sin tráfico ni credenciales reales."""
+from i18n_source_helpers import source_text as _source_text
 from datetime import datetime, timezone, timedelta
 import json
 import os
@@ -59,11 +60,11 @@ class BackupJobTests(unittest.TestCase):
         self.assertEqual(downloader.call_count, 1)
         receipts = list(self.state.glob("lab-*.json"))
         self.assertEqual(len(receipts), 1)
-        data = json.loads(receipts[0].read_text())
+        data = json.loads(_source_text(receipts[0]))
         self.assertEqual(data["status"], "verified_and_restored")
         self.assertEqual(receipts[0].stat().st_mode & 0o077, 0)
         self.assertEqual(self.state.stat().st_mode & 0o077, 0)
-        self.assertNotIn("LAB_NON_SENSITIVE", receipts[0].read_text())
+        self.assertNotIn("LAB_NON_SENSITIVE", _source_text(receipts[0]))
         with sqlite3.connect(self.db) as conn:
             self.assertEqual(conn.execute("SELECT count(*) FROM lab_values").fetchone()[0], 1)
 
@@ -104,7 +105,7 @@ class BackupJobTests(unittest.TestCase):
             with self.assertRaisesRegex(backup_job.BackupJobError, "previous_attempt_needs_review"):
                 self._run()
         self.assertEqual(uploader.call_count, 1)
-        receipt = next(self.state.glob("lab-*.json")).read_text()
+        receipt = _source_text(next(self.state.glob('lab-*.json')))
         self.assertIn("needs_manual_review", receipt)
         self.assertNotIn("sensitive-url", receipt)
 

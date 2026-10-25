@@ -1,4 +1,8 @@
-**Salvaguarda añadida:** la activación inicial depende de que el aviso del canal se sincronice correctamente; si falla, se guarda el canal sin activar la protección ni afirmar éxito. Cubierto por regresión que simula error de permisos al publicar el aviso. Si la protección tenía un estado previo incoherente, se desactiva en vez de dejar sanciones habilitadas sin advertencia.
+## 2026-10-25 — i18n transversal en Pruebas
+
+Internacionalización extendida a bot y módulos auxiliares: 3000 claves para es-419/en-US/pt-BR; selector de setup corregido; contexto por servidor en callbacks, DMs, filas persistidas y tareas; serialización de componentes de clase y entradas localizadas con valores internos estables. Preferencia única en SQLite, guardar explícito y footer Lab conservados. SQL sin cambios. Catálogos parciales: 395 claves revisadas explícitamente y 2605 en cola editorial; no se declara 100 %. Ver `docs/I18N_COVERAGE.md` y `locales/editorial_status.json`.
+
+Validación local: 25 pruebas específicas; suite 933 con dos omisiones existentes; 39 regresiones raíz; sintaxis/gramática 3.11, dependencias y diff. CI y recibo Railway del commit se añadirán tras publicar. Pruebas de clics reales en Discord: NO realizadas. `main` y producción intactos.
 
 ## Honeypot — activación con primer canal y retiro directo (24/10/2026)
 

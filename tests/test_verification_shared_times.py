@@ -1,9 +1,10 @@
 """NH: plazos separados y Volver al submenú Verificación."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
 
-SRC=(Path(__file__).resolve().parents[1]/"bot.py").read_text("utf-8")
+SRC=_source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE=ast.parse(SRC)
 def get(name):
     return next(n for n in TREE.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name==name)

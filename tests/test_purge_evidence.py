@@ -1,4 +1,5 @@
 """Conservación por mensaje, fallos y reanudación; Discord simulado."""
+from i18n_source_helpers import source_text as _source_text
 import asyncio
 import tempfile
 import unittest
@@ -163,7 +164,7 @@ class PurgeEvidenceTests(unittest.IsolatedAsyncioTestCase):
 
     def test_no_ban_can_delete_without_archive(self):
         import ast
-        tree = ast.parse(Path(b.__file__).read_text(encoding='utf-8'))
+        tree = ast.parse(_source_text(Path(b.__file__), encoding='utf-8'))
         wrapper = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef)
                        and n.name == "heraldo_ban")
         calls = [n for n in ast.walk(wrapper) if isinstance(n, ast.Call)

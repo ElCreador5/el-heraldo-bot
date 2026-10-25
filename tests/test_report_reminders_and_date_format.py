@@ -1,4 +1,5 @@
 """Regresiones de recordatorios optativos y formato de fechas."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
@@ -7,7 +8,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
 
 
 def source_function(name):
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
     node = next(node for node in tree.body
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name)
     return ast.unparse(node)
@@ -20,7 +21,7 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("'0'", src)
 
     def test_scheduled_delivery_claims_before_network(self):
-        code = ast.unparse(ast.parse(SOURCE.read_text(encoding="utf-8")))
+        code = ast.unparse(ast.parse(_source_text(SOURCE, encoding='utf-8')))
         loop = code[code.index("async def report_reminders_loop"):code.index("async def before_report_reminders_loop")]
         self.assertLess(loop.index("conn.commit()"), loop.index("await channel.send("))
         self.assertIn("allowed_mentions=discord.AllowedMentions.none()", loop)
@@ -40,7 +41,7 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertNotIn("db_connect", src)
 
     def test_reminder_view_requires_confirmation(self):
-        code = ast.unparse(ast.parse(SOURCE.read_text(encoding="utf-8")))
+        code = ast.unparse(ast.parse(_source_text(SOURCE, encoding='utf-8')))
         cls = code[code.index("class ReportReminderSetupView"):code.index("class HeraldoUserReportsSetupView")]
         self.assertIn("confirm_configuration(", cls)
         self.assertIn("configuration_access(", cls)
@@ -48,7 +49,7 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("reminder_preview(", cls)
 
     def test_date_selector_only_updates_draft(self):
-        source = SOURCE.read_text(encoding="utf-8")
+        source = _source_text(SOURCE, encoding='utf-8')
         tree = ast.parse(source)
         cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                    and node.name == "HeraldoDateFormatSetupView")
@@ -61,7 +62,7 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertNotIn("confirm_configuration(", code)
 
     def test_short_intervals_are_test_only(self):
-        code = ast.unparse(ast.parse(SOURCE.read_text(encoding="utf-8")))
+        code = ast.unparse(ast.parse(_source_text(SOURCE, encoding='utf-8')))
         modal = code[code.index("class ReportReminderOptionsModal"):code.index("class ReportReminderSetupView")]
         self.assertIn("RAILWAY_PROJECT_ID", modal)
         self.assertIn("unit == 's' and (not is_test)", modal)

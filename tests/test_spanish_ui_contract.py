@@ -1,11 +1,12 @@
 """Contrato NH UX-03D: etiquetas de interfaz redactadas por el bot en español."""
+from i18n_source_helpers import source_text as _source_text
 from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-BOT = (ROOT / "bot.py").read_text("utf-8")
-CUSTODIO = (ROOT / "custodio_setup.py").read_text("utf-8")
-RULES = (ROOT / "custodio_rule_actions_setup.py").read_text("utf-8")
+BOT = _source_text(ROOT / 'bot.py', 'utf-8')
+CUSTODIO = _source_text(ROOT / 'custodio_setup.py', 'utf-8')
+RULES = _source_text(ROOT / 'custodio_rule_actions_setup.py', 'utf-8')
 
 
 class SpanishInterfaceTests(unittest.TestCase):

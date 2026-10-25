@@ -4,6 +4,7 @@ Se instala en el despacho de View, antes de permisos, SQLite y renderizado.
 Los callbacks directos y sus reglas de negocio conservan su interfaz.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, variants as _i18n_variants
 
 import asyncio
 from collections import OrderedDict
@@ -20,6 +21,7 @@ _seen: OrderedDict = OrderedDict()
 source_guild = ContextVar("heraldo_interaction_source_guild", default=None)
 
 
+@_i18n_context
 def _parent_of(view):
     for name in ("parent", "editor", "parent_view", "setup_view"):
         parent = getattr(view, name, None)
@@ -28,6 +30,7 @@ def _parent_of(view):
     return None
 
 
+@_i18n_context
 def is_setup_session(view):
     """Incluye subpaneles que conservan la sesión en parent/editor."""
     visited = set()
@@ -39,6 +42,7 @@ def is_setup_session(view):
     return False
 
 
+@_i18n_context
 def may_open_modal(callback, view, visited=None):
     """Conservador: sigue ayudantes, métodos heredados y callbacks dinámicos.
 
@@ -46,6 +50,8 @@ def may_open_modal(callback, view, visited=None):
     """
     callback = getattr(callback, "callback", callback)  # discord.py _ItemCallback
     callback = inspect.unwrap(getattr(callback, "__func__", callback))
+    if getattr(callback, "__module__", "") == "heraldo_i18n":
+        return False  # Renderizadores puros: no abren modales ni hacen IO de Discord.
     code = getattr(callback, "__code__", None)
     if code is None:
         return True  # Callable desconocido: no consumir su respuesta inicial.
@@ -104,11 +110,12 @@ def install(discord):
         return await original_defer(response, **kwargs)
 
     @wraps(original_error)
+    @_i18n_context
     async def on_error(view, interaction, error, item):
         await original_error(view, interaction, error, item)
         if interaction.extras.get(ACK_KEY):
             text = str(error) if isinstance(error, ValueError) else (
-                "No se pudo completar la acción. Vuelva a abrir el panel y compruebe su estado antes de reintentar."
+                _t('text.6b8921f1c59e4e')
             )
             try:
                 await interaction.followup.send(text[:1800], ephemeral=True)
@@ -116,6 +123,7 @@ def install(discord):
                 print("SETUP_INTERACTION status=ERROR_FEEDBACK_FAILED", flush=True)
 
     @wraps(original_task)
+    @_i18n_context
     async def scheduled(view, item, interaction):
         interaction.extras[STARTED_KEY] = True
         if not is_setup_session(view):
@@ -129,12 +137,12 @@ def install(discord):
         while len(_seen) > 2048:
             _seen.popitem(last=False)
         claimed = key not in _busy
-        cancel_pending = (getattr(item, "label", None) == "Cancelar"
+        cancel_pending = (getattr(item, 'label', None) in _i18n_variants('text.bb9dbb406dcbd5')
                           and getattr(view, "finished", None) is False)
         if not claimed and not cancel_pending:
             try:
                 await interaction.response.send_message(
-                    "Hay una operación en curso en este panel. Espere a que termine.",
+                    _t('text.087da0212134bc'),
                     ephemeral=True,
                 )
             except discord.HTTPException:
@@ -161,6 +169,7 @@ def install(discord):
                       flush=True)
 
     @wraps(original_modal_task)
+    @_i18n_context
     async def modal_scheduled(modal, interaction, *args, **kwargs):
         interaction.extras[STARTED_KEY] = True
         if (getattr(modal, "guild_id", None) or is_setup_session(modal)) and not interaction.response.is_done():
@@ -175,6 +184,7 @@ def install(discord):
         return await original_modal_task(modal, interaction, *args, **kwargs)
 
     @wraps(scheduled)
+    @_i18n_context
     async def contextual_scheduled(view, item, interaction):
         token = source_guild.set(getattr(interaction, "guild", None))
         try:

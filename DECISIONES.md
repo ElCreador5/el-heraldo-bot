@@ -1,3 +1,9 @@
+## 2026-10-25 — i18n transversal en Pruebas
+
+Internacionalización extendida a bot y módulos auxiliares: 3000 claves para es-419/en-US/pt-BR; selector de setup corregido; contexto por servidor en callbacks, DMs, filas persistidas y tareas; serialización de componentes de clase y entradas localizadas con valores internos estables. Preferencia única en SQLite, guardar explícito y footer Lab conservados. SQL sin cambios. Catálogos parciales: 395 claves revisadas explícitamente y 2605 en cola editorial; no se declara 100 %. Ver `docs/I18N_COVERAGE.md` y `locales/editorial_status.json`.
+
+Validación local: 25 pruebas específicas; suite 933 con dos omisiones existentes; 39 regresiones raíz; sintaxis/gramática 3.11, dependencias y diff. CI y recibo Railway del commit se añadirán tras publicar. Pruebas de clics reales en Discord: NO realizadas. `main` y producción intactos.
+
 ## Interfaz íntegramente en español — 2026-10-24
 El propietario exige español para todos los mensajes, botones, editores, menús, registros y textos del bot en ambos entornos. Se traducen etiquetas heredadas de Roles de ingreso y reglas del servidor; se preservan identificadores internos, nombres de comandos establecidos, propiedades y contenido de terceros. Consultar NH UX-03D. La interfaz nativa del cliente Discord se localiza por las preferencias de Discord y no la controla el bot.
 

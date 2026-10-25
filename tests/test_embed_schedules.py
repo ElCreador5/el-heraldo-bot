@@ -1,4 +1,5 @@
 """Unit tests for the standalone scheduled embed engine."""
+from i18n_source_helpers import source_text as _source_text
 import sqlite3
 import unittest
 from datetime import datetime, timezone
@@ -46,7 +47,7 @@ class ScheduledEmbedTests(unittest.TestCase):
 
     def test_editor_and_deletion_are_confirmed_and_version_checked(self):
         from pathlib import Path
-        source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+        source = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
         editor = source[source.index("class EmbedScheduleEditView"):source.index("@embed_group.command(name=\"programaciones\"")]
         self.assertIn("if not self.reviewed:", editor)
         self.assertIn("UPDATE scheduled_embeds SET", editor)

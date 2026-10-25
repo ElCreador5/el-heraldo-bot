@@ -1,8 +1,9 @@
 """Contrato NH: controles de personalidad, borradores y conservación."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
-SOURCE=(Path(__file__).resolve().parents[1]/"bot.py").read_text(encoding="utf-8")
+SOURCE=_source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE=ast.parse(SOURCE)
 def get(name,kind):
     return next(x for x in TREE.body if isinstance(x,kind) and x.name==name)

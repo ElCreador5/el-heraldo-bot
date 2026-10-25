@@ -1,8 +1,9 @@
 """Regresiones NH: seguridad del autoservicio de personalidad."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
-src=(Path(__file__).resolve().parents[1]/"bot.py").read_text("utf-8")
+src=_source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 tree=ast.parse(src)
 def code(name):
     n=next(n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name==name)

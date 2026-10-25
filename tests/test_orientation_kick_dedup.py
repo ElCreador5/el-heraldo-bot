@@ -1,7 +1,9 @@
 """No duplicar la expulsión por orientación ni suprimir acciones ajenas."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
+import heraldo_i18n as i18n
 import asyncio
 import time
 import unittest
@@ -9,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE = ast.parse(SOURCE)
 
 def isolated(*names, namespace=None):
@@ -33,8 +35,8 @@ class OrientationKickDedupTests(unittest.IsolatedAsyncioTestCase):
                            "orientation_prune_kick_log_markers",
                            "orientation_departure_has_detailed_log",
                            namespace={
-                               "time": time, "asyncio": asyncio, "bot": self.bot,
-                               "_ORIENTATION_KICK_REASON": "No definió su orientación",
+                               "time": time, "asyncio": asyncio, "bot": self.bot, "i18n": i18n,
+                               "_ORIENTATION_KICK_REASON": "No definió su personalidad",
                                "_ORIENTATION_LOG_WINDOW": 30.0,
                                "_orientation_kick_log_pending": self.pending,
                                "_orientation_kick_log_sent": self.sent,
@@ -47,21 +49,21 @@ class OrientationKickDedupTests(unittest.IsolatedAsyncioTestCase):
     async def test_specific_verification_log_suppresses_one_generic_kick(self):
         self.sent[self.key] = time.monotonic()
         self.assertTrue(await self.check(self.member, "member_kick", self.own_actor,
-                                         "No definió su orientación"))
+                                         "No definió su personalidad"))
         self.assertFalse(await self.check(self.member, "member_kick", self.own_actor,
-                                          "No definió su orientación"))
+                                          "No definió su personalidad"))
 
     async def test_other_moderator_and_reason_keep_their_logs(self):
         self.sent[self.key] = time.monotonic()
         self.assertFalse(await self.check(self.member, "member_kick", NS(id=90),
-                                          "No definió su orientación"))
+                                          "No definió su personalidad"))
         self.assertFalse(await self.check(self.member, "member_kick", self.own_actor,
                                           "Reglas del servidor"))
         self.assertIn(self.key, self.sent)
 
     async def test_without_detail_generic_log_is_preserved(self):
         self.assertFalse(await self.check(self.member, "member_kick", self.own_actor,
-                                          "No definió su orientación"))
+                                          "No definió su personalidad"))
         self.assertFalse(await self.check(self.member, "member_leave", None, None))
 
     async def test_missing_audit_can_use_local_confirmation(self):
@@ -71,16 +73,16 @@ class OrientationKickDedupTests(unittest.IsolatedAsyncioTestCase):
     async def test_rejoin_and_stale_records_cannot_hide_new_departures(self):
         self.sent[self.key] = time.monotonic() - 31
         self.assertFalse(await self.check(self.member, "member_kick", self.own_actor,
-                                          "No definió su orientación"))
+                                          "No definió su personalidad"))
         self.sent[self.key] = time.monotonic()
         newer = NS(id=7, guild=self.member.guild, joined_at="ingreso2")
         self.assertFalse(await self.check(newer, "member_kick", self.own_actor,
-                                          "No definió su orientación"))
+                                          "No definió su personalidad"))
 
     async def test_bans_are_never_suppressed(self):
         self.sent[self.key] = time.monotonic()
         self.assertFalse(await self.check(self.member, "member_ban", self.own_actor,
-                                          "No definió su orientación"))
+                                          "No definió su personalidad"))
 
     async def test_wait_for_successful_detailed_log(self):
         event = asyncio.Event()
@@ -90,7 +92,7 @@ class OrientationKickDedupTests(unittest.IsolatedAsyncioTestCase):
             self.sent[self.key] = time.monotonic()
             event.set()
         await asyncio.gather(complete(), self.check(self.member, "member_kick",
-                                                     self.own_actor, "No definió su orientación"))
+                                                     self.own_actor, "No definió su personalidad"))
         self.assertNotIn(self.key, self.sent)
 
     def test_delegation_and_publication_only_after_success(self):

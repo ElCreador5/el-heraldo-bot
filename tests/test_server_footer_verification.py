@@ -3,13 +3,14 @@
 Regresiones aisladas: no se inicia Discord ni se abre una base de datos real.
 """
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 NODES = {
     n.name: n for n in TREE.body

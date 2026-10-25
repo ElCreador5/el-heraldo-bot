@@ -2,12 +2,13 @@
 
 Se aísla el generador para no iniciar Discord ni conectar con el Gateway.
 """
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-SRC = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+SRC = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE = ast.parse(SRC)
 
 

@@ -1,4 +1,5 @@
 """Validación y renderizado de plantillas. No realiza operaciones de red."""
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 import copy
 import re
 from urllib.parse import urlsplit
@@ -13,7 +14,7 @@ class TemplateEmbeds(list):
 
 def text(value, limit):
     if not isinstance(value, str) or len(value) > limit:
-        raise ValueError(f'El texto supera {limit} caracteres o no es texto.')
+        raise ValueError(_t('text.ccfe6659fcf359', p0=f'{limit}'))
     return value
 
 
@@ -22,68 +23,68 @@ def url(value):
     parsed = urlsplit(value)
     if value and (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
                   or any(c.isspace() for c in value)):
-        raise ValueError('Se requiere una URL HTTPS sin credenciales.')
+        raise ValueError(_t('text.b9bebe2d586542'))
     return value
 
 
 def validate(values):
     if not isinstance(values, dict) or set(values) - VISUAL_KEYS:
-        raise ValueError('Propiedades de plantilla no admitidas.')
+        raise ValueError(_t('text.4647d65e92605f'))
     result = copy.deepcopy(values)
     for key, limit in {'title': 256, 'description': 4096, 'content': 2000, 'button_label': 80}.items():
         text(result.get(key, ''), limit)
     for key in ('image', 'button_url'):
         url(result.get(key, ''))
     if bool(result.get('button_url')) != bool(result.get('button_label')):
-        raise ValueError('El botón requiere etiqueta y URL.')
+        raise ValueError(_t('text.e6adf1faab3088'))
     embeds = result.get('embeds', [])
     if not isinstance(embeds, list) or len(embeds) > 10:
-        raise ValueError('Se admiten hasta diez embeds.')
+        raise ValueError(_t('text.a32aad3e849f80'))
     total = 0
     for embed in embeds:
         if not isinstance(embed, dict) or set(embed) - {'title', 'description', 'url', 'color', 'image', 'thumbnail', 'footer', 'author', 'fields'}:
-            raise ValueError('Embed no válido.')
+            raise ValueError(_t('text.e30fc1bebd0a1f'))
         if not any(embed.get(k) for k in ('title', 'description', 'image', 'thumbnail', 'footer', 'author', 'fields')):
-            raise ValueError('No se admiten embeds vacíos.')
+            raise ValueError(_t('text.a460bbdb699931'))
         for key, limit in (('title', 256), ('description', 4096)):
             total += len(text(embed.get(key, ''), limit))
         url(embed.get('url', ''))
         color = embed.get('color', 0x2B2D31)
         if type(color) is not int or not 0 <= color <= 0xFFFFFF:
-            raise ValueError('Color fuera de rango.')
+            raise ValueError(_t('text.28724350339107'))
         for key in ('image', 'thumbnail'):
             if key in embed:
                 if not isinstance(embed[key], dict) or set(embed[key]) != {'url'}:
-                    raise ValueError('Imagen no válida.')
+                    raise ValueError(_t('text.3af247d93ed913'))
                 if not embed[key]['url']:
-                    raise ValueError('La imagen o miniatura requiere una URL.')
+                    raise ValueError(_t('text.2c96b384152b66'))
                 url(embed[key]['url'])
         for key, caption, limit in (('footer', 'text', 2048), ('author', 'name', 256)):
             if key in embed:
                 obj = embed[key]
                 if not isinstance(obj, dict) or set(obj) - {caption, 'icon_url', 'url'}:
-                    raise ValueError('Autor o pie no válido.')
+                    raise ValueError(_t('text.afcab719309535'))
                 if not obj.get(caption):
-                    raise ValueError('El autor o pie requiere texto.')
+                    raise ValueError(_t('text.5e6c3f135b80cf'))
                 total += len(text(obj.get(caption, ''), limit))
                 for field in ('url', 'icon_url'):
                     url(obj.get(field, ''))
         fields = embed.get('fields', [])
         if not isinstance(fields, list) or len(fields) > 25:
-            raise ValueError('Se admiten hasta 25 campos por embed.')
+            raise ValueError(_t('text.b912f1e71db140'))
         for field in fields:
             if not isinstance(field, dict) or set(field) - {'name', 'value', 'inline'}:
-                raise ValueError('Campo no válido.')
+                raise ValueError(_t('text.a3bc3e1722f928'))
             for key, limit in (('name', 256), ('value', 1024)):
                 if not field.get(key):
-                    raise ValueError('Los campos requieren nombre y valor.')
+                    raise ValueError(_t('text.236c0738873508'))
                 total += len(text(field[key], limit))
             if type(field.get('inline', False)) is not bool:
-                raise ValueError('inline debe ser booleano.')
+                raise ValueError(_t('text.1723c29b5563f1'))
     if total > 6000:
-        raise ValueError('Los embeds juntos superan 6000 caracteres.')
+        raise ValueError(_t('text.34845b77024b64'))
     if not embeds and not any(result.get(k) for k in ('content', 'title', 'description', 'image')):
-        raise ValueError('La plantilla requiere contenido.')
+        raise ValueError(_t('text.e0d336052d6e5f'))
     return result
 
 
@@ -112,16 +113,16 @@ def render(template, context=None):
 
 def import_kit(data):
     if not isinstance(data, dict) or type(data.get('version')) is not int or data.get('version') not in (1, 2) or not isinstance(data.get('templates'), list):
-        raise ValueError('Versión o formato de kit no admitido.')
+        raise ValueError(_t('text.9a4da7d4d43de4'))
     if not 1 <= len(data['templates']) <= 25:
-        raise ValueError('El kit requiere entre 1 y 25 plantillas.')
+        raise ValueError(_t('text.228ce5099dd20f'))
     cleaned, names = [], set()
     for item in data['templates']:
         if not isinstance(item, dict):
-            raise ValueError('Plantilla no válida.')
+            raise ValueError(_t('text.f9e8c63c2240df'))
         name = text(item.get('name'), 70).strip()
         if not name or name.casefold() in names:
-            raise ValueError('Nombre vacío o repetido.')
+            raise ValueError(_t('text.d515f64e825e05'))
         names.add(name.casefold())
         visual = validate({k: v for k, v in item.items() if k in VISUAL_KEYS})
         cleaned.append(dict(visual, name=name, role_component='', role_component_mode='ninguno'))

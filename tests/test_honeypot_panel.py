@@ -243,7 +243,9 @@ class HoneypotPanelTests(unittest.IsolatedAsyncioTestCase):
             confirmed.guild.text_channels = []
             confirmed.guild.get_channel = lambda cid: None
             confirmed.guild.create_text_channel = AsyncMock(return_value=channel)
-            confirmed.guild.me = NS(guild_permissions=NS(manage_channels=True))
+            confirmed.guild.default_role = MagicMock()
+            confirmed.guild.me = MagicMock()
+            confirmed.guild.me.guild_permissions = NS(manage_channels=True)
             confirmed.user.guild_permissions = b.discord.Permissions(manage_channels=True)
             await proposal.confirm.callback(confirmed)
             confirmed.followup.send.assert_not_awaited()
@@ -388,6 +390,7 @@ class HoneypotRemovalBehaviorTests(unittest.IsolatedAsyncioTestCase):
             view_channel=True, send_messages=True, manage_messages=True,
         )
         i = interaction()
+        i.guild.me = NS()
         i.guild.get_channel = lambda cid: channel if cid == 51 else None
         i.response.is_done = lambda: i.response.defer.await_count > 0
         def save(gid, key, val):

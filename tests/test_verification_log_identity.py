@@ -1,10 +1,11 @@
 """Regresión del formato de la mención de usuario en verificación de edad."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 
 
 def completed_age_log_message_expression():

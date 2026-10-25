@@ -1,0 +1,1366 @@
+{
+  "text.d93c9b9a2a26ac": [
+    "A Honeypot operation is in progress. Wait for it to finish before continuing.",
+    "Há uma operação de Honeypot em andamento. Aguarde a conclusão antes de continuar."
+  ],
+  "text.a759af6e809102": [
+    "unavailable",
+    "indisponível"
+  ],
+  "text.d4f534b0b43247": [
+    "**El Heraldo · AutoMod · Custodian Mode**",
+    "**El Heraldo · AutoMod · Modo Custódio**"
+  ],
+  "text.63917bdb62b3db": [
+    "YOU HAVE CROSSED THE THRESHOLD",
+    "VOCÊ CRUZOU O LIMIAR"
+  ],
+  "text.dadf4065bc2a26": [
+    "THE ORACLE IS LISTENING",
+    "O ORÁCULO ESTÁ OUVINDO"
+  ],
+  "text.da204f52a7fdf7": [
+    "Verification DM",
+    "DM de verificação"
+  ],
+  "text.e981f225378465": [
+    "until {p0} ({p1})",
+    "até {p0} ({p1})"
+  ],
+  "text.c3691afdda514b": [
+    "> **User:** {p0} ({p1})",
+    "> **Usuário:** {p0} ({p1})"
+  ],
+  "text.ecb90f9fd3926c": [
+    "> **ID:** `{p0}`",
+    "> **ID:** `{p0}`"
+  ],
+  "text.004e5c3ee5d5a6": [
+    "> **Members:** {p0}",
+    "> **Membros:** {p0}"
+  ],
+  "text.d7d76867c9b025": [
+    "{p0} min {p1} s",
+    "{p0} min {p1} s"
+  ],
+  "text.618d152970777c": [
+    "{p0} min",
+    "{p0} min"
+  ],
+  "text.803d80f50f644d": [
+    "{p0} joins",
+    "{p0} entradas"
+  ],
+  "text.0b1839cfeef7f8": [
+    "<t:1792080000:F> (shown in each member’s time zone)",
+    "<t:1792080000:F> (adaptado ao fuso de cada membro)"
+  ],
+  "text.9bd83f9a0fd22b": [
+    "**El Heraldo · Moderation · Cases**\n\n",
+    "**El Heraldo · Moderação · Casos**\n\n"
+  ],
+  "text.4a78781461afb1": [
+    " · Warnings: {p0}/{p1}",
+    " · Advertências: {p0}/{p1}"
+  ],
+  "text.ac76d4f3e1692c": [
+    "• {p0} → **{p1}** · {p2}{p3} · {p4} report(s){p5}",
+    "• {p0} → **{p1}** · {p2}{p3} · {p4} denúncia(s){p5}"
+  ],
+  "text.3b03f2cc14fbbd": [
+    "• No reactions configured",
+    "• Nenhuma reação configurada"
+  ],
+  "text.b52c5caab6e157": [
+    "**Honeypot channels:** {p0}",
+    "**Canais armadilha:** {p0}"
+  ],
+  "text.bb1ae52184df39": [
+    "{p0} roles · {p1} members",
+    "{p0} cargos · {p1} membros"
+  ],
+  "text.430fc6bcb2ac8f": [
+    "**Exemptions:** {p0}",
+    "**Isenções:** {p0}"
+  ],
+  "text.cef68156804e56": [
+    "do not delete",
+    "não excluir"
+  ],
+  "text.90b54c8acd98ad": [
+    "[Open preserved evidence]({p0})",
+    "[Abrir evidência preservada]({p0})"
+  ],
+  "text.3f879aeda0a579": [
+    "{p0} assignable role(s) removed; Tentad@ and Sin Verificar removed.",
+    "{p0} cargo(s) atribuível(is) removido(s); Tentad@ e Sin Verificar removidos."
+  ],
+  "text.adcd5c7ac1e9f2": [
+    "{p0} role(s) restored",
+    "{p0} cargo(s) restaurado(s)"
+  ],
+  "text.3cd6ba0f966bf4": [
+    "{p0} seconds",
+    "{p0} segundos"
+  ],
+  "text.565c188e570604": [
+    "{p0} minutes",
+    "{p0} minutos"
+  ],
+  "text.a7ad9a34caf933": [
+    " · Active warnings: {p0}/{p1} (history: {p2})",
+    " · Advertências ativas: {p0}/{p1} (histórico: {p2})"
+  ],
+  "text.c16060804b4b4d": [
+    "**Invitations:** {p0}",
+    "**Convites:** {p0}"
+  ],
+  "text.92d40c8a60d585": [
+    "**Raid mode active**",
+    "**Modo raid ativo**"
+  ],
+  "text.f4a322b9164936": [
+    "**Raid Protection** — {p0} · {p1}",
+    "**Proteção contra raids** — {p0} · {p1}"
+  ],
+  "text.fa3eef917ff46a": [
+    "User ID",
+    "ID do usuário"
+  ],
+  "text.7b901234eb1383": [
+    "User avatar URL",
+    "URL do avatar do usuário"
+  ],
+  "text.6009e97ff09484": [
+    "Server ID",
+    "ID do servidor"
+  ],
+  "text.8733a1dcaaf24c": [
+    "Server icon URL",
+    "URL do ícone do servidor"
+  ],
+  "text.7bd6de90efa4ac": [
+    "Server banner URL",
+    "URL do banner do servidor"
+  ],
+  "text.0a970a12507dfe": [
+    "ID of the channel where the message is posted",
+    "ID do canal em que a mensagem é publicada"
+  ],
+  "text.5df7562911ce9f": [
+    "**{p0}** registered command(s).\n\n",
+    "**{p0}** comando(s) registrado(s).\n\n"
+  ],
+  "text.aad2fae4bb126e": [
+    " {p0} min",
+    " {p0} min"
+  ],
+  "text.7233e48621292c": [
+    "notice not published",
+    "aviso não publicado"
+  ],
+  "text.01480942088bd9": [
+    "Use {servidor}, {razon}, {titulo_embed}, and {invitacion}",
+    "Use {servidor}, {razon}, {titulo_embed} e {invitacion}"
+  ],
+  "text.4672008c41c5db": [
+    " Honeypot disabled: no honeypot channels remain.",
+    " Honeypot desativado: não há mais canais armadilha."
+  ],
+  "text.7e4a0430109cd2": [
+    "Template JSON",
+    "JSON do modelo"
+  ],
+  "text.615c174296b31c": [
+    "Server role ID",
+    "ID do cargo do servidor"
+  ],
+  "text.1746ff06bed392": [
+    "Kit JSON",
+    "JSON do kit"
+  ],
+  "text.270cbae6be9b8a": [
+    "{p0} · El Heraldo",
+    "{p0} · El Heraldo"
+  ],
+  "text.b1fd7baec46469": [
+    "frequency → {p0}",
+    "frequência → {p0}"
+  ],
+  "text.5de85a9deb4cba": [
+    "time → {p0}:00",
+    "horário → {p0}:00"
+  ],
+  "text.2562471f32482e": [
+    "interval → {p0}",
+    "intervalo → {p0}"
+  ],
+  "text.0ad9bd3e1926f0": [
+    " · purge {p0}",
+    " · excluir {p0}"
+  ],
+  "text.fbe38e667aa4c7": [
+    "**Purge:** {p0}",
+    "**Exclusão de mensagens:** {p0}"
+  ],
+  "text.e4f05c47752f93": [
+    "{p0}: missing permissions (Send Messages and Manage Messages)",
+    "{p0}: faltam permissões (Enviar mensagens e Gerenciar mensagens)"
+  ],
+  "text.1ae21932e8a55a": [
+    "case {p0}",
+    "caso {p0}"
+  ],
+  "text.4835dd69d7b180": [
+    "message {p0}",
+    "mensagem {p0}"
+  ],
+  "text.43bd4e2a8385cf": [
+    "{p0} — {p1}. By: {p2}.",
+    "{p0} — {p1}. Por: {p2}."
+  ],
+  "text.905087274b6004": [
+    "**{p0}**\nCurrent: {p1}\nProposed: {p2}",
+    "**{p0}**\nAtual: {p1}\nProposto: {p2}"
+  ],
+  "text.ccb474dcc2cecf": [
+    "Button URL",
+    "URL do botão"
+  ],
+  "text.6dac37ee7de44b": [
+    "[Open message]({p0})",
+    "[Abrir mensagem]({p0})"
+  ],
+  "text.cb5238beecfd0b": [
+    "**{p0}** (current count)",
+    "**{p0}** (contagem atual)"
+  ],
+  "text.7a699bb19dfa0d": [
+    "range: from {p0} ago to {p1} ago",
+    "intervalo: de {p0} atrás até {p1} atrás"
+  ],
+  "text.2b4334c2da2a68": [
+    "**Sanctioned:** {p0} · **Logged:** {p1} · **Skipped (staff, bots, older accounts):** {p2} · **Failed:** {p3}",
+    "**Sancionados:** {p0} · **Registrados:** {p1} · **Ignorados (equipe, bots, contas antigas):** {p2} · **Falhas:** {p3}"
+  ],
+  "text.5404d42b9ae053": [
+    "**Messages deleted:** {p0}",
+    "**Mensagens excluídas:** {p0}"
+  ],
+  "text.feb63aebfc131c": [
+    "• Raid mode ends <t:{p0}:R>",
+    "• O modo raid termina <t:{p0}:R>"
+  ],
+  "text.25a98f5906fd59": [
+    "**Result:**\n{p0}{p1}",
+    "**Resultado:**\n{p0}{p1}"
+  ],
+  "text.05f14c3d3bc285": [
+    "**{p0}** saved embed(s).\n\n",
+    "**{p0}** embed(s) salvo(s).\n\n"
+  ],
+  "text.fa5b4388560535": [
+    "{p0} — Suggestion #{p1}",
+    "{p0} — Sugestão #{p1}"
+  ],
+  "text.490b0edaa92697": [
+    "Verification DM",
+    "DM de verificação"
+  ],
+  "text.dba327ecb10f83": [
+    "> **Responsible moderator:** {p0}",
+    "> **Responsável:** {p0}"
+  ],
+  "text.8745c623e08ae2": [
+    "Recovery DM",
+    "DM de recuperação"
+  ],
+  "text.323e705eaf254e": [
+    "⚪ **{p0}:** not configured · select one or create **#{p1}**",
+    "⚪ **{p0}:** não configurado · selecione um ou crie **#{p1}**"
+  ],
+  "text.3c41581cc41dfb": [
+    "Recovery DM → edited",
+    "DM de recuperação → editado"
+  ],
+  "text.0efed973910136": [
+    "**Purge:** {p0}.",
+    "**Exclusão de mensagens:** {p0}."
+  ],
+  "text.ed41c0ebe60708": [
+    "**El Heraldo · Raid Protection**\n\n",
+    "**El Heraldo · Proteção contra raids**\n\n"
+  ],
+  "text.3f830ab8d2046f": [
+    "Verification DM · Content",
+    "DM de verificação · Conteúdo"
+  ],
+  "text.4e6eb39ca6f734": [
+    "Verification DM · Visual asset",
+    "DM de verificação · Recurso visual"
+  ],
+  "text.b8ef40b5f3af4b": [
+    " · {p0} person(s)",
+    " · {p0} pessoa(s)"
+  ],
+  "text.f2abcf1685276c": [
+    "timeout {p0}",
+    "timeout {p0}"
+  ],
+  "text.8efa339119ed21": [
+    "**Timeout:** {p0}",
+    "**Timeout:** {p0}"
+  ],
+  "text.5d90b6e2cedf1c": [
+    "{p0} · {p1} (`{p2}`)\nScope: {p3}\n{p4}",
+    "{p0} · {p1} (`{p2}`)\nEscopo: {p3}\n{p4}"
+  ],
+  "text.94a17d7d49e47c": [
+    "[Original reference]({p0})",
+    "[Referência original]({p0})"
+  ],
+  "text.c91afe656b5293": [
+    "{p0} messages failed",
+    "{p0} mensagens falharam"
+  ],
+  "text.d7801daac381ea": [
+    "{p0} attachments could not be migrated",
+    "Não foi possível migrar {p0} anexos"
+  ],
+  "text.d6e7ad467a837e": [
+    " · next: {p0}",
+    " · próximo: {p0}"
+  ],
+  "text.e0e1c0939acb2f": [
+    "{p0} · Suggestion #{p1}",
+    "{p0} · Sugestão #{p1}"
+  ],
+  "text.7b42fea6d7378e": [
+    "> **Ends:** {p0}",
+    "> **Termina:** {p0}"
+  ],
+  "text.538942d91cc934": [
+    " · missing: {p0}",
+    " · faltam: {p0}"
+  ],
+  "text.c12dc58d85e6b6": [
+    "**El Heraldo · Pending changes**\n\n",
+    "**El Heraldo · Alterações pendentes**\n\n"
+  ],
+  "text.d7b546cda890d2": [
+    "{p0}: {p1} components; Discord allows 25.",
+    "{p0}: {p1} componentes; o Discord permite 25."
+  ],
+  "text.2b364d09092d2e": [
+    " for {p0}",
+    " por {p0}"
+  ],
+  "text.6656b0ec84cd62": [
+    "\nReport only does not apply sanctions or delete messages.",
+    "\nApenas denunciar não aplica sanções nem exclui mensagens."
+  ],
+  "text.2f1b04dd17123d": [
+    "member kicked",
+    "membro expulso"
+  ],
+  "text.b40459eeac79d5": [
+    "purge: {p0}",
+    "exclusão de mensagens: {p0}"
+  ],
+  "text.d4d33c3a803d86": [
+    "**This action can actually affect the user.**",
+    "**Esta medida pode afetar o usuário de verdade.**"
+  ],
+  "text.b6ddd29a8cc4be": [
+    "; DM unavailable",
+    "; DM indisponível"
+  ],
+  "text.4a29e9bb9ce56f": [
+    "**Members:** {p0}",
+    "**Membros:** {p0}"
+  ],
+  "text.3760cd0a4e44f9": [
+    " ({p0} failed)",
+    " ({p0} falharam)"
+  ],
+  "text.ecfe4bf362a762": [
+    "#{p0} (channel)",
+    "#{p0} (canal)"
+  ],
+  "text.2dd2e8b6b55d3e": [
+    "\n\nChanges saved. {p0}",
+    "\n\nAlterações salvas. {p0}"
+  ],
+  "text.bfdf9d542cce81": [
+    "\n\n{p0} {p1} as the Sin Verificar role.",
+    "\n\n{p0} {p1} como cargo Sin Verificar."
+  ],
+  "text.233e5a05c948b4": [
+    "Invalid JSON. Use only supported properties within their limits.",
+    "JSON inválido. Use apenas as propriedades aceitas, respeitando os limites."
+  ],
+  "text.a9f250ccd2392a": [
+    "\n\n{p0} {p1} as the Condenado role.",
+    "\n\n{p0} {p1} como cargo Condenado."
+  ],
+  "text.b7e4a680b07e53": [
+    "**El Heraldo · AutoMod · Raid Protection**\n\n",
+    "**El Heraldo · AutoMod · Proteção contra raids**\n\n"
+  ],
+  "text.f40fb666285632": [
+    "\n\nSaved: {p0}",
+    "\n\nSalvo: {p0}"
+  ],
+  "text.141f1b42d34670": [
+    "\nActive warnings: {p0}/{p1}",
+    "\nAdvertências ativas: {p0}/{p1}"
+  ],
+  "text.5829600b447ca1": [
+    "member banned",
+    "membro banido"
+  ],
+  "text.d4c6e6cc5e7a0b": [
+    "{p0} · {p1}\nScope: {p2}\n{p3}",
+    "{p0} · {p1}\nEscopo: {p2}\n{p3}"
+  ],
+  "text.9e3d482fac90d1": [
+    "No description",
+    "Sem descrição"
+  ],
+  "text.6b7eb808c5f5c8": [
+    "@{p0} (role)",
+    "@{p0} (cargo)"
+  ],
+  "text.6fb0cdce1cb9da": [
+    "**El Heraldo · Templates**\n\nSelected: **",
+    "**El Heraldo · Modelos**\n\nSelecionado: **"
+  ],
+  "text.f43a239b05c658": [
+    "{p0} warning{p1}",
+    "{p0} advertência{p1}"
+  ],
+  "text.0945923d9ab176": [
+    "{p0} · Case {p1}",
+    "{p0} · Caso {p1}"
+  ],
+  "text.5d570f27533fa9": [
+    "@{p0} (user)",
+    "@{p0} (usuário)"
+  ],
+  "text.1d28488404100b": [
+    " **{p0}** error(s).",
+    " **{p0}** erro(s)."
+  ],
+  "text.1372367d605704": [
+    "not configured",
+    "não configurado"
+  ],
+  "text.680fbc1439e5d9": [
+    "{p0} · {p1} report(s)",
+    "{p0} · {p1} denúncia(s)"
+  ],
+  "text.d7f7fe8fa8ed8e": [
+    "enabled",
+    "ativado"
+  ],
+  "text.db10a4dc3f294d": [
+    "disabled",
+    "desativado"
+  ],
+  "text.87a842cf8cf2cd": [
+    "channel unavailable",
+    "canal indisponível"
+  ],
+  "text.6ed95b9df34151": [
+    "Bot {p0}",
+    "Bot {p0}"
+  ],
+  "text.8ff021901db5c3": [
+    "AI is permitted only for ambiguous Server Rules",
+    "IA permitida apenas para ambiguidades nas Server Rules"
+  ],
+  "text.35ff0bd37b6a1a": [
+    "{p0}: completed",
+    "{p0}: concluída"
+  ],
+  "text.ab26ae7bca3621": [
+    "Back",
+    "Voltar"
+  ],
+  "text.14bdfaf2face3a": [
+    "Save changes",
+    "Salvar alterações"
+  ],
+  "text.bb9dbb406dcbd5": [
+    "Cancel",
+    "Cancelar"
+  ],
+  "text.80ca383e9c8d3e": [
+    "Discard changes",
+    "Descartar alterações"
+  ],
+  "text.ed5c91affb2e42": [
+    "There are no pending changes.",
+    "Não há alterações pendentes."
+  ],
+  "text.62876186654ca2": [
+    "This settings panel belongs to another user.",
+    "Este painel de configuração pertence a outro usuário."
+  ],
+  "text.8904a29c5dcf0c": [
+    "Error: {p0}",
+    "Erro: {p0}"
+  ],
+  "text.e1e571bc9280a3": [
+    "Ban",
+    "Banir"
+  ],
+  "text.ffb1a9c946e708": [
+    "Kick",
+    "Expulsar"
+  ],
+  "text.e252efe6974743": [
+    "Disabled",
+    "Desativado"
+  ],
+  "text.05e427a291c27f": [
+    "Server",
+    "Servidor"
+  ],
+  "text.4c08a5d5feb22c": [
+    "Title",
+    "Título"
+  ],
+  "text.63614ffde2d350": [
+    "User",
+    "Usuário"
+  ],
+  "text.6f5c8804bdb7ae": [
+    "This proposal has already been resolved.",
+    "Esta proposta já foi resolvida."
+  ],
+  "text.d8fc3bee61ea28": [
+    "Permanent",
+    "Permanente"
+  ],
+  "text.04ca1828a4d8b5": [
+    "You do not have permission to use this command.",
+    "Você não tem permissão para usar este comando."
+  ],
+  "text.ff1122df900644": [
+    "Created",
+    "Criado"
+  ],
+  "text.e841f8bfd02f85": [
+    "Member",
+    "Membro"
+  ],
+  "text.b97b60aadab055": [
+    "Reused",
+    "Reutilizado"
+  ],
+  "text.0c0c5a2f6079ed": [
+    "Indefinite",
+    "Indefinida"
+  ],
+  "text.ee00b96fff266f": [
+    "Description",
+    "Descrição"
+  ],
+  "text.5f38ebd4859078": [
+    "Error: Nothing was saved: {p0}",
+    "Erro: Nada foi salvo: {p0}"
+  ],
+  "text.ebf7fffd23a15f": [
+    "That channel could not be found.",
+    "Não foi possível encontrar esse canal."
+  ],
+  "text.c7b288b1c0bb65": [
+    "Reason",
+    "Motivo"
+  ],
+  "text.723858144bd548": [
+    "Enabled",
+    "Ativado"
+  ],
+  "text.ba3033214fe41d": [
+    "Visual",
+    "Visual"
+  ],
+  "text.d5a804455b3392": [
+    "Duration",
+    "Duração"
+  ],
+  "text.1cd7c711e626d3": [
+    "Warn",
+    "Advertir"
+  ],
+  "text.0a0ca661486c7e": [
+    "Enabled",
+    "Ativado"
+  ],
+  "text.17b81affec39bc": [
+    "HEX color",
+    "Cor HEX"
+  ],
+  "text.b781f6bd9b98e4": [
+    "Unavailable",
+    "Indisponível"
+  ],
+  "text.fb57b92cfc0723": [
+    "Report only",
+    "Apenas denunciar"
+  ],
+  "text.9c9f4ce11850c8": [
+    "Invalid duration: {p0}",
+    "Duração inválida: {p0}"
+  ],
+  "text.14ab3a6c676705": [
+    "The template does not exist.",
+    "O modelo não existe."
+  ],
+  "text.9e3fc69d0d9cdc": [
+    "None",
+    "Nenhum"
+  ],
+  "text.49c04f00c2a806": [
+    "Condemn",
+    "Condenar"
+  ],
+  "text.a71bc39fe3f33e": [
+    "Outcome",
+    "Resultado"
+  ],
+  "text.197c7a8551b91c": [
+    "Content",
+    "Conteúdo"
+  ],
+  "text.5c855e784bb201": [
+    "Condemned members",
+    "Membros condenados"
+  ],
+  "text.f7db67c9da52a1": [
+    "Not applicable.",
+    "Não se aplica."
+  ],
+  "text.987d904d7afee2": [
+    "Disabled",
+    "Desativada"
+  ],
+  "text.b0bddd1a69b779": [
+    "Date and time",
+    "Data e hora"
+  ],
+  "text.c5341f198fc2f4": [
+    "Preview",
+    "Prévia"
+  ],
+  "text.67db68445a607d": [
+    "Not configured",
+    "Não configurado"
+  ],
+  "text.f37e2b713e4e71": [
+    "That role could not be found.",
+    "Não foi possível encontrar esse cargo."
+  ],
+  "text.86445262a75920": [
+    "Done. ",
+    "Pronto. "
+  ],
+  "text.f5b397a636a054": [
+    "Condemnations",
+    "Condenações"
+  ],
+  "text.5db64388d7b335": [
+    "View Channel",
+    "Ver canal"
+  ],
+  "text.cedd873b560092": [
+    "Case",
+    "Caso"
+  ],
+  "text.ae7023b76cf9e6": [
+    " and {p0} more",
+    " e mais {p0}"
+  ],
+  "text.591ad46e52c514": [
+    "Create channel",
+    "Criar canal"
+  ],
+  "text.afda27aac75a77": [
+    "Review changes",
+    "Revisar alterações"
+  ],
+  "text.0746df8abcc257": [
+    "Button text",
+    "Texto do botão"
+  ],
+  "text.b61967dddd2cd0": [
+    "Condemnation applied",
+    "Condenação aplicada"
+  ],
+  "text.82cc43e419dbbd": [
+    "Access denied.",
+    "Acesso negado."
+  ],
+  "text.e6c0519741c7c0": [
+    "The action could not be completed: ",
+    "Não foi possível concluir a ação: "
+  ],
+  "text.93a7f176f13154": [
+    "Role selection",
+    "Seleção de cargos"
+  ],
+  "text.254052ea94561f": [
+    "Enable schedule",
+    "Ativar agendamento"
+  ],
+  "text.a5bf3a7388934e": [
+    "Allow changes: No",
+    "Permitir mudanças: Não"
+  ],
+  "text.a1c6c077c0ef04": [
+    "Test link or text",
+    "Link ou texto de teste"
+  ],
+  "text.a203b3a7ea6129": [
+    "Kick if no selection: Yes",
+    "Expulsar se não escolher: Sim"
+  ],
+  "text.d2d45010341eea": [
+    "Kick if no selection: No",
+    "Expulsar se não escolher: Não"
+  ],
+  "text.7f2b3ad4ffe709": [
+    "Did not choose a personality",
+    "Não escolheu uma personalidade"
+  ],
+  "text.e751ce97a2b7f0": [
+    "The template no longer exists.",
+    "O modelo não existe mais."
+  ],
+  "text.08e419babf38d0": [
+    "This proposal has already been resolved.",
+    "Esta proposta já foi resolvida."
+  ],
+  "text.7a3072bf51b38b": [
+    "The channel is no longer available.",
+    "O canal não está mais disponível."
+  ],
+  "text.1abd43408fdbb0": [
+    "This confirmation has already been resolved.",
+    "Esta confirmação já foi resolvida."
+  ],
+  "text.6b352f312dd98f": [
+    "Allow changes: Yes (recommended)",
+    "Permitir mudanças: Sim (recomendado)"
+  ],
+  "text.d0e80862185ff7": [
+    "Monday",
+    "Segunda-feira"
+  ],
+  "text.fff8867b824e73": [
+    "Tuesday",
+    "Terça-feira"
+  ],
+  "text.ca7b8cbccb8fd8": [
+    "Thursday",
+    "Quinta-feira"
+  ],
+  "text.f7a8575b1a8fe0": [
+    "Saturday",
+    "Sábado"
+  ],
+  "text.ae9ca0d496b5b3": [
+    "Design",
+    "Design"
+  ],
+  "text.2eba946b2e1ee4": [
+    "Edit",
+    "Editar"
+  ],
+  "text.e57f389344d2ea": [
+    "Time out",
+    "Aplicar timeout"
+  ],
+  "text.69d17ca1683468": [
+    "Enabled",
+    "Ativada"
+  ],
+  "text.7e9a9f126f1f58": [
+    "Friday",
+    "Sexta-feira"
+  ],
+  "text.424e93aa513406": [
+    "Sunday",
+    "Domingo"
+  ],
+  "text.265a0222634a7a": [
+    "None",
+    "Nenhuma"
+  ],
+  "text.d455cfb682d370": [
+    "Paused",
+    "Pausado"
+  ],
+  "text.c9894cf002f90b": [
+    "Delete",
+    "Excluir"
+  ],
+  "text.772ffb657276d9": [
+    "Reports",
+    "Denúncias"
+  ],
+  "text.0635bc16ddbe4c": [
+    "Wednesday",
+    "Quarta-feira"
+  ],
+  "text.c528c9805c3db3": [
+    "Create role",
+    "Criar cargo"
+  ],
+  "text.02db55bac5e3f7": [
+    "Variables",
+    "Variáveis"
+  ],
+  "text.1a878a55c594b0": [
+    "Discard",
+    "Descartar"
+  ],
+  "text.553f5b2ff5d004": [
+    "Unlimited",
+    "Sem limite"
+  ],
+  "text.70cf296fe178d5": [
+    "Suggestions",
+    "Sugestões"
+  ],
+  "text.716ff07341bc5e": [
+    "Notify only",
+    "Apenas avisar"
+  ],
+  "text.86a60bd3aabf98": [
+    "Author and footer",
+    "Autor e rodapé"
+  ],
+  "text.313f857073339b": [
+    "Current channel",
+    "Canal atual"
+  ],
+  "text.2639edffb76eb3": [
+    "Channel → {p0}",
+    "Canal → {p0}"
+  ],
+  "text.edeb65da814288": [
+    "Embed footer",
+    "Rodapé do embed"
+  ],
+  "text.dcedd9e3b0f563": [
+    "Raid Protection",
+    "Proteção contra raids"
+  ],
+  "text.58a23dea20d696": [
+    "Send Messages",
+    "Enviar mensagens"
+  ],
+  "text.c48c231a5a282d": [
+    "New suggestion",
+    "Nova sugestão"
+  ],
+  "text.a438d474bc5f77": [
+    "**Action:** {p0}",
+    "**Ação:** {p0}"
+  ],
+  "text.fcc24033edcb78": [
+    "Field name",
+    "Nome do campo"
+  ],
+  "text.b79429dd1a077e": [
+    "Condemnation expired",
+    "Condenação expirada"
+  ],
+  "text.0c180627ae3f2b": [
+    "Confirm changes",
+    "Confirmar alterações"
+  ],
+  "text.162706924bddfd": [
+    "Condemnation lifted",
+    "Condenação removida"
+  ],
+  "text.0970a2881d7e5a": [
+    "Review required",
+    "Requer revisão"
+  ],
+  "text.c96c4445540314": [
+    "Manage Messages",
+    "Gerenciar mensagens"
+  ],
+  "text.2a6e4612e476fa": [
+    "Cannot assign: ",
+    "Não é possível atribuir: "
+  ],
+  "text.b445b047b2aa6a": [
+    "That case does not exist.",
+    "Esse caso não existe."
+  ],
+  "text.ab946656b18202": [
+    "Honeypot channel removed",
+    "Canal armadilha removido"
+  ],
+  "text.0cfccadccb64bc": [
+    "Enable / Disable",
+    "Ativar / Desativar"
+  ],
+  "text.4e05dd02466bfb": [
+    "Custom name",
+    "Nome personalizado"
+  ],
+  "text.e62842332ca205": [
+    "Review schedule",
+    "Revisar agendamento"
+  ],
+  "text.127c65a53724b1": [
+    "This editor belongs to another user.",
+    "Este editor pertence a outro usuário."
+  ],
+  "text.8e0e9e0ddc829f": [
+    "Rule violation",
+    "Violação das regras"
+  ],
+  "text.bc04eb03f21ad5": [
+    "View case details",
+    "Ver detalhes do caso"
+  ],
+  "text.dd2b7ace80d18b": [
+    "Expired automatically",
+    "Expirado automaticamente"
+  ],
+  "text.9bb0e81f4d5d66": [
+    "The role could not be prepared.",
+    "Não foi possível preparar o cargo."
+  ],
+  "text.e157bf6a2ad565": [
+    "Publication time (HH:MM)",
+    "Horário de publicação (HH:MM)"
+  ],
+  "text.17ebd113981edc": [
+    "Create a template first.",
+    "Crie um modelo primeiro."
+  ],
+  "text.67837899c149ff": [
+    "Could not sync: {p0}",
+    "Não foi possível sincronizar: {p0}"
+  ],
+  "text.5f9ed1c204ef74": [
+    "Select a schedule.",
+    "Selecione um agendamento."
+  ],
+  "text.b882a3fcabc604": [
+    "The schedule no longer exists.",
+    "O agendamento não existe mais."
+  ],
+  "text.aacc41d4dd9e7c": [
+    "Error: That embed no longer exists.",
+    "Erro: Esse embed não existe mais."
+  ],
+  "text.87fdaf1cf9fb80": [
+    "Could not create the channel: `{p0}`.",
+    "Não foi possível criar o canal: `{p0}`."
+  ],
+  "text.fefdd091b33688": [
+    "Select a reaction first.",
+    "Selecione uma reação primeiro."
+  ],
+  "text.41c9cad4c7a58f": [
+    "Could not apply the condemnation: {p0}",
+    "Não foi possível aplicar a condenação: {p0}"
+  ],
+  "text.d922bc70da8e82": [
+    "Condemnation applied to **{p0}**. {p1}",
+    "Condenação aplicada a **{p0}**. {p1}"
+  ],
+  "text.2ab818f8c319dd": [
+    "This confirmation belongs to another user.",
+    "Esta confirmação pertence a outro usuário."
+  ],
+  "text.c0fdd2a9a67701": [
+    "Case code (7 characters)",
+    "Código do caso (7 caracteres)"
+  ],
+  "text.be0580569b16d5": [
+    "This editor belongs to another administrator.",
+    "Este editor pertence a outro administrador."
+  ],
+  "text.40bb00b053beae": [
+    "Editing canceled. No changes were saved.",
+    "Edição cancelada. Nenhuma alteração foi salva."
+  ],
+  "text.13e51a210f45ed": [
+    "Save",
+    "Salvar"
+  ],
+  "text.8e38c2571d87f6": [
+    "Enable",
+    "Ativar"
+  ],
+  "text.326fdfdb1a8937": [
+    "Publish",
+    "Publicar"
+  ],
+  "text.aeccae342e4bd0": [
+    "Close",
+    "Fechar"
+  ],
+  "text.a877dcdc8d8c76": [
+    "PERSONALITY VERIFICATION",
+    "VERIFICAÇÃO DE PERSONALIDADE"
+  ],
+  "text.6a497415e818fd": [
+    "CONDEMNATION DECISION",
+    "DECISÃO DE CONDENAÇÃO"
+  ],
+  "text.adaf2512f140fa": [
+    "Applied by",
+    "Aplicada por"
+  ],
+  "text.838dc32dffd86a": [
+    "Conduct / Reason",
+    "Conduta / Motivo"
+  ],
+  "text.f44c613faa05e6": [
+    "When",
+    "Quando"
+  ],
+  "text.4496110899004f": [
+    "Where it happened",
+    "Onde ocorreu"
+  ],
+  "text.2d67a6484d4045": [
+    "Removed roles",
+    "Cargos removidos"
+  ],
+  "text.1eb041c4d73c8d": [
+    "Observe",
+    "Observar"
+  ],
+  "text.4227fbef304d05": [
+    "Conservative",
+    "Conservadora"
+  ],
+  "text.911d1179bfed6c": [
+    "Balanced",
+    "Equilibrada"
+  ],
+  "text.87956eb4fc2585": [
+    "Strict",
+    "Rigorosa"
+  ],
+  "text.0c46011974c95e": [
+    "Conduct",
+    "Conduta"
+  ],
+  "text.cb99a42f984137": [
+    "Server and channel",
+    "Servidor e canal"
+  ],
+  "text.a376d1351c3f23": [
+    "Original available",
+    "Original disponível"
+  ],
+  "text.6bbb7c3704b1b8": [
+    "Official rule quoted verbatim",
+    "Regra oficial citada literalmente"
+  ],
+  "text.5f7cc9faf6c801": [
+    "Conduct pending review",
+    "Conduta pendente de revisão"
+  ],
+  "text.55326575841ece": [
+    "Log only (no action)",
+    "Apenas registrar (sem ação)"
+  ],
+  "text.10dde311ff3ffe": [
+    "Server rules",
+    "Regras do servidor"
+  ],
+  "text.81fa939a59b76b": [
+    "Departure comment",
+    "Comentário de saída"
+  ],
+  "text.c05ec440a8b5af": [
+    "Private conversation",
+    "Conversa privada"
+  ],
+  "text.1d901a3c70bf7b": [
+    "Case status",
+    "Estado do caso"
+  ],
+  "text.217354ff4b1e64": [
+    "Select a module.",
+    "Selecione um módulo."
+  ],
+  "text.53b5aede865212": [
+    "Invalid module.",
+    "Módulo inválido."
+  ],
+  "text.fec0683ce17f89": [
+    "Select a module in the dropdown first.",
+    "Selecione primeiro um módulo no menu suspenso."
+  ],
+  "text.46f21fb5b47836": [
+    "Verbatim record for review; it does not constitute conclusive evidence.",
+    "Registro literal para revisão; não constitui prova conclusiva."
+  ],
+  "text.dadae52832acc2": [
+    "A condemnation has been applied to {usuario}. The recorded case is detailed below.",
+    "Uma condenação foi aplicada a {usuario}. Os detalhes do caso registrado estão abaixo."
+  ],
+  "text.41c68037c5a2a9": [
+    "Click the button below to confirm that you are of legal age and gain access to the server.",
+    "Clique no botão abaixo para confirmar que você é maior de idade e obter acesso ao servidor."
+  ],
+  "text.f3c20700bd40a7": [
+    "Verified! You now have access to the server.",
+    "Verificado! Você já tem acesso ao servidor."
+  ],
+  "text.3399ac24aef8b9": [
+    "Choose the role that represents you by reacting with its emoji:",
+    "Escolha o cargo que representa você reagindo com o emoji correspondente:"
+  ],
+  "text.087da0212134bc": [
+    "An operation is in progress in this panel. Wait for it to finish.",
+    "Há uma operação em andamento neste painel. Aguarde a conclusão."
+  ],
+  "text.6b8921f1c59e4e": [
+    "The action could not be completed. Reopen the panel and check its state before trying again.",
+    "Não foi possível concluir a ação. Abra o painel novamente e confira o estado antes de tentar outra vez."
+  ],
+  "text.da5e271fa68c1a": [
+    "DM sent to the author.",
+    "DM enviada ao autor."
+  ],
+  "text.0b249beef19d0f": [
+    "no role is configured",
+    "nenhum cargo foi configurado"
+  ],
+  "text.df3f924c2dce87": [
+    "open",
+    "aberto"
+  ],
+  "text.e53ed75c1535ff": [
+    "closed",
+    "fechado"
+  ],
+  "text.adfcbfc83b5cc5": [
+    "enabled",
+    "ativada"
+  ],
+  "text.5a2925de7a1a0b": [
+    "⏸️ disabled",
+    "⏸️ desativada"
+  ],
+  "text.be981808e1c5c1": [
+    "sent",
+    "enviado"
+  ],
+  "text.f1308241eb0241": [
+    "month",
+    "mês"
+  ],
+  "text.a0ca8cf00d2c89": [
+    "months",
+    "meses"
+  ],
+  "text.f7f5a5c6c80d49": [
+    "disabled",
+    "desativada"
+  ],
+  "text.4f87498b67d589": [
+    "yes",
+    "sim"
+  ],
+  "text.9390298f3fb0c5": [
+    "no",
+    "não"
+  ],
+  "text.f6920bf7ea3ae9": [
+    "indefinite",
+    "indefinida"
+  ],
+  "text.7b2b5b660ede59": [
+    "manually",
+    "manualmente"
+  ],
+  "text.913dba3a79e33b": [
+    "enabled",
+    "ativada"
+  ],
+  "text.ec4cc7e5b3e7ea": [
+    "updated",
+    "atualizada"
+  ],
+  "text.5b0f1790dee350": [
+    "ban",
+    "banir"
+  ],
+  "text.f7345bb5522ba6": [
+    "kick",
+    "expulsar"
+  ],
+  "text.189dced1c43601": [
+    "paused",
+    "pausada"
+  ],
+  "text.3f695d04348e0b": [
+    "none",
+    "nenhum"
+  ],
+  "text.c364369f1d9925": [
+    "**Pending changes:** ",
+    "**Alterações pendentes:** "
+  ],
+  "text.d6404388cff88f": [
+    "\n\n**Preferences saved successfully.**",
+    "\n\n**Preferências salvas com sucesso.**"
+  ],
+  "text.14ad1858c57255": [
+    "invitations reopened",
+    "convites reabertos"
+  ],
+  "text.2424e40261916d": [
+    "all their messages",
+    "todas as suas mensagens"
+  ],
+  "text.670c413faac6cc": [
+    "invitations paused",
+    "convites pausados"
+  ],
+  "text.2140c195f7301b": [
+    "current date",
+    "data atual"
+  ],
+  "text.b0553346e6abfb": [
+    "current time",
+    "hora atual"
+  ],
+  "text.5a4a62a78eb47e": [
+    "full current date and time",
+    "data e hora atuais completas"
+  ],
+  "text.ead768befde1a5": [
+    "role deleted",
+    "cargo excluído"
+  ],
+  "text.838ec21bd0b926": [
+    "Discord user ID",
+    "ID de usuário do Discord"
+  ],
+  "text.6cbb555353f07c": [
+    "Welcome DM updated",
+    "DM de boas-vindas atualizada"
+  ],
+  "text.6ba42f2a390dbe": [
+    "Image URL (optional)",
+    "URL da imagem (opcional)"
+  ],
+  "text.af23497887284b": [
+    "[go to panel](https://discord.com/channels/{p0}/{p1}/{p2})",
+    "[ir ao painel](https://discord.com/channels/{p0}/{p1}/{p2})"
+  ],
+  "text.52749e2dae55d4": [
+    "CONDEMNATION PARDONED",
+    "CONDENAÇÃO PERDOADA"
+  ],
+  "text.59ec49f8e82d3f": [
+    "**all** their messages",
+    "**todas** as suas mensagens"
+  ],
+  "text.da592f55fa9151": [
+    "RAID DETECTED — raid mode enabled",
+    "RAID DETECTADA — modo raid ativado"
+  ],
+  "text.674b76beacb483": [
+    " · moderators only",
+    " · apenas moderadores"
+  ],
+  "text.e684fb97330ca6": [
+    "; DM sent",
+    "; DM enviada"
+  ],
+  "text.2da57217e1f950": [
+    " the owner among those who receive suggestions?",
+    " o proprietário entre quem recebe sugestões?"
+  ],
+  "text.c9d5f099ef0154": [
+    "<#{p0}> · {p1}\nAccount created: {p2}",
+    "<#{p0}> · {p1}\nConta criada: {p2}"
+  ],
+  "text.f1c5938f74bc84": [
+    "\n\nChanges saved.",
+    "\n\nAlterações salvas."
+  ],
+  "text.a353e5092f323b": [
+    "\n\nUser saved.",
+    "\n\nUsuário salvo."
+  ],
+  "text.32f00695fd70af": [
+    "\n\nPanel deleted.",
+    "\n\nPainel excluído."
+  ],
+  "text.abd666b3e487d1": [
+    "**Additional purge:** none.",
+    "**Exclusão adicional de mensagens:** nenhuma."
+  ],
+  "text.0e3afcece98f82": [
+    "; original card updated",
+    "; cartão original atualizado"
+  ],
+  "text.319e0a88ba629f": [
+    "condemnation applied",
+    "condenação aplicada"
+  ],
+  "text.5bde67d5dc66f7": [
+    "Unknown IANA time zone; use UTC or America/Santo_Domingo.",
+    "Fuso horário IANA desconhecido; use UTC ou America/Santo_Domingo."
+  ],
+  "text.0182367407cd7b": [
+    "efimera must be a boolean.",
+    "efimera deve ser um booleano."
+  ],
+  "text.1723c29b5563f1": [
+    "inline must be a boolean.",
+    "inline deve ser um booleano."
+  ],
+  "text.f37d15744f63b8": [
+    "Administrative warning.",
+    "Advertência administrativa."
+  ],
+  "text.2e2946769ed603": [
+    "Sanction or warning from a moderation reaction.",
+    "Sanção ou advertência por reação de moderação."
+  ],
+  "text.310350050c4757": [
+    "Delivery interrupted. Check the channel and create a new schedule if needed.",
+    "Envio interrompido. Confira o canal e crie um novo agendamento, se necessário."
+  ],
+  "text.cc7bdc48cefe15": [
+    "0 = immediately",
+    "0 = imediato"
+  ],
+  "text.5bc44882e1a920": [
+    "0 = disable",
+    "0 = desativar"
+  ],
+  "text.380c34da780c51": [
+    "Condemned member",
+    "Membro condenado"
+  ],
+  "text.742321065c0d4b": [
+    "https://… or {serverbanner}",
+    "https://… ou {serverbanner}"
+  ],
+  "text.0b202b1dc653c4": [
+    "https://… or {servericon}",
+    "https://… ou {servericon}"
+  ]
+}

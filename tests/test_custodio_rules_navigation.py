@@ -1,9 +1,10 @@
 """Regresión del subpanel de Server Rules, sin Gateway ni inferencia."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
 
-SOURCE = (Path(__file__).resolve().parents[1] / "custodio_setup.py").read_text("utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'custodio_setup.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 
 

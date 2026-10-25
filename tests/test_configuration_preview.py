@@ -1,4 +1,5 @@
 """Pruebas estructurales del flujo central de confirmación de /setup."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
@@ -7,7 +8,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
 
 
 def find_function(name):
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
     return next(node for node in tree.body
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and node.name == name)
@@ -30,7 +31,7 @@ class ConfigurationPreviewTests(unittest.TestCase):
         self.assertIn("publish_honeypot_notice=publish_honeypot_notice", code)
 
     def test_existing_confirmation_keeps_safety_checks(self):
-        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
         cls = next(node for node in tree.body
                    if isinstance(node, ast.ClassDef) and node.name == "ConfigurationConfirmView")
         code = ast.unparse(cls)

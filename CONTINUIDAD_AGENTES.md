@@ -1,3 +1,9 @@
+## 2026-10-25 — i18n transversal en Pruebas
+
+Internacionalización extendida a bot y módulos auxiliares: 3000 claves para es-419/en-US/pt-BR; selector de setup corregido; contexto por servidor en callbacks, DMs, filas persistidas y tareas; serialización de componentes de clase y entradas localizadas con valores internos estables. Preferencia única en SQLite, guardar explícito y footer Lab conservados. SQL sin cambios. Catálogos parciales: 395 claves revisadas explícitamente y 2605 en cola editorial; no se declara 100 %. Ver `docs/I18N_COVERAGE.md` y `locales/editorial_status.json`.
+
+Validación local: 25 pruebas específicas; suite 933 con dos omisiones existentes; 39 regresiones raíz; sintaxis/gramática 3.11, dependencias y diff. CI y recibo Railway del commit se añadirán tras publicar. Pruebas de clics reales en Discord: NO realizadas. `main` y producción intactos.
+
 ## Continuidad — idioma español en todo El Heraldo (2026-10-24)
 Requisito NH UX-03D en `Pruebas` y `main`. Traducir exclusivamente texto visible escrito por El Heraldo, sin alterar contratos internos, comandos establecidos ni preferencias de los servidores. Comprobar CI y Railway tras cada publicación. Las etiquetas del cliente Discord (botón de enviar un modal) no son controlables por la aplicación.
 

@@ -1,11 +1,12 @@
 """Regresión de verificación tras desconexión: revisión segura, sin Discord real."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace as NS
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE = ast.parse(SOURCE)
 FUNC = next(n for n in TREE.body if isinstance(n, ast.AsyncFunctionDef)
             and n.name == "reconcile_untracked_verifications_for_guild")

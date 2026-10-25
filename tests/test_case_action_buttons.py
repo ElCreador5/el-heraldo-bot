@@ -1,4 +1,5 @@
 """Structural regressions for case actions and live user status."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import pathlib
 import unittest
@@ -9,8 +10,8 @@ SOURCE = pathlib.Path(__file__).resolve().parents[1] / "bot.py"
 class CaseActionsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-        cls.source = SOURCE.read_text(encoding="utf-8")
+        cls.tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
+        cls.source = _source_text(SOURCE, encoding='utf-8')
 
     def function(self, name):
         return next(n for n in self.tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == name)

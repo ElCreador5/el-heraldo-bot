@@ -1,11 +1,12 @@
 """Contrato de recuperación oficial: DM previo y título/servidor configurables."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 import ast
 import re
 import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
-SOURCE=(Path(__file__).resolve().parents[1]/"bot.py").read_text(encoding="utf-8")
+SOURCE=_source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
 TREE=ast.parse(SOURCE)
 
 class PersonalityRecoveryTests(unittest.TestCase):

@@ -1,9 +1,10 @@
 """Regresión sin Gateway: Solo reportar nunca puede activar una purga."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
 
-SOURCE = Path(__file__).resolve().parents[1].joinpath("bot.py").read_text(encoding="utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1].joinpath('bot.py'), encoding='utf-8')
 TREE = ast.parse(SOURCE)
 
 def function_named(name):

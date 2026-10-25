@@ -1,4 +1,5 @@
 """Persistencia y cálculo de publicaciones programadas de embeds (opt-in)."""
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 import calendar
 import json
 import re
@@ -21,18 +22,18 @@ def initialize(conn):
 def interval_seconds(value, is_test=False):
     m = re.fullmatch(r"([1-9][0-9]{0,7})([smhd])", value.strip().lower())
     if not m:
-        raise ValueError("Use un intervalo como 2m, 1h o 14d.")
+        raise ValueError(_t('text.30c7ae0fcfd2fd'))
     unit = m.group(2)
     if unit == "s" and not is_test:
-        raise ValueError("Los segundos solo están permitidos en Test.")
+        raise ValueError(_t('text.952e23ecdc3bd6'))
     sec = int(m.group(1)) * (1 if unit == "s" else UNITS[unit])
     if sec < (10 if is_test else 3600) or sec > 365 * 86400:
-        raise ValueError("Intervalo fuera del rango permitido.")
+        raise ValueError(_t('text.679e80c4ba72df'))
     return sec
 
 def validate(mode, config, is_test=False):
     if mode not in MODES:
-        raise ValueError("Tipo de programación no admitido.")
+        raise ValueError(_t('text.527684e4a4c093'))
     if mode == "once":
         datetime.fromisoformat(config["when"]).astimezone(RD)
     elif mode == "interval":
@@ -40,14 +41,14 @@ def validate(mode, config, is_test=False):
     elif mode in {"daily", "weekly", "monthly"}:
         hh, mm = map(int, config["time"].split(":"))
         if not (0 <= hh <= 23 and 0 <= mm <= 59):
-            raise ValueError("Hora inválida.")
+            raise ValueError(_t('text.4e8e5bee2f3861'))
         if mode == "weekly" and not (set(config["days"]) <= set(range(7)) and config["days"]):
-            raise ValueError("Seleccione días de la semana.")
+            raise ValueError(_t('text.ab698e8e4300bf'))
         if mode == "monthly" and not (set(config["days"]) <= set(range(1,32)) and config["days"]):
-            raise ValueError("Seleccione días del mes.")
+            raise ValueError(_t('text.29cc2a7bd96585'))
     elif mode == "messages":
         if not 10 <= int(config["count"]) <= 100000:
-            raise ValueError("El contador debe estar entre 10 y 100000 mensajes.")
+            raise ValueError(_t('text.b99ef82693945f'))
 
 def next_due(mode, cfg, now, is_test=False):
     validate(mode, cfg, is_test)
@@ -76,7 +77,7 @@ def next_due(mode, cfg, now, is_test=False):
         if mode == "daily" or (mode == "weekly" and day.weekday() in cfg["days"]) or (
             mode == "monthly" and day.day in cfg["days"]):
             return day.astimezone(timezone.utc)
-    raise ValueError("No se encontró próxima fecha.")
+    raise ValueError(_t('text.0550e7d48809a9'))
 
 def claim_due(conn, now, is_test=False):
     """Claim before send. Skipped messages aren't replayed after restart."""
@@ -98,6 +99,7 @@ def claim_due(conn, now, is_test=False):
     conn.commit()
     return claims
 
+@_i18n_context
 def advance_message(conn, guild_id, channel_id):
     """Count real user messages. Single process + SQLite transaction avoids duplicate triggers."""
     initialize(conn)

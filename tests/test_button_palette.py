@@ -1,11 +1,12 @@
 """Estándar semántico de botones de El Heraldo; verificación sin Gateway."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 
 import ast
 from pathlib import Path
 import unittest
 
-CODE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+CODE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(CODE)
 
 def decorators():
@@ -67,9 +68,9 @@ class ButtonPaletteTests(unittest.TestCase):
 
     def test_auxiliary_message_modules_use_same_palette(self):
         root = Path(__file__).resolve().parents[1]
-        actions = (root / "message_components.py").read_text("utf-8")
-        editor = (root / "message_editor.py").read_text("utf-8")
-        automation = (root / "message_automation.py").read_text("utf-8")
+        actions = _source_text(root / 'message_components.py', 'utf-8').replace('"', "'")
+        editor = _source_text(root / 'message_editor.py', 'utf-8').replace('"', "'")
+        automation = _source_text(root / 'message_automation.py', 'utf-8').replace('"', "'")
         self.assertIn("self.execute.style", actions)
         self.assertIn("for action in definition.get('acciones', [])", actions)
         self.assertIn("discord.ButtonStyle.danger", actions)
@@ -84,7 +85,7 @@ class ButtonPaletteTests(unittest.TestCase):
         scope = next(x for x in TREE.body if isinstance(x, ast.ClassDef)
                      and x.name == "HoneypotTrapActionConfirmView")
         init = next(x for x in scope.body if isinstance(x, ast.FunctionDef) and x.name == "__init__")
-        self.assertIn("remove", ast.unparse(init))
+        self.assertIn("discord.ButtonStyle.success", ast.unparse(init))
         self.assertIn("self.confirm.style", ast.unparse(init))
         scheduler = next(x for x in TREE.body if isinstance(x, ast.ClassDef)
                          and x.name == "EmbedScheduleView")

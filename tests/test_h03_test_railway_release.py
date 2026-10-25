@@ -1,4 +1,5 @@
 """Puente Railway Test a respaldo H-03 y diario: SIN red ni SQLite viva."""
+from i18n_source_helpers import source_text as _source_text
 from contextlib import nullcontext
 import json
 import os
@@ -171,7 +172,7 @@ class RailwayIntegrationTests(unittest.TestCase):
 
 class BootOrderTest(unittest.TestCase):
     def test_test_gate_before_discord_creation(self):
-        code=(Path(__file__).resolve().parents[1]/"bot.py").read_text(encoding="utf-8")
+        code=_source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
         self.assertIn("_h03_test_enforce_boot()", code)
         self.assertLess(code.index("_h03_test_enforce_boot()"),
                         code.index("bot = commands.Bot("))

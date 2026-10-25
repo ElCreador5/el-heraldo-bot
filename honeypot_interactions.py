@@ -1,5 +1,6 @@
 """Exclusión de operaciones Honeypot en el worker; no escribe datos ni difiere modales."""
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context
 
 import asyncio
 from functools import wraps
@@ -18,6 +19,7 @@ def honeypot_operation(callback):
     El worker Test usa una réplica; esto no es un bloqueo distribuido.
     """
     @wraps(callback)
+    @_i18n_context
     async def guarded(self, interaction, *args, **kwargs):
         parent = getattr(self, "parent", self)
         guild_id = getattr(self, "guild_id", None) or parent.guild_id
@@ -27,7 +29,7 @@ def honeypot_operation(callback):
             if not interaction.response.is_done():
                 await interaction.response.defer()
             await interaction.followup.send(
-                "Hay una operación de Honeypot en curso. Espere a que termine antes de continuar.",
+                _t('text.d93c9b9a2a26ac'),
                 ephemeral=True,
             )
             return
@@ -44,6 +46,7 @@ def honeypot_operation(callback):
 def serialize_honeypot_warning(callback):
     """Relee el ID del aviso dentro del bloqueo compartido por canal."""
     @wraps(callback)
+    @_i18n_context
     async def guarded(channel):
         key = (channel.guild.id, channel.id)
         lock = _warning_locks.get(key)

@@ -1,12 +1,13 @@
 """Regresiones editoriales del programador de embeds."""
 from __future__ import annotations
+from i18n_source_helpers import source_text as _source_text
 import ast
 import unittest
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 
-SOURCE = (Path(__file__).resolve().parents[1] / "bot.py").read_text("utf-8")
+SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 def get(name):
     matches = [n for n in TREE.body if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]

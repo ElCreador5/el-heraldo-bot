@@ -1,4 +1,5 @@
 """Regresiones estructurales de sincronización de paneles publicados."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
@@ -7,7 +8,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "bot.py"
 
 
 def function(name):
-    tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+    tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
     return next(node for node in tree.body
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name)
 
@@ -36,7 +37,7 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertNotIn("message.delete", code)
 
     def test_verification_updates_on_changes(self):
-        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
         cls = next(node for node in tree.body
                    if isinstance(node, ast.ClassDef) and node.name == "ConfigurationConfirmView")
         code = ast.unparse(cls)
@@ -48,7 +49,7 @@ class PublishedPanelSyncTests(unittest.TestCase):
     def test_report_helpers_have_synchronous_callers(self):
         self.assertIsInstance(function("moderation_report_reactions"), ast.FunctionDef)
         self.assertIsInstance(function("moderation_reports_summary"), ast.FunctionDef)
-        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
         for node in ast.walk(tree):
             if isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
                 called = node.value.func
@@ -64,7 +65,7 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertNotIn("guild_config_set", source)
 
     def test_missing_warning_is_offered_without_saving(self):
-        tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        tree = ast.parse(_source_text(SOURCE, encoding='utf-8'))
         editor = next(node for node in tree.body
                       if isinstance(node, ast.ClassDef) and node.name == "ModerationReactionEditModal")
         source = ast.unparse(editor)
@@ -80,7 +81,7 @@ class PublishedPanelSyncTests(unittest.TestCase):
         self.assertIn("Advertencia ❗ no configurada", ast.unparse(overview))
 
     def test_report_editor_uses_compact_overview(self):
-        source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+        source = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
         tree = ast.parse(source)
         cls = next(node for node in tree.body
                    if isinstance(node, ast.ClassDef) and node.name == "HeraldoUserReportsSetupView")

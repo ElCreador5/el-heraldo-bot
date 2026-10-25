@@ -4,6 +4,7 @@ No habilita modo automático ni configura sanciones en Discord. Las propuestas
 por categoría deben ligarse posteriormente a reglas locales aprobadas.
 """
 from __future__ import annotations
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 
 import discord
 
@@ -13,22 +14,23 @@ from custodio_rule_actions import (
 )
 
 ACTION_LABELS = {
-    "report": "Solo reportar",
-    "warn": "Warn",
-    "temp_ban": "Temp Ban",
-    "kick": "Expulsar (futuro)",
-    "ban": "Banear (futuro)",
+    "report": _t('text.fb57b92cfc0723'),
+    "warn": _t('text.8448814dc5caff'),
+    "temp_ban": _t('text.560bdcdd9b4bbd'),
+    "kick": _t('text.c1df82c8d7ed93'),
+    "ban": _t('text.5047b0ff0e35b4'),
 }
 ACTION_DESCRIPTIONS = {
-    "report": "Registra la observación para revisión, sin sancionar.",
-    "warn": "Advertencia centralizada, pendiente de integración.",
-    "temp_ban": "Baneo temporal; plazo aún no configurable.",
-    "kick": "Propuesta de expulsión; no ejecutable en esta fase.",
-    "ban": "Propuesta de baneo; no ejecutable en esta fase.",
+    "report": _t('text.0cd0ee7856aa89'),
+    "warn": _t('text.fe5583126103ee'),
+    "temp_ban": _t('text.6f719cc02ce8bb'),
+    "kick": _t('text.204bc4d08f485e'),
+    "ban": _t('text.30c170b8779c5a'),
 }
 
 
 class CustodioRuleActionsView(discord.ui.View):
+    @_i18n_context
     def __init__(self, parent):
         super().__init__(timeout=600)
         self.parent = parent
@@ -39,7 +41,7 @@ class CustodioRuleActionsView(discord.ui.View):
         self._committing = False
 
         self.category_selector = discord.ui.Select(
-            placeholder="Tipo de infracción según las reglas del servidor",
+            placeholder=_t('text.4180f6860b00ea'),
             row=0, min_values=1, max_values=1,
             options=[
                 discord.SelectOption(
@@ -52,7 +54,7 @@ class CustodioRuleActionsView(discord.ui.View):
         self.add_item(self.category_selector)
 
         self.action_selector = discord.ui.Select(
-            placeholder="Acción propuesta para este tipo (sin sanciones activas)",
+            placeholder=_t('text.84a8d1547097dc'),
             row=1, min_values=1, max_values=1,
             options=[
                 discord.SelectOption(
@@ -66,40 +68,43 @@ class CustodioRuleActionsView(discord.ui.View):
         self.add_item(self.action_selector)
 
         suggestion = discord.ui.Button(
-            label="Aplicar acción sugerida", style=discord.ButtonStyle.primary, row=2,
+            label=_t('text.3dff800821bcd8'), style=discord.ButtonStyle.primary, row=2,
         )
         suggestion.callback = self.apply_suggestion
         self.add_item(suggestion)
 
         save = discord.ui.Button(
-            label="Guardar cambios", style=discord.ButtonStyle.success, row=2,
+            label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=2,
         )
         save.callback = self.save_changes
         self.save_button = save
         self.add_item(save)
 
         discard = discord.ui.Button(
-            label="Descartar cambios", style=discord.ButtonStyle.danger, row=3,
+            label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=3,
         )
         discard.callback = self.discard_changes
         self.discard_button = discard
         self.add_item(discard)
 
         back = discord.ui.Button(
-            label="Volver", style=discord.ButtonStyle.secondary, row=3,
+            label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=3,
         )
         back.callback = self.back
         self.add_item(back)
         self._sync_controls()
 
+    @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await self.parent.access_check(
             interaction, self.parent.guild_id, self.parent.owner_id
         )
 
+    @_i18n_context
     def _dirty(self) -> bool:
         return self.pending_actions != self.saved_actions
 
+    @_i18n_context
     def _sync_controls(self) -> None:
         for option in self.category_selector.options:
             option.default = option.value == self.selected_category
@@ -108,6 +113,7 @@ class CustodioRuleActionsView(discord.ui.View):
         self.save_button.disabled = not self._dirty() or self._committing
         self.discard_button.disabled = not self._dirty() or self._committing
 
+    @_i18n_context
     def summary(self) -> str:
         category = TEMPLATE_BY_KEY[self.selected_category]
         pending = self.pending_actions[self.selected_category]
@@ -120,21 +126,10 @@ class CustodioRuleActionsView(discord.ui.View):
             for entry in TEMPLATES
         )
         return (
-            "**El Heraldo · AutoMod · Custodio · Acciones por tipo**\n\n"
-            "Estas son plantillas sugeridas, no reglas universales. "
-            "Cada servidor debe vincularlas a sus propias reglas del servidor aprobadas.\n"
-            "NH se refiere a las normas internas del bot.\n\n"
-            f"**Plantillas:**\n{entries}\n\n"
-            f"**Tipo seleccionado:** {category.label}\n"
-            f"**Sugerencia:** {ACTION_LABELS[suggested_action(category.key)]}\n"
-            f"**Selección actual:** {ACTION_LABELS[pending]}\n"
-            f"**Cambios pendientes:** {pending_count}\n"
-            f"**Configuración:** {'Guardada (inactiva)' if self.has_saved_policy else 'Sin guardar'}\n\n"
-            "**Importante:** este panel guarda preferencias para el futuro. "
-            "Custodio permanece en modo Observar, sin clasificador operativo, "
-            "sin supervisión activa y sin expulsiones ni baneos automáticos."
+            _t('text.8b54caa88de96f', p0=f'{entries}', p1=f'{category.label}', p2=f'{ACTION_LABELS[suggested_action(category.key)]}', p3=f'{ACTION_LABELS[pending]}', p4=f'{pending_count}', p5=f"{(_t('text.e524a9ec1211a5') if self.has_saved_policy else _t('text.f8b73aaaaf9da0'))}")
         )
 
+    @_i18n_context
     async def choose_category(self, interaction: discord.Interaction) -> None:
         category = self.category_selector.values[0]
         if category not in TEMPLATE_BY_KEY:
@@ -144,6 +139,7 @@ class CustodioRuleActionsView(discord.ui.View):
         self._sync_controls()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
+    @_i18n_context
     async def choose_action(self, interaction: discord.Interaction) -> None:
         action = self.action_selector.values[0]
         if action not in VALID_ACTIONS:
@@ -153,11 +149,13 @@ class CustodioRuleActionsView(discord.ui.View):
         self._sync_controls()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
+    @_i18n_context
     async def apply_suggestion(self, interaction: discord.Interaction) -> None:
         self.pending_actions[self.selected_category] = suggested_action(self.selected_category)
         self._sync_controls()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
+    @_i18n_context
     async def save_changes(self, interaction: discord.Interaction) -> None:
         if self._committing:
             await interaction.response.defer(thinking=False)
@@ -180,28 +178,30 @@ class CustodioRuleActionsView(discord.ui.View):
                 self.original_raw = self.parent.get_setting(self.parent.guild_id, SETTING_KEY)
                 self.saved_actions, self.has_saved_policy = decode_actions(self.original_raw)
                 self.pending_actions = self.saved_actions.copy()
-                status = "\n\nLa configuración cambió en otra sesión. No se guardaron sus cambios."
+                status = _t('text.e9b5b8dfdd82a4')
             else:
                 self.original_raw = proposal
                 self.saved_actions = self.pending_actions.copy()
                 self.has_saved_policy = True
-                status = "\n\nPreferencias guardadas, sin activar sanciones."
+                status = _t('text.8b89abd03d1b14')
         except Exception:
-            status = "\n\nNo se pudieron guardar las preferencias. No se activó ninguna sanción."
+            status = _t('text.90afd4119451a6')
         finally:
             self._committing = False
             self._sync_controls()
         await interaction.edit_original_response(content=self.summary() + status, view=self, embed=None)
 
+    @_i18n_context
     async def discard_changes(self, interaction: discord.Interaction) -> None:
         self.pending_actions = self.saved_actions.copy()
         self._sync_controls()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
+    @_i18n_context
     async def back(self, interaction: discord.Interaction) -> None:
         if self._dirty():
             await interaction.response.edit_message(
-                content=self.summary() + "\n\nGuarde o descarte los cambios para volver.",
+                content=self.summary() + _t('text.969ff46d338ddc'),
                 view=self, embed=None,
             )
             return

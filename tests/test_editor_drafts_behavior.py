@@ -1,4 +1,5 @@
 """Pruebas aisladas del borrador de los selectores de /setup, sin arrancar Discord."""
+from i18n_source_helpers import source_text as _source_text
 import ast
 import asyncio
 import copy
@@ -7,7 +8,7 @@ from types import SimpleNamespace
 import unittest
 
 
-TREE = ast.parse((Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8"))
+TREE = ast.parse(_source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8'))
 
 
 def isolated_method(class_name, method_name, env=None):
