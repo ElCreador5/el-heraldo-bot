@@ -201,3 +201,28 @@ def observation_embed(evidence: ObservationEvidence) -> discord.Embed:
     )
     embed.set_footer(text="La referencia puede dejar de estar disponible si se elimina el mensaje. No se archivó su contenido.")
     return embed
+
+
+def custodio_literal_report(
+    *, actor: str, guild_name: str, channel_name: str,
+    occurred_at: datetime, verbatim: str, rule_text: str, rule_number: int,
+    footer: str, icon_url: str | None = None,
+    original_url: str | None = None, original_exists: bool = False,
+) -> list[discord.Embed]:
+    """Adaptador NH sin persistencia ni envío: solo crea embeds para revisión.
+
+    Un flujo de eventos futuro debe comprobar permisos, regla, privacidad y
+    existencia del mensaje antes de utilizar este adaptador.
+    """
+    from heraldo_evidence import LiteralEvidence, make_evidence_embeds
+    return make_evidence_embeds(
+        LiteralEvidence(
+            actor=actor, guild=guild_name, channel=channel_name,
+            occurred_at=occurred_at, verbatim=verbatim,
+            rule_quote=rule_text, rule_number=rule_number,
+            original_url=original_url, original_exists=original_exists,
+            conduct="Posible incumplimiento pendiente de revisión",
+            outcome="Solo reportar",
+        ),
+        footer=footer, icon_url=icon_url,
+    )
