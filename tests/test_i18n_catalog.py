@@ -15,11 +15,14 @@ class I18nCatalogTests(unittest.TestCase):
         verify_catalogs()
         self.assertEqual(set(CATALOGS), set(TARGET_LOCALES))
 
-    def test_incomplete_languages_cannot_be_used(self):
-        self.assertEqual(SUPPORTED_LOCALES, frozenset({DEFAULT_LOCALE}))
-        for locale in ("en-US", "pt-BR"):
-            with self.assertRaises(TranslationUnavailable):
-                translate(locale, "language.title")
+    def test_partial_languages_are_available_with_explicit_status(self):
+        from heraldo_i18n import PARTIAL_LOCALES
+        self.assertEqual(SUPPORTED_LOCALES, frozenset(TARGET_LOCALES))
+        self.assertEqual(PARTIAL_LOCALES, frozenset({"en-US", "pt-BR"}))
+        for locale in PARTIAL_LOCALES:
+            self.assertTrue(translate(locale, "language.title"))
+            self.assertIn("partial" if locale == "en-US" else "parciais",
+                          translate(locale, "language.help"))
 
     def test_missing_key_raises_instead_of_using_spanish(self):
         with self.assertRaises(TranslationUnavailable):

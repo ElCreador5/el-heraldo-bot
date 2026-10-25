@@ -12740,7 +12740,7 @@ class HeraldoDateFormatSetupView(discord.ui.View):
 import heraldo_i18n as i18n
 
 LANGUAGE_CHOICES = {"es-419": "Español (Latinoamérica)", "en-US": "English (US)", "pt-BR": "Português (Brasil)"}
-# No publicar otro idioma hasta verificar todos los textos de todos los módulos.
+# El administrador puede seleccionar idiomas parciales; mostrar siempre su estado.
 LANGUAGE_READY = i18n.SUPPORTED_LOCALES
 
 
@@ -12775,7 +12775,8 @@ class HeraldoLanguageView(discord.ui.View):
         selector = discord.ui.Select(
             placeholder=i18n.translate(self.original, "language.select"),
             options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
-                                          description=i18n.translate(self.original, "language.verified"),
+                                          description=("Estado: parcial" if key in i18n.PARTIAL_LOCALES
+                                                       else "Estado: completo"),
                                           default=key == self.pending)
                      for key in sorted(LANGUAGE_READY)],
             row=0,

@@ -25,3 +25,6 @@ El código de los otros módulos aún necesita integrarse con el motor central.
 
 El número de claves actualmente presentes en los tres catálogos no debe
 interpretarse como el porcentaje de cobertura del bot entero.
+
+## Cambio aprobado: idiomas disponibles con estado parcial
+Inglés (`en-US`) y portugués brasileño (`pt-BR`) aparecen en el selector con la pista **Estado: parcial**. Pueden seleccionarse y guardarse por servidor. Los textos todavía no integrados continuarán temporalmente en español; el panel debe advertirlo de forma explícita. La cobertura integral sigue pendiente; no declarar ninguno de estos idiomas completo.

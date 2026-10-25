@@ -1,8 +1,8 @@
 """Motor de internacionalización de El Heraldo.
 
-Los idiomas distintos del español solo se habilitan cuando el inventario de
-mensajes del bot está completo y las pruebas de integración cubren cada ruta.
-No hay fallback silencioso para un idioma que se declare publicado.
+Inglés y portugués brasileño están disponibles en estado PARCIAL, según
+solicitud del propietario. El catálogo traduce únicamente las claves integradas;
+los demás mensajes del bot conservan temporalmente su idioma original.
 """
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from typing import Mapping
 
 DEFAULT_LOCALE = "es-419"
 TARGET_LOCALES = ("es-419", "en-US", "pt-BR")
-SUPPORTED_LOCALES = frozenset({DEFAULT_LOCALE})
+SUPPORTED_LOCALES = frozenset(TARGET_LOCALES)
+PARTIAL_LOCALES = frozenset({"en-US", "pt-BR"})
 
 
 class TranslationUnavailable(RuntimeError):
@@ -30,7 +31,7 @@ CATALOGS = {
         "language.description": "Configura el idioma del bot para este servidor, incluidos los registros, los avisos y los mensajes privados asociados.",
         "language.current": "Actual: {language}",
         "language.pending": "Sin guardar: {language}",
-        "language.help": "Los idiomas adicionales aparecerán cuando sus traducciones estén completas y verificadas. Los textos personalizados se conservan.",
+        "language.help": "Estado: español completo; inglés y portugués brasileño parciales. Algunas funciones todavía mostrarán textos en español. Los textos personalizados se conservan.",
         "language.select": "Selecciona el idioma del servidor",
         "language.verified": "Idioma completo y verificado",
         "language.not_available": "Este idioma todavía no está disponible.",
@@ -46,7 +47,7 @@ CATALOGS = {
         "language.description": "Configure the bot's language for this server, including logs, notices, and associated direct messages.",
         "language.current": "Current: {language}",
         "language.pending": "Not saved: {language}",
-        "language.help": "Additional languages will appear once their translations have been completed and verified. Custom text is preserved.",
+        "language.help": "Status: English and Brazilian Portuguese translations are partial. Some features still display Spanish text. Custom messages are preserved.",
         "language.select": "Select the server language",
         "language.verified": "Fully translated and verified",
         "language.not_available": "This language is not available yet.",
@@ -62,7 +63,7 @@ CATALOGS = {
         "language.description": "Configure o idioma do bot neste servidor, incluindo registros, avisos e mensagens privadas relacionadas.",
         "language.current": "Atual: {language}",
         "language.pending": "Não salvo: {language}",
-        "language.help": "Outros idiomas aparecerão quando todas as traduções estiverem concluídas e verificadas. Os textos personalizados serão preservados.",
+        "language.help": "Estado: as traduções para inglês e português brasileiro são parciais. Algumas funções ainda exibem textos em espanhol. As mensagens personalizadas são preservadas.",
         "language.select": "Selecione o idioma do servidor",
         "language.verified": "Idioma totalmente traduzido e verificado",
         "language.not_available": "Este idioma ainda não está disponível.",
