@@ -9,7 +9,6 @@ from collections import defaultdict, deque
 from hashlib import sha256
 import unicodedata
 
-URL_PATTERN = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
 MAX_TEXT = 4000
 WINDOW_SECONDS = 90
 REPEAT_MIN = 3
