@@ -12762,7 +12762,7 @@ def language_panel_text(guild_id: int, selected: str | None = None) -> str:
         text += "**" + i18n.translate(
             language, "language.pending", language=LANGUAGE_CHOICES[selected]
         ) + "**\n"
-    return text + "\n" + i18n.translate(language, "language.help")
+    return text
 
 
 class HeraldoLanguageView(discord.ui.View):
@@ -12775,9 +12775,9 @@ class HeraldoLanguageView(discord.ui.View):
         selector = discord.ui.Select(
             placeholder=i18n.translate(self.original, "language.select"),
             options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
-                                          description=("Traducción parcial: algunos mensajes siguen en español"
+                                          description=("Otras funciones del bot todavía pueden aparecer en español."
                                                        if key in i18n.PARTIAL_LOCALES
-                                                       else "Traducción completa"),
+                                                       else None),
                                           default=key == self.pending)
                      for key in sorted(LANGUAGE_READY)],
             row=0,
