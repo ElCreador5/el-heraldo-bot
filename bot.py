@@ -12737,9 +12737,11 @@ class HeraldoDateFormatSetupView(discord.ui.View):
 
 
 
+import heraldo_i18n as i18n
+
 LANGUAGE_CHOICES = {"es-419": "Español (Latinoamérica)", "en-US": "English (US)", "pt-BR": "Português (Brasil)"}
 # No publicar otro idioma hasta verificar todos los textos de todos los módulos.
-LANGUAGE_READY = frozenset({"es-419"})
+LANGUAGE_READY = i18n.SUPPORTED_LOCALES
 
 
 def guild_language(guild_id: int) -> str:
@@ -12748,15 +12750,19 @@ def guild_language(guild_id: int) -> str:
 
 
 def language_panel_text(guild_id: int, selected: str | None = None) -> str:
-    current = guild_language(guild_id)
-    text = ("**El Heraldo · Idioma**\n\n"
-            "Configura el idioma del bot para este servidor, incluidos los registros, "
-            "los avisos y los mensajes privados asociados.\n\n"
-            f"**Actual:** {LANGUAGE_CHOICES[current]}\n")
-    if selected is not None and selected != current:
-        text += f"**Sin guardar:** {LANGUAGE_CHOICES[selected]}\n"
-    return text + ("\nLos idiomas adicionales aparecerán cuando sus traducciones "
-                   "estén completas y verificadas. Los textos personalizados se conservan.")
+    language = guild_language(guild_id)
+    text = (
+        "**" + i18n.translate(language, "language.title") + "**\n\n"
+        + i18n.translate(language, "language.description") + "\n\n"
+        + "**" + i18n.translate(
+            language, "language.current", language=LANGUAGE_CHOICES[language]
+        ) + "**\n"
+    )
+    if selected is not None and selected != language:
+        text += "**" + i18n.translate(
+            language, "language.pending", language=LANGUAGE_CHOICES[selected]
+        ) + "**\n"
+    return text + "\n" + i18n.translate(language, "language.help")
 
 
 class HeraldoLanguageView(discord.ui.View):
@@ -12767,9 +12773,9 @@ class HeraldoLanguageView(discord.ui.View):
         self.original = guild_language(guild_id)
         self.pending = self.original
         selector = discord.ui.Select(
-            placeholder="Selecciona el idioma del servidor",
+            placeholder=i18n.translate(self.original, "language.select"),
             options=[discord.SelectOption(label=LANGUAGE_CHOICES[key], value=key,
-                                          description="Idioma completo y verificado",
+                                          description=i18n.translate(self.original, "language.verified"),
                                           default=key == self.pending)
                      for key in sorted(LANGUAGE_READY)],
             row=0,
