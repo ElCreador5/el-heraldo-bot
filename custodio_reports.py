@@ -261,6 +261,8 @@ async def publish_literal_observation(
     async with lock:
         channel = _get_safe_existing(guild, report_channel_id)
         key = (guild.id, source_message.id)
+        import os
+        db_path = os.environ.get("DB_PATH")
         if key not in _published_evidence:
             from custodio_evidence_index import find_reference, prepare_index
             import os
@@ -340,4 +342,9 @@ async def unlink_deleted_original(*, guild: discord.Guild, deleted_message_id: i
         except (discord.Forbidden, discord.HTTPException) as exc:
             raise ReportChannelError("No se pudo actualizar la referencia del mensaje eliminado.") from exc
         _published_evidence.pop(key, None)
+        import os
+        db_path = os.environ.get("DB_PATH")
+        if db_path:
+            from custodio_evidence_index import remove_reference
+            remove_reference(db_path, guild.id, deleted_message_id)
         return True
