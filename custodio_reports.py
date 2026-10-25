@@ -226,3 +226,62 @@ def custodio_literal_report(
         ),
         footer=footer, icon_url=icon_url,
     )
+
+
+# Dedupe temporal por mensaje; evita guardar copias en SQLite/Supabase.
+_published_evidence: dict[tuple[int, int], int] = {}
+_publish_locks: dict[int, asyncio.Lock] = {}
+MAX_RECENT_EVIDENCE = 2048
+
+
+async def publish_literal_observation(
+    *, guild: discord.Guild, report_channel_id: int,
+    source_message: discord.Message, rule_text: str, rule_number: int,
+    footer: str, icon_url: str | None = None,
+) -> discord.Message:
+    """Publicar una copia literal autorizada exclusivamente en reportes privado.
+
+    Debe llamarse solo después de confirmar una regla del servidor aprobada,
+    una observación revisable y las exenciones. No sanciona, no crea canales,
+    no archiva localmente y no consulta IA.
+    """
+    if source_message.guild is None or source_message.guild.id != guild.id:
+        raise ReportChannelError("La evidencia no pertenece a este servidor.")
+    if source_message.author.bot or source_message.webhook_id:
+        raise ReportChannelError("No se reportan mensajes automatizados.")
+    if not isinstance(source_message.channel, discord.TextChannel):
+        raise ReportChannelError("El origen no es un canal de texto autorizado.")
+    if source_message.channel.is_nsfw():
+        raise ReportChannelError("La publicación automática de material restringido no está autorizada.")
+    if not isinstance(rule_text, str) or not rule_text.strip() or rule_number <= 0:
+        raise ReportChannelError("No hay una regla literal autorizada.")
+    if not isinstance(source_message.content, str) or not source_message.content:
+        raise ReportChannelError("No existe transcripción textual verificable.")
+    lock = _publish_locks.setdefault(guild.id, asyncio.Lock())
+    async with lock:
+        channel = _get_safe_existing(guild, report_channel_id)
+        key = (guild.id, source_message.id)
+        if key in _published_evidence:
+            try:
+                return await channel.fetch_message(_published_evidence[key])
+            except discord.NotFound:
+                _published_evidence.pop(key, None)
+            except discord.HTTPException as exc:
+                raise ReportChannelError("No se pudo verificar el reporte anterior.") from exc
+        embeds = custodio_literal_report(
+            actor=str(source_message.author), guild_name=guild.name,
+            channel_name=source_message.channel.name,
+            occurred_at=source_message.created_at, verbatim=source_message.content,
+            rule_text=rule_text, rule_number=rule_number,
+            footer=footer, icon_url=icon_url,
+            original_url=source_message.jump_url, original_exists=True,
+        )
+        try:
+            # No permitir menciones en el reporte aunque la cita las contenga.
+            report = await channel.send(embeds=embeds, allowed_mentions=discord.AllowedMentions.none())
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            raise ReportChannelError("Discord rechazó la publicación del reporte.") from exc
+        if len(_published_evidence) >= MAX_RECENT_EVIDENCE:
+            _published_evidence.pop(next(iter(_published_evidence)))
+        _published_evidence[key] = report.id
+        return report
