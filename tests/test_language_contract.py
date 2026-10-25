@@ -23,7 +23,7 @@ class LanguageContract(unittest.TestCase):
         self.assertIn("configuration_access", ast.unparse(command))
         self.assertIn("ephemeral=True", ast.unparse(command))
         setup = ast.unparse(klass("HeraldoSetupView"))
-        self.assertIn('selected == "language"', setup)
+        self.assertIn("selected == 'language'", setup)
         self.assertIn("HeraldoLanguageView", setup)
 
     def test_language_is_never_auto_saved_by_selection(self):
