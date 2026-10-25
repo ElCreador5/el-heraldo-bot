@@ -47,7 +47,8 @@ Revisión de `Pruebas`, 25 de octubre de 2026. Base: `b7b177b3abd422bee9b1fc4605
 - Esquema real de comandos: todos sus campos usan catálogo; agregar o cambiar una descripción/opción sin registro falla. Payloads concurrentes de dos servidores no se contaminan ni alteran IDs/valores. Seleccionar idioma no sincroniza ni guarda; Guardar actualiza solo el origen y admite reintento.
 - Suite `tests`: **952 pruebas, 950 aprobadas y 2 omisiones existentes**. Raíz: **39 aprobadas**. Total: **989 aprobadas y 2 omitidas**. Compilación, gramática Python 3.11, `pip check` y `git diff --check` correctos.
 - Las regresiones AST históricas usan una vista semántica española; **las pruebas nuevas de i18n inspeccionan y ejecutan el código y los payloads reales**, sin esa adaptación.
-- GitHub Actions incluye la auditoría y las pruebas específicas, además de regresiones en Python 3.11/3.12/3.13. Los resultados remotos del commit se registran tras publicarlo.
+- GitHub Actions del commit `8d82172ed5eb41efa146f2346d982c328c9cb770`: [Lab 40226189099](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40226189099) SUCCESS (Python 3.11/3.12/3.13 y UX); [Mensajes 40226189104](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40226189104) SUCCESS. Las 952 pruebas completas y las 44 específicas también pasaron remotamente.
+- El flujo antiguo [candidato de producción 40226189181](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40226189181) falla antes de sus pruebas: `Production baseline changed; reconcile before preparing candidate`. No es un fallo de i18n; reconciliar ese candidato no está autorizado en esta tarea y no se altera para ocultar su resultado.
 
 ## Aceptación que permanece pendiente
 
@@ -57,4 +58,8 @@ Por esta razón se conservan los avisos exactos de inglés y portugués solicita
 
 ## Publicación
 
-Único destino: proyecto Railway Test `747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61`, entorno Lab, servicio `worker`. Se fija el commit validado, conservando el volumen `/data` y sus datos. El recibo con SHA, despliegue, arranque, Gateway y sincronización se registra en `docs/I18N_TEST_DEPLOYMENT.json` después de verificarlo. No se crea otro servicio ni se toca producción.
+Único destino: proyecto Railway Test `747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61`, entorno Lab, servicio `worker`. Commit fijado `8d82172ed5eb41efa146f2346d982c328c9cb770`; deployment `b7c68d40-9d48-4dbb-a47f-69d3921a4795` **SUCCESS**, creado el 25/10/2026 a las 19:32:01 UTC. Gateway conectado a las 19:33:15 UTC; dos autopruebas de `/setup` y dos sincronizaciones de **51 comandos** correctas con el `en-US` guardado de sus servidores.
+
+Volumen `85da5175-658b-4f71-9be3-d98f5573dbee` montado en `/data`, sin cambios de volumen, variables ni otra configuración del servicio. Sin migraciones ni reescritura de datos. Cron de respaldo sin modificaciones. `main` observado antes y después: `32c9f5dcc8505a3d6aacde76533d6b60dd88a542`; producción no modificada ni desplegada. Recibo reproducible: [I18N_TEST_DEPLOYMENT.json](I18N_TEST_DEPLOYMENT.json).
+
+El arranque real acredita Gateway y sincronización en el idioma guardado; los otros dos idiomas se comprobaron mediante payloads y ejecución automática. No se presentan esas pruebas como clics reales en Discord.
