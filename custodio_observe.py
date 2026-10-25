@@ -7,13 +7,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections import defaultdict, deque
 from hashlib import sha256
-import re
 import unicodedata
 
 URL_PATTERN = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
 MAX_TEXT = 4000
 WINDOW_SECONDS = 90
 REPEAT_MIN = 3
+MAX_TRACKED_PATTERNS = 2048
 
 @dataclass(frozen=True)
 class Observation:
@@ -33,6 +33,7 @@ class ObserveBuffer:
     """Ventana temporal acotada; solo huellas, nunca contenido ni sanciones."""
     def __init__(self):
         self._events = defaultdict(deque)
+        self._latest = {}
 
     def inspect(self, *, guild_id: int, channel_id: int, actor_id: int,
                 message_id: int, timestamp: float, content: str,
@@ -53,12 +54,18 @@ class ObserveBuffer:
             raise ValueError("invalid_rule_number")
         fingerprint = sha256(normalized.encode("utf-8")).digest()
         key = (guild_id, actor_id, fingerprint)
+        if key not in self._events and len(self._events) >= MAX_TRACKED_PATTERNS:
+            # Cota de memoria: descartar el patrón menos reciente.
+            oldest = min(self._latest, key=self._latest.get)
+            self._events.pop(oldest, None)
+            self._latest.pop(oldest, None)
         events = self._events[key]
         while events and events[0][0] < timestamp - WINDOW_SECONDS:
             events.popleft()
         if any(mid == message_id for _, mid in events):
             return None
         events.append((timestamp, message_id))
+        self._latest[key] = timestamp
         # Evidencia mecánica, no prueba por sí sola de una infracción.
         if len(events) == REPEAT_MIN:
             return Observation(guild_id, channel_id, actor_id, message_id,
