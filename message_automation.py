@@ -63,6 +63,37 @@ def next_occurrence(job, now):
         return (now + timedelta(seconds=job['cooldown'])).isoformat()
     if job['repeat'] == 'ninguna':
         return None
+    if job['repeat'] == 'custom':
+        import calendar
+        parts = job.get('repeat_parts') or {}
+        months = int(parts.get('months', 0))
+        days = int(parts.get('days', 0))
+        hours = int(parts.get('hours', 0))
+        minutes = int(parts.get('minutes', 0))
+        if min(months, days, hours, minutes) < 0:
+            raise ValueError('custom_schedule_invalid')
+        seconds = days * 86400 + hours * 3600 + minutes * 60
+        if months == 0:
+            if seconds < 3600:
+                raise ValueError('custom_schedule_too_short')
+            origin = datetime.fromisoformat(job['start']).astimezone(timezone.utc)
+            steps = max(1, int((now - origin).total_seconds() // seconds) + 1)
+            return (origin + timedelta(seconds=steps * seconds)).isoformat()
+        if months > 120:
+            raise ValueError('custom_schedule_invalid')
+        tz = ZoneInfo(job['zone'])
+        local_origin = datetime.fromisoformat(job['start']).astimezone(tz)
+        for step in range(1, 1201):
+            month_index = local_origin.month - 1 + step * months
+            year = local_origin.year + month_index // 12
+            month = month_index % 12 + 1
+            day = min(local_origin.day, calendar.monthrange(year, month)[1])
+            candidate = local_origin.replace(year=year, month=month, day=day)
+            candidate += timedelta(seconds=step * seconds)
+            utc_candidate = candidate.astimezone(timezone.utc)
+            if utc_candidate > now:
+                return utc_candidate.isoformat()
+        raise ValueError('custom_schedule_out_of_range')
     if job['repeat'] == 'mensual':
         import calendar
         origin = datetime.fromisoformat(job['start']).astimezone(ZoneInfo(job['zone']))
@@ -194,15 +225,23 @@ class ScheduledMessages:
                 raise ValueError(_t('text.fd79243eaf7cd5'))
             if not bot_perms.view_channel or not bot_perms.send_messages or not bot_perms.embed_links:
                 raise ValueError(_t('text.a0250ca7797377'))
-            if job.get('autofeed') and job.get('text'):
-                # El hook global convierte el texto ordinario en embed. Conservar
-                # texto exterior para permitir exclusivamente la mención elegida,
-                # adjuntando un embed de identidad ya sellado (footer obligatorio).
+            if job.get('autofeed') and (job.get('text') or job.get('embed')):
+                # El texto y las menciones permanecen fuera del embed, que
+                # recibe el pie de identidad obligatorio del servidor/Lab.
                 import message_payload
-                identity = self.host['stamp_embed'](discord.Embed(), guild)
+                data = job.get('embed') or {}
+                if data:
+                    visual = discord.Embed(
+                        title=data.get('title') or None,
+                        description=data.get('description') or None,
+                        color=int(data.get('color_hex', '5865F2'), 16),
+                    )
+                else:
+                    visual = discord.Embed()
+                stamped = self.host['stamp_embed'](visual, guild)
                 payload = {
-                    'content': job['text'],
-                    'embeds': message_payload.TemplateEmbeds([identity]),
+                    'content': job.get('text') or None,
+                    'embeds': message_payload.TemplateEmbeds([stamped]),
                     'allowed_mentions': discord.AllowedMentions.none(),
                 }
             else:
