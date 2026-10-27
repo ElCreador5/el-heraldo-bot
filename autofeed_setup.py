@@ -281,20 +281,44 @@ def repeat_parts(months, days, hours, minutes):
     return dict(zip(("months", "days", "hours", "minutes"), values))
 
 
-class DateRepeatModal(discord.ui.Modal):
+class DateTimeModal(discord.ui.Modal):
+    """Use separate date and time inputs and a local-time preview."""
     def __init__(self, editor):
-        super().__init__(title=t("schedule"))
+        super().__init__(title=t("date_picker"))
         self.editor = editor
-        date = (editor.start.astimezone(editor.timezone).strftime("%Y-%m-%d %H:%M")
-                if editor.start else "")
-        parts = editor.parts or {}
-        self.date = discord.ui.TextInput(label=t("time_format"), required=True,
-                                          placeholder="2026-11-01 18:00",
-                                          default=date, max_length=20)
-        self.fields = [discord.ui.TextInput(label=t(key), required=True,
-                                           default=str(parts.get(key, 0)), max_length=4)
-                       for key in ("months", "days", "hours", "minutes")]
+        local = editor.start.astimezone(editor.timezone) if editor.start else (
+            datetime.now(editor.timezone) + timedelta(days=1)).replace(
+                hour=18, minute=0, second=0, microsecond=0)
+        self.date = discord.ui.TextInput(label=t("date_only"),
+            default=local.strftime("%Y-%m-%d"), placeholder="2026-11-01", max_length=10)
+        self.time = discord.ui.TextInput(label=t("time_only"),
+            default=local.strftime("%H:%M"), placeholder="18:00", max_length=5)
         self.add_item(self.date)
+        self.add_item(self.time)
+
+    @guild_context
+    async def on_submit(self, interaction):
+        if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            return await feeds.respond_error(interaction, "denied")
+        try:
+            self.editor.start = feeds.start_from_form(
+                f"{str(self.date).strip()} {str(self.time).strip()}",
+                "America/Santo_Domingo")
+        except ValueError:
+            return await feeds.respond_error(interaction, "invalid")
+        self.editor.dirty = True
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor)
+
+
+class CustomRepeatModal(discord.ui.Modal):
+    def __init__(self, editor):
+        super().__init__(title=t("repeat_picker"))
+        self.editor = editor
+        parts = editor.parts or {}
+        self.fields = [discord.ui.TextInput(
+            label=t(key), default=str(parts.get(key, 0)), max_length=4)
+            for key in ("months", "days", "hours", "minutes")]
         for field in self.fields:
             self.add_item(field)
 
@@ -303,14 +327,140 @@ class DateRepeatModal(discord.ui.Modal):
         if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
             return await feeds.respond_error(interaction, "denied")
         try:
-            parts = repeat_parts(*(int(str(v).strip()) for v in self.fields))
-            start = feeds.start_from_form(str(self.date), "America/Santo_Domingo")
-        except ValueError as exc:
+            parts = repeat_parts(*(int(str(field).strip()) for field in self.fields))
+            if parts is None:
+                raise ValueError("short")
+        except ValueError:
             return await interaction.response.send_message(
-                t("invalid_interval") if str(exc) == "short" else feeds.tr("invalid"),
-                ephemeral=True)
-        self.editor.start, self.editor.parts = start, parts
+                t("invalid_interval"), ephemeral=True)
+        self.editor.parts = parts
         self.editor.dirty = True
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor)
+
+
+PRESETS = {
+    "once": None,
+    "daily": {"months": 0, "days": 1, "hours": 0, "minutes": 0},
+    "weekly": {"months": 0, "days": 7, "hours": 0, "minutes": 0},
+    "monthly": {"months": 1, "days": 0, "hours": 0, "minutes": 0},
+}
+
+
+class FrequencyPickerView(discord.ui.View):
+    def __init__(self, editor):
+        super().__init__(timeout=600)
+        self.editor = editor
+        self.select = discord.ui.Select(
+            placeholder=t("choose_frequency"), row=0, options=[
+                discord.SelectOption(label=t(key), value=key)
+                for key in (*PRESETS, "custom")])
+        self.select.callback = self.pick
+        self.add_item(self.select)
+        self.back.label = t("back")
+
+    @guild_context
+    async def interaction_check(self, interaction):
+        if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            await feeds.respond_error(interaction, "denied")
+            return False
+        return True
+
+    @guild_context
+    async def pick(self, interaction):
+        mode = self.select.values[0]
+        if mode == "custom":
+            return await interaction.response.send_modal(CustomRepeatModal(self.editor))
+        value = PRESETS[mode]
+        self.editor.parts = dict(value) if value else None
+        self.editor.dirty = True
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
+    @guild_context
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor)
+
+
+class MentionPickerView(discord.ui.View):
+    """Insert a guild-scoped mention token in the draft without saving it."""
+    def __init__(self, editor):
+        super().__init__(timeout=600)
+        self.editor = editor
+        self.destination = "text"
+        self.target = discord.ui.Select(
+            placeholder=t("mention_target"), row=0, options=[
+                discord.SelectOption(label=t("in_text"), value="text", default=True),
+                discord.SelectOption(label=t("in_embed"), value="embed")])
+        self.target.callback = self.pick_target
+        self.add_item(self.target)
+        self.roles = discord.ui.RoleSelect(
+            placeholder=t("choose_role"), min_values=1, max_values=1, row=1)
+        self.roles.callback = self.insert_role
+        self.add_item(self.roles)
+        self.channels = discord.ui.ChannelSelect(
+            placeholder=t("choose_channel"), min_values=1, max_values=1, row=2,
+            channel_types=[discord.ChannelType.text])
+        self.channels.callback = self.insert_channel
+        self.add_item(self.channels)
+        self.back.label = t("back")
+
+    @guild_context
+    async def interaction_check(self, interaction):
+        if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            await feeds.respond_error(interaction, "denied")
+            return False
+        return True
+
+    @guild_context
+    async def pick_target(self, interaction):
+        self.destination = self.target.values[0]
+        await interaction.response.edit_message(content=t("mention_help"), embed=None, view=self)
+
+    def insert(self, token):
+        editor = self.editor
+        if self.destination == "embed":
+            embed = dict(editor.embed or {"color_hex": "5865F2"})
+            old = embed.get("description", "")
+            if len(old) + len(token) + 1 > 4000:
+                raise ValueError("invalid")
+            embed["description"] = (old + " " + token).strip()
+            editor.embed = embed
+        else:
+            if len(editor.text) + len(token) + 1 > 1900:
+                raise ValueError("invalid")
+            editor.text = (editor.text + " " + token).strip()
+        editor.dirty = True
+
+    @guild_context
+    async def insert_role(self, interaction):
+        role = self.roles.values[0]
+        if role.guild.id != self.editor.guild_id or not role.mentionable:
+            return await feeds.respond_error(interaction, "role")
+        try:
+            self.insert(role.mention)
+        except ValueError:
+            return await feeds.respond_error(interaction, "invalid")
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor)
+
+    @guild_context
+    async def insert_channel(self, interaction):
+        channel = self.channels.values[0]
+        if channel.guild.id != self.editor.guild_id:
+            return await feeds.respond_error(interaction, "invalid")
+        try:
+            self.insert(channel.mention)
+        except ValueError:
+            return await feeds.respond_error(interaction, "invalid")
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @guild_context
+    async def back(self, interaction, button):
         await interaction.response.edit_message(
             content=self.editor.summary(), embed=None, view=self.editor)
 
