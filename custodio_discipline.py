@@ -48,6 +48,18 @@ class CustodioDiscipline:
         reviewer = guild.get_member(moderator_id) if moderator_id else None
         if reviewer is None or (reviewer.id != guild.owner_id and not reviewer.guild_permissions.administrator):
             raise DisciplineBlocked("administrator_required")
+        check_config=False
+        exemption_raw=interpretation_raw=None
+        def authorized():
+            current=guild.get_member(moderator_id)
+            return bool(current and (current.id==guild.owner_id or current.guild_permissions.administrator)
+                and not protected(member) and guild.me
+                and member.top_role < guild.me.top_role
+                and (current.id==guild.owner_id or member.top_role < current.top_role)
+                and (not required or getattr(guild.me.guild_permissions,required,False))
+                and (not check_config or (
+                    exemption_raw==self.n['guild_config_get'](guild.id,KEY)
+                    and interpretation_raw==self.n['guild_config_get'](guild.id,PLAN_KEY))))
         key = f"custodio-action:{guild.id}:{incident.message_id}"
         import sqlite3
         import json
@@ -100,6 +112,22 @@ class CustodioDiscipline:
         fresh = await load_server_rules(guild.id, os.environ.get("DISCORD_TOKEN", ""))
         if fresh.revision != snapshot.revision or protected(member):
             raise DisciplineBlocked("rules_or_exemptions_changed")
+        if callable(self.n.get('guild_config_get')):
+            from custodio_policy import KEY,ObservePolicy
+            from custodio_interpretation import KEY as PLAN_KEY,InterpretationPlan
+            exemption_raw=self.n['guild_config_get'](guild.id,KEY)
+            interpretation_raw=self.n['guild_config_get'](guild.id,PLAN_KEY)
+            check_config=True
+            policy_settings=ObservePolicy.rebase(exemption_raw,snapshot)
+            role_ids={role.id for role in member.roles}
+            source_channel_id=receipts[0].get('source_channel_id')
+            binding=policy_settings.bindings[incident.rule_number-1]
+            if (policy_settings.roles.intersection(role_ids) or binding.roles.intersection(role_ids)
+                    or source_channel_id in policy_settings.channels or source_channel_id in binding.channels):
+                raise DisciplineBlocked('exempt_member_or_channel')
+            plan=InterpretationPlan.decode(interpretation_raw,snapshot)
+            if plan and plan.rules[incident.rule_number-1].status=='disabled':
+                raise DisciplineBlocked('corrected_interpretation_requires_review')
         if action in {"ban", "temp_ban"}:
             try:
                 await guild.fetch_ban(discord.Object(id=member.id))
@@ -112,8 +140,8 @@ class CustodioDiscipline:
             if state == "complete":
                 return result[0]
             raise DisciplineBlocked("uncertain_action_requires_review")
-        if protected(member):
-            raise DisciplineBlocked("protected_member")
+        if not authorized():
+            raise DisciplineBlocked("permissions_changed")
         policy = "custodio:" + sha256(snapshot.rules[incident.rule_number - 1].encode()).hexdigest()
         reason = str(_t("text.custodio.case_reason", rule=incident.rule_number, reference=incident.message_id))
         case = None
@@ -127,9 +155,10 @@ class CustodioDiscipline:
                 expires = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
                 with closing(self.n["db_connect"]()) as db, db:
                     db.execute("UPDATE moderation_cases SET expires_at=? WHERE guild_id=? AND user_id=? "
-                               "AND type='WARN' AND open=1 AND moderator_notes=?",
-                               (expires, guild.id, member.id, policy))
-                await self.n["moderation_warning_escalation"](guild, member, case, active, limit)
+                               "AND type='WARN' AND open=1 AND (moderator_notes=? OR moderator_notes LIKE ?)",
+                               (expires, guild.id, member.id, policy,policy+'\n%'))
+                # Compartir recuento e historial no autoriza una segunda medida.
+                # El límite se informa al revisor; Custodio nunca escala automáticamente.
             else:
                 kind = "KICK" if action == "kick" else "BAN"
                 duration = duration_minutes if action == "temp_ban" else None
@@ -149,11 +178,13 @@ class CustodioDiscipline:
                     db.execute("UPDATE moderation_cases SET moderator_notes=?, expires_at=? WHERE guild_id=? AND case_number=? AND open=1",
                                (policy + "|complete\n" + str(_t("text.custodio.measure_confirmed")), expiry, guild.id, case))
                     linked = db.execute("SELECT case_number FROM moderation_cases WHERE guild_id=? AND user_id=? "
-                                        "AND type='WARN' AND open=1 AND moderator_notes=?", (guild.id, member.id, policy)).fetchall()
+                                        "AND type='WARN' AND open=1 AND (moderator_notes=? OR moderator_notes LIKE ?)",
+                                        (guild.id, member.id, policy,policy+'\n%')).fetchall()
                 for warning in linked:
                     self.n["moderation_case_close"](guild.id, int(warning[0]), closed_by=reviewer.id,
                                                      resolution=str(_t("text.custodio.warning_served")))
-            result = {"status": "complete", "case_number": case, "action": action}
+            result = {"status": "complete", "case_number": case, "action": action,
+                      "review_limit_reached": action == 'warn' and active >= limit}
             await asyncio.to_thread(ledger, self.n["DB_PATH"], key, "complete", [result])
             if action == "warn" and callable(getattr(member, "send", None)):
                 embed = discord.Embed(title=_t("text.custodio.warn_title"),
@@ -164,6 +195,13 @@ class CustodioDiscipline:
                     await member.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
                 except discord.HTTPException:
                     pass  # El reporte privado permite al administrador verificar el aviso.
+            if callable(self.n.get('log_embed')):
+                try:
+                    await self.n['log_embed'](guild,_t('text.custodio.discipline.log_title'),
+                        _t('text.custodio.discipline.log',case=case,member=f'<@{member.id}>',
+                           moderator=f'<@{reviewer.id}>',reference=incident.report_url),discord.Color.orange())
+                except Exception:
+                    pass  # El caso y el recibo ya están completos; no repetir la medida.
             return result
         except discord.Forbidden:
             if case is not None:

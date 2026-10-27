@@ -74,6 +74,28 @@ class ObservePolicy:
         except (TypeError, ValueError, KeyError):
             return cls.empty(snapshot)
 
+    @classmethod
+    def rebase(cls,raw,snapshot):
+        """Conservar interruptor y exenciones globales al aprobar una nueva revisión.
+
+        Los enlaces por regla requieren la revisión exacta; no se transfieren
+        por número a un texto que pudo cambiar de significado.
+        """
+        try:
+            from types import SimpleNamespace
+            data=json.loads(raw)
+            previous=cls.decode(raw,SimpleNamespace(revision=data['revision'],count=len(data['bindings'])))
+            if previous.encode(len(data['bindings'])) != raw:
+                # Admitir serialización equivalente, pero no un documento reparado silenciosamente.
+                if json.loads(previous.encode(len(data['bindings']))) != data:
+                    raise ValueError('invalid_previous_policy')
+            if previous.revision==snapshot.revision:
+                return cls.decode(raw,snapshot)
+            from dataclasses import replace
+            return replace(cls.empty(snapshot),enabled=previous.enabled,roles=previous.roles,channels=previous.channels)
+        except (TypeError,ValueError,KeyError,AttributeError):
+            return cls.empty(snapshot)
+
     def eligible(self, *, role_ids, channel_id, owner=False, staff=False):
         return bool(self.enabled and not owner and not staff
                     and not self.roles.intersection(role_ids) and channel_id not in self.channels)

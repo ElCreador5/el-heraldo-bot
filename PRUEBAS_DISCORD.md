@@ -1,3 +1,13 @@
+## 2026-10-27 — Custodio: planificador automático y paneles separados
+
+Estado vigente de implementación: 73 fichas, 24 categorías con señales locales y 49 de revisión humana. Interpretación estructurada por servidor/revisión y citas literales, asignación automática de mecanismos, correcciones reversibles, Detección separada de Exenciones y un único Activar/Pausar en el panel principal. Los borradores solo se aprueban mediante Guardar cambios. Un plan antiguo o sin aprobación no autoriza observaciones.
+
+La pausa se comprueba antes de cada parte de un reporte. Los expedientes centrales muestran origen Custodio/manual; las advertencias de Custodio comparten el límite, pero nunca llaman al escalado automático. Se conservan las cinco medidas, todas bajo revisión y confirmación explícitas. Sin migraciones ni cambios de esquema, requirements, H-03, main o producción.
+
+Validación local: 1064 componentes ejecutados (1062 aprobados, dos omisiones históricas), 39 regresiones raíz aprobadas y 14 focalizadas posteriores, incluida la exclusión de menciones automáticas de respuestas. Catálogos de 3322 claves revisadas en los tres idiomas; 3292 referencias reales y cero literales pendientes. Gramática 3.11, compilación y dependencias correctas. Corpus reproducible: 417 escenarios, 1251 ejecuciones, 216 TP / 0 FP / 513 TN / 81 FN conocidos / 441 abstenciones de revisión humana. Son resultados sintéticos, no eficacia en servidores reales.
+
+El despliegue de esta fase y el análisis auténtico del conjunto de reglas se comprobarán antes de la entrega. El proveedor ya tiene inferencia sintética real validada en d99b298 (428 ms). Los clics de Discord siguen pendientes por el acceso no operativo; no se simula una sesión ni sanciones sobre miembros reales. Informe único y guía actualizados en `docs/CUSTODIO_EVOLUTION.md` y `docs/CUSTODIO_RUNTIME.md`. Los apartados anteriores conservan el historial y no sustituyen este estado vigente.
+
 ## 2026-10-27 — Custodio: encargo de interpretación autónoma, fase de proveedor
 
 **Proveedor comprobado:** `d99b2989ba83f00a2ec07786887c2d4ec97ffb2b` desplegado en Lab/worker, deployment `e92901b8-b417-4a48-9120-c727d18718cd` SUCCESS. Groq `openai/gpt-oss-20b` realizó una inferencia auténtica con regla sintética en 428 ms: esquema y cita literal validados. Sin Discord ni SQLite en la sonda; no equivale al clic real de «Analizar reglas». Gateway conectado, dos sincronizaciones de 51 comandos (en-US/es-419). Pre-deploy temporal retirado y volumen conservado. CI Lab 40562341587 (3.11/3.12/3.13 + UX) y Mensajes 40562341644 SUCCESS. Recibo: `docs/CUSTODIO_PROVIDER_DEPLOYMENT.json`. El desarrollo continúa: 73 fichas de taxonomía, interpretación automática y rediseño de Detección; no es cierre integral.

@@ -250,6 +250,7 @@ def custodio_literal_report(
             original_url=original_url, original_exists=original_exists,
             conduct=conduct or _t('text.3d57a85390b5c0'),
             outcome=_t('text.fb57b92cfc0723'),
+            origin=_t('text.custodio.discipline.origin'),
             verbatim_is_description=not bool(verbatim),
         ),
         footer=footer, icon_url=icon_url,
@@ -281,6 +282,7 @@ async def publish_literal_observation(
     observed_description: str | None = None, conduct: str | None = None,
     rules_revision: str | None = None,
     review_view: discord.ui.View | None = None,
+    authorization_check=None,
 ) -> discord.Message:
     """Publicar una copia literal autorizada exclusivamente en reportes privado.
 
@@ -300,6 +302,10 @@ async def publish_literal_observation(
         raise ReportChannelError(_t('text.a951b5fa2dbce1'))
     lock = _publish_locks.setdefault(guild.id, asyncio.Lock())
     async with lock:
+        async def require_authorization():
+            if authorization_check is not None and not await authorization_check():
+                raise ReportChannelError(_t('text.custodio.effect_cancelled'))
+        await require_authorization()
         channel = _get_safe_existing(guild, report_channel_id)
         if not compatible_evidence_access(source_message.channel, channel):
             raise ReportChannelError(_t('text.custodio.privacy_mismatch'))
@@ -347,6 +353,7 @@ async def publish_literal_observation(
         from evidence_archive import ledger
         if not db_path:
             raise ReportChannelError(_t('text.custodio.delivery_review'))
+        await require_authorization()
         claimed, state, receipts = await asyncio.to_thread(ledger, db_path, ledger_key, "claim")
         if not claimed:
             if state == "complete" and receipts:
@@ -359,6 +366,7 @@ async def publish_literal_observation(
                 _get_safe_existing(guild, report_channel_id)
                 if not compatible_evidence_access(source_message.channel, channel):
                     raise ReportChannelError(_t('text.custodio.privacy_mismatch'))
+                await require_authorization()
                 sent = await channel.send(embeds=batch, view=review_view if report is None else None,
                                           allowed_mentions=discord.AllowedMentions.none())
                 report = report or sent

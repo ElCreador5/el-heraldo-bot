@@ -248,7 +248,7 @@
       "capability": "objetiva/determinista (señal)",
       "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
       "human_review_required": true,
-      "implementation": "planned_signal",
+      "implementation": "existing_signal",
       "sources": [
         "discord_automod"
       ]
@@ -301,7 +301,7 @@
       "capability": "heurística/contextual (señal)",
       "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
       "human_review_required": true,
-      "implementation": "planned_signal",
+      "implementation": "existing_signal",
       "sources": [
         "discord_automod"
       ]
@@ -829,7 +829,7 @@
       "capability": "objetiva/determinista (señal)",
       "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
       "human_review_required": true,
-      "implementation": "planned_signal",
+      "implementation": "existing_signal",
       "sources": [
         "discord_automod"
       ]
@@ -882,7 +882,7 @@
       "capability": "objetiva/determinista (señal)",
       "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
       "human_review_required": true,
-      "implementation": "planned_signal",
+      "implementation": "existing_signal",
       "sources": [
         "discord_automod"
       ]
@@ -2292,7 +2292,7 @@
       "capability": "objetiva/determinista (señal)",
       "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
       "human_review_required": true,
-      "implementation": "planned_signal",
+      "implementation": "existing_signal",
       "sources": [
         "discord_automod",
         "use_mention_study",
@@ -3026,7 +3026,7 @@
       "capability": "heurística/contextual (señal)",
       "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
       "human_review_required": true,
-      "implementation": "planned_signal",
+      "implementation": "existing_signal",
       "sources": [
         "discord_automod"
       ]

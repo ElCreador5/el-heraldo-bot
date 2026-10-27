@@ -1,4 +1,16 @@
 {
+  "access.all": [
+    "Everyone",
+    "Todos"
+  ],
+  "access.allowlist": [
+    "Allowlist",
+    "Lista de permissões"
+  ],
+  "access.denylist": [
+    "Denylist",
+    "Lista de bloqueios"
+  ],
   "channel.purpose.questions": [
     "Questions",
     "Dúvidas"
@@ -423,9 +435,17 @@
     "created and linked.",
     "criado e vinculado."
   ],
+  "common.delete": [
+    "delete",
+    "excluir"
+  ],
   "common.everyone_role": [
     "is @everyone",
     "é @everyone"
+  ],
+  "common.no": [
+    "No",
+    "Não"
   ],
   "common.none_sentence": [
     "None.",
@@ -439,9 +459,101 @@
     "private",
     "privada"
   ],
+  "common.save": [
+    "save",
+    "salvar"
+  ],
+  "common.yes": [
+    "Yes",
+    "Sim"
+  ],
+  "footer.editor_hint": [
+    "{servidor} → Labs 🧪; {servericon} → icon",
+    "{servidor} → Labs 🧪; {servericon} → ícone"
+  ],
+  "input.add": [
+    "add",
+    "adicionar"
+  ],
+  "input.button": [
+    "button",
+    "botão"
+  ],
+  "input.menu": [
+    "menu",
+    "menu"
+  ],
+  "input.none": [
+    "none",
+    "nenhum"
+  ],
+  "input.remove": [
+    "remove",
+    "remover"
+  ],
+  "input.toggle": [
+    "toggle",
+    "alternar"
+  ],
+  "language.back": [
+    "Back",
+    "Voltar"
+  ],
+  "language.closed": [
+    "Language settings closed.",
+    "Configuração de idioma fechada."
+  ],
   "language.command_sync_pending": [
     "The language was saved, but command help could not be updated. Press Save changes to retry.",
     "O idioma foi salvo, mas não foi possível atualizar a ajuda dos comandos. Pressione Salvar alterações para tentar novamente."
+  ],
+  "language.concurrent_change": [
+    "The language was changed in another session. Reopen the editor.",
+    "O idioma foi alterado em outra sessão. Abra o editor novamente."
+  ],
+  "language.current": [
+    "Current: {language}",
+    "Atual: {language}"
+  ],
+  "language.description": [
+    "Configure the bot's language for this server, including logs, notices, and associated direct messages.",
+    "Configure o idioma do bot neste servidor, incluindo registros, avisos e mensagens privadas relacionadas."
+  ],
+  "language.discard": [
+    "Discard changes",
+    "Descartar alterações"
+  ],
+  "language.help": [
+    "Other bot features may appear in Spanish. In development.",
+    "Outras funções do bot podem aparecer em espanhol. Em desenvolvimento."
+  ],
+  "language.not_available": [
+    "This language is not available yet.",
+    "Este idioma ainda não está disponível."
+  ],
+  "language.pending": [
+    "Not saved: {language}",
+    "Não salvo: {language}"
+  ],
+  "language.save": [
+    "Save changes",
+    "Salvar alterações"
+  ],
+  "language.saved": [
+    "Changes saved.",
+    "Alterações salvas."
+  ],
+  "language.select": [
+    "Select the server language",
+    "Selecione o idioma do servidor"
+  ],
+  "language.title": [
+    "El Heraldo · Language",
+    "El Heraldo · Idioma"
+  ],
+  "language.verified": [
+    "Fully translated and verified",
+    "Idioma totalmente traduzido e verificado"
   ],
   "noun.message.many": [
     "messages",
@@ -450,6 +562,10 @@
   "noun.message.one": [
     "message",
     "mensagem"
+  ],
+  "personality.details_locked": [
+    "Personality roles let members choose how they would like to participate in this community. Members can choose one option; this server does not allow them to change it while changes are disabled.\n\n**How does it work?**\nMembers react with the emoji for their chosen option to receive the associated role. They can keep only one choice at a time.\n\nThe choice expresses their interests and provides a personalized experience in the server. It may unlock channels according to role permissions; it is not proof of identity and does not replace age verification.",
+    "Os cargos de personalidade permitem que o membro escolha como deseja participar desta comunidade. O membro pode selecionar uma opção; este servidor não permite alterá-la enquanto as mudanças de escolha estiverem desativadas.\n\n**Como funciona?**\nO membro reage com o emoji da opção escolhida para receber o cargo associado. Só é possível manter uma escolha por vez.\n\nA escolha expressa seus interesses e oferece uma experiência personalizada no servidor. Pode liberar canais conforme as permissões dos cargos; não constitui prova de identidade nem substitui a verificação de idade."
   ],
   "raid.profile.balanced": [
     "Balanced",
@@ -470,6 +586,106 @@
   "reaction.access_mode": [
     "Access mode",
     "Modo de acesso"
+  ],
+  "setup.access_denied": [
+    "Access denied. You need Manage Server permission and must use your own session in this server.",
+    "Acesso negado. É necessário ter a permissão Gerenciar Servidor e usar sua própria sessão neste servidor."
+  ],
+  "setup.home": [
+    "**El Heraldo · Settings**\n\nSelect a section to open it directly. Save changes only when you are satisfied.\nYou can return to this menu from each module's navigation options.",
+    "**El Heraldo · Configurações**\n\nSelecione uma seção para abri-la diretamente. Salve as alterações somente quando estiver satisfeito.\nVocê pode voltar a este menu pelas opções de navegação de cada módulo."
+  ],
+  "setup.module.automod.description": [
+    "Automatic server protections",
+    "Proteções automáticas do servidor"
+  ],
+  "setup.module.automod.label": [
+    "AutoMod",
+    "AutoMod"
+  ],
+  "setup.module.date_format.description": [
+    "Dates and times in bot messages",
+    "Datas e horários nas mensagens do bot"
+  ],
+  "setup.module.date_format.label": [
+    "Date format",
+    "Formato de data"
+  ],
+  "setup.module.join_roles.description": [
+    "Roles assigned when joining the server",
+    "Cargos atribuídos ao entrar no servidor"
+  ],
+  "setup.module.join_roles.label": [
+    "Join roles",
+    "Cargos de entrada"
+  ],
+  "setup.module.language.description": [
+    "The bot’s language in this server",
+    "Idioma do bot neste servidor"
+  ],
+  "setup.module.language.label": [
+    "Language",
+    "Idioma"
+  ],
+  "setup.module.logging.description": [
+    "Log events and channels",
+    "Eventos e canais de registro"
+  ],
+  "setup.module.logging.label": [
+    "Logs",
+    "Registros"
+  ],
+  "setup.module.messages.description": [
+    "Templates and default messages",
+    "Modelos e mensagens padrão"
+  ],
+  "setup.module.messages.label": [
+    "Messages",
+    "Mensagens"
+  ],
+  "setup.module.moderation.description": [
+    "Condemnations, reports, and cases",
+    "Condenações, denúncias e casos"
+  ],
+  "setup.module.moderation.label": [
+    "Moderation",
+    "Moderação"
+  ],
+  "setup.module.reaction_roles.description": [
+    "Reaction role settings",
+    "Configurações de cargos por reação"
+  ],
+  "setup.module.reaction_roles.label": [
+    "Reaction roles",
+    "Cargos por reação"
+  ],
+  "setup.module.role_connections.description": [
+    "Role connections (pending)",
+    "Conexões de cargos (pendente)"
+  ],
+  "setup.module.role_connections.label": [
+    "Role connections",
+    "Conexões de cargos"
+  ],
+  "setup.module.verification.description": [
+    "Age and personality verification",
+    "Verificação de idade e personalidade"
+  ],
+  "setup.module.verification.label": [
+    "Verification",
+    "Verificação"
+  ],
+  "setup.select_module": [
+    "Choose a section to open",
+    "Escolha uma seção para abrir"
+  ],
+  "suggestion.accepted": [
+    "accepted",
+    "aceita"
+  ],
+  "suggestion.rejected": [
+    "rejected",
+    "rejeitada"
   ],
   "text.000135b3cd2a46": [
     "The bot lacks permissions to publish.",
@@ -10051,9 +10267,425 @@
     "All rules",
     "Todas as regras"
   ],
+  "text.custodio.analysis.clarification": [
+    "Clarification required",
+    "Requer esclarecimento"
+  ],
+  "text.custodio.analysis.contradiction": [
+    "Possible conflict between rules",
+    "Possível contradição entre regras"
+  ],
+  "text.custodio.analysis.correct": [
+    "Correct interpretation",
+    "Corrigir interpretação"
+  ],
+  "text.custodio.analysis.detail": [
+    "**Rule {number} · Interpretation**\n\n**Full text**\n{quote}\n\n**Status:** {status}\n**Normative meaning:** {normative}\n**Scope:** {scope}\n**Conduct:** {categories}\n**Local mechanisms:** {mechanisms}\n**Verbatim prohibitions:**\n{prohibitions}\n**Verbatim obligations:**\n{obligations}\n**Verbatim permissions:**\n{permissions}\n**Verbatim exceptions:**\n{exceptions}\n**Verbatim conditions:**\n{conditions}\n**References to rules:** {references}\n**Channels in scope:** {channels}\n**Limitations:**\n{limits}\n**Administrative correction:** {correction}\n{note}",
+    "**Regra {number} · Interpretação**\n\n**Texto completo**\n{quote}\n\n**Estado:** {status}\n**Sentido normativo:** {normative}\n**Escopo:** {scope}\n**Condutas:** {categories}\n**Mecanismos locais:** {mechanisms}\n**Proibições literais:**\n{prohibitions}\n**Obrigações literais:**\n{obligations}\n**Permissões literais:**\n{permissions}\n**Exceções literais:**\n{exceptions}\n**Condições literais:**\n{conditions}\n**Referências a regras:** {references}\n**Canais do escopo:** {channels}\n**Limitações:**\n{limits}\n**Correção administrativa:** {correction}\n{note}"
+  ],
+  "text.custodio.analysis.disabled": [
+    "Interpretation disabled by a correction",
+    "Interpretação desabilitada por correção"
+  ],
+  "text.custodio.analysis.no_prohibition": [
+    "No detectable prohibition",
+    "Sem proibição detectável"
+  ],
+  "text.custodio.analysis.page": [
+    "Page {part}/{total} · Save changes from Detection.",
+    "Página {part}/{total} · Salve as alterações em Detecção."
+  ],
+  "text.custodio.analysis.panel": [
+    "**Modo Custodio · Detection**\n\nSaved global state: {state}\nRules: {total} · Revision: `{revision}`\nLocal signals: {watchable} · Partial coverage: {partial}\nAmbiguous or conflicting: {ambiguous}\nHuman review: {human} · No prohibition: {none}\nDisabled: {disabled} · Unavailable: {unavailable}\nUpdated: {updated}\nUnsaved changes: {pending}\n\nAnalyze the rules and review the proposal. Mechanisms are assigned automatically to verified restrictions. Save to approve; automatic sanctions remain disabled. Use the main panel to activate or pause.",
+    "**Modo Custodio · Detecção**\n\nEstado global salvo: {state}\nRegras: {total} · Revisão: `{revision}`\nSinais locais: {watchable} · Cobertura parcial: {partial}\nAmbíguas ou contraditórias: {ambiguous}\nRevisão humana: {human} · Sem proibição: {none}\nDesabilitadas: {disabled} · Indisponíveis: {unavailable}\nAtualizado: {updated}\nAlterações pendentes: {pending}\n\nAnalise as regras e revise a proposta. Os mecanismos são associados automaticamente às restrições verificadas. Salve para aprovar; as sanções automáticas permanecem desabilitadas. Use o painel principal para ativar ou pausar."
+  ],
+  "text.custodio.analysis.partial": [
+    "Partial coverage; review required",
+    "Cobertura parcial; requer revisão"
+  ],
+  "text.custodio.analysis.progress": [
+    "Rules processed: {done}/{total}. The proposal has not been saved yet.",
+    "Regras processadas: {done}/{total}. A proposta ainda não foi salva."
+  ],
+  "text.custodio.analysis.ready": [
+    "Proposal ready. Review each rule and save changes to approve it. Unavailable or ambiguous results do not create detectors.",
+    "Proposta preparada. Revise cada regra e salve as alterações para aprová-la. Resultados indisponíveis ou ambíguos não geram detectores."
+  ],
+  "text.custodio.analysis.review": [
+    "Review interpretation",
+    "Revisar interpretação"
+  ],
+  "text.custodio.analysis.rule_help": [
+    "Read the full rule, its scope, and its limitations",
+    "Consulte o texto completo, o escopo e os limites desta regra"
+  ],
+  "text.custodio.analysis.running": [
+    "Analyzing the rules. This occasional process may take a few minutes; it does not change active settings.",
+    "Analisando as regras. Este processo ocasional pode levar alguns minutos; ele não altera a configuração ativa."
+  ],
+  "text.custodio.analysis.unavailable": [
+    "Analysis unavailable",
+    "Análise indisponível"
+  ],
+  "text.custodio.analysis.unsupported": [
+    "Human review; no reliable detector",
+    "Revisão humana; sem detector confiável"
+  ],
+  "text.custodio.analysis.watchable": [
+    "Local signals available",
+    "Sinais locais disponíveis"
+  ],
+  "text.custodio.behavior.age_restricted_placement": [
+    "Restricted content in the wrong space",
+    "Conteúdo restrito em espaço inadequado"
+  ],
+  "text.custodio.behavior.attachment_burst": [
+    "Attachment flooding",
+    "Excesso de anexos"
+  ],
+  "text.custodio.behavior.ban_evasion": [
+    "Sanction evasion",
+    "Evasão de sanções"
+  ],
+  "text.custodio.behavior.brigading": [
+    "Brigading",
+    "Brigading"
+  ],
+  "text.custodio.behavior.broadcast_mentions": [
+    "Broadcast-mention abuse",
+    "Abuso de menções gerais"
+  ],
+  "text.custodio.behavior.chain_messages": [
+    "Chain messages",
+    "Correntes de mensagens"
+  ],
+  "text.custodio.behavior.channel_conventions": [
+    "Channel conventions",
+    "Convenções dos canais"
+  ],
+  "text.custodio.behavior.character_flood": [
+    "Character flooding",
+    "Excesso de caracteres"
+  ],
+  "text.custodio.behavior.collective_harassment": [
+    "Coordinated harassment",
+    "Assédio coletivo"
+  ],
+  "text.custodio.behavior.commercial_solicitation": [
+    "Commercial solicitation",
+    "Solicitações comerciais"
+  ],
+  "text.custodio.behavior.component_spam": [
+    "Component misuse",
+    "Abuso de componentes"
+  ],
+  "text.custodio.behavior.contextual_hostility": [
+    "Contextual hostility",
+    "Hostilidade contextual"
+  ],
+  "text.custodio.behavior.covert_advertising": [
+    "Undisclosed advertising",
+    "Publicidade disfarçada"
+  ],
+  "text.custodio.behavior.credential_solicitation": [
+    "Credential requests",
+    "Solicitações de credenciais"
+  ],
+  "text.custodio.behavior.cross_channel_pursuit": [
+    "Cross-channel targeting",
+    "Perseguição entre canais"
+  ],
+  "text.custodio.behavior.cross_channel_repeat": [
+    "Cross-channel repetition",
+    "Repetição entre canais"
+  ],
+  "text.custodio.behavior.degrading_mockery": [
+    "Degrading mockery",
+    "Deboche degradante"
+  ],
+  "text.custodio.behavior.directed_insult": [
+    "Directed insults",
+    "Insultos direcionados"
+  ],
+  "text.custodio.behavior.directed_mentions": [
+    "Repeated targeted mentions",
+    "Menções direcionadas repetidas"
+  ],
+  "text.custodio.behavior.discrimination": [
+    "Discrimination",
+    "Discriminação"
+  ],
+  "text.custodio.behavior.edited_link_evasion": [
+    "Links added through edits",
+    "Links adicionados por edição"
+  ],
+  "text.custodio.behavior.embed_burst": [
+    "Embed flooding",
+    "Excesso de embeds"
+  ],
+  "text.custodio.behavior.emoji_flood": [
+    "Emoji flooding",
+    "Excesso de emojis"
+  ],
+  "text.custodio.behavior.exact_text": [
+    "Repeated text",
+    "Repetição textual"
+  ],
+  "text.custodio.behavior.fake_support": [
+    "Fake technical support",
+    "Falso suporte técnico"
+  ],
+  "text.custodio.behavior.financial_scams": [
+    "Potential scams",
+    "Possíveis golpes"
+  ],
+  "text.custodio.behavior.format_flood": [
+    "Formatting overload",
+    "Excesso de formatação"
+  ],
+  "text.custodio.behavior.forum_misuse": [
+    "Forum misuse",
+    "Uso indevido de fóruns"
+  ],
+  "text.custodio.behavior.fragmented_posts": [
+    "Excessive message splitting",
+    "Fragmentação excessiva"
+  ],
+  "text.custodio.behavior.giveaway_fraud": [
+    "Giveaway fraud",
+    "Fraude em brindes e sorteios"
+  ],
+  "text.custodio.behavior.harassment_incitement": [
+    "Incitement to harass",
+    "Incitação ao assédio"
+  ],
+  "text.custodio.behavior.ignored_staff_instruction": [
+    "Ignoring valid staff instructions",
+    "Descumprimento de instruções legítimas"
+  ],
+  "text.custodio.behavior.insistent_requests": [
+    "Persistent requests",
+    "Solicitações insistentes"
+  ],
+  "text.custodio.behavior.interruption_campaign": [
+    "Disruption campaigns",
+    "Campanhas de interrupção"
+  ],
+  "text.custodio.behavior.intimidation": [
+    "Intimidation",
+    "Intimidação"
+  ],
+  "text.custodio.behavior.invasive_recruitment": [
+    "Intrusive recruitment",
+    "Recrutamento invasivo"
+  ],
+  "text.custodio.behavior.invisible_formatting": [
+    "Misleading invisible formatting",
+    "Formatação invisível enganosa"
+  ],
+  "text.custodio.behavior.masked_link": [
+    "Visible-link destination mismatch",
+    "Diferença entre URL visível e destino"
+  ],
+  "text.custodio.behavior.mass_forwarding": [
+    "Mass forwarding",
+    "Encaminhamento em massa"
+  ],
+  "text.custodio.behavior.mass_mentions": [
+    "Mass mentions",
+    "Menções em massa"
+  ],
+  "text.custodio.behavior.mention_campaign": [
+    "Mention campaigns",
+    "Campanhas de menções"
+  ],
+  "text.custodio.behavior.message_burst": [
+    "Message bursts",
+    "Rajadas de mensagens"
+  ],
+  "text.custodio.behavior.near_text": [
+    "Nearly identical messages",
+    "Mensagens quase idênticas"
+  ],
+  "text.custodio.behavior.nonconsensual_pii": [
+    "Nonconsensual personal-data disclosure",
+    "Divulgação não consentida de dados"
+  ],
+  "text.custodio.behavior.off_topic": [
+    "Off-topic content",
+    "Conteúdo fora do tema"
+  ],
+  "text.custodio.behavior.persistent_provocation": [
+    "Persistent provocation",
+    "Provocação persistente"
+  ],
+  "text.custodio.behavior.phishing_links": [
+    "Potential phishing links",
+    "Links potencialmente enganosos"
+  ],
+  "text.custodio.behavior.private_message_harassment": [
+    "Direct-message harassment",
+    "Assédio em mensagens privadas"
+  ],
+  "text.custodio.behavior.protected_attribute_attacks": [
+    "Protected-attribute attacks",
+    "Ataques por características protegidas"
+  ],
+  "text.custodio.behavior.reaction_spam": [
+    "Reaction spam",
+    "Spam de reações"
+  ],
+  "text.custodio.behavior.referral_links": [
+    "Referral and reward links",
+    "Links de indicação e recompensas"
+  ],
+  "text.custodio.behavior.repeated_devaluation": [
+    "Repeated belittling",
+    "Desqualificação repetida"
+  ],
+  "text.custodio.behavior.repeated_gifs": [
+    "Repeated GIFs",
+    "GIFs repetidos"
+  ],
+  "text.custodio.behavior.repeated_harassment": [
+    "Repeated harassment",
+    "Assédio reiterado"
+  ],
+  "text.custodio.behavior.repeated_images": [
+    "Repeated identical images",
+    "Imagens idênticas repetidas"
+  ],
+  "text.custodio.behavior.repeated_links": [
+    "Repeated links",
+    "Links repetidos"
+  ],
+  "text.custodio.behavior.repeated_promotion": [
+    "Repeated promotion",
+    "Promoção repetida"
+  ],
+  "text.custodio.behavior.repeated_stickers": [
+    "Repeated stickers",
+    "Figurinhas repetidas"
+  ],
+  "text.custodio.behavior.reply_misuse": [
+    "Reply misuse",
+    "Abuso de respostas"
+  ],
+  "text.custodio.behavior.requests_after_response": [
+    "Requests after a response",
+    "Pedidos após uma resposta"
+  ],
+  "text.custodio.behavior.server_invites": [
+    "Server invitations",
+    "Convites para servidores"
+  ],
+  "text.custodio.behavior.sexual_harassment": [
+    "Sexual harassment",
+    "Assédio sexual"
+  ],
+  "text.custodio.behavior.similar_images": [
+    "Visually similar images",
+    "Imagens visualmente semelhantes"
+  ],
+  "text.custodio.behavior.social_engineering": [
+    "Social engineering",
+    "Engenharia social"
+  ],
+  "text.custodio.behavior.spoiler_abuse": [
+    "Spoiler misuse",
+    "Abuso de spoilers"
+  ],
+  "text.custodio.behavior.staff_impersonation": [
+    "Staff impersonation",
+    "Falsificação de identidade da equipe"
+  ],
+  "text.custodio.behavior.suspicious_files": [
+    "Suspicious files",
+    "Arquivos suspeitos"
+  ],
+  "text.custodio.behavior.synchronized_posts": [
+    "Synchronized posting",
+    "Publicações sincronizadas"
+  ],
+  "text.custodio.behavior.thread_misuse": [
+    "Thread misuse",
+    "Uso indevido de tópicos"
+  ],
+  "text.custodio.behavior.threats": [
+    "Threats",
+    "Ameaças"
+  ],
+  "text.custodio.behavior.unauthorized_automation": [
+    "Unauthorized automation",
+    "Automação não autorizada"
+  ],
+  "text.custodio.behavior.unauthorized_promotion": [
+    "Unauthorized promotion",
+    "Promoção não autorizada"
+  ],
+  "text.custodio.behavior.user_impersonation": [
+    "Member impersonation",
+    "Falsificação de identidade de membros"
+  ],
   "text.custodio.case_reason": [
     "Modo Custodio · rule {rule} · incident {reference}",
     "Modo Custodio · regra {rule} · incidente {reference}"
+  ],
+  "text.custodio.correction.allowed": [
+    "Permitted conduct",
+    "Conduta permitida"
+  ],
+  "text.custodio.correction.ambiguous": [
+    "Ambiguous rule",
+    "Regra ambígua"
+  ],
+  "text.custodio.correction.apply": [
+    "Apply to draft",
+    "Aplicar ao rascunho"
+  ],
+  "text.custodio.correction.disable": [
+    "Disable interpretation",
+    "Desabilitar interpretação"
+  ],
+  "text.custodio.correction.exception": [
+    "Legitimate exception",
+    "Exceção legítima"
+  ],
+  "text.custodio.correction.false_positive": [
+    "False positive",
+    "Falso positivo"
+  ],
+  "text.custodio.correction.help": [
+    "Suspends this interpretation when saved; preserves the original rule",
+    "Suspende esta interpretação ao salvar; preserva a regra original"
+  ],
+  "text.custodio.correction.incorrect": [
+    "Incorrect interpretation",
+    "Interpretação incorreta"
+  ],
+  "text.custodio.correction.note": [
+    "Optional administrative note",
+    "Nota administrativa opcional"
+  ],
+  "text.custodio.correction.note_hint": [
+    "Explain the reason without copying private messages or sensitive data.",
+    "Explique o motivo sem copiar mensagens privadas ou dados sensíveis."
+  ],
+  "text.custodio.correction.panel": [
+    "**Correct rule {number}**\n\nReason: {reason}\nNote: {note}\n\nThe correction suspends this rule’s interpretation; it does not modify the rules or other servers. It affects only the draft until you Save changes in Detection. Restore reverts it within the same revision.",
+    "**Corrigir regra {number}**\n\nMotivo: {reason}\nNota: {note}\n\nA correção suspende a interpretação desta regra; não modifica o regulamento nem outros servidores. Ela afeta apenas o rascunho até Salvar alterações em Detecção. Restaurar permite revertê-la na mesma revisão."
+  ],
+  "text.custodio.correction.restore": [
+    "Restore validated proposal",
+    "Restaurar proposta validada"
+  ],
+  "text.custodio.correction.restore_help": [
+    "Reverts this revision’s correction; Save changes is required",
+    "Reverte a correção desta revisão; é necessário Salvar alterações"
+  ],
+  "text.custodio.correction.select": [
+    "Select the reason for the correction",
+    "Selecione o motivo da correção"
   ],
   "text.custodio.delivery_review": [
     "The previous delivery needs review. It will not be repeated automatically to prevent duplicates.",
@@ -10062,6 +10694,38 @@
   "text.custodio.detector_help": [
     "Only reports matches; does not sanction or invent rules",
     "Apenas relata correspondências; não aplica sanções nem inventa regras"
+  ],
+  "text.custodio.discipline.limit_review": [
+    "The central warning limit has been reached. Any further action requires a separate review and explicit confirmation.",
+    "Foi atingido o limite central de advertências. Qualquer medida adicional requer outra revisão e confirmação explícita."
+  ],
+  "text.custodio.discipline.log": [
+    "Source: Modo Custodio\nCase: {case}\nMember: {member}\nReviewer: {moderator}\nPrivate evidence: {reference}\nAction applied after explicit administrative confirmation.",
+    "Origem: Modo Custodio\nCaso: {case}\nMembro: {member}\nRevisor: {moderator}\nEvidência privada: {reference}\nMedida aplicada após confirmação administrativa explícita."
+  ],
+  "text.custodio.discipline.log_title": [
+    "Modo Custodio · Reviewed action",
+    "Modo Custodio · Medida revisada"
+  ],
+  "text.custodio.discipline.manual": [
+    "Manual moderation",
+    "Moderação manual"
+  ],
+  "text.custodio.discipline.origin": [
+    "Modo Custodio",
+    "Modo Custodio"
+  ],
+  "text.custodio.discipline.origin_label": [
+    "Source",
+    "Origem"
+  ],
+  "text.custodio.discipline.other": [
+    "Moderation and other modules",
+    "Moderação e outros módulos"
+  ],
+  "text.custodio.effect_cancelled": [
+    "Delivery stopped because authorization changed or Modo Custodio was paused. Parts already published remain available for review.",
+    "O envio foi interrompido porque a autorização mudou ou o Modo Custodio foi pausado. As partes já publicadas permanecem disponíveis para revisão."
   ],
   "text.custodio.excerpt": [
     "… [excerpt; full text in Server rules]",
@@ -10075,6 +10739,10 @@
     "Exempt roles; owner and moderators are always protected",
     "Cargos isentos; proprietário e moderadores sempre protegidos"
   ],
+  "text.custodio.exemptions_panel": [
+    "**Modo Custodio · Exemptions**\n\nScope: {scope}\nExempt roles: {roles}\nExempt channels: {channels}\n\nUnsaved changes: {pending}\nSelections only prepare a draft. Save to apply it. The owner and authorized staff are always protected.",
+    "**Modo Custodio · Isenções**\n\nEscopo: {scope}\nCargos isentos: {roles}\nCanais isentos: {channels}\n\nAlterações pendentes: {pending}\nA seleção apenas prepara o rascunho. Salve para aplicar. O proprietário e a equipe autorizada estão sempre protegidos."
+  ],
   "text.custodio.full_rule": [
     "View full rule",
     "Ver regra completa"
@@ -10087,6 +10755,14 @@
     "Advertising with links",
     "Publicidade com links"
   ],
+  "text.custodio.kind.attachment_flood": [
+    "Attachment burst",
+    "Sequência intensa de anexos"
+  ],
+  "text.custodio.kind.character_flood": [
+    "Character flooding",
+    "Saturação com caracteres"
+  ],
   "text.custodio.kind.coordinated": [
     "Coordinated patterns",
     "Padrões coordenados"
@@ -10094,6 +10770,14 @@
   "text.custodio.kind.cross_channel": [
     "Repetition across channels",
     "Repetição entre canais"
+  ],
+  "text.custodio.kind.directed_mentions": [
+    "Repeated mentions of one person",
+    "Menções insistentes a uma pessoa"
+  ],
+  "text.custodio.kind.emoji_flood": [
+    "Emoji flooding",
+    "Saturação com emojis"
   ],
   "text.custodio.kind.flood": [
     "Channel flooding",
@@ -10106,6 +10790,10 @@
   "text.custodio.kind.links": [
     "Repeated links",
     "Links repetidos"
+  ],
+  "text.custodio.kind.masked_link": [
+    "Link destination differs from its label",
+    "Link com destino diferente do exibido"
   ],
   "text.custodio.kind.mentions": [
     "Mass mentions",
@@ -10122,6 +10810,78 @@
   "text.custodio.kind.similar_text": [
     "Nearly identical texts",
     "Textos quase idênticos"
+  ],
+  "text.custodio.kind.sticker_repeat": [
+    "Repeated stickers",
+    "Figurinhas repetidas"
+  ],
+  "text.custodio.limit.condition": [
+    "The condition requires human context; it is not applied as a general prohibition.",
+    "A condição requer contexto humano; não é aplicada como proibição geral."
+  ],
+  "text.custodio.limit.contradiction": [
+    "Permissions and restrictions may be incompatible.",
+    "Permissões e restrições podem ser incompatíveis."
+  ],
+  "text.custodio.limit.exception": [
+    "The exception requires human interpretation.",
+    "A exceção requer interpretação humana."
+  ],
+  "text.custodio.limit.human": [
+    "This conduct requires human review. A keyword match does not establish a violation.",
+    "Esta conduta requer revisão humana. A coincidência de palavras não comprova uma infração."
+  ],
+  "text.custodio.limit.indicator": [
+    "Produces reviewable signals only; it does not determine guilt or apply automatic sanctions.",
+    "Produz apenas sinais para revisão; não determina culpa nem aplica sanções automáticas."
+  ],
+  "text.custodio.limit.instruction": [
+    "Instructions addressed to the interpreter were detected; the rule requires human review.",
+    "Foram detectadas instruções dirigidas ao intérprete; a regra requer revisão humana."
+  ],
+  "text.custodio.limit.invalid": [
+    "The proposal failed citation, category, or scope validation.",
+    "A proposta não passou na validação de citações, categorias ou escopo."
+  ],
+  "text.custodio.limit.normative": [
+    "An unambiguous prohibition could not be verified.",
+    "Não foi possível verificar uma proibição inequívoca."
+  ],
+  "text.custodio.limit.obligation": [
+    "This obligation has no reliable local mechanism.",
+    "Esta obrigação não possui um mecanismo local confiável."
+  ],
+  "text.custodio.limit.provider_config": [
+    "The free provider is not configured. Administrative service configuration is required.",
+    "O provedor gratuito não está configurado. É necessária a configuração administrativa do serviço."
+  ],
+  "text.custodio.limit.provider_key": [
+    "The provider rejected the credential. The service administrator must review it.",
+    "O provedor rejeitou a credencial. O administrador do serviço deve verificá-la."
+  ],
+  "text.custodio.limit.provider_request": [
+    "The provider rejected the requested format or model. Administrative diagnosis is required.",
+    "O provedor rejeitou o formato ou o modelo solicitado. É necessário diagnóstico administrativo."
+  ],
+  "text.custodio.limit.quota": [
+    "A request or budget limit was reached. No automatic retries were made; you can analyze again later.",
+    "Foi atingido um limite de solicitações ou orçamento. Não houve novas tentativas automáticas; você pode analisar novamente mais tarde."
+  ],
+  "text.custodio.limit.reference": [
+    "The reference to another rule requires a joint review.",
+    "A referência a outra regra requer revisão conjunta."
+  ],
+  "text.custodio.limit.scope": [
+    "The scope could not be resolved unambiguously.",
+    "O escopo não pôde ser resolvido sem ambiguidade."
+  ],
+  "text.custodio.limit.size": [
+    "The rule exceeds this request’s analysis budget. Human review is required.",
+    "A regra excede o orçamento de análise desta solicitação. É necessária revisão humana."
+  ],
+  "text.custodio.limit.unavailable": [
+    "No validated analysis was obtained. Check the provider and analyze again from this panel.",
+    "Não foi obtida uma análise validada. Verifique o provedor e analise novamente neste painel."
   ],
   "text.custodio.measure_confirmed": [
     "Action confirmed by Discord.",
@@ -10142,6 +10902,30 @@
   "text.custodio.no": [
     "No",
     "Não"
+  ],
+  "text.custodio.normative.ambiguous": [
+    "Ambiguous normative meaning",
+    "Sentido normativo ambíguo"
+  ],
+  "text.custodio.normative.none": [
+    "No normative provision",
+    "Sem disposição normativa"
+  ],
+  "text.custodio.normative.obligation": [
+    "Obligation",
+    "Obrigação"
+  ],
+  "text.custodio.normative.permission": [
+    "Permission",
+    "Permissão"
+  ],
+  "text.custodio.normative.prohibition": [
+    "Prohibition",
+    "Proibição"
+  ],
+  "text.custodio.normative.restriction": [
+    "Scope restriction",
+    "Restrição de escopo"
   ],
   "text.custodio.observation_conduct": [
     "Provisional observation: {kind}. Matches: {count}. Pending review; it does not establish guilt.",
@@ -10195,21 +10979,41 @@
     "The complete outcome was not confirmed. Review the case before repeating an action; a pending operation is not reexecuted automatically.",
     "O resultado completo não foi confirmado. Revise o caso antes de repetir uma medida; uma operação pendente não é reexecutada automaticamente."
   ],
+  "text.custodio.rule_short": [
+    "Rule {number}",
+    "Regra {number}"
+  ],
   "text.custodio.rules_page": [
     "**Server rules · {number}/{count} · part {part}/{total}**\nRevision: `{revision}`\n\n{quote}\n\nThis is a verbatim copy. Analyses are proposals for administrative review.",
     "**Regras do servidor · {number}/{count} · parte {part}/{total}**\nRevisão: `{revision}`\n\n{quote}\n\nA transcrição é literal. Análises são propostas para revisão administrativa."
   ],
   "text.custodio.runtime_summary": [
-    "**Observation:** {status}. Configure per-rule detectors and exemptions before activating. AI is not used to read messages.",
-    "**Observação:** {status}. Configure detectores por regra e isenções antes de ativar. Não se usa IA para ler mensagens."
+    "**Observation:** {status}. Analyze and approve the interpretation in Detection; configure exemptions before activating. AI is not used to read messages.",
+    "**Observação:** {status}. Analise e aprove a interpretação em Detecção; configure as isenções antes de ativar. Não se utiliza IA para ler mensagens."
   ],
   "text.custodio.save_failed": [
-    "Not saved. Check permissions, current rules, private channel and changes in another session. To activate, save at least one detector and enable Message Content.",
-    "Não foi salvo. Confira permissões, regras vigentes, canal privado e alterações de outra sessão. Para ativar, salve um detector e habilite Message Content."
+    "Changes were not saved. Check permissions, current rules, and changes in another session. Activation requires an approved interpretation with local signals, a valid private channel, and Message Content.",
+    "As alterações não foram salvas. Verifique permissões, regras vigentes e mudanças em outra sessão. A ativação exige uma interpretação aprovada com sinais locais, um canal privado válido e Message Content."
   ],
   "text.custodio.saved": [
     "Changes saved. Automatic sanctions remain disabled.",
     "Alterações salvas. As sanções automáticas continuam desativadas."
+  ],
+  "text.custodio.scope.all": [
+    "All nonexempt channels",
+    "Todos os canais não isentos"
+  ],
+  "text.custodio.scope.ambiguous": [
+    "Unresolved scope",
+    "Escopo não resolvido"
+  ],
+  "text.custodio.scope.only": [
+    "Only in the listed channels",
+    "Somente nos canais indicados"
+  ],
+  "text.custodio.scope.outside": [
+    "Only outside the listed authorized channels",
+    "Somente fora dos canais autorizados indicados"
   ],
   "text.custodio.scope_help": [
     "Apply these exemptions to all observation in this server",

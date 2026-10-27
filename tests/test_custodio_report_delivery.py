@@ -40,10 +40,29 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.copies[mid]=copy
         return copy
 
-    async def publish(self):
+    async def publish(self,**changes):
         return await reports.publish_literal_observation(guild=self.guild,report_channel_id=26,
                 source_message=self.source,rule_text='No enviar spam.',rule_number=1,
-                rules_revision='a'*64,footer="El Heraldo's Labs 🧪")
+                rules_revision='a'*64,footer="El Heraldo's Labs 🧪",**changes)
+
+    async def test_pause_before_claim_creates_no_report_or_persistent_reference(self):
+        with self.assertRaises(reports.ReportChannelError):
+            await self.publish(authorization_check=AsyncMock(return_value=False))
+        self.destination.send.assert_not_awaited()
+        self.assertFalse(Path(self.db).exists())
+
+    async def test_pause_between_parts_stops_delivery_and_preserves_uncertain_ledger_on_restart(self):
+        self.source.content='Texto literal extenso\n'*700
+        guard=AsyncMock(side_effect=[True,True,True,False])
+        with self.assertRaises(reports.ReportChannelError):
+            await self.publish(authorization_check=guard)
+        self.destination.send.assert_awaited_once()
+        with sqlite3.connect(self.db) as db:
+            self.assertEqual(db.execute('SELECT status FROM evidence_archive_v1').fetchone()[0],'pending')
+        reports._published_evidence.clear()
+        with self.assertRaises(reports.ReportChannelError):
+            await self.publish(authorization_check=AsyncMock(return_value=True))
+        self.destination.send.assert_awaited_once()
 
     async def test_concurrent_delivery_and_restart_keep_one_report_without_sqlite_text(self):
         first,second=await asyncio.gather(self.publish(),self.publish())

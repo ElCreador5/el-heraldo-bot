@@ -1,7 +1,7 @@
 """Configuración de Custodio y reglas literales, con observación optativa.
 
 Las preferencias generales no activan observación ni medidas disciplinarias.
-La autorización por regla y su activación se gestionan en Detección.
+La interpretación se aprueba en Detección; el interruptor global está en el panel principal.
 """
 from __future__ import annotations
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
@@ -189,6 +189,7 @@ class CustodioSetupView(discord.ui.View):
         """Interruptor global: persistir SOLO enabled; pausar aun sin acceso a Server Rules."""
         import json
         from custodio_policy import KEY, ObservePolicy
+        from custodio_interpretation import KEY as PLAN_KEY, InterpretationPlan
         from custodio_reports import _get_safe_existing
 
         if not await self.interaction_check(interaction):
@@ -211,7 +212,11 @@ class CustodioSetupView(discord.ui.View):
                 if enabled:
                     snapshot = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
                     policy = ObservePolicy.decode(original, snapshot)
-                    if not any(binding.kinds for binding in policy.bindings):
+                    plan_raw = self.get_setting(self.guild_id,PLAN_KEY)
+                    plan = InterpretationPlan.decode(plan_raw,snapshot)
+                    if not plan or not plan.approved_by or not any(rule.kinds for rule in plan.rules):
+                        raise ValueError("saved_interpretation_required")
+                    if not any(binding.kinds & rule.kinds for binding,rule in zip(policy.bindings,plan.rules)):
                         raise ValueError("saved_detectors_required")
                     channel = self.get_setting(self.guild_id, SETTING_KEY)
                     if not channel or not channel.isdecimal() or not interaction.client.intents.message_content:
@@ -227,7 +232,12 @@ class CustodioSetupView(discord.ui.View):
                         raise ValueError("invalid_configuration")
                     document["enabled"] = False
                     replacement = json.dumps(document, separators=(",", ":"), sort_keys=True)
-                if not self.save_atomic(self.guild_id, {KEY: original}, {KEY: replacement}):
+                if not await self.interaction_check(interaction):
+                    return
+                expected = {KEY: original}
+                if enabled:
+                    expected[PLAN_KEY] = plan_raw
+                if not self.save_atomic(self.guild_id, expected, {KEY: replacement}):
                     raise ValueError("stale_configuration")
                 notice = _t("text.custodio.saved")
         except Exception:
@@ -249,6 +259,7 @@ class CustodioSetupView(discord.ui.View):
     async def open_observation(self, interaction, *, exemptions):
         await interaction.response.defer(thinking=False)
         from custodio_observe_setup import CustodioObserveSetupView
+        from custodio_detection_setup import CustodioDetectionView
         try:
             snapshot = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
         except (RulesUnavailable, ValueError):
@@ -258,8 +269,9 @@ class CustodioSetupView(discord.ui.View):
         if (view is None or view.snapshot.revision != snapshot.revision
                 or view.is_finished()
                 or (view.pending == view.saved
-                    and view.original != self.get_setting(self.guild_id, OBSERVATION_SETTING_KEY))):
-            view = CustodioObserveSetupView(self, snapshot, exemptions=exemptions)
+                    and (view.original != self.get_setting(self.guild_id, OBSERVATION_SETTING_KEY)
+                         or getattr(view,'is_stale',lambda:False)()))):
+            view = CustodioObserveSetupView(self, snapshot, exemptions=True) if exemptions else CustodioDetectionView(self,snapshot)
             self.observation_editors[exemptions] = view
         await interaction.edit_original_response(content=view.summary(), view=view, embed=None)
 
@@ -581,26 +593,12 @@ class CustodioRulesView(discord.ui.View):
     @discord.ui.button(label=_t('text.ba4c0deba27b34'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def analyze_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if (interaction.user.id != interaction.guild.owner_id
-                and not interaction.user.guild_permissions.administrator):
-            await interaction.response.edit_message(content=self.summary() + "\n\n" + str(_t("text.custodio.ai_admin_only")), view=self, embed=None)
-            return
-        await interaction.response.defer(thinking=False)
-        from custodio_ai_runtime import analyze_rule, AIUnavailable
-        try:
-            fresh = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
-            if fresh.revision != self.snapshot.revision:
-                raise ValueError("stale_rules")
-            proposal = await analyze_rule(fresh, self.index, administrator_requested=True)
-            notice = _t("text.custodio.ai_proposal", number=self.index + 1,
-                        interpretation=proposal["interpretation"],
-                        clarification=str(_t("text.custodio.yes" if proposal["needs_clarification"] else "text.custodio.no")))
-        except AIUnavailable as exc:
-            notice = _t("text.custodio.ai_unavailable" if str(exc) == "free_provider_not_configured"
-                        else "text.custodio.ai_failed")
-        except Exception:
-            notice = _t("text.custodio.ai_failed")
-        await interaction.edit_original_response(content=str(notice), view=self, embed=None)
+        from custodio_detection_setup import CustodioDetectionView
+        view = self.parent.observation_editors.get(False)
+        if view is None or view.snapshot.revision != self.snapshot.revision or view.is_finished():
+            view = CustodioDetectionView(self.parent,self.snapshot)
+            self.parent.observation_editors[False] = view
+        await view.analyze(interaction)
 
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context

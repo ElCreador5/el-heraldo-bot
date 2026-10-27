@@ -17,11 +17,19 @@ from custodio_policy import ObservePolicy, RuleBinding, KEY
 from custodio_runtime import CustodioRuntime
 from custodio_observe_setup import CustodioObserveSetupView
 from custodio_setup import CustodioRulesView
+from custodio_detection_setup import CustodioDetectionView
+from custodio_interpretation import KEY as PLAN_KEY, InterpretationPlan, RuleInterpretation, fingerprint
 from custodio_ai_runtime import analyze_rule, request_payload, validate_proposal, AIUnavailable, _last
 from heraldo_evidence import LiteralEvidence, make_evidence_embeds, evidence_batches
 from heraldo_i18n import set_locale_resolver, CATALOGS
 
 SNAPSHOT = RulesSnapshot(101, ("No publicar spam ni mensajes repetidos.",), "a" * 64)
+
+
+def approved_plan(snapshot=SNAPSHOT):
+    rules=tuple(RuleInterpretation(n,fingerprint(text),'watchable','prohibition',('exact_text',),
+        ((0,len(text)),),prohibitions=((0,len(text)),)) for n,text in enumerate(snapshot.rules,1))
+    return InterpretationPlan(snapshot.guild_id,snapshot.revision,rules,1700000000).approve(999)
 
 
 class DetectorTests(unittest.TestCase):
@@ -147,7 +155,7 @@ class PolicyTests(unittest.TestCase):
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.p = ObservePolicy(SNAPSHOT.revision, True, bindings=(RuleBinding(1, frozenset({"repeat"})),))
-        self.values = {KEY: self.p.encode(1), "custodio_reports_channel_id": "404"}
+        self.values = {PLAN_KEY:approved_plan().encode(SNAPSHOT), KEY: self.p.encode(1), "custodio_reports_channel_id": "404"}
         self.clock = [100.0]
         self.loader, self.publisher = AsyncMock(return_value=SNAPSHOT), AsyncMock(return_value="report")
         self.engine = CustodioRuntime({"guild_config_get": lambda gid,key:self.values.get(key),
@@ -279,7 +287,7 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
                 view = panel(parent, SNAPSHOT)
                 is_observation = panel is CustodioObserveSetupView
                 if is_observation:
-                    view.update(kinds=frozenset({'repeat'}))
+                    view.update(roles=frozenset({707}))
                 else:
                     view.pending[0] = 'temp_ban'
                 started, finish = asyncio.Event(), asyncio.Event()
@@ -287,7 +295,7 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
                     started.set()
                     await finish.wait()
                     return SNAPSHOT
-                interaction = NS(response=NS(defer=AsyncMock(),edit_message=AsyncMock()),
+                interaction = NS(guild=NS(get_role=lambda rid:NS(id=rid)),response=NS(defer=AsyncMock(),edit_message=AsyncMock()),
                                   edit_original_response=AsyncMock())
                 module = 'custodio_observe_setup' if is_observation else 'custodio_source'
                 with patch(module+'.load_server_rules',new=fetch):
@@ -295,9 +303,9 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
                     await started.wait()
                     try:
                         if is_observation:
-                            view.kind_select._values = ['links']
-                            await view.select_kinds(interaction)
-                            self.assertEqual(view.pending.bindings[0].kinds, {'repeat'})
+                            view.role_select._values = [NS(id=808)]
+                            await view.select_roles(interaction)
+                            self.assertEqual(view.pending.roles, {707})
                         else:
                             view.actions_select._values = ['ban']
                             await view.select_action(interaction)
@@ -345,7 +353,7 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
             for exemptions in (False, True):
                 await parent.open_observation(interaction, exemptions=exemptions)
                 view = interaction.edit_original_response.call_args.kwargs['view']
-                view.update(**({'roles':frozenset({707})} if exemptions else {'kinds':frozenset({'repeat'})}))
+                view.update(roles=frozenset({707})) if exemptions else setattr(view,'pending',approved_plan().correct(0,reason='false_positive',note='Corrección sintética',administrator_id=303))
                 pending = view.pending
                 await view.back(interaction)
                 self.assertIs(interaction.response.edit_message.call_args.kwargs['view'], parent)
@@ -370,11 +378,11 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
         with patch('custodio_setup.load_server_rules', new=AsyncMock(side_effect=[SNAPSHOT, replace(SNAPSHOT, revision='b'*64)])):
             await parent.open_observation(interaction, exemptions=False)
             old = interaction.edit_original_response.call_args.kwargs['view']
-            old.update(kinds=frozenset({'repeat'}))
+            old.pending=approved_plan()
             await parent.open_observation(interaction, exemptions=False)
             current = interaction.edit_original_response.call_args.kwargs['view']
             self.assertIsNot(current, old)
-            self.assertFalse(current.pending.bindings[0].kinds)
+            self.assertIsNone(current.pending)
         parent.save_atomic.assert_not_called()
 
     async def test_all_new_panels_serialize_within_limits_in_three_languages(self):
@@ -390,7 +398,7 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
                   access_check=AsyncMock(return_value=True),save_atomic=Mock())
         for locale in i18n.TARGET_LOCALES:
             with patch.object(i18n,'_locale_resolver',lambda gid,locale=locale:locale),i18n.use_guild(101):
-                views=[CustodioObserveSetupView(parent,maximum),CustodioObserveSetupView(parent,maximum,exemptions=True),
+                views=[CustodioDetectionView(parent,maximum),CustodioObserveSetupView(parent,maximum,exemptions=True),
                        CustodioRulesView(parent,maximum),CustodioServerRuleActionsView(parent,maximum),
                        CustodioReviewPanel({'guild_config_get':parent.get_setting},303,maximum,
                                           ReviewedIncident(101,200,300,1,maximum.revision,'https://discord.com/channels/101/5/6'))]
@@ -406,27 +414,29 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
                                     self.assertLessEqual(len(str(option['label'])),100)
                                     self.assertLessEqual(len(str(option.get('description',''))),100)
 
-    async def test_activate_and_pause_save_only_state_and_preserve_other_drafts(self):
-        values={KEY:ObservePolicy(SNAPSHOT.revision,bindings=(RuleBinding(1,frozenset({'repeat'})),)).encode(1),
+    async def test_main_activate_and_pause_save_only_state_and_preserve_other_drafts(self):
+        from custodio_setup import CustodioSetupView
+        values={PLAN_KEY:approved_plan().encode(SNAPSHOT),
+                KEY:ObservePolicy(SNAPSHOT.revision,bindings=(RuleBinding(1,frozenset({'repeat'})),)).encode(1),
                 'custodio_reports_channel_id':'404'}
         def save(gid,old,new):
             if any(values.get(k)!=v for k,v in old.items()):return False
             values.update(new);return True
-        parent=NS(guild_id=101,owner_id=303,get_setting=lambda gid,key:values.get(key),
-                  access_check=AsyncMock(return_value=True),save_atomic=Mock(side_effect=save))
-        view=CustodioObserveSetupView(parent,SNAPSHOT)
-        view.update(kinds=frozenset({'links'}))
+        parent=CustodioSetupView(101,303,get_setting=lambda gid,key:values.get(key),
+                  access_check=AsyncMock(return_value=True),save_atomic=Mock(side_effect=save),parent_factory=lambda:None)
+        parent.pending_sensitivity='strict'
         interaction=NS(client=NS(intents=NS(message_content=True)),guild=NS(id=101),
                        response=NS(defer=AsyncMock()),edit_original_response=AsyncMock())
-        with patch('custodio_observe_setup.load_server_rules',new=AsyncMock(return_value=SNAPSHOT)) as source,\
-             patch('custodio_observe_setup._get_safe_existing'):
-            await view.activate(interaction)
+        with patch('custodio_setup.load_server_rules',new=AsyncMock(return_value=SNAPSHOT)) as source,\
+             patch('custodio_reports._get_safe_existing'):
+            await parent.activate_observation(interaction)
             stored=ObservePolicy.decode(values[KEY],SNAPSHOT)
             self.assertTrue(stored.enabled)
             self.assertEqual(stored.bindings[0].kinds,{'repeat'})
-            self.assertEqual(view.pending.bindings[0].kinds,{'links'})
+            self.assertEqual(parent.pending_sensitivity,'strict')
+            self.assertNotIn('custodio_sensitivity',values)
             source.reset_mock()
-            await view.pause(interaction)
+            await parent.pause_observation(interaction)
             self.assertFalse(ObservePolicy.decode(values[KEY],SNAPSHOT).enabled)
             source.assert_not_awaited()
 
@@ -454,19 +464,19 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(fragment,view.summary())
             self.assertLessEqual(len(view.summary()),2000)
 
-    async def test_observation_selection_and_discard_never_save_and_retain_defaults(self):
+    async def test_exemption_selection_and_discard_never_save_and_retain_defaults(self):
         values={}
         parent=NS(guild_id=101,owner_id=303,get_setting=lambda gid,key:values.get(key),
                   access_check=AsyncMock(return_value=True),save_atomic=Mock(),_sync_controls=Mock(),summary=lambda:'parent')
-        view=CustodioObserveSetupView(parent,SNAPSHOT)
-        view.kind_select._values=['repeat']
+        view=CustodioObserveSetupView(parent,SNAPSHOT,exemptions=True)
+        view.role_select._values=[NS(id=707)]
         interaction=NS(response=NS(edit_message=AsyncMock()))
-        await view.select_kinds(interaction)
-        self.assertTrue(view.kind_select.options[-1].default or any(o.default for o in view.kind_select.options))
+        await view.select_roles(interaction)
+        self.assertEqual([v.id for v in view.role_select.default_values],[707])
         self.assertFalse(values)
         parent.save_atomic.assert_not_called()
         await view.discard(interaction)
-        self.assertFalse(view.pending.bindings[0].kinds)
+        self.assertFalse(view.pending.roles)
 
 
 if __name__=='__main__':unittest.main()

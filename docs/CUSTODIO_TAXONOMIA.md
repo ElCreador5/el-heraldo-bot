@@ -72,7 +72,7 @@ Las fichas describen viabilidad y limitaciones. `planned_signal` todavía exige 
 
 ### `character_flood` — Saturación de caracteres
 
-**Familia/versión:** spam / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `planned_signal`.
+**Familia/versión:** spam / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `existing_signal`.
 
 **Descripción/señal:** Secuencia extraordinariamente larga de un mismo carácter. **Regla necesaria:** Prohibición o restricción afirmativa vigente de saturación de caracteres, con ámbito y excepciones verificables. La categoría no crea una norma.
 
@@ -88,7 +88,7 @@ Las fichas describen viabilidad y limitaciones. `planned_signal` todavía exige 
 
 ### `emoji_flood` — Saturación de emojis
 
-**Familia/versión:** spam / 1.0.0. **Capacidad:** heurística/contextual (señal). **Estado:** `planned_signal`.
+**Familia/versión:** spam / 1.0.0. **Capacidad:** heurística/contextual (señal). **Estado:** `existing_signal`.
 
 **Descripción/señal:** Carga extraordinaria de símbolos emoji en una publicación. **Regla necesaria:** Prohibición o restricción afirmativa vigente de saturación de emojis, con ámbito y excepciones verificables. La categoría no crea una norma.
 
@@ -248,7 +248,7 @@ Las fichas describen viabilidad y limitaciones. `planned_signal` todavía exige 
 
 ### `repeated_stickers` — Stickers reiterados
 
-**Familia/versión:** media / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `planned_signal`.
+**Familia/versión:** media / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `existing_signal`.
 
 **Descripción/señal:** Identificador de sticker repetido por el mismo actor. **Regla necesaria:** Prohibición o restricción afirmativa vigente de stickers reiterados, con ámbito y excepciones verificables. La categoría no crea una norma.
 
@@ -264,7 +264,7 @@ Las fichas describen viabilidad y limitaciones. `planned_signal` todavía exige 
 
 ### `attachment_burst` — Saturación mediante adjuntos
 
-**Familia/versión:** media / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `planned_signal`.
+**Familia/versión:** media / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `existing_signal`.
 
 **Descripción/señal:** Acumulación extraordinaria de adjuntos del actor en una ventana breve. **Regla necesaria:** Prohibición o restricción afirmativa vigente de saturación mediante adjuntos, con ámbito y excepciones verificables. La categoría no crea una norma.
 
@@ -696,7 +696,7 @@ Las fichas describen viabilidad y limitaciones. `planned_signal` todavía exige 
 
 ### `masked_link` — Diferencia entre URL visible y destino
 
-**Familia/versión:** security / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `planned_signal`.
+**Familia/versión:** security / 1.0.0. **Capacidad:** objetiva/determinista (señal). **Estado:** `existing_signal`.
 
 **Descripción/señal:** Etiqueta con forma de URL cuyo host difiere del enlace Markdown real. **Regla necesaria:** Prohibición o restricción afirmativa vigente de diferencia entre url visible y destino, con ámbito y excepciones verificables. La categoría no crea una norma.
 
@@ -920,7 +920,7 @@ Las fichas describen viabilidad y limitaciones. `planned_signal` todavía exige 
 
 ### `directed_mentions` — Menciones insistentes
 
-**Familia/versión:** features / 1.0.0. **Capacidad:** heurística/contextual (señal). **Estado:** `planned_signal`.
+**Familia/versión:** features / 1.0.0. **Capacidad:** heurística/contextual (señal). **Estado:** `existing_signal`.
 
 **Descripción/señal:** El mismo autor menciona reiteradamente al mismo destinatario. **Regla necesaria:** Prohibición o restricción afirmativa vigente de menciones insistentes, con ámbito y excepciones verificables. La categoría no crea una norma.
 

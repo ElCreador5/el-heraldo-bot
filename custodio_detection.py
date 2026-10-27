@@ -1,6 +1,6 @@
 """Detección mecánica acotada. No interpreta normas ni ejecuta medidas.
 
-Solo devuelve indicadores elegidos por un administrador para una regla real.
+Solo devuelve indicadores derivados de una interpretación aprobada de una regla real.
 Conserva huellas temporales; nunca transcripciones o perfiles de miembros.
 """
 from __future__ import annotations
@@ -11,9 +11,12 @@ from hashlib import blake2b, sha256
 import math
 import re
 import unicodedata
+from urllib.parse import urlsplit
 
 KINDS = frozenset({"repeat", "similar_text", "links", "mentions", "flood",
-                   "cross_channel", "images", "similar_images", "coordinated", "advertising"})
+                   "cross_channel", "images", "similar_images", "coordinated", "advertising",
+                   "character_flood", "emoji_flood", "directed_mentions", "sticker_repeat",
+                   "attachment_flood", "masked_link"})
 KIND_KEYS = {
     "repeat": "text.custodio.kind.repeat", "similar_text": "text.custodio.kind.similar_text",
     "links": "text.custodio.kind.links", "mentions": "text.custodio.kind.mentions",
@@ -21,10 +24,34 @@ KIND_KEYS = {
     "images": "text.custodio.kind.images", "similar_images": "text.custodio.kind.similar_images",
     "coordinated": "text.custodio.kind.coordinated",
     "advertising": "text.custodio.kind.advertising",
+    "character_flood": "text.custodio.kind.character_flood",
+    "emoji_flood": "text.custodio.kind.emoji_flood",
+    "directed_mentions": "text.custodio.kind.directed_mentions",
+    "sticker_repeat": "text.custodio.kind.sticker_repeat",
+    "attachment_flood": "text.custodio.kind.attachment_flood",
+    "masked_link": "text.custodio.kind.masked_link",
 }
 WINDOW = 90.0
 MAX_EVENTS = 4096
 MAX_MESSAGE_CHARS = 4000
+
+
+def visible_content(text):
+    """No atribuir al autor ejemplos citados o bloques de código."""
+    text = re.sub(r"```.*?(?:```|$)", "", text, flags=re.S)
+    text = re.sub(r"`[^`\n]*`", "", text)
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith(">"))
+
+
+def mismatched_link(text):
+    for label, destination in re.findall(r"\[(https?://[^\]\s]{1,512})\]\((https?://[^\s)]{1,1024})\)", text)[:20]:
+        try:
+            left, right = (urlsplit(url).hostname for url in (label,destination))
+            if left and right and left.removeprefix('www.').casefold() != right.removeprefix('www.').casefold():
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def normalize(text: str) -> str:
@@ -57,6 +84,11 @@ class MessageSignal:
     mentions: int
     images: tuple[tuple[str, int | None], ...] = ()
     rule_number: int = 0
+    targets: frozenset[int] = frozenset()
+    stickers: frozenset[int] = frozenset()
+    attachments: int = 0
+    character_flood: bool = False
+    emoji_flood: bool = False
 
 
 @dataclass(frozen=True)
@@ -90,7 +122,8 @@ class LocalDetector:
                 message_id: int, now: float, content: str,
                 kinds: frozenset[str], mention_count: int = 0,
                 images: tuple[tuple[str, int | None], ...] = (),
-                sensitivity: str = "balanced", rule_number: int = 0) -> tuple[Detection, ...]:
+                sensitivity: str = "balanced", rule_number: int = 0,
+                mention_ids=(), sticker_ids=(), attachment_count=0) -> tuple[Detection, ...]:
         if (not all(type(v) is int and v > 0 for v in
                     (guild_id, channel_id, actor_id, message_id))
                 or type(now) not in (int, float) or isinstance(now, bool)
@@ -98,6 +131,9 @@ class LocalDetector:
                 or not kinds <= KINDS or type(mention_count) is not int or mention_count < 0
                 or sensitivity not in {"conservative", "balanced", "strict"}
                 or type(rule_number) is not int or not 0 <= rule_number <= 16
+                or len(mention_ids) > 100 or len(sticker_ids) > 3
+                or any(type(v) is not int or v <= 0 for v in (*mention_ids,*sticker_ids))
+                or type(attachment_count) is not int or not 0 <= attachment_count <= 10
                 or len(images) > 4 or any(not re.fullmatch(r"[0-9a-f]{64}", h)
                       or (p is not None and (type(p) is not int or not 0 <= p < 2**64))
                       for h, p in images)):
@@ -106,7 +142,10 @@ class LocalDetector:
         if any(e.guild_id == guild_id and e.message_id == message_id
                and e.rule_number == rule_number for e in self.events):
             return ()
-        text = normalize(content)
+        text = normalize(visible_content(content))
+        visible = text
+        longest = max((len(match[0]) for match in re.finditer(r"([^\s])\1{2,}",visible)),default=0)
+        emoji_count = sum(unicodedata.category(char) == 'So' for char in visible)
         digest = sha256(text.encode()).digest() if len(text) >= 12 else None
         previous = self.events[-1] if self.events else None
         shared_fingerprint = bool(previous and digest is not None
@@ -119,7 +158,9 @@ class LocalDetector:
             len(text),
             previous.links if shared_fingerprint else frozenset(sha256(link.rstrip(".,!?)").encode()).digest()
                       for link in re.findall(r"(?:https?://|discord\.gg/|discord\.com/invite/)[^\s<>]+", text)[:20]),
-            mention_count, images, rule_number,
+            mention_count, images, rule_number, frozenset(mention_ids),frozenset(sticker_ids),attachment_count,
+            len(visible) >= 160 and longest >= 120,
+            emoji_count >= 48 and emoji_count / max(1,len(visible)) >= .65,
         )
         self.events.append(signal)
         applicable = [e for e in self.events if e.guild_id == guild_id and e.rule_number == rule_number]
@@ -163,6 +204,27 @@ class LocalDetector:
         if len({e.actor_id for e in campaign}) >= 3 and len(exact) >= 2:
             # Nunca atribuir la actividad ajena a un miembro con una sola entrada.
             add("coordinated", campaign, 6, coordinated=True)
+        for kind in ('character_flood','emoji_flood'):
+            if getattr(signal,kind):
+                add(kind,[e for e in own if getattr(e,kind)],3 if sensitivity == 'conservative' else 2)
+        if signal.targets:
+            targeted = {target:[e for e in own if target in e.targets and e.at >= now-30]
+                        for target in signal.targets}
+            for matches in targeted.values():
+                add('directed_mentions',matches,{'conservative':6,'balanced':5,'strict':4}[sensitivity])
+                if result and result[-1].kind == 'directed_mentions':
+                    break
+        if signal.stickers:
+            add('sticker_repeat',[e for e in own if signal.stickers.intersection(e.stickers)])
+        attachments = [e for e in recent if e.attachments]
+        limit = {'conservative':24,'balanced':16,'strict':12}[sensitivity]
+        if ('attachment_flood' in kinds and signal.attachments and len(attachments) >= 3
+                and sum(e.attachments for e in attachments) >= limit
+                and (len(attachments)==3 or sum(e.attachments for e in attachments[:-1]) < limit)):
+            result.append(Detection('attachment_flood',sum(e.attachments for e in attachments),
+                                    tuple(e.message_id for e in attachments)))
+        if 'masked_link' in kinds and mismatched_link(visible):
+            result.append(Detection('masked_link',1,(message_id,)))
         return tuple(result)
 
 

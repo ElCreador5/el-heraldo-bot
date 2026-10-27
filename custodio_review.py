@@ -72,6 +72,8 @@ class CustodioReviewPanel(discord.ui.View):
             actual_action = result.get("action", "report")
             notice = _t("text.custodio.review_complete", action=str(dict((a, label) for a,label,_ in ACTIONS)[actual_action]),
                         case=result.get("case_number") or "—")
+            if result.get('review_limit_reached'):
+                notice = str(notice)+'\n'+str(_t('text.custodio.discipline.limit_review'))
             # Editar únicamente la medida; nunca reescribir la transcripción.
             match = re.fullmatch(r"https://discord.com/channels/(\d+)/(\d+)/(\d+)", self.incident.report_url)
             channel = _get_safe_existing(interaction.guild, int(match.group(2)))

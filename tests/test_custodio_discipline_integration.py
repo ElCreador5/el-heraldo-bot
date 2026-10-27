@@ -56,6 +56,37 @@ class DisciplineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.moderation_warning_counts(765,9),(0,0))
         self.kick.assert_not_awaited();self.ban.assert_not_awaited()
 
+    async def test_custodio_origin_survives_edit_and_closure_in_central_history(self):
+        result=await self.execute('warn')
+        case=result['case_number']
+        b.moderation_case_update(765,case,notes='Nota del administrador sin traducir.')
+        b.moderation_case_close(765,case,closed_by=7,resolution='Revisión completada.')
+        row=b.moderation_case_get(765,case)
+        self.assertEqual(b.moderation_case_origin(row),'Modo Custodio')
+        self.assertTrue(row['moderator_notes'].startswith('custodio:'))
+        self.guild.name='Synthetic Lab'
+        embed=b.moderation_case_embed(self.guild,row)
+        self.assertIn('Modo Custodio',[field.value for field in embed.fields])
+        self.assertIn('Nota del administrador sin traducir.',[field.value for field in embed.fields])
+        self.assertFalse(any('custodio:' in field.value for field in embed.fields))
+        manual=b.moderation_case_create(765,'WARN',9,'Motivo propio.',author_id=7,history_ref='')
+        self.assertNotEqual(b.moderation_case_origin(b.moderation_case_get(765,manual)),'Modo Custodio')
+
+    async def test_reaching_central_warning_limit_never_executes_an_automatic_secondary_measure(self):
+        b.guild_config_set(765,'moderation_warn_limit','1')
+        b.guild_config_set(765,'moderation_warn_limit_action','ban')
+        result=await self.execute('warn')
+        self.assertTrue(result['review_limit_reached'])
+        self.escalate.assert_not_awaited();self.ban.assert_not_awaited();self.kick.assert_not_awaited()
+
+    async def test_reviewer_revoked_during_io_cannot_execute_the_confirmed_measure(self):
+        async def fetch(*args):
+            self.reviewer.guild_permissions.administrator=False
+            return self.snapshot
+        with patch('custodio_source.load_server_rules',new=fetch):
+            with self.assertRaises(DisciplineBlocked):await self.execute('ban')
+        self.ban.assert_not_awaited()
+
     async def test_warn_uses_shared_limit_history_reference_and_month_without_repetition(self):
         with patch.object(b,'moderation_case_message_history',side_effect=AssertionError('must not duplicate message text')):
             first=await self.execute('warn')
@@ -65,7 +96,7 @@ class DisciplineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(one['expires_at'],two['expires_at'])
         self.assertTrue(one['message_history'].startswith('https://discord.com/channels/'))
         self.assertTrue(one['moderator_notes'].startswith('custodio:'))
-        self.assertEqual(self.escalate.await_count,2)
+        self.escalate.assert_not_awaited()
         self.kick.assert_not_awaited();self.ban.assert_not_awaited()
 
     async def test_kick_and_both_bans_record_one_case_with_exact_duration(self):

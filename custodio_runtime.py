@@ -16,6 +16,7 @@ from discord.ext import tasks
 from heraldo_i18n import text as _t, guild_context as _i18n_context
 from custodio_detection import LocalDetector, image_fingerprint, KIND_KEYS
 from custodio_policy import KEY, ObservePolicy
+from custodio_interpretation import KEY as PLAN_KEY, InterpretationPlan
 from custodio_source import load_server_rules
 from custodio_core import RulesUnavailable
 from custodio_reports import SETTING_KEY, _get_safe_existing, publish_literal_observation, unlink_deleted_original, compatible_evidence_access
@@ -42,6 +43,7 @@ class CustodioRuntime:
         self.locks = {}
         self.image_lock = asyncio.Semaphore(1)
         self.policy_versions = OrderedDict()
+        self.plans = OrderedDict()
 
     def raw_policy(self, guild_id):
         return self.n["guild_config_get"](guild_id, KEY)
@@ -110,16 +112,32 @@ class CustodioRuntime:
             return None
         snapshot = await self.snapshot(guild.id)
         raw = await asyncio.to_thread(self.raw_policy, guild.id)
-        if self.policy_versions.get(guild.id) != raw:
+        plan_raw = await asyncio.to_thread(self.n['guild_config_get'],guild.id,PLAN_KEY)
+        version = (raw,plan_raw,snapshot.revision)
+        if self.policy_versions.get(guild.id) != version:
             self.detector.clear_guild(guild.id)
-            self.policy_versions[guild.id] = raw
+            self.policy_versions[guild.id] = version
             while len(self.policy_versions) > 32:
                 self.policy_versions.popitem(last=False)
         policy = ObservePolicy.decode(raw, snapshot)
+        cached = self.plans.get(guild.id)
+        if not cached or cached[0] != (plan_raw,snapshot.revision):
+            plan = InterpretationPlan.decode(plan_raw,snapshot)
+            self.plans[guild.id] = ((plan_raw,snapshot.revision),plan)
+            self.plans.move_to_end(guild.id)
+            while len(self.plans)>32:
+                self.plans.popitem(last=False)
+        else:
+            plan = cached[1]
+        if not plan or not plan.approved_by:
+            return None
         roles = {role.id for role in message.author.roles}
         if not policy.eligible(role_ids=roles, channel_id=channel.id):
             return None
-        bindings = policy.allowed_bindings(role_ids=roles, channel_id=channel.id)
+        from dataclasses import replace
+        bindings = tuple(replace(binding,kinds=binding.kinds & plan.rules[binding.number-1].kinds)
+            for binding in policy.allowed_bindings(role_ids=roles, channel_id=channel.id)
+            if plan.rules[binding.number-1].eligible(channel.id,roles))
         kinds = frozenset(kind for binding in bindings for kind in binding.kinds)
         if not kinds:
             return None
@@ -147,6 +165,11 @@ class CustodioRuntime:
                 kinds=binding.kinds, images=tuple(images), rule_number=binding.number,
                 mention_count=len({m.id for m in message.mentions}) + len({r.id for r in message.role_mentions})
                               + (8 if message.mention_everyone else 0),
+                # Las menciones automáticas de una respuesta no son pings explícitos.
+                mention_ids=tuple({m.id for m in message.mentions
+                    if f'<@{m.id}>' in message.content or f'<@!{m.id}>' in message.content})[:100],
+                sticker_ids=tuple(s.id for s in getattr(message,'stickers',()))[:3],
+                attachment_count=min(10,len(message.attachments)),
                 sensitivity=sensitivity or "balanced",
             ):
                 detections.append((binding, detection))
@@ -158,8 +181,22 @@ class CustodioRuntime:
             fresh = await self.snapshot(guild.id, fresh=True)
             current_policy = await asyncio.to_thread(self.raw_policy, guild.id)
             if (fresh.revision != snapshot.revision or raw != current_policy
+                    or plan_raw != await asyncio.to_thread(self.n['guild_config_get'],guild.id,PLAN_KEY)
                     or protected(message.author)):
                 return None
+            async def authorized():
+                # Revalidar antes de CADA envío, incluso las partes de una evidencia.
+                current_roles = {role.id for role in message.author.roles}
+                permission = channel.permissions_for(guild.me) if guild.me else None
+                return bool(not protected(message.author) and permission
+                    and permission.view_channel and permission.read_message_history
+                    and policy.eligible(role_ids=current_roles,channel_id=channel.id)
+                    and plan.rules[binding.number-1].eligible(channel.id,current_roles)
+                    and not binding.roles.intersection(current_roles)
+                    and channel.id not in binding.channels
+                    and raw == await asyncio.to_thread(self.raw_policy,guild.id)
+                    and plan_raw == await asyncio.to_thread(self.n['guild_config_get'],guild.id,PLAN_KEY)
+                    and destination == await asyncio.to_thread(self.n['guild_config_get'],guild.id,SETTING_KEY))
             self.recent[key] = self.clock()
             while len(self.recent) > 2048:
                 self.recent.popitem(last=False)
@@ -169,6 +206,7 @@ class CustodioRuntime:
                 guild=guild, report_channel_id=int(destination), source_message=message,
                 rule_text=fresh.rules[binding.number - 1], rule_number=binding.number,
                 rules_revision=fresh.revision,
+                authorization_check=authorized,
                 review_view=report_review_view(message.id),
                 footer=self.n["LAB_FOOTER_TEXT"],
                 icon_url=str(guild.icon.url) if guild.icon else None,

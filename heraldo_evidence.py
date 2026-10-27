@@ -23,6 +23,7 @@ class LiteralEvidence:
     original_url: str | None = None
     original_exists: bool = False
     verbatim_is_description: bool = False
+    origin: str | None = None
 
     @_i18n_context
     def __post_init__(self):
@@ -65,6 +66,8 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
             color=discord.Color.orange(), timestamp=stamp,
         )
         if index == 0:
+            if evidence.origin:
+                item.add_field(name=_t('text.custodio.discipline.origin_label'),value=evidence.origin,inline=True)
             item.add_field(name=_t('text.e841f8bfd02f85'), value=evidence.actor[:1024], inline=True)
             item.add_field(name=_t('text.cb99a42f984137'), value=f"{evidence.guild} · {evidence.channel}"[:1024], inline=True)
             item.add_field(name=_t('text.b0bddd1a69b779'), value=discord_local_timestamp(evidence.occurred_at), inline=False)

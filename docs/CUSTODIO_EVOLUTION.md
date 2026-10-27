@@ -1,114 +1,89 @@
-# Modo Custodio — evolución autorizada y trazabilidad
+# Modo Custodio — informe de implementación y comprobación
 
-Encargo integral recibido el 27/10/2026. Desarrollo exclusivamente en `Pruebas`;
-Railway Test → Lab → worker. Sin producción, cambios de H-03 ni sanciones automáticas.
+Encargo integral del 27/10/2026. Alcance autorizado: `Pruebas`, Railway Test → Lab → worker. Las comprobaciones interactivas pendientes se distinguen de las pruebas automáticas. No se declara aceptación integral ni eficacia universal.
 
-## Punto de partida comprobado
+## Versiones y conservación
 
-- HEAD remoto inicial: `9aa06fcdbcab9d249332842baee42aa9a634207a`.
-- Se conservan las correcciones de `7eac8af` (interruptor global) y `9aa06fc` (sin Integraciones).
-- Worker inicial: `9caeb22cfbb3580756e62cb25042a257060ac8dc`, deployment
-  `a7f6d657-0de4-4a2a-82be-1fc811305318`, SUCCESS. Todavía no contiene los dos últimos fixes.
-- `main`: `32c9f5dcc8505a3d6aacde76533d6b60dd88a542`; no se escribe ni se despliega.
-- Volumen de worker `/data` conservado. Ninguna escritura de datos privados ni cambio del cron.
-- Detección local, reglas auténticas, evidencia privada durable, revisión humana y cinco
-  medidas centrales ya existen. No se reimplementan.
-- La asignación por regla era manual y el panel compartía Detección/Exenciones.
-  La IA solo devolvía una propuesta textual; no hay interpretación normativa estructurada guardada.
-- Groq tiene variables presentes. No se han leído ni exportado sus valores.
+- HEAD inicial remoto: `9aa06fcdbcab9d249332842baee42aa9a634207a`.
+- Se preservan `7eac8af` (interruptor global) y `9aa06fc` (retirada de Integraciones).
+- [d99b298](https://github.com/ElCreador5/el-heraldo-bot/commit/d99b2989ba83f00a2ec07786887c2d4ec97ffb2b): modelo Groq vigente, respuesta completa y acotada, esquema estricto y sonda sintética.
+- [409f360](https://github.com/ElCreador5/el-heraldo-bot/commit/409f36023f7147a83a728e1bcb8b704cfdab5e18): 73 fichas, fuentes públicas, pruebas de la taxonomía y recibo del proveedor real.
+- La publicación del planificador y el SHA desplegado se registran tras su verificación; no se atribuye un despliegue al árbol local.
+- `main` comprobado: `32c9f5dcc8505a3d6aacde76533d6b60dd88a542`. No se escribe ni despliega.
+- Se conserva `/data` de worker; no se ejecutan migraciones, borrados ni restauraciones. No se leen valores de credenciales ni se cambia configuración privada.
+- H-03 conserva servicio, volumen, horario, build, variables y fuente. No se tocan archivos vigilados por su cron, incluidos `requirements*.txt`.
 
-## Secuencia y estado
+## Taxonomía y fuentes
 
-| Etapa | Estado | Comprobación de salida |
-| --- | --- | --- |
-| Inventario y límites de seguridad | Comprobado | HEAD, arquitectura, Test y main contrastados. |
-| Proveedor actual y transporte acotado | Implementación inicial | 51 focalizadas, 1012 componentes (dos omitidas), CI y proveedor real correctos; clic de Discord pendiente. |
-| Investigación y fichas de conductas | 73 fichas iniciales | Fuentes oficiales/estudios, ejemplos sintéticos, capacidad y límites por categoría. |
-| Interpretación versionada y planificador | Pendiente | Sin detectores para saludos; excepciones/negaciones/contradicciones y revisión fresca. |
-| Contexto y correcciones auditables | Pendiente | Ventanas y recursos acotados, aislamiento, revisiones y correcciones reversibles. |
-| Detección y Exenciones independientes | Pendiente | Sin lista manual de detectores, navegación/guardado/ACK y tres idiomas. |
-| Interruptor y disciplina/evidencias | Pendiente de ampliación | Estado justo antes de efectos, origen central y preservación de evidencia histórica. |
-| Evaluación, CI, publicación y Lab | Pendiente | Métricas reproducibles, SHA exacto, SUCCESS y arranque; separar clics reales. |
+[73 fichas completas](CUSTODIO_TAXONOMIA.md), versión 1.0.0, sin límite comercial de categorías. Cada ficha tiene ID estable, definición neutral, ejemplos positivos/legítimos sintéticos, señales, contexto, polisemia, excepciones, idiomas, eventos, permisos, relación normativa, mecanismo, recursos, privacidad, FP/FN, certeza y fuentes.
 
-El trabajo continúa entre etapas. Este documento es un checkpoint, no una aceptación final.
+24 categorías disponen de una o más señales locales; se comparten 16 mecanismos. Las otras 49 requieren revisión humana y no se presentan como detectores implementados. Amenazas, discriminación, acoso semántico, identidad y fraude no se clasifican mediante palabras aisladas. Una señal mecánica tampoco prueba culpabilidad.
 
-## Proveedor: fallo identificado y validación pendiente
+Fuentes: [Discord Guidelines](https://discord.com/guidelines), [AutoMod oficial](https://docs.discord.com/developers/resources/auto-moderation), [política de hostigamiento](https://discord.com/safety/bullying-harassment-threats-policy-explainer), estudios primarios de [contexto](https://aclanthology.org/2024.lrec-main.740/) y [uso/mención y contradiscurso](https://aclanthology.org/2024.naacl-long.331/). Experiencias públicas de moderación en Reddit son ilustrativas, no evaluaciones de eficacia. No se obtuvieron pruebas adicionales suficientes de X/Instagram; no se inventan consultas. No se recopilaron conversaciones privadas ni perfiles.
 
-La documentación oficial retira `llama-3.1-8b-instant` de Free/Developer el
-16/08/2026 y recomienda `openai/gpt-oss-20b`. Se actualiza ese modelo fijo, sin
-fallback a modelos Enterprise ni nuevas cuentas/contratos. El presupuesto anterior
-de 280 tokens podía truncar la cita de reglas largas y el JSON; se ajusta de forma
-acotada y se exige terminación completa. El lector de HTTP acumula fragmentos bajo
-un límite de bytes, en vez de suponer que la primera lectura devuelve todo el cuerpo.
+## Arquitectura final
 
-La sonda `tools/custodio_ai_health.py` hará una petición auténtica con una regla
-sintética, sin Discord ni SQLite. Solo imprimirá modelo, estado, validación y latencia;
-nunca claves, reglamentos ni razonamientos. Esto acredita proveedor/contrato si pasa,
-pero no equivale a pulsar un botón en Discord. La ruta de interfaz conserva su
-aceptación separada y no se atribuye un clic a una prueba con dobles.
+1. `custodio_source.py` obtiene las reglas auténticas de Screening mediante Bot autorizado, verifica su habilitación y calcula una revisión que incluye el servidor. Los fallos y cambios de revisión invalidan la autorización de efectos nuevos.
+2. `custodio_rule_analysis.py` realiza análisis ocasional por acción administrativa. El proveedor recibe únicamente reglas y esquema, sin mensajes de miembros, DMs ni herramientas. Agrupa hasta cuatro reglas por petición, con límites de bytes/tiempo y presupuesto compartido; no reintenta un 429 o respuesta malformada.
+3. `custodio_interpretation.py` verifica números, revisión, texto íntegro, citas literales, categorías conocidas, sentido normativo, canales/roles auténticos, excepciones, condiciones y referencias. Un saludo no llama al proveedor ni crea detectores. Negaciones, contradicciones, instrucciones al modelo, condiciones no ejecutables y excepciones sin resolver se abstienen.
+4. Los mecanismos se derivan del registro interno por categoría; la IA no propone acciones, sanciones ni umbrales. No se exige al administrador construir una lista manual.
+5. `custodio_interpretation_v1` guarda hashes, spans e interpretación estructurada en la configuración existente. No copia las reglas ni conversaciones en SQLite. La propuesta queda sin aprobar hasta Guardar, con CAS conjunto del plan y la política. Las notas propias del administrador permanecen literales.
+6. Correcciones por servidor/revisión/regla: interpretación incorrecta, conducta permitida, excepción legítima, falso positivo, ambigüedad o deshabilitación. Suspender es seguro y reversible dentro de la misma revisión. El registro guarda autor, momento, motivo, revisión y hash, hasta 32 correcciones; no hay entrenamiento con conversaciones. Una revisión nueva no hereda automáticamente la corrección de una regla distinta.
+7. Caché por servidor/revisión/taxonomía/modelo/contexto, hasta 32 entradas y una hora. Los mensajes no invocan IA. Presupuesto por proceso: 7500 tokens estimados/65 s, hasta 256 solicitudes/día, máximo 240 s por análisis; los límites reales de la cuenta pueden ser inferiores y prevalece el 429. Reiniciar el proceso reinicia este presupuesto local, nunca la cuota real del proveedor.
 
-Fuentes oficiales verificadas el 27/10/2026:
+La validación literal y los controles conservadores no demuestran comprensión semántica perfecta. El administrador revisa el alcance y la propuesta antes de guardar. Las condiciones semánticas complejas y referencias cruzadas no resueltas se muestran pendientes de aclaración, sin vigilancia ficticia.
 
-- [Retirada de modelos](https://console.groq.com/docs/deprecations#august-16-2026-llama318binstant-and-llama3370bversatile).
-- [Modelos y acceso](https://console.groq.com/docs/models).
-- [JSON Schema y límites de JSON Object](https://console.groq.com/docs/structured-outputs).
-- [Contrato de Chat Completions](https://console.groq.com/docs/api-reference).
-- [Cuotas y cabeceras del proveedor](https://console.groq.com/docs/rate-limits).
+## Detección, contexto y recursos
 
-## Condiciones invariables
+Mecanismos: repetición, similitud textual, enlaces repetidos, menciones masivas, ráfagas, repetición entre canales, imágenes exactas/similares, coordinación con contribución propia, promoción con enlace, saturación de caracteres/emojis, menciones insistentes explícitas, stickers repetidos, ráfagas de adjuntos y destinos Markdown distintos de su etiqueta. Esta última señal no determina phishing; no descarga ni abre la URL.
 
-El reglamento es dato no confiable y autoridad del servidor, nunca instrucciones de
-sistema. No se envían mensajes de miembros al proveedor. Una señal es provisional;
-la IA no autoriza castigos. Categorías semánticas que no pueden comprobarse de forma
-fiable permanecen en revisión humana. Propietario, personal, roles/canales exentos,
-ACL y restricciones de edad se conservan antes del análisis y antes de efectos.
+Las citas y bloques de código se excluyen de los patrones textuales sin modificar la evidencia literal. Una celebración aislada no es saturación. Las menciones automáticas de respuestas no cuentan como pings dirigidos. Las campañas exigen participación propia repetida; la actividad ajena no se atribuye a un miembro con una sola entrada.
 
-Guardar/Descartar y CAS se mantienen; Activar/Pausar solo guardan su estado.
-Pausar no depende del proveedor ni de la lectura de reglas. Las revisiones antiguas
-no pueden autorizar efectos nuevos. Evidencia literal en Discord e índices mínimos;
-no se duplican conversaciones en SQLite/Supabase. Los nombres propios, comandos,
-valores persistentes y textos personalizados no se traducen.
+Memoria: 90 s / 4096 eventos, sin transcripciones persistentes; cachés de 32 servidores y limitadores de 2048 entradas. Texto hasta 4000 caracteres, enlaces/mentions/adjuntos acotados. Imágenes: cuatro de 1 MiB / 4 Mpx, decodificación en un semáforo, sin archivos temporales ni descargas ajenas a adjuntos Discord. Se conservan sensibilidad y umbrales previos; los seis mecanismos nuevos tienen umbrales explícitos en `custodio_detection.py` y corpus reproducible.
 
-La aceptación final requiere pruebas reales diferenciadas de unitarias e integración.
-No se declara 100 % ni se elimina el estado parcial de idiomas por un CI verde.
+No se observa DMs, webhooks, bots, propietario, personal autorizado o canales trampa. Exenciones globales y por regla, ámbito interpretado, permisos, audiencia y restricciones de edad se aplican antes de leer/descargar señales y antes de publicar. La revisión por regla impide que un mensaje exento contribuya a otro umbral por accidente.
 
-## Decisiones para la siguiente etapa (todavía sin implementar)
+## Interfaz y tres idiomas
 
-- Conservar `custodio_observe_policy_v1.enabled` como interruptor global compatible.
-  La interpretación versionada se guarda en otra clave de configuración existente;
-  no necesita una nueva tabla ni migración destructiva.
-- Un plan necesita revisión/hash literal del reglamento, versión de taxonomía,
-  categorías conocidas y citas/spans comprobados. Los detectores se derivan del
-  registro interno; nunca los elige el proveedor ni una lista manual del panel.
-- Saludos y permisos sin restricción no producen detectores. Negaciones,
-  excepciones sin resolver, contradicciones e instrucciones maliciosas requieren
-  abstención o aclaración. Casos semánticos sin mecanismo fiable quedan para revisión.
-- Las excepciones de canales/roles de una regla solo pueden resolverse contra
-  menciones o referencias auténticas e inequívocas del mismo servidor. No se infieren
-  canales, identidades, edades o intenciones.
-- La propuesta, correcciones y descartes siguen siendo borradores hasta Guardar.
-  Registrar correcciones reversibles por servidor, revisión y regla; sin entrenar
-  con conversaciones. Conservar metadatos mínimos y referencias a evidencia existente.
-- La IA solo recibe reglas y análisis solicitado, con caché por revisión y límites
-  globales de cuota/tiempo. No hay llamadas desde el flujo de mensajes ni descarga
-  de modelos locales en worker.
-- Detección mostrará resumen, regla completa por páginas, interpretación, categorías,
-  mecanismos, excepciones y limitaciones. Exenciones conservará sus selectores
-  independientes. Solo el panel principal tendrá controles Activar/Pausar.
-- Antes de cada efecto automático, incluidas las partes de un reporte, revalidar
-  estado global, configuración, revisión y permisos. Pausar seguirá funcionando
-  sin red/Groq/Server Rules. Las herramientas históricas y la revisión explícita
-  permanecen disponibles sin activar sanciones automáticas.
-- Preservar las cinco medidas y el ledger central; hacer visible el origen de
-  Custodio frente a moderación manual en casos, avisos, registros e historial.
-- Ampliar señales objetivas bajo presupuestos de memoria/CPU, sin clasificar
-  amenazas, discriminación o fraude con listas de palabras. Medir el corpus
-  sintético por mecanismo, sensibilidad e idioma, sin extrapolar cifras a uso real.
-- Toda nueva etiqueta/ayuda utilizará catálogo y los tres idiomas. Las citas de
-  reglas/evidencia y aclaraciones del administrador permanecen literales.
+Detección muestra estado global guardado, total, categorías vigilables/parciales, ambiguas/contradictorias, revisión humana, sin prohibición, deshabilitadas, no disponibles, revisión y fecha nativa Discord. Analizar, Revisar, Corregir, Guardar, Descartar y Volver actualizan el mismo panel con ACK temprano y bloqueo de concurrencia.
 
-## Recibo del proveedor
+La revisión muestra texto completo por páginas, sentido normativo, categorías, mecanismos, alcance, citas de prohibiciones/obligaciones/permisos, excepciones, condiciones, referencias y limitaciones. Las notas no se traducen. Exenciones tiene sus propios selectores globales/por regla y Guardar/Descartar; no contiene detectores ni activación.
 
-**Proveedor comprobado:** `d99b2989ba83f00a2ec07786887c2d4ec97ffb2b` desplegado en Lab/worker, deployment `e92901b8-b417-4a48-9120-c727d18718cd` SUCCESS. Groq `openai/gpt-oss-20b` realizó una inferencia auténtica con regla sintética en 428 ms: esquema y cita literal validados. Sin Discord ni SQLite en la sonda; no equivale al clic real de «Analizar reglas». Gateway conectado, dos sincronizaciones de 51 comandos (en-US/es-419). Pre-deploy temporal retirado y volumen conservado. CI Lab 40562341587 (3.11/3.12/3.13 + UX) y Mensajes 40562341644 SUCCESS. Recibo: `docs/CUSTODIO_PROVIDER_DEPLOYMENT.json`. El desarrollo continúa: 73 fichas de taxonomía, interpretación automática y rediseño de Detección; no es cierre integral.
+Solo el panel principal dispone de Activar/Pausar. Guardan únicamente `custodio_observe_policy_v1.enabled`, sin arrastrar otros borradores. Activar requiere plan aprobado vigente, canal privado e intents guardados. Pausar funciona sin Groq, red ni Screening. Las revisiones históricas, consultas y herramientas manuales centrales siguen disponibles.
 
-Taxonomía inicial: [73 fichas y fuentes](CUSTODIO_TAXONOMIA.md), con 24 categorías relacionadas con señales existentes/previstas y 49 de revisión humana. Los mecanismos nuevos siguen señalados como previstos hasta que su implementación y evaluación pasen.
+3322 claves de catálogo revisadas y compatibles en es-419/en-US/pt-BR; 3292 referencias reales en código, auditoría estática sin literales pendientes. Esos recuentos no acreditan todos los recorridos reales. Se conservan advertencias parciales de idiomas con el texto del encargo inicial, identificadores/comandos y footer `El Heraldo's Labs 🧪`.
+
+## Disciplina central y evidencia NH
+
+Custodio utiliza Advertencias, expedientes, Condenas y expiradores centrales; no crea disciplina paralela. Las cinco medidas se conservan: Solo reportar, Warn, Temp Ban, Expulsar y Ban. Todas requieren revisión administrativa explícita y revalidación de permisos, jerarquía, regla fresca y evidencia completa. Cualquier solicitud `automatic=True` se rechaza.
+
+Una advertencia comparte límite e historial y renueva treinta días sin reincidencia de esa conducta. Alcanzar el límite NO llama al escalado automático desde Custodio. Una condena adicional o cualquier otra medida central requiere su autorización independiente; las configuraciones previas de otros módulos no se alteran. Los expedientes y listas muestran origen Custodio/manual/otros módulos. El origen y el estado interno sobreviven a edición de notas y cierre; las notas personalizadas se muestran intactas. Una medida cumplida cierra solo advertencias de la misma conducta.
+
+La evidencia privada contiene origen, autor, servidor/canal, fecha nativa Discord, cita literal, regla literal, señal y medida. Se divide sin truncar; la audiencia del destino no puede ampliar la del origen. Un ledger durable reclama antes del primer envío, con referencias mínimas. Se revalida el estado global y la configuración antes de cada parte. Si se pausa en medio, el resultado queda pendiente de revisión y no se reenvía como completo después de reiniciar.
+
+Eliminar el original retira solo su enlace; conserva la transcripción y referencia del reporte. La reconciliación histórica está acotada y no depende de activar la observación. No se borran evidencias anteriores ni se afirma haber migrado todos los archivos históricos ajenos al módulo.
+
+## Pruebas y medición
+
+- Local: 1064 componentes (1062 correctos, dos omisiones históricas) y 39 regresiones raíz correctas. Tras la suite, 14 focalizadas verifican también la nueva exclusión de menciones implícitas de respuestas. CI comprobará el árbol publicado exacto.
+- Las nuevas pruebas ejecutan paneles, modales, callbacks, permisos, borradores, CAS, navegación, estado global, correcciones, separación de canales/servidores, proveedor malformado, cuota, caché, fuente revisada, inyección, concurrencia, reinicio, entrega parcial y medidas centrales con Discord aislado.
+- El primer intento completo encontró una prueba heredada que exigía el import del adaptador textual anterior. Se sustituyó por un recorrido ejecutable con proveedor ausente, sin HTTP ni guardado; la suite repetida pasó.
+- Compilación, gramática Python 3.11, `pip check`, catálogo/variables/markup y auditoría de textos correctos. La matriz CI incluye 3.11/3.12/3.13 y UX. El fallo histórico de Issue 23 es `Production baseline changed; reconcile before preparing candidate`, confirmado en el job 122401267853; no se cambia producción para resolverlo.
+- Corpus [fuente sintética](../data/custodio_evaluation_cases.json), evaluador `python tools/evaluate_custodio.py --output docs/CUSTODIO_EVALUATION.json` y [resultados completos](CUSTODIO_EVALUATION.json): 417 escenarios × tres sensibilidades = 1251 ejecuciones; 216 TP, 0 FP, 513 TN, 81 FN conocidos fuera de ventana y 441 abstenciones humanas. Desglose por categoría/idioma/sensibilidad. Precisión y recall son nulos cuando no corresponde medirlos; no se concede precisión ficticia a categorías humanas.
+- Medición local del evaluador: 1514 ms con tracemalloc, pico trazado 1726929 bytes. No representa CPU/RAM ni capacidad de Railway. Las cifras del corpus no se extrapolan a personas, servidores o lenguas no evaluadas. Incluye actividad legítima de varios autores, citas, ejemplos, saludos y evasiones deliberadas.
+
+## Groq y Railway: comprobado frente a pendiente
+
+Ya comprobado: `d99b298` en worker de Lab, deployment `e92901b8-b417-4a48-9120-c727d18718cd`, SUCCESS. Groq `openai/gpt-oss-20b` realizó inferencia real sobre una regla sintética en 428 ms; JSON Schema y cita validados. [Recibo](CUSTODIO_PROVIDER_DEPLOYMENT.json). CI Lab 40562341587 y Mensajes 40562341644 SUCCESS. El modelo anterior gratuito estaba retirado; se corrigieron modelo, tokens insuficientes, lectura HTTP fragmentada y rechazo de respuestas truncadas.
+
+La nueva sonda `tools/custodio_analysis_health.py` solo opera en proyecto/entorno Lab exactos, lee reglas auténticas con Bot autorizado y valida el motor completo sin SQLite, mensajes o activación. Solo imprime revisión, recuentos y metadatos. Su resultado y el nuevo deployment se añadirán aquí tras observarlos; un éxito de esta sonda no acredita el clic de Discord.
+
+## Aceptación real pendiente
+
+La sesión de usuario de Discord no permitió completar recorridos: error de segundo factor y después conexión WebSocket no operativa. No se reinician intentos de autenticación ni se extraen tokens de usuario. El uso del bot autorizado permite verificar reglas y proveedor por separado.
+
+Recorrido exacto al disponer de sesión operativa: **Heraldo's Lab → `/setup` → AutoMod → Modo Custodio → Detección → Analizar reglas → Revisar interpretación**. Comprobar en los tres idiomas categorías/ámbitos/límites y ausencia de selector manual; Guardar debe aprobar, Descartar no escribir, Volver regresar al submenú anterior. En Exenciones, seleccionar no debe guardar. Activar/Pausar aparecen únicamente en el panel principal.
+
+Para observar eventos reales hace falta un miembro voluntario sin permisos/roles exentos: el propietario y moderadores están protegidos. Verificar mensajes sintéticos autorizados, reporte privado provisional, pausa, borrado del original y conservación de copia. Warn/Temp Ban reales requieren participante voluntario y confirmación individual; no se ejecutaron sanciones sobre miembros reales.
+
+Pendientes: aceptación interactiva autenticada, observaciones con participante voluntario, medidas controladas y capacidad real bajo carga de Railway. Las 49 categorías humanas y eventos no implementados (DM, reacciones ajenas, hilos/foros y evasión por ediciones) siguen limitados. Rollback: volver a fijar el worker a d99b298 sin borrar `/data`; los campos nuevos son metadatos ignorados por la versión anterior. No se modifica main, producción ni H-03 para revertir.

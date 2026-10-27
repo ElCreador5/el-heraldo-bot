@@ -3,12 +3,16 @@ from i18n_source_helpers import source_text as _source_text
 import ast
 from pathlib import Path
 import unittest
+import os
+from types import SimpleNamespace as NS
+from unittest.mock import AsyncMock,Mock,patch
+import discord
 
 SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'custodio_setup.py', 'utf-8')
 TREE = ast.parse(SOURCE)
 
 
-class CustodioRulesNavigationTests(unittest.TestCase):
+class CustodioRulesNavigationTests(unittest.IsolatedAsyncioTestCase):
     def test_manual_rules_reader_only(self):
         cls = next(n for n in TREE.body if isinstance(n, ast.ClassDef) and n.name == "CustodioSetupView")
         constructor = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
@@ -18,11 +22,23 @@ class CustodioRulesNavigationTests(unittest.TestCase):
         ))
         self.assertIn('label="Reglas del servidor"', SOURCE)
 
-    def test_subpanel_disallows_unconfigured_ai(self):
-        self.assertIn("class CustodioRulesView", SOURCE)
-        self.assertIn("from custodio_ai_runtime import analyze_rule, AIUnavailable", SOURCE)
-        self.assertIn("free_provider_not_configured", SOURCE)
-        self.assertIn("text.custodio.ai_unavailable", SOURCE)
+    async def test_subpanel_disallows_unconfigured_ai(self):
+        from custodio_setup import CustodioRulesView
+        from test_custodio_runtime_integration import SNAPSHOT
+        import custodio_rule_analysis as analysis
+        analysis._cache.clear();analysis._busy.clear()
+        parent=NS(guild_id=101,owner_id=303,get_setting=lambda gid,key:None,
+                  access_check=AsyncMock(return_value=True),observation_editors={},save_atomic=Mock())
+        interaction=NS(user=NS(id=303,guild_permissions=discord.Permissions(administrator=True)),
+            guild=NS(id=101,owner_id=999,text_channels=[],roles=[]),
+            response=NS(defer=AsyncMock()),edit_original_response=AsyncMock())
+        view=CustodioRulesView(parent,SNAPSHOT)
+        with patch.dict(os.environ,{},clear=True),patch('aiohttp.ClientSession') as transport,\
+             patch('custodio_detection_setup.load_server_rules',new=AsyncMock(return_value=SNAPSHOT)),\
+             patch.object(analysis,'BUDGET',NS(take=AsyncMock())):
+            await view.analyze_rules.callback(interaction)
+        transport.assert_not_called();parent.save_atomic.assert_not_called()
+        self.assertEqual(parent.observation_editors[False].pending.rules[0].status,'unavailable')
 
     def test_subpanel_back_navigation(self):
         self.assertIn("view=self.parent, embed=None", SOURCE)

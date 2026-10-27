@@ -16438,6 +16438,11 @@ def moderation_case_update(guild_id: int, case_number: int, *, reason: str | Non
         params.append(verified_proof[:2000])
     if notes is not None:
         updates.append("moderator_notes = ?")
+        previous_notes = str(row['moderator_notes'] or '')
+        if re.match(r'^custodio:[0-9a-f]{64}(?:[|\n]|$)', previous_notes):
+            # Conservar origen y estado interno al editar una nota administrativa.
+            prefix = previous_notes.partition('\n')[0]
+            notes = prefix + '\n' + notes
         params.append(notes[:2000])
     if not updates:
         return True
@@ -16489,6 +16494,14 @@ async def moderation_verified_proof(guild: discord.Guild, proof: str | None) -> 
 
 
 @_i18n_context
+def moderation_case_origin(row) -> str:
+    notes = str(row['moderator_notes'] or '')
+    if re.match(r'^custodio:[0-9a-f]{64}(?:[|\n]|$)',notes):
+        return _t('text.custodio.discipline.origin')
+    return _t('text.custodio.discipline.manual' if row['author_id'] else 'text.custodio.discipline.other')
+
+
+@_i18n_context
 def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Embed:
     embed = discord.Embed(
         title=_t('text.5d564802a7325c', p0=f"{moderation_case_code(row['case_number'], int(row['guild_id']))}", p1=f"{row['type']}"),
@@ -16496,6 +16509,7 @@ def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Emb
         timestamp=datetime.fromisoformat(row["created_at"]),
     )
     embed.add_field(name=_t('text.98e5acddb6c46a'), value=_t('text.a441cccdf812ed') if row["open"] else _t('text.27aaa41ec82c9b'), inline=True)
+    embed.add_field(name=_t('text.custodio.discipline.origin_label'),value=moderation_case_origin(row),inline=True)
     if row["type"] == "WARN":
         active, _ = moderation_warning_counts(guild.id, int(row["user_id"]))
         embed.add_field(
@@ -16515,7 +16529,11 @@ def moderation_case_embed(guild: discord.Guild, row: sqlite3.Row) -> discord.Emb
     if row["verified_proof"]:
         embed.add_field(name=_t('text.f416cd0b391855'), value=str(row["verified_proof"])[:1024], inline=False)
     if row["moderator_notes"]:
-        embed.add_field(name=_t('text.164be57a7867d4'), value=str(row["moderator_notes"])[:1024], inline=False)
+        notes = str(row['moderator_notes'])
+        if re.match(r'^custodio:[0-9a-f]{64}(?:[|\n]|$)',notes):
+            notes = notes.partition('\n')[2]
+        if notes:
+            embed.add_field(name=_t('text.164be57a7867d4'), value=notes[:1024], inline=False)
     if not row["open"] and row["resolution"]:
         embed.add_field(name=_t('text.c7d72431d93965'), value=str(row["resolution"])[:1024], inline=False)
     embed.set_footer(text=_t('text.270cbae6be9b8a', p0=f'{guild.name}'))
@@ -16530,8 +16548,8 @@ def moderation_cases_summary(guild: discord.Guild) -> str:
     lines = []
     for row in rows:
         with _i18n_guild(i18n.source_id(row) or i18n.current_guild_id()):
-            state = "abierto" if row["open"] else "cerrado"
-            lines.append(f"**{moderation_case_code(row['case_number'], int(row['guild_id']))}** · {row['type']} · <@{row['user_id']}> · {state}\n{str(row['reason'])[:120]}")
+            state = _t('text.a441cccdf812ed') if row["open"] else _t('text.27aaa41ec82c9b')
+            lines.append(f"**{moderation_case_code(row['case_number'], int(row['guild_id']))}** · {row['type']} · <@{row['user_id']}> · {state} · {moderation_case_origin(row)}\n{str(row['reason'])[:120]}")
     return _t('text.9bd83f9a0fd22b') + _i18n_join("\n\n", lines)
 
 
@@ -17263,6 +17281,7 @@ def condemnation_duration_text(row: sqlite3.Row) -> str:
 
 def condemnation_origin_label(origin: str) -> str:
     return {
+        "custodio": _t('text.custodio.discipline.origin'),
         "honeypot": "Honeypot",
         "command": "⌨️ Comando",
         "reaction": _t('text.f72d79371b3bdc'),
@@ -22963,7 +22982,7 @@ async def moderation_warnings(interaction: discord.Interaction, usuario: discord
     lines = [
         f"**{moderation_case_code(int(row['case_number']), interaction.guild.id)}** · "
         f"{_t('text.e7d107cc746492') if row['open'] and (not row['expires_at'] or datetime.fromisoformat(row['expires_at']) > now) else _t('text.881a7769e8780a')}"
-        f" · {str(row['reason'])[:130]}"
+        f" · {moderation_case_origin(row)} · {str(row['reason'])[:130]}"
         for row in rows
     ]
     heading = (_t('text.b851647c6d5585', p0=f'{discord.utils.escape_markdown(usuario.display_name)}', p1=f'{abiertas}', p2=f'{maximum}', p3=f'{total}', p4=f'{total - abiertas}'))
