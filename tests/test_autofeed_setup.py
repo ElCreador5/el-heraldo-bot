@@ -40,7 +40,7 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         labels = [getattr(item, "label", "") for item in editor.children]
         for key in ("message", "embed", "schedule", "silent", "save", "discard", "back"):
             self.assertIn(setup.t(key), labels)
-        self.assertEqual([x.row for x in editor.children[:2]], [0, 1])
+        self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
         self.assertEqual(len(editor.children), 10)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
