@@ -477,7 +477,10 @@ class AutofeedEditorView(discord.ui.View):
         self.embed = job.get("embed") if job else None
         self.start = datetime.fromisoformat(job["start"]) if job else None
         self.timezone = __import__("zoneinfo").ZoneInfo("America/Santo_Domingo")
-        self.parts = job.get("repeat_parts") if job else None
+        self.parts = (job.get("repeat_parts") if job and job.get("repeat") == "custom" else
+                      dict(PRESETS["daily"]) if job and job.get("repeat") == "diaria" else
+                      dict(PRESETS["weekly"]) if job and job.get("repeat") == "semanal" else
+                      dict(PRESETS["monthly"]) if job and job.get("repeat") == "mensual" else None)
         self.dirty = False
 
         self.channels = discord.ui.ChannelSelect(
@@ -491,7 +494,8 @@ class AutofeedEditorView(discord.ui.View):
         self.roles.callback = self.pick_role
         self.add_item(self.roles)
         for item, key in [(self.message, "message"), (self.embed_builder, "embed"),
-                          (self.date_repeat, "schedule"), (self.preview, "preview"),
+                          (self.date_time, "date_picker"), (self.frequency, "repeat_picker"),
+                          (self.preview, "preview"), (self.mention, "insert_mention"),
                           (self.silent, "silent"), (self.save, "save"),
                           (self.discard, "discard"), (self.back, "back")]:
             item.label = t(key)
@@ -543,10 +547,17 @@ class AutofeedEditorView(discord.ui.View):
     async def embed_builder(self, interaction, button):
         await interaction.response.send_modal(EmbedModal(self))
 
-    @discord.ui.button(label="Fecha y repetición", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Fecha y hora", style=discord.ButtonStyle.primary, row=2)
     @guild_context
-    async def date_repeat(self, interaction, button):
-        await interaction.response.send_modal(DateRepeatModal(self))
+    async def date_time(self, interaction, button):
+        await interaction.response.send_modal(DateTimeModal(self))
+
+    @discord.ui.button(label="Frecuencia", style=discord.ButtonStyle.primary, row=2)
+    @guild_context
+    async def frequency(self, interaction, button):
+        picker = FrequencyPickerView(self)
+        await interaction.response.edit_message(
+            content=t("choose_frequency"), embed=None, view=picker)
 
     @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=2)
     @guild_context
@@ -562,12 +573,25 @@ class AutofeedEditorView(discord.ui.View):
             embed=embed, view=self,
             allowed_mentions=discord.AllowedMentions.none())
 
+    @discord.ui.button(label="Insertar mención", style=discord.ButtonStyle.secondary, row=3)
+    @guild_context
+    async def mention(self, interaction, button):
+        picker = MentionPickerView(self)
+        await interaction.response.edit_message(
+            content=t("mention_help"), embed=None, view=picker)
+
     @discord.ui.button(label="Sin rol", style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def silent(self, interaction, button):
         self.role_id = None
         self.dirty = True
-        await interaction.response.edit_message(content=self.summary(), embed=None, view=self)
+        self.remove_item(self.roles)
+        self.roles = discord.ui.RoleSelect(
+            placeholder=t("select_role"), row=1, min_values=0, max_values=1)
+        self.roles.callback = self.pick_role
+        self.add_item(self.roles)
+        await interaction.response.edit_message(
+            content=self.summary() + "\n\n" + t("role_again"), embed=None, view=self)
 
     def prepared(self, interaction):
         guild = interaction.guild
@@ -581,6 +605,11 @@ class AutofeedEditorView(discord.ui.View):
             raise ValueError("warning")
         if self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("warning")
+        try:
+            feeds.referenced_mentions(guild, {
+                "text": self.text, "embed": self.embed, "role": self.role_id})
+        except ValueError as exc:
+            raise ValueError("unavailable") from exc
         previous = self.original or {}
         return {
             "id": previous.get("id", uuid.uuid4().hex[:12]),
