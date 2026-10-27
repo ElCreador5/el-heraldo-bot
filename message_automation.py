@@ -142,8 +142,10 @@ class ScheduledMessages:
         conn = self.host['db_connect']()
         try:
             conn.execute("""UPDATE message_schedule_state SET
-                status=CASE WHEN ?='waiting' AND dirty=1 THEN 'pending' ELSE ? END,
-                next_run=?,message_id=?,detail=?,dirty=0 WHERE guild_id=? AND job_id=?""",
+                status=CASE WHEN status='paused' THEN 'paused'
+                            WHEN ?='waiting' AND dirty=1 THEN 'pending' ELSE ? END,
+                next_run=CASE WHEN status='paused' THEN next_run ELSE ? END,
+                message_id=?,detail=?,dirty=0 WHERE guild_id=? AND job_id=?""",
                          (status, status, next_run, message_id, detail, guild_id, job['id']))
         finally:
             conn.close()
