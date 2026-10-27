@@ -62,6 +62,7 @@ STRINGS = {
         "no_role": "Sin rol",
         "template_label": "Plantilla",
         "status_label": "Estado",
+        "activate": "Activar",
         "enabled_label": "Activo",
         "disabled_label": "Pausado",
         "limit_label": "Límite por miembro",
@@ -112,6 +113,7 @@ STRINGS = {
         "no_role": "No role",
         "template_label": "Template",
         "status_label": "Status",
+        "activate": "Enable",
         "enabled_label": "Enabled",
         "disabled_label": "Paused",
         "limit_label": "Per-member limit",
@@ -162,6 +164,7 @@ STRINGS = {
         "no_role": "Sem cargo",
         "template_label": "Modelo",
         "status_label": "Estado",
+        "activate": "Ativar",
         "enabled_label": "Ativo",
         "disabled_label": "Pausado",
         "limit_label": "Limite por membro",
@@ -532,7 +535,7 @@ class ManageView(discord.ui.View):
         self.edit.label, self.silence.label, self.delete.label = tr("edit"), tr("silence"), tr("delete")
         self.toggle.label = tr("pause") + " / " + tr("resume")
         select = discord.ui.Select(placeholder=tr("choose"), row=0, options=[
-            discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or j.get("template") or "Mensaje")[:60])[:100],
+            discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or j.get("template") or tr("msg"))[:60])[:100],
                                  value=j["id"]) for j in jobs[:25]])
         select.callback = self.select_job
         self.add_item(select)
@@ -616,7 +619,7 @@ class PolicyView(discord.ui.View):
             placeholder="Roles que pueden programar", min_values=0, max_values=10, row=1)
         self.roles.callback = self.pick_roles
         self.add_item(self.roles)
-        self.activate.label = tr("pause") if self.current["enabled"] else tr("enabled_label")
+        self.activate.label = tr("pause") if self.current["enabled"] else tr("activate")
         self.save.label, self.discard.label = tr("save"), tr("discard")
         self.back.label = tr("back")
         self.channels.placeholder, self.roles.placeholder = tr("channels"), tr("roles_ui")
@@ -676,7 +679,7 @@ class PolicyView(discord.ui.View):
         self.host["guild_config_set"](self.guild_id, POLICY_KEY, json.dumps(current))
         self.original = self.host["guild_config_get"](self.guild_id, POLICY_KEY)
         self.current["enabled"] = current["enabled"]
-        button.label = tr("pause") if current["enabled"] else tr("enabled_label")
+        button.label = tr("pause") if current["enabled"] else tr("activate")
         button.style = discord.ButtonStyle.danger if current["enabled"] else discord.ButtonStyle.success
         await interaction.response.edit_message(content=self.summary(), view=self)
 
@@ -722,7 +725,7 @@ def install(host):
         if not jobs:
             return await respond_error(interaction, "no_jobs")
         lines = [(j["id"] + " · <#" + str(j["channel"]) + "> · "
-                  + ("Pausado" if j.get("paused") else j["repeat"])) for j in jobs[:25]]
+                  + (tr("disabled_label") if j.get("paused") else j["repeat"])) for j in jobs[:25]]
         await interaction.response.send_message(
             content="\n".join(lines), view=ManageView(host, interaction.guild.id, interaction.user.id, jobs),
             ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
