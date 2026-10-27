@@ -38,10 +38,13 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
         self.assertTrue(any(getattr(item, "label", "") == setup.t("new") for item in hub.children))
         labels = [getattr(item, "label", "") for item in editor.children]
-        for key in ("message", "embed", "schedule", "silent", "save", "discard", "back"):
+        for key in ("message", "embed", "date_picker", "repeat_picker",
+                    "insert_mention", "silent", "save", "discard", "back"):
             self.assertIn(setup.t(key), labels)
         self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
-        self.assertEqual(len(editor.children), 10)
+        self.assertEqual(len(editor.children), 12)
+        self.assertIsInstance(setup.DateTimeModal(editor), b.discord.ui.Modal)
+        self.assertIsInstance(setup.FrequencyPickerView(editor), b.discord.ui.View)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
     async def test_back_returns_exact_parent_from_setup(self):
@@ -79,6 +82,25 @@ class CarlStyleFieldsTests(unittest.TestCase):
         job["repeat_parts"] = setup.repeat_parts(0, 1, 2, 30)
         next_time = next_occurrence(job, datetime(2027, 1, 31, 11, tzinfo=timezone.utc))
         self.assertEqual(next_time, "2027-02-01T12:30:00+00:00")
+
+    def test_mention_picker_inserts_guild_mention_in_correct_field(self):
+        editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
+        picker = setup.MentionPickerView(editor)
+        picker.insert("<#123456789012345678>")
+        self.assertEqual(editor.text, "<#123456789012345678>")
+        picker.destination = "embed"
+        picker.insert("<@&987654321012345678>")
+        self.assertIn("<@&987654321012345678>", editor.embed["description"])
+        self.assertNotIn("<@&987654321012345678>", editor.text)
+        self.assertTrue(editor.dirty)
+
+    def test_frequency_preset_and_time_fields(self):
+        editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
+        self.assertEqual(setup.PRESETS["daily"]["days"], 1)
+        self.assertEqual(setup.PRESETS["monthly"]["months"], 1)
+        modal = setup.DateTimeModal(editor)
+        self.assertEqual(len(modal.children), 2)
+        self.assertEqual(len(setup.CustomRepeatModal(editor).children), 4)
 
     def test_draft_does_not_write_before_confirmation(self):
         host = b.__dict__
