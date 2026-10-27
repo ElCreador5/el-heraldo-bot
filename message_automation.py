@@ -195,7 +195,16 @@ class ScheduledMessages:
             if not bot_perms.view_channel or not bot_perms.send_messages or not bot_perms.embed_links:
                 raise ValueError(_t('text.a0250ca7797377'))
             if job.get('autofeed') and job.get('text'):
-                payload = {'content': job['text'], 'allowed_mentions': discord.AllowedMentions.none()}
+                # El hook global convierte el texto ordinario en embed. Conservar
+                # texto exterior para permitir exclusivamente la mención elegida,
+                # adjuntando un embed de identidad ya sellado (footer obligatorio).
+                import message_payload
+                identity = self.host['stamp_embed'](discord.Embed(), guild)
+                payload = {
+                    'content': job['text'],
+                    'embeds': message_payload.TemplateEmbeds([identity]),
+                    'allowed_mentions': discord.AllowedMentions.none(),
+                }
             else:
                 template = next((x for x in self.host['heraldo_template_list'](guild.id) if x['name'] == job['template']), None)
                 if template is None:
