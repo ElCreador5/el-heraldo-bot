@@ -189,15 +189,58 @@ class CustodioSetupView(discord.ui.View):
         await self._toggle_observation(interaction, False)
 
     async def _toggle_observation(self, interaction, enabled):
-        """Reutiliza la validación y persistencia CAS de Detección."""
-        from custodio_observe_setup import CustodioObserveSetupView
-        try:
-            snapshot = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
-        except (RulesUnavailable, ValueError):
-            await interaction.response.edit_message(content=self.summary() + "\\n\\n" + str(_t("text.dbb413c4fa004b")), view=self, embed=None)
+        """Interruptor global: persistir SOLO enabled; pausar aun sin acceso a Server Rules."""
+        import json
+        from custodio_policy import KEY, ObservePolicy
+        from custodio_reports import _get_safe_existing
+
+        if not await self.interaction_check(interaction):
             return
-        view = CustodioObserveSetupView(self, snapshot, exemptions=False)
-        await view.persist(interaction, enabled=enabled)
+        await interaction.response.defer(thinking=False)
+        if self.saving:
+            return
+        self.saving = True
+        notice = _t("text.custodio.save_failed")
+        try:
+            original = self.get_setting(self.guild_id, KEY)
+            if not original:
+                raise ValueError("not_configured")
+            document = json.loads(original)
+            if not isinstance(document, dict) or type(document.get("enabled")) is not bool:
+                raise ValueError("invalid_configuration")
+            if document["enabled"] == enabled:
+                notice = _t("text.custodio.saved")
+            else:
+                if enabled:
+                    snapshot = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
+                    policy = ObservePolicy.decode(original, snapshot)
+                    if not any(binding.kinds for binding in policy.bindings):
+                        raise ValueError("saved_detectors_required")
+                    channel = self.get_setting(self.guild_id, SETTING_KEY)
+                    if not channel or not channel.isdecimal() or not interaction.client.intents.message_content:
+                        raise ValueError("report_channel_or_intent_required")
+                    _get_safe_existing(interaction.guild, int(channel))
+                    replacement = policy.__class__(
+                        policy.revision, True, policy.roles, policy.channels, policy.bindings
+                    ).encode(snapshot.count)
+                else:
+                    # Desactivar no depende de la red, del reglamento ni de un canal existente.
+                    # Conserva intactas las configuraciones guardadas y los borradores.
+                    if document.get("version") != 1 or not isinstance(document.get("bindings"), list):
+                        raise ValueError("invalid_configuration")
+                    document["enabled"] = False
+                    replacement = json.dumps(document, separators=(",", ":"), sort_keys=True)
+                if not self.save_atomic(self.guild_id, {KEY: original}, {KEY: replacement}):
+                    raise ValueError("stale_configuration")
+                notice = _t("text.custodio.saved")
+        except Exception:
+            notice = _t("text.custodio.save_failed")
+        finally:
+            self.saving = False
+            self._sync_controls()
+        await interaction.edit_original_response(
+            content=self.summary() + "\n\n" + str(notice), view=self, embed=None
+        )
 
     async def open_detection(self, interaction):
         await self.open_observation(interaction, exemptions=False)
