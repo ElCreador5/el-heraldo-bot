@@ -1,3 +1,11 @@
+## 2026-10-27 — AutoFeeds (/programar), aceptación pendiente
+
+Cambios de código en Pruebas: `message_autofeeds.py`, integración con `message_automation.py`, acceso en Mensajes y metadatos nativos en tres idiomas. Pruebas automatizadas añadidas: casos de permiso denegado por defecto, listas permitidas, cuota, fechas DST, intervalos, mensualidad, CAS, protección de trabajos heredados y pausa/reanudación. **No hay constancia de ejecución de la nueva suite ni de clics auténticos en Discord:** es un candidato de prueba.
+
+Recorrido requerido en Heraldo's Lab con El Heraldo Test: (1) administrador abre `/mensajes → Programaciones`, guarda canales y roles; sin guardar los selectores no producen efectos; (2) activa el acceso, prueba crear con usuario del rol autorizado y verifica rechazo desde canal no permitido; (3) crea texto y plantilla, vista previa y Guardar; (4) comprueba recurrencias puntual, diaria, semanal, mensual e intervalo >= 1 h sin menciones imprevistas; (5) consulta, edita, silencia, mueve, pausa y reanuda sin duplicados; (6) elimina con confirmación y constata la permanencia de mensajes históricos; (7) cambia permisos o sale el autor para validar suspensión de entregas; (8) reinicia Test y comprueba estado SQLite conservado; (9) repite paneles en es-419/en-US/pt-BR, footer Lab y tiempos de ACK; (10) confirma que `/programar_mensaje` y `/embed programaciones` siguen disponibles.
+
+Worker Lab observado con código anterior fijado en `1407d5c2` y despliegue más reciente FAIL antes de estos cambios. No se ha desplegado este candidato ni tocado `main`.
+
 ## 2026-10-27 — Custodio: planificador automático y paneles separados
 
 Estado vigente de implementación: 73 fichas, 24 categorías con señales locales y 49 de revisión humana. Interpretación estructurada por servidor/revisión y citas literales, asignación automática de mecanismos, correcciones reversibles, Detección separada de Exenciones y un único Activar/Pausar en el panel principal. Los borradores solo se aprueban mediante Guardar cambios. Un plan antiguo o sin aprobación no autoriza observaciones.
