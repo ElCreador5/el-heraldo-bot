@@ -1,5 +1,7 @@
 # Internacionalización de El Heraldo — cobertura real
 
+**Revalidación del 27/10/2026:** aviso parcial ajustado al texto exacto vigente en inglés y portugués. 989 regresiones aprobadas y dos omisiones históricas, 44 pruebas de idioma correctas; CI Lab `40503577907` y Mensajes `40503577827` SUCCESS. `Pruebas@069c8d347968458bdababa71c8f3c36c2435153a` desplegado en worker/Lab, deployment `4ff1090b-3ba2-4ac9-bc09-e816150c215b` SUCCESS, Gateway, dos autopruebas de /setup y sincronizaciones de 51 comandos en en-US y pt-BR correctas. Recibo actual: `I18N_TEST_DEPLOYMENT.json`. El recorrido interactivo sigue pendiente: Discord avanzó al segundo factor, pero devolvió un error genérico al elegir otra verificación. Producción y H-03 conservados. Las secciones fechadas el 25/10 documentan la revisión original, no un nuevo recorrido real.
+
 Revisión de `Pruebas`, 25 de octubre de 2026. Base: `b7b177b3abd422bee9b1fc4605de175eac15e4a7`. No se modifica `main` ni producción.
 
 ## Estado comprobado

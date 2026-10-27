@@ -1,8 +1,8 @@
 {
   "repository": "ElCreador5/el-heraldo-bot",
   "branch": "Pruebas",
-  "code_commit": "8d82172ed5eb41efa146f2346d982c328c9cb770",
-  "source_base": "b7b177b3abd422bee9b1fc4605de175eac15e4a7",
+  "code_commit": "069c8d347968458bdababa71c8f3c36c2435153a",
+  "source_base": "26a496dbb78d7af74fdb1ede21af7ca6a4eb9205",
   "main_observed_unchanged": "32c9f5dcc8505a3d6aacde76533d6b60dd88a542",
   "scope": {
     "project_id": "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61",
@@ -43,9 +43,9 @@
     "partial_language_notices_retained": true
   },
   "discord_acceptance": {
-    "status": "blocked_authentication",
+    "status": "blocked_second_factor",
     "real_clicks_performed": false,
-    "reason": "El navegador disponible muestra el inicio de sesión de Discord. Sin sesión conectada para comprobar los recorridos reales en Test."
+    "reason": "El acceso avanzó a autenticación multifactor; Discord respondió «Ocurrió un error. Inténtalo de nuevo» al elegir otra forma de verificación. Se detuvo el intento automatizado; recorrido de Lab pendiente de sesión verificada."
   },
   "production": {
     "modified": false,
@@ -53,69 +53,73 @@
   },
   "github_actions": [
     {
-      "id": 40226189181,
-      "name": "Issue 23 - selective production candidate",
-      "status": "completed",
-      "conclusion": "failure",
-      "url": "https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40226189181",
-      "reason": "Production baseline changed; reconcile before preparing candidate",
-      "disposition": "No se altera main ni el candidato de producción; fallo ajeno a i18n."
-    },
-    {
-      "id": 40226189104,
-      "name": "Mensajes - verificación de regresiones",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40226189104"
-    },
-    {
-      "id": 40226189099,
+      "id": 40503577907,
       "name": "Heraldo Lab - Python regressions",
       "status": "completed",
       "conclusion": "success",
-      "url": "https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40226189099"
+      "url": "https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40503577907"
+    },
+    {
+      "id": 40503577827,
+      "name": "Mensajes - verificación de regresiones",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40503577827"
+    },
+    {
+      "id": 40503577820,
+      "name": "Issue 23 - selective production candidate",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40503577820",
+      "reason": "Production baseline changed; reconcile before preparing candidate",
+      "disposition": "Fallo histórico reproducido al preparar el candidato de producción. No se altera ese flujo, main ni producción."
     }
   ],
   "github_lab_jobs": [
     {
-      "id": 121267954545,
-      "name": "offline-regressions (3.13)",
-      "conclusion": "success"
-    },
-    {
-      "id": 121267954821,
-      "name": "offline-regressions (3.12)",
-      "conclusion": "success"
-    },
-    {
-      "id": 121267954826,
-      "name": "offline-regressions (3.11)",
-      "conclusion": "success"
-    },
-    {
-      "id": 121267954846,
+      "id": 122187110043,
       "name": "ux-contract",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122187110254,
+      "name": "offline-regressions (3.12)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122187110337,
+      "name": "offline-regressions (3.13)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 122187110491,
+      "name": "offline-regressions (3.11)",
+      "status": "completed",
       "conclusion": "success"
     }
   ],
-  "verified_at_utc": "2026-10-25T19:34:20.658Z",
+  "verified_at_utc": "2026-10-27T12:29:29.677Z",
   "deployment": {
-    "id": "b7c68d40-9d48-4dbb-a47f-69d3921a4795",
+    "id": "4ff1090b-3ba2-4ac9-bc09-e816150c215b",
     "status": "SUCCESS",
-    "created_at": "2026-10-25T19:32:01.795Z",
-    "commit": "8d82172ed5eb41efa146f2346d982c328c9cb770",
+    "created_at": "2026-10-27T12:25:59.036Z",
+    "commit": "069c8d347968458bdababa71c8f3c36c2435153a",
     "branch": "Pruebas",
-    "gateway_connected_at": "2026-10-25T19:33:15.438116812Z",
+    "gateway_connected_at": "2026-10-27T12:27:39.200931904Z",
     "setup_self_checks": 2,
     "command_syncs": [
       {
-        "timestamp": "2026-10-25T19:33:18.783535695Z",
+        "timestamp": "2026-10-27T12:27:42.376178968Z",
         "locale": "en-US",
         "commands": 51
       },
       {
-        "timestamp": "2026-10-25T19:33:19.793952483Z",
-        "locale": "en-US",
+        "timestamp": "2026-10-27T12:27:42.688928737Z",
+        "locale": "pt-BR",
         "commands": 51
       }
     ],
@@ -128,6 +132,7 @@
     "other_service_config_unchanged": true,
     "sql_changes": false,
     "credentials_read": false,
-    "backup_cron_changed": false
+    "backup_cron_changed": false,
+    "backup_cron_deployment_unchanged": "1d4973cd-862c-42ff-9641-9e75f28c0aaa"
   }
 }
