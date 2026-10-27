@@ -63,6 +63,20 @@ def next_occurrence(job, now):
         return (now + timedelta(seconds=job['cooldown'])).isoformat()
     if job['repeat'] == 'ninguna':
         return None
+    if job['repeat'] == 'mensual':
+        import calendar
+        origin = datetime.fromisoformat(job['start']).astimezone(ZoneInfo(job['zone']))
+        local_now = now.astimezone(ZoneInfo(job['zone']))
+        month_offset = max(0, (local_now.year - origin.year) * 12 + local_now.month - origin.month)
+        for step in range(month_offset, month_offset + 14):
+            month_number = origin.month - 1 + step
+            year = origin.year + month_number // 12
+            month = month_number % 12 + 1
+            day = min(origin.day, calendar.monthrange(year, month)[1])
+            candidate = origin.replace(year=year, month=month, day=day)
+            if candidate.astimezone(timezone.utc) > now:
+                return candidate.astimezone(timezone.utc).isoformat()
+        raise ValueError('monthly_schedule_invalid')
     if job['repeat'] == 'intervalo':
         from message_autofeeds import interval_seconds
         period = interval_seconds(job['interval'])
