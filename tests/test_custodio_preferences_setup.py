@@ -79,8 +79,12 @@ class CustodioSetupTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertIn("Modo Custodio", view.summary())
         self.assertEqual(next(x.label for x in view.children if getattr(x, "label", None) == "Reportes"), "Reportes")
-        self.assertEqual(len(view.children), 10)
-        self.assertEqual([x.row for x in view.children], [0, 1, 3, 1, 1, 3, 3, 2, 2, 2])
+        self.assertIn(view.activate_button, view.children)
+        self.assertIn(view.pause_button, view.children)
+        self.assertIs(view.activate_button.callback.__self__, view)
+        self.assertIs(view.pause_button.callback.__self__, view)
+        self.assertEqual(view.activate_button.row, view.pause_button.row)
+        self.assertNotIn("Integraciones", [str(getattr(x, "label", "")) for x in view.children])
         self.assertIn("Acciones", [x.label for x in view.children if getattr(x, "label", None)])
 
     def test_confirmation_only_prepares_observing_preferences(self):

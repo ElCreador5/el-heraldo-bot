@@ -30,9 +30,9 @@ La primera fase de idiomas está validada automáticamente y desplegada; los rec
 
 ## IA manual: impedimento real y alternativa
 
-`custodio_ai_runtime.py` implementa una llamada manual acotada a Groq, modelo `llama-3.1-8b-instant`, endpoint fijo, un único texto de regla y salida JSON validada. No recibe mensajes, perfiles ni herramientas. La cita debe coincidir exactamente con la regla; toda interpretación es una propuesta y no modifica acciones. El adaptador y sus controles se probaron con transporte aislado, **no mediante una inferencia real**.
+`custodio_ai_runtime.py` implementa una llamada manual acotada a Groq, modelo `openai/gpt-oss-20b` (sustituto vigente del anterior modelo gratuito retirado), endpoint fijo, un único texto de regla y salida JSON validada. No recibe mensajes, perfiles ni herramientas. La cita debe coincidir exactamente con la regla; toda interpretación es una propuesta y no modifica acciones. El adaptador y sus controles se probaron con transporte aislado, **no mediante una inferencia real**.
 
-El worker no dispone de `CUSTODIO_AI_FREE_PROVIDER` ni `CUSTODIO_GROQ_API_KEY`. No se han creado cuentas, contratado servicios, añadido secretos ni generado solicitudes facturables. Sin configuración, el botón informa de que se necesita revisión humana.
+Lectura de metadatos del 27/10: el worker ya dispone de los nombres `CUSTODIO_AI_FREE_PROVIDER` y `CUSTODIO_GROQ_API_KEY`; no se leyeron sus valores. La presencia de ambas variables no acredita una inferencia válida. No se han creado cuentas, contratado servicios, añadido secretos ni generado solicitudes facturables. Sin configuración, el botón informa de que se necesita revisión humana.
 
 Recursos observados en Lab: 0,512 GB de RAM y 1 vCPU; el bot utiliza aproximadamente 0,160 GB, con pico observado de 0,298 GB. El fabricante publica 434 MB de pico para LFM2.5-350M Q4 en su benchmark; sumarlo al proceso existente no demuestra un margen seguro en este servicio. No se carga un modelo local sin una medición propia que demuestre viabilidad. Esto no equivale a afirmar que ningún modelo pequeño pueda ejecutarse.
 

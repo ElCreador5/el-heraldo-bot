@@ -227,7 +227,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 class EvidenceAndAITests(unittest.IsolatedAsyncioTestCase):
     async def test_manual_ai_adapter_runs_transport_and_validates_the_real_response_contract(self):
         proposal={'rule_number':1,'rule_quote':SNAPSHOT.rules[0],'interpretation':'Requiere aclaración humana del alcance.','needs_clarification':True}
-        transport=AsyncMock(return_value={'choices':[{'message':{'content':json.dumps(proposal)}}]})
+        transport=AsyncMock(return_value={'choices':[{'finish_reason':'stop','message':{'content':json.dumps(proposal)}}]})
         _last.pop(SNAPSHOT.guild_id,None)
         with patch.dict(os.environ,{'CUSTODIO_AI_FREE_PROVIDER':'groq','CUSTODIO_GROQ_API_KEY':'synthetic-test-key'}):
             result=await analyze_rule(SNAPSHOT,0,administrator_requested=True,transport=transport)

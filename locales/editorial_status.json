@@ -8,13 +8,13 @@
   "catalog_keys": 3175,
   "explicitly_reviewed_keys": 3175,
   "editorial_review_pending_keys": [],
-  "literal_exemptions": 182,
+  "literal_exemptions": 186,
   "coverage_claim": "No se acredita cobertura integral del 100 %.",
   "generation": "Propuestas iniciales locales; revisión editorial explícita completada en los tres idiomas. Sin traducción automática en runtime.",
   "discord_interactive_acceptance": "blocked_authentication",
   "global_native_command_metadata": "guild payload localization implemented; global identifiers unchanged",
   "editorial_review_complete": true,
-  "referenced_keys": 3154,
+  "referenced_keys": 3150,
   "native_command_fields": 242,
   "native_root_commands": 51
 }
