@@ -256,7 +256,7 @@ class DraftConfirm(discord.ui.View):
     def __init__(self, host, job, *, prior=None):
         super().__init__(timeout=300)
         self.host, self.job, self.prior = host, job, prior
-        self.owner_id = job["author"]
+        self.owner_id = job["requester"]
         self.guild_id = job["guild"]
         self.done = False
 
@@ -292,18 +292,18 @@ class DraftConfirm(discord.ui.View):
                         raise ValueError("quota")
                     if any(j.get("id") == job["id"] for j in jobs):
                         raise ValueError("conflict")
-                    jobs.append({k: v for k, v in job.items() if k != "guild"})
+                    jobs.append({k: v for k, v in job.items() if k not in ("guild", "requester")})
                 else:
                     original = next((j for j in jobs if j.get("id") == job["id"]), None)
                     if original is None or not can_manage(interaction.user, original):
                         raise ValueError("missing")
-                    jobs = [{k: v for k, v in job.items() if k != "guild"} if j["id"] == job["id"] else j for j in jobs]
+                    jobs = [{k: v for k, v in job.items() if k not in ("guild", "requester")} if j["id"] == job["id"] else j for j in jobs]
                     conn.execute("UPDATE message_schedule_state SET status='pending',next_run=?,detail=NULL WHERE guild_id=? AND job_id=?",
                                  (job["start"], guild.id, job["id"]))
                 return jobs, job["id"]
             atomic_change(self.host, guild.id, edit, expected=self.prior)
         except ValueError as exc:
-            return await respond_error(interaction, str(exc) if str(exc) in ("quota", "missing", "conflict") else "invalid")
+            return await respond_error(interaction, ("changed" if str(exc) == "conflict" else str(exc)) if str(exc) in ("quota", "missing", "conflict") else "invalid")
         self.done = True
         self.stop()
         await interaction.response.edit_message(content=tr("saved") + "\n" + show_job(job), embed=None, view=None)
@@ -322,6 +322,7 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
         self.host, self.guild_id, self.author = host, guild_id, author
         self.channel_id, self.repeat, self.role_id = channel_id, repeat, role_id
         self.template, self.job = template, job
+        self.snapshot = host["guild_config_get"](guild_id, CONFIG_KEY) if job else None
         self.message = discord.ui.TextInput(label="Mensaje", style=discord.TextStyle.paragraph,
                                             required=not bool(template), max_length=1900,
                                             default=(job or {}).get("text", ""))
@@ -352,11 +353,12 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
                     "author": self.author, "start": start.isoformat(), "zone": zone,
                     "repeat": self.repeat, "interval": str(self.interval).strip() if self.repeat == "intervalo" else "",
                     "text": text, "template": self.template, "role": self.role_id,
-                    "autofeed": True,
+                    "autofeed": True, "paused": (self.job or {}).get("paused", False),
+                    "requester": interaction.user.id,
                 }
             except ValueError as exc:
                 return await respond_error(interaction, "content" if str(exc) == "content" else "invalid")
-            raw = self.host["guild_config_get"](self.guild_id, CONFIG_KEY) if self.job else None
+            raw = self.snapshot if self.job else None
             view = DraftConfirm(self.host, job, prior=raw)
             await interaction.response.send_message(
                 content=tr("preview") + "\n" + show_job(job), view=view,
@@ -410,7 +412,7 @@ class ActionConfirm(discord.ui.View):
                 return jobs, found["id"]
             atomic_change(self.host, self.guild_id, apply, expected=self.snapshot)
         except ValueError as exc:
-            return await respond_error(interaction, str(exc) if str(exc) in ("missing", "conflict") else "invalid")
+            return await respond_error(interaction, ("changed" if str(exc) == "conflict" else str(exc)) if str(exc) in ("missing", "conflict") else "invalid")
         self.finished = True
         self.stop()
         await interaction.response.edit_message(
