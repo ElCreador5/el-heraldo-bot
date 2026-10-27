@@ -10034,9 +10034,11 @@ class HeraldoMessagesSetupView(discord.ui.View):
             return
 
         if selected == "schedules":
-            await interaction.response.send_message(
-                _t('text.63162429e5e260'),
-                ephemeral=True)
+            # Un único panel: /setup -> Mensajes -> Programaciones.
+            # No abrir una respuesta efímera adicional ni redirigir a /mensajes.
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(globals(), self.guild_id, self.owner_id)
+            await interaction.response.edit_message(content=content, embed=None, view=view)
             return
 
         if selected == "kits":
@@ -26965,14 +26967,6 @@ class HeraldoMessagesView(discord.ui.View):
         else:
             text = _t('text.d81d9ca94206a7')
         await interaction.response.send_message(text, ephemeral=True)
-
-    @discord.ui.button(label=_t('autofeed.ui.schedule_btn'), style=discord.ButtonStyle.primary, row=2)
-    @_i18n_context
-    async def scheduled_messages(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        from message_autofeeds import PolicyView
-        import message_autofeeds
-        view = PolicyView(globals(), self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=view.summary(), view=view)
 
     @discord.ui.button(label=_t('text.aeccae342e4bd0'), style=discord.ButtonStyle.danger, row=2)
     @_i18n_context
