@@ -79,17 +79,14 @@ class CustodioSetupView(discord.ui.View):
         actions_button.callback = self.open_rule_actions
         self.add_item(actions_button)
 
-        for section, (caption, description, placement) in enumerate((
-            (_t('text.2cc32e458872c6'), _t('text.7cb87385497004'), 1),
-            (_t('text.3e9bb29a0832fc'), _t('text.8348e279630516'), 3),
-            (_t('text.5beed665025da3'), _t('text.5aa657464cd546'), 3),
-        )):
+        # Advertencias y Condenas son integraciones internas del motor disciplinario.
+        # Solo se exponen controles administrativos reales, no un panel informativo.
+        for caption, placement, callback in (
+            (_t('text.2cc32e458872c6'), 1, self.open_detection),
+            (_t('text.3e9bb29a0832fc'), 3, self.open_exemptions),
+        ):
             nav = discord.ui.Button(label=caption, style=discord.ButtonStyle.secondary, row=placement)
-            @_i18n_context
-            async def open_section(interaction: discord.Interaction, text=description, heading=caption):
-                view = CustodioInformationView(self, heading, text)
-                await interaction.response.edit_message(content=view.summary(), view=view, embed=None)
-            nav.callback = self.open_detection if section == 0 else self.open_exemptions if section == 1 else open_section
+            nav.callback = callback
             self.add_item(nav)
 
         save_button = discord.ui.Button(
