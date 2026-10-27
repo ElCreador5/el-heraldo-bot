@@ -6,10 +6,12 @@ del proveedor gratuito y su clave, el flujo deriva a revisión humana.
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import os
 import time
 import aiohttp
 
+log = logging.getLogger(__name__)
 ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "llama-3.1-8b-instant"
 _busy = set()
@@ -70,12 +72,21 @@ async def analyze_rule(snapshot, index, *, administrator_requested=False, transp
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                 async with session.post(ENDPOINT, json=payload, allow_redirects=False) as result:
                     if result.status != 200:
-                        raise AIUnavailable("provider_unavailable")
+                        code = ("invalid_api_key" if result.status in (401, 403) else
+                                "rate_limited" if result.status == 429 else
+                                "invalid_request" if result.status == 400 else
+                                "provider_unavailable")
+                        log.warning("CUSTODIO_AI_PROVIDER_ERROR status=%d code=%s", result.status, code)
+                        raise AIUnavailable(code)
                     raw = await result.content.read(16385)
                     if len(raw) > 16384:
                         raise ValueError("ai_response_too_large")
                     response = json.loads(raw)
-        proposal = json.loads(response["choices"][0]["message"]["content"])
-        return validate_proposal(proposal, snapshot, index)
+        try:
+            proposal = json.loads(response["choices"][0]["message"]["content"])
+            return validate_proposal(proposal, snapshot, index)
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            log.warning("CUSTODIO_AI_VALIDATION_ERROR type=%s", type(exc).__name__)
+            raise AIUnavailable("invalid_response") from exc
     finally:
         _busy.discard(snapshot.guild_id)
