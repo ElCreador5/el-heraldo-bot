@@ -227,7 +227,7 @@ def referenced_mentions(guild, job):
     roles = {}
     for role_id in role_ids:
         role = guild.get_role(role_id)
-        if role is None or not role.mentionable:
+        if role is None:
             raise ValueError("role")
         roles[role_id] = role
     # Embed text displays mentions but cannot fire a notification; only
@@ -235,7 +235,8 @@ def referenced_mentions(guild, job):
     ping_ids = {int(value) for value in re.findall(r"<@&(\d{1,20})>", body)}
     if explicit:
         ping_ids.add(int(explicit))
-    return [roles[role_id] for role_id in sorted(ping_ids)]
+    return [roles[role_id] for role_id in sorted(ping_ids)
+            if roles[role_id].mentionable]
 
 
 def can_deliver(host, guild, job, member, channel):
