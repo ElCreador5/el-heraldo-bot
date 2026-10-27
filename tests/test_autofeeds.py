@@ -113,5 +113,42 @@ class AutofeedTests(unittest.TestCase):
         self.assertTrue(feeds.can_manage(self.actor, self.job))
 
 
+
+class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_role_mention_stays_in_content_with_stamped_embed(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from message_automation import ScheduledMessages
+        import message_payload
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "send.db")
+            def connect():
+                return sqlite3.connect(path, isolation_level=None)
+            member = NS(id=7, guild_permissions=discord.Permissions(manage_guild=True))
+            role = NS(id=22, mention="<@&22>", mentionable=True)
+            channel = MagicMock(spec=discord.TextChannel)
+            channel.permissions_for.return_value = discord.Permissions(
+                view_channel=True, send_messages=True, embed_links=True)
+            channel.send = AsyncMock(return_value=NS(id=123))
+            guild = NS(id=1, me=NS(id=2), get_channel=lambda cid: channel,
+                       get_role=lambda rid: role if rid == 22 else None,
+                       fetch_member=AsyncMock(return_value=member))
+            job = dict(id="feed123", author=7, channel=10, role=22,
+                       start=(datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat(),
+                       zone="UTC", repeat="ninguna", text="Mensaje directo", autofeed=True)
+            engine = ScheduledMessages({
+                "db_connect": connect,
+                "guild_config_get": lambda *_: json.dumps([job]),
+                "heraldo_template_list": lambda *_: [],
+                "stamp_embed": lambda embed, guild: embed,
+            })
+            engine.initialize()
+            await engine.execute(guild, job, datetime.now(timezone.utc))
+            channel.send.assert_awaited_once()
+            kwargs = channel.send.await_args.kwargs
+            self.assertEqual(kwargs["content"], "Mensaje directo\n<@&22>")
+            self.assertIsInstance(kwargs["embeds"], message_payload.TemplateEmbeds)
+            self.assertEqual(len(kwargs["embeds"]), 1)
+            self.assertEqual(kwargs["allowed_mentions"].roles, [role])
+
 if __name__ == "__main__":
     unittest.main()
