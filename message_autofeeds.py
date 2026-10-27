@@ -43,6 +43,29 @@ STRINGS = {
         "content": "Escribe un mensaje o selecciona una plantilla existente.",
         "past": "Selecciona una fecha futura.",
         "legacy": "Esta programación se administra con el comando anterior /programar_mensaje.",
+        "channels": "Canales permitidos para miembros",
+        "roles_ui": "Roles que pueden programar",
+        "edit": "Editar",
+        "pause": "Pausar",
+        "resume": "Reanudar",
+        "silence": "Silenciar",
+        "delete": "Eliminar",
+        "modal": "Programar mensaje",
+        "msg": "Mensaje",
+        "date": "Fecha y hora local (AAAA-MM-DD HH:MM)",
+        "interval_ui": "Intervalo (ej. 6h, 2d)",
+        "channel_label": "Canal",
+        "frequency_label": "Frecuencia",
+        "start_label": "Inicio",
+        "mention_label": "Mención",
+        "content_label": "Contenido",
+        "no_role": "Sin rol",
+        "template_label": "Plantilla",
+        "status_label": "Estado",
+        "enabled_label": "Activo",
+        "disabled_label": "Pausado",
+        "limit_label": "Límite por miembro",
+        "policy_help": "Las listas se guardan con Guardar cambios. Activar/Pausar solo cambia el estado guardado.",
     },
     "en-US": {
         "denied": "You cannot schedule messages in that channel.",
@@ -70,6 +93,29 @@ STRINGS = {
         "content": "Enter a message or select an existing template.",
         "past": "Select a future date.",
         "legacy": "Manage this legacy schedule using /programar_mensaje.",
+        "channels": "Channels members may post in",
+        "roles_ui": "Roles allowed to schedule",
+        "edit": "Edit",
+        "pause": "Pause",
+        "resume": "Resume",
+        "silence": "Mute",
+        "delete": "Delete",
+        "modal": "Schedule a message",
+        "msg": "Message",
+        "date": "Local date and time (YYYY-MM-DD HH:MM)",
+        "interval_ui": "Interval (e.g. 6h, 2d)",
+        "channel_label": "Channel",
+        "frequency_label": "Frequency",
+        "start_label": "Start",
+        "mention_label": "Mention",
+        "content_label": "Content",
+        "no_role": "No role",
+        "template_label": "Template",
+        "status_label": "Status",
+        "enabled_label": "Enabled",
+        "disabled_label": "Paused",
+        "limit_label": "Per-member limit",
+        "policy_help": "Save lists with Save changes. Enable/Pause only updates the saved state.",
     },
     "pt-BR": {
         "denied": "Você não pode programar mensagens nesse canal.",
@@ -97,6 +143,29 @@ STRINGS = {
         "content": "Digite uma mensagem ou selecione um modelo existente.",
         "past": "Selecione uma data futura.",
         "legacy": "Gerencie esta programação antiga usando /programar_mensaje.",
+        "channels": "Canais permitidos aos membros",
+        "roles_ui": "Cargos autorizados a programar",
+        "edit": "Editar",
+        "pause": "Pausar",
+        "resume": "Retomar",
+        "silence": "Silenciar",
+        "delete": "Excluir",
+        "modal": "Programar mensagem",
+        "msg": "Mensagem",
+        "date": "Data e hora local (AAAA-MM-DD HH:MM)",
+        "interval_ui": "Intervalo (ex. 6h, 2d)",
+        "channel_label": "Canal",
+        "frequency_label": "Frequência",
+        "start_label": "Início",
+        "mention_label": "Menção",
+        "content_label": "Conteúdo",
+        "no_role": "Sem cargo",
+        "template_label": "Modelo",
+        "status_label": "Estado",
+        "enabled_label": "Ativo",
+        "disabled_label": "Pausado",
+        "limit_label": "Limite por membro",
+        "policy_help": "Salve listas com Salvar alterações. Ativar/Pausar altera somente o estado salvo.",
     },
 }
 
@@ -221,12 +290,12 @@ def show_job(job, *, detail=True):
         when = f"<t:{int(datetime.fromisoformat(when).timestamp())}:F>"
     except (ValueError, TypeError):
         pass
-    lines = [f"ID: {job['id']}", f"Canal: <#{job['channel']}>",
-             f"Frecuencia: {frequency}", f"Inicio: {when}",
-             f"Mención: {('<@&' + str(rid) + '>') if rid else 'Sin rol'}"]
+    lines = [f"ID: {job['id']}", f"{tr('channel_label')}: <#{job['channel']}>",
+             f"{tr('frequency_label')}: {frequency}", f"{tr('start_label')}: {when}",
+             f"{tr('mention_label')}: {('<@&' + str(rid) + '>') if rid else tr('no_role')}"]
     if detail:
-        message = job.get("text") or ("Plantilla: " + job.get("template", ""))
-        lines.append("Contenido: " + message[:700])
+        message = job.get("text") or (tr("template_label") + ": " + job.get("template", ""))
+        lines.append(tr("content_label") + ": " + message[:700])
     return "\n".join(lines)
 
 
@@ -320,6 +389,7 @@ class DraftConfirm(discord.ui.View):
 class FeedModal(discord.ui.Modal, title="Programar mensaje"):
     def __init__(self, host, guild_id, author, channel_id, repeat, role_id, template=None, job=None):
         super().__init__()
+        self.title = tr("modal")
         self.host, self.guild_id, self.author = host, guild_id, author
         self.channel_id, self.repeat, self.role_id = channel_id, repeat, role_id
         self.template, self.job = template, job
@@ -333,6 +403,9 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
                                              ZoneInfo(job["zone"])).strftime("%Y-%m-%d %H:%M")) if job else None))
         self.interval = discord.ui.TextInput(label="Intervalo (ej. 6h, 2d)", required=False,
                                              max_length=10, default=(job or {}).get("interval", ""))
+        self.message.label = tr("msg")
+        self.date.label = tr("date")
+        self.interval.label = tr("interval_ui")
         self.add_item(self.message)
         self.add_item(self.date)
         self.add_item(self.interval)
@@ -375,7 +448,7 @@ class ActionConfirm(discord.ui.View):
         self.finished = False
         self.snapshot = host["guild_config_get"](self.guild_id, CONFIG_KEY)
         self.confirm.style = discord.ButtonStyle.danger if action == "eliminar" else discord.ButtonStyle.success
-        self.confirm.label = "Eliminar" if action == "eliminar" else tr("save")
+        self.confirm.label = tr("delete") if action == "eliminar" else tr("save")
         self.cancel.label = tr("discard")
 
     @guild_context
@@ -456,6 +529,8 @@ class ManageView(discord.ui.View):
         super().__init__(timeout=900)
         self.host, self.guild_id, self.viewer_id = host, guild_id, viewer_id
         self.selected = None
+        self.edit.label, self.silence.label, self.delete.label = tr("edit"), tr("silence"), tr("delete")
+        self.toggle.label = tr("pause") + " / " + tr("resume")
         select = discord.ui.Select(placeholder=tr("choose"), row=0, options=[
             discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or j.get("template") or "Mensaje")[:60])[:100],
                                  value=j["id"]) for j in jobs[:25]])
@@ -479,6 +554,8 @@ class ManageView(discord.ui.View):
         job = self.selected_job(interaction.user)
         if job is None:
             return await respond_error(interaction, "missing")
+        self.toggle.label = tr("resume") if job.get("paused") else tr("pause")
+        self.toggle.style = discord.ButtonStyle.success if job.get("paused") else discord.ButtonStyle.danger
         await interaction.response.edit_message(content=show_job(job), view=self)
 
     @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=1)
@@ -501,6 +578,8 @@ class ManageView(discord.ui.View):
             set_paused(self.host, self.guild_id, job["id"], interaction.user, paused)
         except ValueError:
             return await respond_error(interaction, "invalid")
+        button.label = tr("resume") if paused else tr("pause")
+        button.style = discord.ButtonStyle.success if paused else discord.ButtonStyle.danger
         await interaction.response.edit_message(content=tr("paused" if paused else "resumed"), view=self)
 
     @discord.ui.button(label="Silenciar", style=discord.ButtonStyle.primary, row=1)
@@ -537,16 +616,18 @@ class PolicyView(discord.ui.View):
             placeholder="Roles que pueden programar", min_values=0, max_values=10, row=1)
         self.roles.callback = self.pick_roles
         self.add_item(self.roles)
-        self.activate.label = "Pausar" if self.current["enabled"] else "Activar"
+        self.activate.label = tr("pause") if self.current["enabled"] else tr("enabled_label")
         self.save.label, self.discard.label = tr("save"), tr("discard")
+        self.back.label = tr("back")
+        self.channels.placeholder, self.roles.placeholder = tr("channels"), tr("roles_ui")
         self.activate.style = discord.ButtonStyle.danger if self.current["enabled"] else discord.ButtonStyle.success
 
     def summary(self):
-        return (tr("settings") + "\nEstado: " + ("Activo" if self.current["enabled"] else "Pausado")
-                + "\nCanales: " + (", ".join(f"<#{c}>" for c in self.current["channels"]) or "Ninguno")
-                + "\nRoles: " + (", ".join(f"<@&{r}>" for r in self.current["roles"]) or "Ninguno")
-                + "\nLímite por miembro: " + str(self.current["max_per_member"])
-                + "\nLos cambios en listas requieren Guardar cambios. Activar/Pausar solo modifica el estado guardado.")
+        return (tr("settings") + "\n" + tr("status_label") + ": " + (tr("enabled_label") if self.current["enabled"] else tr("disabled_label"))
+                + "\n" + tr("channels") + ": " + (", ".join(f"<#{c}>" for c in self.current["channels"]) or "—")
+                + "\n" + tr("roles_ui") + ": " + (", ".join(f"<@&{r}>" for r in self.current["roles"]) or "—")
+                + "\n" + tr("limit_label") + ": " + str(self.current["max_per_member"])
+                + "\n" + tr("policy_help"))
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -595,7 +676,7 @@ class PolicyView(discord.ui.View):
         self.host["guild_config_set"](self.guild_id, POLICY_KEY, json.dumps(current))
         self.original = self.host["guild_config_get"](self.guild_id, POLICY_KEY)
         self.current["enabled"] = current["enabled"]
-        button.label = "Pausar" if current["enabled"] else "Activar"
+        button.label = tr("pause") if current["enabled"] else tr("enabled_label")
         button.style = discord.ButtonStyle.danger if current["enabled"] else discord.ButtonStyle.success
         await interaction.response.edit_message(content=self.summary(), view=self)
 
