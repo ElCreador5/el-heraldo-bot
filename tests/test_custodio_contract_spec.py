@@ -115,7 +115,7 @@ class CustodioDesignContractTests(unittest.TestCase):
         self.assertEqual(case["served_cycle_active"], 0)
         self.assertEqual(case["served_cycle_history"], 5)
 
-    @unittest.skip("Pendiente: conectar escenarios al motor REAL de Custodio en Pruebas; no existe evidencia de ese adaptador")
+    @unittest.skip("Aceptación real en Discord pendiente; el motor y los adaptadores se verifican sin red en test_custodio_runtime_integration y test_custodio_discipline_integration")
     def test_live_custodio_engine_contract(self):
         pass
 

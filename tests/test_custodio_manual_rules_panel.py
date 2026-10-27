@@ -31,7 +31,9 @@ class CustodioManualRulesPanelTests(unittest.TestCase):
                         for n in ast.walk(handler)))
 
     def test_screen_does_not_claim_active_supervision(self):
-        self.assertIn("todavía no están activadas", SOURCE)
+        self.assertIn("def observation_status", SOURCE)
+        self.assertIn("text.custodio.on", SOURCE)
+        self.assertIn("text.custodio.off", SOURCE)
 
 
 if __name__ == "__main__":

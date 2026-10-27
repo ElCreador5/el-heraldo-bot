@@ -1,0 +1,2 @@
+# Solo worker y regresiones de Custodio; no cambia dependencias de H-03.
+Pillow>=11,<13

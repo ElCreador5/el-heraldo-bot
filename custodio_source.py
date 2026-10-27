@@ -53,7 +53,7 @@ async def load_server_rules(
         return await run(fetcher)
 
     headers = {
-        "Authorization": _t('text.6ed95b9df34151', p0=f'{bot_token}'),
+        "Authorization": f"Bot {bot_token}",
         "Accept": "application/json",
         "User-Agent": "ElHeraldo-Custodio/1.0",
     }
@@ -61,7 +61,7 @@ async def load_server_rules(
     async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async def get_json(path: str) -> tuple[int, dict[str, Any]]:
             try:
-                async with session.get(API_ROOT + path) as response:
+                async with session.get(API_ROOT + path, allow_redirects=False) as response:
                     if response.status != 200:
                         return response.status, {}
                     raw = await response.content.read(MAX_RESPONSE_BYTES + 1)

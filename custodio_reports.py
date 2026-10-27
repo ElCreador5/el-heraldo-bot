@@ -74,6 +74,29 @@ def private_report_channel(channel: discord.TextChannel) -> bool:
     return True
 
 
+def compatible_evidence_access(source, destination):
+    """Una copia no amplía el acceso ni rebaja la restricción de edad del origen."""
+    if source.guild.id != destination.guild.id:
+        return False
+    if source.is_nsfw() and not destination.is_nsfw():
+        return False
+    guild = source.guild
+    if source.permissions_for(guild.default_role).view_channel:
+        return True
+    # Si el origen restringe a un miembro individual, no copiar automáticamente.
+    if any(isinstance(target, discord.Member) and overwrite.view_channel is False
+           for target, overwrite in source.overwrites.items()):
+        return False
+    for role in guild.roles:
+        if destination.permissions_for(role).view_channel and not source.permissions_for(role).view_channel:
+            return False
+    for target, overwrite in destination.overwrites.items():
+        if isinstance(target, discord.Member) and overwrite.view_channel is True:
+            if not source.permissions_for(target).view_channel:
+                return False
+    return True
+
+
 @_i18n_context
 async def create_private_report_channel(
     guild: discord.Guild,
@@ -211,6 +234,7 @@ def custodio_literal_report(
     occurred_at: datetime, verbatim: str, rule_text: str, rule_number: int,
     footer: str, icon_url: str | None = None,
     original_url: str | None = None, original_exists: bool = False,
+    observed_description: str | None = None, conduct: str | None = None,
 ) -> list[discord.Embed]:
     """Adaptador NH sin persistencia ni envío: solo crea embeds para revisión.
 
@@ -221,11 +245,12 @@ def custodio_literal_report(
     return make_evidence_embeds(
         LiteralEvidence(
             actor=actor, guild=guild_name, channel=channel_name,
-            occurred_at=occurred_at, verbatim=verbatim,
+            occurred_at=occurred_at, verbatim=verbatim or observed_description,
             rule_quote=rule_text, rule_number=rule_number,
             original_url=original_url, original_exists=original_exists,
-            conduct=_t('text.3d57a85390b5c0'),
+            conduct=conduct or _t('text.3d57a85390b5c0'),
             outcome=_t('text.fb57b92cfc0723'),
+            verbatim_is_description=not bool(verbatim),
         ),
         footer=footer, icon_url=icon_url,
     )
@@ -237,11 +262,25 @@ _publish_locks: dict[int, asyncio.Lock] = {}
 MAX_RECENT_EVIDENCE = 2048
 
 
+def delivery_state(db_path, key):
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect(db_path, timeout=2)) as db:
+        try:
+            row = db.execute("SELECT status FROM evidence_archive_v1 WHERE evidence_key=?", (key,)).fetchone()
+            return row[0] if row else None
+        except sqlite3.OperationalError:
+            return None
+
+
 @_i18n_context
 async def publish_literal_observation(
     *, guild: discord.Guild, report_channel_id: int,
     source_message: discord.Message, rule_text: str, rule_number: int,
     footer: str, icon_url: str | None = None,
+    observed_description: str | None = None, conduct: str | None = None,
+    rules_revision: str | None = None,
+    review_view: discord.ui.View | None = None,
 ) -> discord.Message:
     """Publicar una copia literal autorizada exclusivamente en reportes privado.
 
@@ -255,18 +294,19 @@ async def publish_literal_observation(
         raise ReportChannelError(_t('text.bbc165288f8c22'))
     if not isinstance(source_message.channel, discord.TextChannel):
         raise ReportChannelError(_t('text.745b4b3080cb03'))
-    if source_message.channel.is_nsfw():
-        raise ReportChannelError(_t('text.4e20ebf238207f'))
     if not isinstance(rule_text, str) or not rule_text.strip() or rule_number <= 0:
         raise ReportChannelError(_t('text.7cfb6c510e4124'))
-    if not isinstance(source_message.content, str) or not source_message.content:
+    if not isinstance(source_message.content, str) or not (source_message.content or observed_description):
         raise ReportChannelError(_t('text.a951b5fa2dbce1'))
     lock = _publish_locks.setdefault(guild.id, asyncio.Lock())
     async with lock:
         channel = _get_safe_existing(guild, report_channel_id)
+        if not compatible_evidence_access(source_message.channel, channel):
+            raise ReportChannelError(_t('text.custodio.privacy_mismatch'))
         key = (guild.id, source_message.id)
         import os
         db_path = os.environ.get("DB_PATH")
+        ledger_key = f"custodio-report:{guild.id}:{source_message.id}"
         if key not in _published_evidence:
             from custodio_evidence_index import find_reference, prepare_index
             import os
@@ -277,23 +317,62 @@ async def publish_literal_observation(
                 if previous_id:
                     _published_evidence[key] = previous_id
         if key in _published_evidence:
+            if db_path and await asyncio.to_thread(delivery_state, db_path, ledger_key) not in {None, "complete"}:
+                raise ReportChannelError(_t('text.custodio.delivery_review'))
             try:
                 return await channel.fetch_message(_published_evidence[key])
-            except discord.NotFound:
-                _published_evidence.pop(key, None)
+            except discord.NotFound as exc:
+                raise ReportChannelError(_t('text.custodio.delivery_review')) from exc
             except discord.HTTPException as exc:
                 raise ReportChannelError(_t('text.7fd3f44c21a889')) from exc
+        original_exists = False
+        try:
+            current = await source_message.channel.fetch_message(source_message.id)
+            original_exists = current.content == source_message.content
+        except discord.NotFound:
+            pass
+        except discord.HTTPException as exc:
+            raise ReportChannelError(_t('text.7fd3f44c21a889')) from exc
         embeds = custodio_literal_report(
-            actor=str(source_message.author), guild_name=guild.name,
+            actor=f"{source_message.author} {source_message.author.id}", guild_name=guild.name,
             channel_name=source_message.channel.name,
             occurred_at=source_message.created_at, verbatim=source_message.content,
             rule_text=rule_text, rule_number=rule_number,
             footer=footer, icon_url=icon_url,
-            original_url=source_message.jump_url, original_exists=True,
+            original_url=source_message.jump_url, original_exists=original_exists,
+            observed_description=observed_description, conduct=conduct,
         )
+        from heraldo_evidence import evidence_batches
+        batches = evidence_batches(embeds)
+        from evidence_archive import ledger
+        if not db_path:
+            raise ReportChannelError(_t('text.custodio.delivery_review'))
+        claimed, state, receipts = await asyncio.to_thread(ledger, db_path, ledger_key, "claim")
+        if not claimed:
+            if state == "complete" and receipts:
+                return await channel.fetch_message(int(receipts[0]["message_id"]))
+            raise ReportChannelError(_t('text.custodio.delivery_review'))
         try:
             # No permitir menciones en el reporte aunque la cita las contenga.
-            report = await channel.send(embeds=embeds, allowed_mentions=discord.AllowedMentions.none())
+            report = None
+            for batch in batches:
+                _get_safe_existing(guild, report_channel_id)
+                if not compatible_evidence_access(source_message.channel, channel):
+                    raise ReportChannelError(_t('text.custodio.privacy_mismatch'))
+                sent = await channel.send(embeds=batch, view=review_view if report is None else None,
+                                          allowed_mentions=discord.AllowedMentions.none())
+                report = report or sent
+                if key not in _published_evidence:
+                    _published_evidence[key] = sent.id
+                    from custodio_evidence_index import save_reference
+                    await asyncio.to_thread(save_reference, db_path, guild.id, source_message.id, sent.id)
+                receipts.append({"message_id": sent.id, "channel_id": channel.id,
+                                 "source_channel_id": source_message.channel.id,
+                                 "source_message_id": source_message.id,
+                                 "guild_id": guild.id, "actor_id": source_message.author.id,
+                                 "rule_number": rule_number,
+                                 "rules_revision": rules_revision})
+                await asyncio.to_thread(ledger, db_path, ledger_key, "pending", receipts)
         except (discord.Forbidden, discord.HTTPException) as exc:
             raise ReportChannelError(_t('text.69f89336b1e086')) from exc
         if len(_published_evidence) >= MAX_RECENT_EVIDENCE:
@@ -302,6 +381,7 @@ async def publish_literal_observation(
         if db_path:
             from custodio_evidence_index import save_reference
             save_reference(db_path, guild.id, source_message.id, report.id)
+            await asyncio.to_thread(ledger, db_path, ledger_key, "complete", receipts)
         return report
 
 
@@ -310,8 +390,8 @@ async def unlink_deleted_original(*, guild: discord.Guild, deleted_message_id: i
                                   report_channel_id: int) -> bool:
     """Quitar el enlace de un reporte existente sin tocar la copia literal.
 
-    Solo sirve mientras subsista la referencia efímera en memoria. Tras reiniciar
-    el proceso no se puede reconstruir el índice sin persistencia adicional.
+    Recupera la referencia mínima persistida después de un reinicio. La copia
+    literal permanece en Discord y nunca se vuelve a cargar desde SQLite.
     """
     key = (guild.id, deleted_message_id)
     report_id = _published_evidence.get(key)

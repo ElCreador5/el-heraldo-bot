@@ -22,6 +22,7 @@ class LiteralEvidence:
     outcome: str = _t('text.fb57b92cfc0723')
     original_url: str | None = None
     original_exists: bool = False
+    verbatim_is_description: bool = False
 
     @_i18n_context
     def __post_init__(self):
@@ -48,15 +49,13 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
     no se publica una representación incompleta como evidencia literal.
     """
     text = evidence.verbatim
-    if len(text) > 7200:
+    if len(text) > 32000:
         raise ValueError("evidence_too_long_for_single_report")
     chunks = [text[i:i+900] for i in range(0, len(text), 900)]
     rule = evidence.rule_quote or ""
-    if len(rule) > 2000:
+    if len(rule) > 2048:
         raise ValueError("rule_quote_too_long")
     parts = [rule[i:i+900] for i in range(0, len(rule), 900)] if rule else []
-    if len(chunks) + len(parts) > 10:
-        raise ValueError("report_exceeds_embed_limits")
     embeds = []
     stamp = evidence.occurred_at.astimezone(timezone.utc)
     for index, chunk in enumerate(chunks):
@@ -76,7 +75,10 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
         displayed = chunk
         if evidence.original_exists and evidence.original_url and index == 0:
             item.add_field(name=_t('text.a376d1351c3f23'), value=evidence.original_url[:1024], inline=False)
-        item.add_field(name=_t('text.ed432ad50b8d94', p0=f'{index + 1}', p1=f'{len(chunks)}'), value=displayed, inline=False)
+        caption = (_t('text.custodio.action_description', part=index + 1, total=len(chunks))
+                   if evidence.verbatim_is_description else
+                   _t('text.ed432ad50b8d94', p0=f'{index + 1}', p1=f'{len(chunks)}'))
+        item.add_field(name=caption, value=displayed, inline=False)
         item.set_footer(text=footer, icon_url=icon_url or None)
         embeds.append(item)
     for index, fragment in enumerate(parts):
@@ -85,3 +87,19 @@ def make_evidence_embeds(evidence: LiteralEvidence, *, footer: str, icon_url: st
         item.set_footer(text=footer, icon_url=icon_url or None)
         embeds.append(item)
     return embeds
+
+
+def evidence_batches(embeds):
+    """Preserva todas las partes respetando 6000 caracteres y diez embeds/envío."""
+    batches, batch, size = [], [], 0
+    for item in embeds:
+        if len(item) > 6000:
+            raise ValueError("evidence_embed_too_large")
+        if batch and (len(batch) == 10 or size + len(item) > 6000):
+            batches.append(batch)
+            batch, size = [], 0
+        batch.append(item)
+        size += len(item)
+    if batch:
+        batches.append(batch)
+    return batches

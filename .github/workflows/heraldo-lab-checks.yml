@@ -28,8 +28,9 @@ jobs:
           cache-dependency-path: |
             requirements-ci.txt
             requirements-backup.txt
+            custodio_image_deps.in
       - name: Instalar dependencias de pruebas aisladas
-        run: python -m pip install -r requirements-ci.txt -r requirements-backup.txt
+        run: python -m pip install -r requirements-ci.txt -r requirements-backup.txt -r custodio_image_deps.in
       - name: Comprobar entorno de pruebas
         run: python -m pip check
       - name: Internacionalización por servidor y detección de textos sin catálogo
@@ -81,8 +82,9 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-ci.txt
+            custodio_image_deps.in
       - name: Instalar dependencia directa validada
-        run: python -m pip install -r requirements-ci.txt
+        run: python -m pip install -r requirements-ci.txt -r custodio_image_deps.in
       - name: Instalar cifrado para regresiones aisladas
         run: python -m pip install -r requirements-backup.txt
       - name: Comprobar dependencias

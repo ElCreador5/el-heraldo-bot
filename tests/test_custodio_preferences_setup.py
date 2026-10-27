@@ -74,7 +74,7 @@ class CustodioSetupTests(unittest.TestCase):
         self.assertIn("Equilibrada", view.summary())
         self.assertIn("Canales elegibles", view.summary())
         self.assertIn("Desactivados", view.summary())
-        self.assertIn("No activada", view.summary())
+        self.assertIn("Observación pausada", view.summary())
         self.assertEqual(self.db, {})
         self.assertEqual(self.calls, [])
         self.assertIn("Modo Custodio", view.summary())

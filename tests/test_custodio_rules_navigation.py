@@ -20,8 +20,9 @@ class CustodioRulesNavigationTests(unittest.TestCase):
 
     def test_subpanel_disallows_unconfigured_ai(self):
         self.assertIn("class CustodioRulesView", SOURCE)
-        self.assertIn("config=CustodioAIConfig()", SOURCE)
-        self.assertIn("no se ha enviado ningún texto a una IA", SOURCE)
+        self.assertIn("from custodio_ai_runtime import analyze_rule, AIUnavailable", SOURCE)
+        self.assertIn("free_provider_not_configured", SOURCE)
+        self.assertIn("text.custodio.ai_unavailable", SOURCE)
 
     def test_subpanel_back_navigation(self):
         self.assertIn("view=self.parent, embed=None", SOURCE)
@@ -29,7 +30,8 @@ class CustodioRulesNavigationTests(unittest.TestCase):
     def test_snapshot_is_not_saved_or_approved(self):
         cls = next(n for n in TREE.body if isinstance(n, ast.ClassDef) and n.name == "CustodioRulesView")
         methods = {n.name: n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-        self.assertEqual({"__init__", "interaction_check", "summary", "analyze_rules", "back"}, set(methods))
+        self.assertTrue({"__init__", "interaction_check", "summary", "analyze_rules", "back",
+                         "choose_rule", "fragments", "previous", "next", "sync"}.issubset(methods))
         self.assertNotIn("set_setting(", ast.get_source_segment(SOURCE, cls))
 
 

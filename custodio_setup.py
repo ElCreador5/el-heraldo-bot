@@ -1,7 +1,7 @@
-"""Vista de /setup de Modo Custodio, sin clasificador ni sanciones.
+"""Configuración de Custodio y reglas literales, con observación optativa.
 
-El modo Observar todavía no está en funcionamiento: estas preferencias no
-activan supervisión. Todos los cambios requieren una segunda confirmación.
+Las preferencias generales no activan observación ni medidas disciplinarias.
+La autorización por regla y su activación se gestionan en Detección.
 """
 from __future__ import annotations
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
@@ -74,17 +74,17 @@ class CustodioSetupView(discord.ui.View):
         actions_button.callback = self.open_rule_actions
         self.add_item(actions_button)
 
-        for caption, description, placement in (
+        for section, (caption, description, placement) in enumerate((
             (_t('text.2cc32e458872c6'), _t('text.7cb87385497004'), 1),
             (_t('text.3e9bb29a0832fc'), _t('text.8348e279630516'), 3),
             (_t('text.5beed665025da3'), _t('text.5aa657464cd546'), 3),
-        ):
+        )):
             nav = discord.ui.Button(label=caption, style=discord.ButtonStyle.secondary, row=placement)
             @_i18n_context
             async def open_section(interaction: discord.Interaction, text=description, heading=caption):
                 view = CustodioInformationView(self, heading, text)
                 await interaction.response.edit_message(content=view.summary(), view=view, embed=None)
-            nav.callback = open_section
+            nav.callback = self.open_detection if section == 0 else self.open_exemptions if section == 1 else open_section
             self.add_item(nav)
 
         save_button = discord.ui.Button(
@@ -144,9 +144,38 @@ class CustodioSetupView(discord.ui.View):
                 if self._raw_changes() else _t('common.none_sentence')
             ),
             "",
-            _t('text.b74d22c0bda1ce'),
+            self.observation_status(),
         ]
         return _i18n_join("\n", lines)
+
+    @_i18n_context
+    def observation_status(self):
+        import json
+        from custodio_policy import KEY
+        try:
+            raw = self.get_setting(self.guild_id, KEY)
+            enabled = bool(raw and json.loads(raw).get("enabled") is True)
+        except (ValueError, TypeError, AttributeError):
+            enabled = False
+        return _t("text.custodio.runtime_summary", status=str(_t("text.custodio.on" if enabled else "text.custodio.off")))
+
+    async def open_detection(self, interaction):
+        await self.open_observation(interaction, exemptions=False)
+
+    async def open_exemptions(self, interaction):
+        await self.open_observation(interaction, exemptions=True)
+
+    @_i18n_context
+    async def open_observation(self, interaction, *, exemptions):
+        await interaction.response.defer(thinking=False)
+        from custodio_observe_setup import CustodioObserveSetupView
+        try:
+            snapshot = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
+        except (RulesUnavailable, ValueError):
+            await interaction.edit_original_response(content=self.summary() + str(_t('text.dbb413c4fa004b')), view=self, embed=None)
+            return
+        view = CustodioObserveSetupView(self, snapshot, exemptions=exemptions)
+        await interaction.edit_original_response(content=view.summary(), view=view, embed=None)
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -395,10 +424,36 @@ class CustodioRulesView(discord.ui.View):
     """Consulta de reglas obtenidas: IA explícitamente desactivada por defecto."""
 
     @_i18n_context
-    def __init__(self, parent: CustodioSetupView, snapshot):
+    def __init__(self, parent: CustodioSetupView, snapshot, *, index=0, return_view=None):
         super().__init__(timeout=300)
         self.parent = parent
         self.snapshot = snapshot
+        self.guild_id, self.owner_id = parent.guild_id, parent.owner_id
+        self.index, self.part = index, 0
+        self.return_view = return_view
+        selector = discord.ui.Select(placeholder=_t('text.428d2d90458fc5'), row=0,
+            options=[discord.SelectOption(label=_t('text.21c2960681a0f2', p0=str(n), p1=rule[:75]),
+                     value=str(n - 1), description=_t('text.ab827188c50dff'))
+                     for n, rule in enumerate(snapshot.rules, 1)])
+        selector.callback = self.choose_rule
+        self.selector = selector
+        self.add_item(selector)
+        self.sync()
+
+    def fragments(self):
+        text = self.snapshot.rules[self.index]
+        return tuple(text[n:n + 1100] for n in range(0, len(text), 1100))
+
+    def sync(self):
+        for option in self.selector.options:
+            option.default = option.value == str(self.index)
+        self.previous.disabled = self.part == 0
+        self.next.disabled = self.part == len(self.fragments()) - 1
+
+    async def choose_rule(self, interaction):
+        self.index, self.part = int(self.selector.values[0]), 0
+        self.sync()
+        await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -406,41 +461,58 @@ class CustodioRulesView(discord.ui.View):
 
     @_i18n_context
     def summary(self) -> str:
-        rules = _i18n_join("\n", (
-            f"**{index}.** {rule[:600]}" + ("…" if len(rule) > 600 else "")
-            for index, rule in enumerate(self.snapshot.rules, 1)
-        ))
-        # Mensajes de Discord tienen un límite de 2000 caracteres.
-        if len(rules) > 1300:
-            rules = rules[:1290].rsplit("\n", 1)[0] + _t('text.233e756c692ec6')
-        return (
-            _t('text.c040284e65f9e2', p0=f'{self.snapshot.count}', p1=f'{self.snapshot.revision[:12]}')
-            + rules + _t('text.3eaf2f7e758b56')
-        )
+        fragments = self.fragments()
+        return str(_t("text.custodio.rules_page", number=self.index + 1, count=self.snapshot.count,
+                      part=self.part + 1, total=len(fragments), revision=self.snapshot.revision[:12],
+                      quote=fragments[self.part]))
 
-    @discord.ui.button(label=_t('text.ba4c0deba27b34'), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label=_t('text.custodio.previous'), style=discord.ButtonStyle.secondary, row=1)
+    async def previous(self, interaction, button):
+        self.part = max(0, self.part - 1)
+        self.sync()
+        await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
+
+    @discord.ui.button(label=_t('text.custodio.next'), style=discord.ButtonStyle.secondary, row=1)
+    async def next(self, interaction, button):
+        self.part = min(len(self.fragments()) - 1, self.part + 1)
+        self.sync()
+        await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
+
+    @discord.ui.button(label=_t('text.ba4c0deba27b34'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def analyze_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
-        from custodio_ai_config import CustodioAIConfig, prepare_rule_analysis
-        # Nunca se pasa texto a un servicio externo; IA permanece apagada.
-        result = prepare_rule_analysis(
-            config=CustodioAIConfig(), rules_active=True,
-            administrator_requested=True, text=_i18n_join("\n", self.snapshot.rules),
-        )
-        if result["status"] != "manual_review":
-            raise RuntimeError(_t('text.85ab1149c4ef10'))
-        await interaction.response.edit_message(
-            content=self.summary() + _t('text.b7334ef09fe43d'),
-            view=self, embed=None,
-        )
+        if (interaction.user.id != interaction.guild.owner_id
+                and not interaction.user.guild_permissions.administrator):
+            await interaction.response.edit_message(content=self.summary() + "\n\n" + str(_t("text.custodio.ai_admin_only")), view=self, embed=None)
+            return
+        await interaction.response.defer(thinking=False)
+        from custodio_ai_runtime import analyze_rule, AIUnavailable
+        try:
+            fresh = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
+            if fresh.revision != self.snapshot.revision:
+                raise ValueError("stale_rules")
+            proposal = await analyze_rule(fresh, self.index, administrator_requested=True)
+            notice = _t("text.custodio.ai_proposal", number=self.index + 1,
+                        interpretation=proposal["interpretation"],
+                        clarification=str(_t("text.custodio.yes" if proposal["needs_clarification"] else "text.custodio.no")))
+        except AIUnavailable as exc:
+            notice = _t("text.custodio.ai_unavailable" if str(exc) == "free_provider_not_configured"
+                        else "text.custodio.ai_failed")
+        except Exception:
+            notice = _t("text.custodio.ai_failed")
+        await interaction.edit_original_response(content=str(notice), view=self, embed=None)
 
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        self.parent._sync_controls()
+        target = self.return_view or self.parent
+        if hasattr(target, "_sync_controls"):
+            target._sync_controls()
+        else:
+            target.sync()
         await interaction.response.edit_message(
-            content=self.parent.summary(), view=self.parent, embed=None,
+            content=target.summary(), view=target, embed=None,
         )
 
 

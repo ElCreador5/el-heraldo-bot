@@ -16352,9 +16352,10 @@ def moderation_warning_create(
     guild_id: int, user_id: int, reason: str, *,
     duration_minutes: int | None = None, author_id: int | None = None,
     proof: str | None = None, verified_proof: str | None = None,
+    history_ref: str | None = None, policy_ref: str | None = None,
 ) -> tuple[int, int, int]:
     """Inserta WARN respetando límite bajo BEGIN IMMEDIATE, sin borrar historial."""
-    history = moderation_case_message_history(guild_id, user_id)
+    history = history_ref if history_ref is not None else moderation_case_message_history(guild_id, user_id)
     limit = moderation_warning_limit(guild_id)
     conn = db_connect()
     try:
@@ -16380,7 +16381,7 @@ def moderation_warning_create(
             (guild_id, number, user_id, reason[:1000], duration_minutes,
              now.isoformat(), expires.isoformat() if expires else None,
              author_id, (proof or "")[:2000], (verified_proof or "")[:2000],
-             _t('text.f37d15744f63b8'), history),
+             policy_ref if policy_ref is not None else _t('text.f37d15744f63b8'), history),
         )
         conn.commit()
     except Exception:
@@ -16393,7 +16394,7 @@ def moderation_warning_create(
 
 
 @_i18n_context
-def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None) -> int:
+def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: str, *, duration_minutes: int | None = None, author_id: int | None = None, proof: str | None = None, verified_proof: str | None = None, moderator_notes: str | None = None, history_ref: str | None = None) -> int:
     case_type = case_type.upper()
     if case_type not in MODERATION_CASE_TYPES:
         raise ValueError(_t('text.8f83ce22585f48'))
@@ -16408,7 +16409,7 @@ def moderation_case_create(guild_id: int, case_type: str, user_id: int, reason: 
         (guild_id, case_number, case_type, user_id, reason[:1000], duration_minutes, now.isoformat(),
          expires_at.isoformat() if expires_at else None, author_id, (proof or "")[:2000],
          (verified_proof or "")[:2000], (moderator_notes or "")[:2000],
-         moderation_case_message_history(guild_id, user_id)),
+         history_ref if history_ref is not None else moderation_case_message_history(guild_id, user_id)),
     )
     conn.close()
     moderation_case_code(case_number, guild_id)
@@ -19802,8 +19803,13 @@ async def moderation_case_expiry_loop() -> None:
                     except discord.HTTPException:
                         traceback.print_exc()
                         continue  # Sin estado confirmado, mantener expediente abierto.
-                    if (current is not None and heraldo_is_test()
-                            and current.reason and current.reason != row["reason"]):
+                    if (current is None and str(row["moderator_notes"] or "").startswith("custodio:")
+                            and "|pending" in str(row["moderator_notes"])):
+                        continue  # Una petición en vuelo no se da por cumplida ni se repite.
+                    if (current is not None and (
+                            (heraldo_is_test() and current.reason and current.reason != row["reason"])
+                            or (str(row["moderator_notes"] or "").startswith("custodio:")
+                                and current.reason != row["reason"]))):
                         moderation_case_close(
                             guild.id, int(row["case_number"]), closed_by=None,
                             resolution=_t('text.72eaf3b94801cd'),
@@ -26970,6 +26976,11 @@ message_automation_engine = message_automation.install(globals())
 message_components.install(globals())
 import message_editor
 message_editor.install(globals())
+
+import custodio_runtime
+custodio_engine = custodio_runtime.install(globals())
+import custodio_discipline
+custodio_discipline_engine = custodio_discipline.CustodioDiscipline(globals())
 
 # ---------------------------------------------------------------------------
 

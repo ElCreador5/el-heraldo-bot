@@ -4712,8 +4712,8 @@
     "Desativadas"
   ],
   "text.5aa657464cd546": [
-    "Centralized warnings, condemnations and reviews. Disciplinary connections aren't activated yet.",
-    "Advertências centralizadas, condenações e revisões. As ligações disciplinares ainda não estão ativadas."
+    "The five actions are reviewed from each private report. Warn uses Warnings; Temp Ban and Ban use central cases and expiry. Condemnations participates if configured as warning escalation. Automatic sanctions are not enabled.",
+    "As cinco medidas são revisadas em cada relatório privado. Warn usa Advertências; Temp Ban e Ban usam os casos centrais e sua expiração. Condenas participa se configurada como escalonamento de advertências. Não há sanções automáticas ativadas."
   ],
   "text.5ae2b0688bfb86": [
     "{p0} was added as a trap channel.",
@@ -5316,8 +5316,8 @@
     "Erro: O ícone deve ser um URL `http(s)://…` ou uma variável como `{servericon}`."
   ],
   "text.678e2d5eab4062": [
-    "**Response mode:** Observe (no sanctions)\n**Sensitivity:** {p0}\n**Scope:** Eligible and authorized channels\n**Rule change notices:** Disabled\n**Continuous monitoring:** Not enabled\n\nPreferences prepare future monitoring. The bot does not yet classify messages with AI or apply sanctions.",
-    "**Modo de resposta:** Observar (sem sanções)\n**Sensibilidade:** {p0}\n**Escopo:** Canais elegíveis e autorizados\n**Avisos de alterações nas regras:** Desativados\n**Supervisão contínua:** Não ativada\n\nAs preferências preparam a supervisão futura. O bot ainda não classifica mensagens por IA nem aplica sanções."
+    "**Mode:** Observe\n**Saved sensitivity:** {p0}\n**Scope:** Eligible channels\n**Rule change notices:** Disabled",
+    "**Modo:** Observar\n**Sensibilidade salva:** {p0}\n**Escopo:** Canais elegíveis\n**Avisos de alterações de regras:** Desativados"
   ],
   "text.679e80c4ba72df": [
     "Interval outside the allowable range.",
@@ -10018,6 +10018,234 @@
   "text.cffadab7b22ff1": [
     "Trapping channels that catch spam bots.",
     "Canais de armadilhas que capturam bots de spam."
+  ],
+  "text.custodio.action_description": [
+    "Observed action · {part}/{total}",
+    "Ação observada · {part}/{total}"
+  ],
+  "text.custodio.action_failed": [
+    "Discord rejected the action; it was not executed.",
+    "O Discord rejeitou a medida; ela não foi executada."
+  ],
+  "text.custodio.activate": [
+    "Activate",
+    "Ativar"
+  ],
+  "text.custodio.ai_admin_only": [
+    "Only the owner or an administrator may request manual rule interpretation.",
+    "Somente o proprietário ou um administrador pode solicitar a interpretação manual de regras."
+  ],
+  "text.custodio.ai_failed": [
+    "No valid interpretation was obtained. Request administrative clarification; no rules or actions were changed.",
+    "Não foi obtida uma interpretação válida. Solicite esclarecimento administrativo; nenhuma regra ou ação foi alterada."
+  ],
+  "text.custodio.ai_proposal": [
+    "**Proposed interpretation · rule {number}**\n{interpretation}\n\n**Clarification needed:** {clarification}\n\nNo proposal changes rules or enables sanctions.",
+    "**Proposta de interpretação · regra {number}**\n{interpretation}\n\n**Esclarecimento necessário:** {clarification}\n\nNenhuma proposta altera regras ou habilita sanções."
+  ],
+  "text.custodio.ai_unavailable": [
+    "No free provider is configured and verified. Human review is needed; no text has been sent to AI.",
+    "Nenhum provedor gratuito está configurado e verificado. É necessária revisão humana; nenhum texto foi enviado a uma IA."
+  ],
+  "text.custodio.all_rules": [
+    "All rules",
+    "Todas as regras"
+  ],
+  "text.custodio.case_reason": [
+    "Modo Custodio · rule {rule} · incident {reference}",
+    "Modo Custodio · regra {rule} · incidente {reference}"
+  ],
+  "text.custodio.delivery_review": [
+    "The previous delivery needs review. It will not be repeated automatically to prevent duplicates.",
+    "O envio anterior requer revisão. Ele não será repetido automaticamente para evitar duplicações."
+  ],
+  "text.custodio.detector_help": [
+    "Only reports matches; does not sanction or invent rules",
+    "Apenas relata correspondências; não aplica sanções nem inventa regras"
+  ],
+  "text.custodio.excerpt": [
+    "… [excerpt; full text in Server rules]",
+    "… [trecho; texto completo em Regras do servidor]"
+  ],
+  "text.custodio.exempt_channels": [
+    "Channels excluded from this rule or all rules",
+    "Canais excluídos desta regra ou de todas as regras"
+  ],
+  "text.custodio.exempt_roles": [
+    "Exempt roles; owner and moderators are always protected",
+    "Cargos isentos; proprietário e moderadores sempre protegidos"
+  ],
+  "text.custodio.full_rule": [
+    "View full rule",
+    "Ver regra completa"
+  ],
+  "text.custodio.image_observation": [
+    "Observed attachments; SHA-256 fingerprints: {hashes}. Their content is not interpreted.",
+    "Anexos observados; impressões SHA-256: {hashes}. O conteúdo não é interpretado."
+  ],
+  "text.custodio.kind.advertising": [
+    "Advertising with links",
+    "Publicidade com links"
+  ],
+  "text.custodio.kind.coordinated": [
+    "Coordinated patterns",
+    "Padrões coordenados"
+  ],
+  "text.custodio.kind.cross_channel": [
+    "Repetition across channels",
+    "Repetição entre canais"
+  ],
+  "text.custodio.kind.flood": [
+    "Channel flooding",
+    "Inundação do canal"
+  ],
+  "text.custodio.kind.images": [
+    "Identical images",
+    "Imagens idênticas"
+  ],
+  "text.custodio.kind.links": [
+    "Repeated links",
+    "Links repetidos"
+  ],
+  "text.custodio.kind.mentions": [
+    "Mass mentions",
+    "Menções em massa"
+  ],
+  "text.custodio.kind.repeat": [
+    "Repeated identical text",
+    "Texto idêntico repetido"
+  ],
+  "text.custodio.kind.similar_images": [
+    "Similar images",
+    "Imagens semelhantes"
+  ],
+  "text.custodio.kind.similar_text": [
+    "Nearly identical texts",
+    "Textos quase idênticos"
+  ],
+  "text.custodio.measure_confirmed": [
+    "Action confirmed by Discord.",
+    "Medida confirmada pelo Discord."
+  ],
+  "text.custodio.measure_pending": [
+    "Action pending Discord confirmation; execution is not established.",
+    "Medida pendente de confirmação do Discord; a execução não está comprovada."
+  ],
+  "text.custodio.minutes": [
+    "{minutes} minutes",
+    "{minutes} minutos"
+  ],
+  "text.custodio.next": [
+    "Next",
+    "Próxima"
+  ],
+  "text.custodio.no": [
+    "No",
+    "Não"
+  ],
+  "text.custodio.observation_conduct": [
+    "Provisional observation: {kind}. Matches: {count}. Pending review; it does not establish guilt.",
+    "Observação provisória: {kind}. Correspondências: {count}. Pendente de revisão; não comprova culpa."
+  ],
+  "text.custodio.observe_panel": [
+    "**Modo Custodio · Detection and exemptions**\n{status}\n\n**Rule {rule}**\n{quote}\n\n**Detectors:** {kinds}\n**Exempt roles:** {roles}\n**Excluded channels:** {channels}\n**Unsaved changes:** {pending}\n\nSave configures. Activate uses only saved settings. Owner and moderators are exempt. Private and age-restricted spaces require a destination with compatible access and age restrictions. Observations are provisional and do not trigger sanctions.",
+    "**Modo Custodio · Detecção e isenções**\n{status}\n\n**Regra {rule}**\n{quote}\n\n**Detectores:** {kinds}\n**Cargos isentos:** {roles}\n**Canais excluídos:** {channels}\n**Alterações pendentes:** {pending}\n\nSalvar configura. Ativar usa apenas o que foi salvo. Proprietário e moderadores são isentos. Espaços privados e restritos por idade exigem um destino com acesso e restrições etárias compatíveis. Observações são provisórias e não geram sanções."
+  ],
+  "text.custodio.off": [
+    "Observation paused",
+    "Observação pausada"
+  ],
+  "text.custodio.on": [
+    "Observation enabled · reports only",
+    "Observação ativada · apenas relatórios"
+  ],
+  "text.custodio.pause": [
+    "Pause",
+    "Pausar"
+  ],
+  "text.custodio.previous": [
+    "Previous",
+    "Anterior"
+  ],
+  "text.custodio.privacy_mismatch": [
+    "Evidence was not copied: the destination does not preserve the source access or age restriction.",
+    "A evidência não foi copiada: o destino não mantém o acesso privado ou a restrição etária da origem."
+  ],
+  "text.custodio.review": [
+    "Review",
+    "Revisar"
+  ],
+  "text.custodio.review_blocked": [
+    "This report cannot be reviewed: check permissions, complete evidence and current rules. No action was executed.",
+    "Não é possível revisar este relatório: confira permissões, evidência completa e regras vigentes. Nenhuma medida foi executada."
+  ],
+  "text.custodio.review_complete": [
+    "Review confirmed · action: {action} · case: {case}.",
+    "Revisão confirmada · medida: {action} · caso: {case}."
+  ],
+  "text.custodio.review_discarded": [
+    "Review discarded. No action was applied.",
+    "Revisão descartada. Nenhuma medida foi aplicada."
+  ],
+  "text.custodio.review_panel": [
+    "**Administrative review · rule {rule}**\n{quote}\n\n**Proposed action:** {action}\n**Temp Ban duration:** {duration} minutes (only if applicable).\n**Complete verbatim evidence:** {reference}\n\nConfirming certifies that you reviewed the evidence and current rule and authorizes only this action. It does not enable automatic sanctions. Discarding does not sanction.",
+    "**Revisão administrativa · regra {rule}**\n{quote}\n\n**Medida proposta:** {action}\n**Duração do Temp Ban:** {duration} minutos (apenas se aplicável).\n**Evidência literal completa:** {reference}\n\nConfirmar atesta que você revisou a evidência e a regra vigente e autoriza apenas esta medida. Não habilita sanções automáticas. Descartar não aplica sanções."
+  ],
+  "text.custodio.review_uncertain": [
+    "The complete outcome was not confirmed. Review the case before repeating an action; a pending operation is not reexecuted automatically.",
+    "O resultado completo não foi confirmado. Revise o caso antes de repetir uma medida; uma operação pendente não é reexecutada automaticamente."
+  ],
+  "text.custodio.rules_page": [
+    "**Server rules · {number}/{count} · part {part}/{total}**\nRevision: `{revision}`\n\n{quote}\n\nThis is a verbatim copy. Analyses are proposals for administrative review.",
+    "**Regras do servidor · {number}/{count} · parte {part}/{total}**\nRevisão: `{revision}`\n\n{quote}\n\nA transcrição é literal. Análises são propostas para revisão administrativa."
+  ],
+  "text.custodio.runtime_summary": [
+    "**Observation:** {status}. Configure per-rule detectors and exemptions before activating. AI is not used to read messages.",
+    "**Observação:** {status}. Configure detectores por regra e isenções antes de ativar. Não se usa IA para ler mensagens."
+  ],
+  "text.custodio.save_failed": [
+    "Not saved. Check permissions, current rules, private channel and changes in another session. To activate, save at least one detector and enable Message Content.",
+    "Não foi salvo. Confira permissões, regras vigentes, canal privado e alterações de outra sessão. Para ativar, salve um detector e habilite Message Content."
+  ],
+  "text.custodio.saved": [
+    "Changes saved. Automatic sanctions remain disabled.",
+    "Alterações salvas. As sanções automáticas continuam desativadas."
+  ],
+  "text.custodio.scope_help": [
+    "Apply these exemptions to all observation in this server",
+    "Aplica estas isenções a toda a observação neste servidor"
+  ],
+  "text.custodio.select_detector": [
+    "Choose only behaviors expressly prohibited by this rule",
+    "Escolha apenas condutas expressamente proibidas por esta regra"
+  ],
+  "text.custodio.select_scope": [
+    "Choose all rules or one rule to configure exemptions",
+    "Escolha todas as regras ou uma regra para configurar isenções"
+  ],
+  "text.custodio.temp_duration": [
+    "Temp Ban duration; saved with the rule",
+    "Duração do Temp Ban; salva com a regra"
+  ],
+  "text.custodio.temp_help": [
+    "Proposal only; does not enable or execute bans",
+    "Apenas proposta; não habilita nem executa banimentos"
+  ],
+  "text.custodio.warn_notice": [
+    "Please respect this server rule:\n\n{rule}\n\nA warning was recorded after administrative review. If you believe there was a mistake, ask for your case to be reviewed.",
+    "Pedimos que respeite esta regra do servidor:\n\n{rule}\n\nUma advertência foi registrada após revisão administrativa. Se acredita que houve um erro, solicite a revisão do seu caso."
+  ],
+  "text.custodio.warn_title": [
+    "Server rule reminder",
+    "Lembrete de uma regra do servidor"
+  ],
+  "text.custodio.warning_served": [
+    "Warning linked to a completed action; history is preserved.",
+    "Advertência vinculada a uma medida cumprida; o histórico é preservado."
+  ],
+  "text.custodio.yes": [
+    "Yes",
+    "Sim"
   ],
   "text.d02e4a1e58a334": [
     "The request has already been resolved.",

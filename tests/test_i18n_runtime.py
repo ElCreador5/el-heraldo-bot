@@ -123,7 +123,10 @@ class CatalogAndSourceTests(unittest.TestCase):
                 if not isinstance(node, ast.keyword) or not isinstance(node.value, ast.Call):
                     continue
                 value = node.value
-                if not (isinstance(value.func, ast.Name) and value.func.id == '_t') or value.keywords:
+                if (not (isinstance(value.func, ast.Name) and value.func.id == '_t') or value.keywords
+                        or not value.args or not isinstance(value.args[0], ast.Constant)):
+                    # Los selectores con claves dinámicas se verifican al construir
+                    # sus payloads reales en la matriz de componentes de Custodio.
                     continue
                 owner = parents[id(node)]
                 name = ast.unparse(owner.func) if isinstance(owner, ast.Call) else ''

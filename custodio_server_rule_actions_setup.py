@@ -34,13 +34,30 @@ def decode(raw, snapshot: RulesSnapshot):
         pass
     return defaults
 
-def encode(snapshot: RulesSnapshot, choices):
+def encode(snapshot: RulesSnapshot, choices, durations=None):
     if len(choices) != snapshot.count or any(a not in VALID_ACTIONS for a in choices):
         raise ValueError("invalid_rule_actions")
-    return json.dumps({
+    payload = {
         "version": 1, "revision": snapshot.revision,
         "enforcement_enabled": False, "actions": list(choices),
-    }, separators=(",", ":"), ensure_ascii=False)
+    }
+    if durations is not None:
+        if len(durations) != snapshot.count or any(type(n) is not int or not 1 <= n <= 43200 for n in durations):
+            raise ValueError("invalid_temp_ban_duration")
+        payload["temp_ban_minutes"] = list(durations)
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+
+def decode_durations(raw, snapshot):
+    try:
+        data = json.loads(raw)
+        values = data.get("temp_ban_minutes")
+        if (data.get("revision") == snapshot.revision and type(values) is list
+                and len(values) == snapshot.count and all(type(n) is int and 1 <= n <= 43200 for n in values)):
+            return values.copy()
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return [60] * snapshot.count
 
 class CustodioServerRuleActionsView(discord.ui.View):
     """Acciones de las reglas oficiales, nunca de plantillas genéricas."""
@@ -53,6 +70,8 @@ class CustodioServerRuleActionsView(discord.ui.View):
         self.original = parent.get_setting(parent.guild_id, SETTING_KEY)
         self.saved = decode(self.original, snapshot)
         self.pending = self.saved.copy()
+        self.saved_durations = decode_durations(self.original, snapshot)
+        self.durations = self.saved_durations.copy()
         self.index = 0
         self._saving = False
 
@@ -81,17 +100,26 @@ class CustodioServerRuleActionsView(discord.ui.View):
         self.actions_select.callback = self.select_action
         self.add_item(self.actions_select)
 
+        self.duration_select = discord.ui.Select(placeholder=_t("text.custodio.temp_duration"), row=2,
+            options=[discord.SelectOption(label=_t("text.custodio.minutes", minutes=n), value=str(n),
+                       description=_t("text.custodio.temp_help")) for n in (15, 60, 360, 1440, 10080, 43200)])
+        self.duration_select.callback = self.select_duration
+        self.add_item(self.duration_select)
+
         self.save_button = discord.ui.Button(
-            label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=2)
+            label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=3)
         self.save_button.callback = self.save
         self.add_item(self.save_button)
         self.discard_button = discord.ui.Button(
-            label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=2)
+            label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=3)
         self.discard_button.callback = self.discard
         self.add_item(self.discard_button)
-        back = discord.ui.Button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
+        back = discord.ui.Button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=3)
         back.callback = self.back
         self.add_item(back)
+        full = discord.ui.Button(label=_t("text.custodio.full_rule"), style=discord.ButtonStyle.secondary, row=4)
+        full.callback = self.full_rule
+        self.add_item(full)
         self.sync()
 
     @_i18n_context
@@ -105,18 +133,31 @@ class CustodioServerRuleActionsView(discord.ui.View):
             option.default = option.value == str(self.index)
         for option in self.actions_select.options:
             option.default = option.value == self.pending[self.index]
-        dirty = self.pending != self.saved
+        for option in self.duration_select.options:
+            option.default = option.value == str(self.durations[self.index])
+        self.duration_select.disabled = self.pending[self.index] != "temp_ban"
+        dirty = self.pending != self.saved or self.durations != self.saved_durations
         self.save_button.disabled = not dirty or self._saving
         self.discard_button.disabled = not dirty or self._saving
 
     @_i18n_context
     def summary(self):
         selected = self.snapshot.rules[self.index]
-        selected = selected[:1100] + ("…" if len(selected) > 1100 else "")
+        selected = selected[:1100] + (str(_t("text.custodio.excerpt")) if len(selected) > 1100 else "")
         labels = dict((value, label) for value, label, _ in ACTIONS)
         return (
             _t('text.cdf37bc5779ea5', p0=f'{self.snapshot.count}', p1=f'{self.snapshot.revision[:12]}', p2=f'{self.index + 1}', p3=f'{selected}', p4=f'{labels[self.pending[self.index]]}', p5=f'{sum((a != b for a, b in zip(self.pending, self.saved)))}')
-        )
+        ) + ("\n" + str(_t("text.custodio.minutes", minutes=self.durations[self.index])) if self.pending[self.index] == "temp_ban" else "")
+
+    async def full_rule(self, interaction):
+        from custodio_setup import CustodioRulesView
+        view = CustodioRulesView(self.parent, self.snapshot, index=self.index, return_view=self)
+        await interaction.response.edit_message(content=view.summary(), view=view, embed=None)
+
+    async def select_duration(self, interaction):
+        self.durations[self.index] = int(self.duration_select.values[0])
+        self.sync()
+        await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     @_i18n_context
     async def select_rule(self, interaction):
@@ -148,7 +189,7 @@ class CustodioServerRuleActionsView(discord.ui.View):
             if fresh.revision != self.snapshot.revision:
                 notice = _t('text.e5474b8245453f')
             else:
-                proposal = encode(self.snapshot, self.pending)
+                proposal = encode(self.snapshot, self.pending, self.durations)
                 ok = self.parent.save_atomic(
                     self.parent.guild_id,
                     {SETTING_KEY: self.original},
@@ -157,6 +198,7 @@ class CustodioServerRuleActionsView(discord.ui.View):
                 if ok:
                     self.original = proposal
                     self.saved = self.pending.copy()
+                    self.saved_durations = self.durations.copy()
                     notice = _t('text.5a21fcce6712fa')
                 else:
                     notice = _t('text.a58bbaf3c14428')
@@ -169,13 +211,17 @@ class CustodioServerRuleActionsView(discord.ui.View):
 
     @_i18n_context
     async def discard(self, interaction):
+        self.original = self.parent.get_setting(self.parent.guild_id, SETTING_KEY)
+        self.saved = decode(self.original, self.snapshot)
+        self.saved_durations = decode_durations(self.original, self.snapshot)
         self.pending = self.saved.copy()
+        self.durations = self.saved_durations.copy()
         self.sync()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     @_i18n_context
     async def back(self, interaction):
-        if self.pending != self.saved:
+        if self.pending != self.saved or self.durations != self.saved_durations:
             await interaction.response.edit_message(
                 content=self.summary() + _t('text.c15d7d491d22ac'),
                 view=self, embed=None,
