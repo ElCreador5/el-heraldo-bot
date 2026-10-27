@@ -17,6 +17,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from custodio_ai_runtime import MODEL
 from custodio_rule_analysis import analyze,BUDGET
 from custodio_source import load_server_rules
+from custodio_core import RulesUnavailable
 from tools.custodio_rules_probe import GUILD_ID,API_ROOT
 
 PROJECT='747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61'
@@ -71,11 +72,19 @@ async def probe(*,loader=load_server_rules,context_loader=context,analyzer=analy
             'input':'authentic_discord_server_rules','model':MODEL,'rules':snapshot.count,
             'revision':snapshot.revision,'states':dict(counts),
             'requests_reserved':monitor.requests,'invalid_or_unavailable_rules':invalid,
+            'limitations':dict(Counter(value for rule in plan.rules for value in rule.limitations)),
             'saved':False,'enabled_changed':False,'discord_interactive':False,
             'elapsed_ms':round((time.monotonic()-start)*1000)},success
     except Exception as exc:
+        diagnostic={}
+        if isinstance(exc,RulesUnavailable):
+            safe={'guild_unavailable','screening_disabled_or_unknown','verification_unavailable',
+                  'api_response_too_large','unexpected_verification_payload','invalid_api_json',
+                  'features_unknown','screening_disabled','invalid_rule_content','rules_empty','too_many_rules'}
+            diagnostic={'reason':exc.reason if exc.reason in safe else 'source_unavailable',
+                        'http_status':exc.http_status}
         return {'status':'ANALYSIS_UNAVAILABLE','exception':type(exc).__name__,
-                'elapsed_ms':round((time.monotonic()-start)*1000)},False
+                'elapsed_ms':round((time.monotonic()-start)*1000),**diagnostic},False
 
 
 def main():

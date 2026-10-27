@@ -87,3 +87,11 @@ Recorrido exacto al disponer de sesión operativa: **Heraldo's Lab → `/setup` 
 Para observar eventos reales hace falta un miembro voluntario sin permisos/roles exentos: el propietario y moderadores están protegidos. Verificar mensajes sintéticos autorizados, reporte privado provisional, pausa, borrado del original y conservación de copia. Warn/Temp Ban reales requieren participante voluntario y confirmación individual; no se ejecutaron sanciones sobre miembros reales.
 
 Pendientes: aceptación interactiva autenticada, observaciones con participante voluntario, medidas controladas y capacidad real bajo carga de Railway. Las 49 categorías humanas y eventos no implementados (DM, reacciones ajenas, hilos/foros y evasión por ediciones) siguen limitados. Rollback: volver a fijar el worker a d99b298 sin borrar `/data`; los campos nuevos son metadatos ignorados por la versión anterior. No se modifica main, producción ni H-03 para revertir.
+
+## Incidencia real de lectura antes del arranque nuevo
+
+El primer intento de desplegar b843009, deployment `0616a0fa-433c-4146-84c8-9732dceadecc`, se detuvo en pre-deploy: `ANALYSIS_UNAVAILABLE`, `RulesUnavailable`, 237 ms. No hubo análisis Groq de ese reglamento, guardado ni activación. El intento no sustituye al deployment anterior validado.
+
+Se corrige una deficiencia concreta del adaptador HTTP de Server Rules: una lectura única `read(n)` puede devolver solo el primer fragmento. El lector acumula ahora fragmentos completos, incluidos caracteres multibyte, hasta 64 KiB; mantiene límite, timeout, validación JSON y rechazo de redirecciones. Dos regresiones nuevas ejecutan el adaptador real con transporte fragmentado, cuerpo malformado y exceso de tamaño. La sonda añade motivo técnico/HTTP seguro y recuentos de limitaciones sin publicar reglas o credenciales. El motivo preciso del fallo remoto se confirmará con esta nueva instrumentación; no se presupone un problema de credenciales.
+
+Validación de la corrección: 46 pruebas focalizadas correctas. El commit y el reintento se registrarán tras verificar publicación, CI y estado real.

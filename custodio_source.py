@@ -64,9 +64,11 @@ async def load_server_rules(
                 async with session.get(API_ROOT + path, allow_redirects=False) as response:
                     if response.status != 200:
                         return response.status, {}
-                    raw = await response.content.read(MAX_RESPONSE_BYTES + 1)
-                    if len(raw) > MAX_RESPONSE_BYTES:
-                        raise RulesUnavailable("api_response_too_large")
+                    raw = bytearray()
+                    async for chunk in response.content.iter_chunked(4096):
+                        raw.extend(chunk)
+                        if len(raw) > MAX_RESPONSE_BYTES:
+                            raise RulesUnavailable("api_response_too_large")
                     payload = json.loads(raw)
                     if not isinstance(payload, dict):
                         raise RulesUnavailable("unexpected_verification_payload")

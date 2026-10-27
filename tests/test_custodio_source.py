@@ -1,11 +1,49 @@
 """Pruebas aisladas del lector real de Server Rules, sin credenciales ni red."""
 import unittest
+import json
+from types import SimpleNamespace as NS
+from unittest.mock import patch
 
 from custodio_core import RulesUnavailable
 from custodio_source import load_server_rules
 
 
 class CustodioSourceTests(unittest.IsolatedAsyncioTestCase):
+    def session(self,bodies):
+        class Body:
+            def __init__(self,raw):self.raw=raw
+            async def iter_chunked(self,size):
+                for start in range(0,len(self.raw),7):yield self.raw[start:start+7]
+            async def read(self,*args):raise AssertionError('single read can return a partial body')
+        class Response:
+            status=200
+            def __init__(self,raw):self.content=Body(raw)
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):return False
+        class Session:
+            def __init__(self,*args,**kwargs):self.calls=[]
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):return False
+            def get(self,url,**kwargs):
+                self.calls.append((url,kwargs))
+                return Response(bodies[len(self.calls)-1])
+        return Session
+
+    async def test_real_http_adapter_accumulates_complete_fragmented_multibyte_rules(self):
+        rule='No repetir mensajes. «ñ» '+ 'Texto legítimo. '*70
+        bodies=[json.dumps({'features':['MEMBER_VERIFICATION_GATE_ENABLED'],'ignored':'x'*12000}).encode(),
+                json.dumps({'form_fields':[{'field_type':'TERMS','values':[rule]}]},ensure_ascii=False).encode()]
+        with patch('custodio_source.aiohttp.ClientSession',self.session(bodies)):
+            result=await load_server_rules(1234,'synthetic-secret')
+        self.assertEqual(result.rules,(rule,))
+
+    async def test_real_http_adapter_rejects_oversized_or_broken_body_before_interpreting_rules(self):
+        for raw,reason in [(b'x'*65537,'api_response_too_large'),(b'{broken','invalid_api_json')]:
+            with patch('custodio_source.aiohttp.ClientSession',self.session([raw])):
+                with self.assertRaises(RulesUnavailable) as error:
+                    await load_server_rules(1234,'synthetic-secret')
+            self.assertEqual(error.exception.reason,reason)
+
     async def test_reads_official_terms_through_exactly_two_get_paths(self):
         paths = []
         async def fake_read(path):
