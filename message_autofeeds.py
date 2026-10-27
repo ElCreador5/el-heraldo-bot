@@ -466,10 +466,11 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
 
 
 class ActionConfirm(discord.ui.View):
-    def __init__(self, host, job, action, channel_id=None):
+    def __init__(self, host, job, action, channel_id=None, *, from_setup=False):
         super().__init__(timeout=180)
         self.host, self.job, self.action = host, job, action
         self.channel_id = channel_id
+        self.from_setup = from_setup
         self.owner_id, self.guild_id = job["author"], job["guild"]
         self.finished = False
         self.snapshot = host["guild_config_get"](self.guild_id, CONFIG_KEY)
@@ -516,15 +517,27 @@ class ActionConfirm(discord.ui.View):
             return await respond_error(interaction, ("changed" if str(exc) == "conflict" else str(exc)) if str(exc) in ("missing", "conflict") else "invalid")
         self.finished = True
         self.stop()
-        await interaction.response.edit_message(
-            content=tr("removed") if self.action == "eliminar" else tr("saved"), view=None)
+        if self.from_setup:
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(self.host, self.guild_id, interaction.user.id)
+            await interaction.response.edit_message(
+                content=(tr("removed") if self.action == "eliminar" else tr("saved")) + "\n\n" + content,
+                embed=None, view=view)
+        else:
+            await interaction.response.edit_message(
+                content=tr("removed") if self.action == "eliminar" else tr("saved"), view=None)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
     @guild_context
     async def cancel(self, interaction, button):
         self.finished = True
         self.stop()
-        await interaction.response.edit_message(content=tr("discarded"), view=None)
+        if self.from_setup:
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(self.host, self.guild_id, interaction.user.id)
+            await interaction.response.edit_message(content=content, embed=None, view=view)
+        else:
+            await interaction.response.edit_message(content=tr("discarded"), view=None)
 
 
 def set_paused(host, guild_id, job_id, actor, pause):
@@ -614,7 +627,10 @@ class ManageView(discord.ui.View):
             return await respond_error(interaction, "invalid")
         button.label = tr("resume") if paused else tr("pause")
         button.style = discord.ButtonStyle.success if paused else discord.ButtonStyle.danger
-        await interaction.response.edit_message(content=tr("paused" if paused else "resumed"), view=self)
+        current = self.selected_job(interaction.user)
+        await interaction.response.edit_message(
+            content=tr("paused" if paused else "resumed") + "\n\n" + show_job(current),
+            view=self)
 
     @discord.ui.button(label="Silenciar", style=discord.ButtonStyle.primary, row=1)
     @guild_context
@@ -622,7 +638,8 @@ class ManageView(discord.ui.View):
         job = self.selected_job(interaction.user)
         if job is None:
             return await respond_error(interaction, "missing")
-        view = ActionConfirm(self.host, {**job, "guild": self.guild_id}, "silenciar")
+        view = ActionConfirm(self.host, {**job, "guild": self.guild_id}, "silenciar",
+                             from_setup=self.from_setup)
         await interaction.response.edit_message(content=tr("preview") + "\n" + show_job(job), view=view)
 
     @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
@@ -631,7 +648,8 @@ class ManageView(discord.ui.View):
         job = self.selected_job(interaction.user)
         if job is None:
             return await respond_error(interaction, "missing")
-        view = ActionConfirm(self.host, {**job, "guild": self.guild_id}, "eliminar")
+        view = ActionConfirm(self.host, {**job, "guild": self.guild_id}, "eliminar",
+                             from_setup=self.from_setup)
         await interaction.response.edit_message(content=tr("preview") + "\n" + show_job(job), view=view)
 
 
