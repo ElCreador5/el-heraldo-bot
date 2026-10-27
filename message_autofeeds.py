@@ -421,7 +421,7 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
         self.template, self.job = template, job
         self.snapshot = host["guild_config_get"](guild_id, CONFIG_KEY) if job else None
         self.message = discord.ui.TextInput(label="Mensaje", style=discord.TextStyle.paragraph,
-                                            required=not bool(template), max_length=1900,
+                                            required=not bool(template or (job or {}).get("embed")), max_length=1900,
                                             default=(job or {}).get("text", ""))
         self.date = discord.ui.TextInput(label="Fecha y hora local (AAAA-MM-DD HH:MM)",
                                          placeholder="2026-10-30 18:00", max_length=24,
@@ -445,7 +445,7 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
                 if self.repeat == "intervalo":
                     interval_seconds(str(self.interval))
                 text = str(self.message).strip()
-                if not text and not self.template:
+                if not text and not self.template and not (self.job or {}).get("embed"):
                     raise ValueError("content")
                 job = {
                     "id": self.job["id"] if self.job else uuid.uuid4().hex[:12],
@@ -454,6 +454,8 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
                     "repeat": self.repeat, "interval": str(self.interval).strip() if self.repeat == "intervalo" else "",
                     "text": text, "template": self.template, "role": self.role_id,
                     "autofeed": True, "paused": (self.job or {}).get("paused", False),
+                    "embed": (self.job or {}).get("embed"),
+                    "repeat_parts": (self.job or {}).get("repeat_parts") if self.repeat == "custom" else None,
                     "requester": interaction.user.id,
                 }
             except ValueError as exc:
