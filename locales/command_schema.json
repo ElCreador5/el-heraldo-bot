@@ -966,5 +966,65 @@
   "editar_plantilla.description": {
     "key": "command.cb3234ec1a480fb4",
     "source": "Abre el editor visual de texto, embeds, campos e imágenes."
+  },
+  "programar.description": {
+    "key": "autofeed.command.root",
+    "source": "Programar y administrar publicaciones."
+  },
+  "programar.crear.description": {
+    "key": "autofeed.command.create",
+    "source": "Programar texto o una plantilla con vista previa."
+  },
+  "programar.crear.frecuencia.choice.4f32a84368e9": {
+    "key": "autofeed.choice.once",
+    "source": "Una vez"
+  },
+  "programar.crear.frecuencia.choice.0fd40abf5464": {
+    "key": "autofeed.choice.daily",
+    "source": "Diaria"
+  },
+  "programar.crear.frecuencia.choice.b0cae07d63d1": {
+    "key": "autofeed.choice.weekly",
+    "source": "Semanal"
+  },
+  "programar.crear.frecuencia.choice.9e19c53d9ea8": {
+    "key": "autofeed.choice.monthly",
+    "source": "Mensual"
+  },
+  "programar.crear.frecuencia.choice.8f2c8f7b14b0": {
+    "key": "autofeed.choice.interval",
+    "source": "Por intervalo"
+  },
+  "programar.listar.description": {
+    "key": "autofeed.command.list",
+    "source": "Consultar y administrar las publicaciones programadas."
+  },
+  "programar.editar.description": {
+    "key": "autofeed.command.edit",
+    "source": "Editar el contenido y horario de una programación."
+  },
+  "programar.pausar.description": {
+    "key": "autofeed.command.pause",
+    "source": "Detener temporalmente una programación."
+  },
+  "programar.reanudar.description": {
+    "key": "autofeed.command.resume",
+    "source": "Reactivar una programación pausada."
+  },
+  "programar.silenciar.description": {
+    "key": "autofeed.command.silence",
+    "source": "Retirar la mención de rol sin pausar publicaciones."
+  },
+  "programar.mover.description": {
+    "key": "autofeed.command.move",
+    "source": "Cambiar el canal de destino después de guardar."
+  },
+  "programar.eliminar.description": {
+    "key": "autofeed.command.delete",
+    "source": "Eliminar una programación previa confirmación."
+  },
+  "programar.configurar.description": {
+    "key": "autofeed.command.config",
+    "source": "Configurar canales y roles autorizados."
   }
 }
