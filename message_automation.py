@@ -253,12 +253,13 @@ class ScheduledMessages:
                 role = guild.get_role(job['role']) if job.get('role') else None
                 if job.get('role') and (role is None or not role.mentionable):
                     raise ValueError('Rol de mención no disponible.')
+                from message_autofeeds import referenced_mentions
+                allowed_roles = referenced_mentions(guild, job)
                 if role:
                     payload = {**payload,
-                               'content': ((payload.get('content') or '') + '\n' + role.mention).strip(),
-                               'allowed_mentions': discord.AllowedMentions(everyone=False, users=False, roles=[role])}
-                else:
-                    payload = {**payload, 'allowed_mentions': discord.AllowedMentions.none()}
+                               'content': ((payload.get('content') or '') + '\n' + role.mention).strip()}
+                payload = {**payload, 'allowed_mentions': discord.AllowedMentions(
+                    everyone=False, users=False, roles=allowed_roles)}
             if not any(x['id'] == job['id'] for x in self.jobs(guild.id, config_key)):
                 self.finish(guild.id, job, 'cancelled')
                 return
