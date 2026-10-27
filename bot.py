@@ -26966,6 +26966,14 @@ class HeraldoMessagesView(discord.ui.View):
             text = _t('text.d81d9ca94206a7')
         await interaction.response.send_message(text, ephemeral=True)
 
+    @discord.ui.button(label="Programaciones", style=discord.ButtonStyle.primary, row=2)
+    @_i18n_context
+    async def scheduled_messages(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        from message_autofeeds import PolicyView
+        import message_autofeeds
+        view = PolicyView(globals(), self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view.summary(), view=view)
+
     @discord.ui.button(label=_t('text.aeccae342e4bd0'), style=discord.ButtonStyle.danger, row=2)
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
