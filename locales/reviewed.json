@@ -11,6 +11,70 @@
     "Denylist",
     "Lista de bloqueios"
   ],
+  "autofeed.choice.daily": [
+    "Daily",
+    "Diária"
+  ],
+  "autofeed.choice.interval": [
+    "At intervals",
+    "Por intervalo"
+  ],
+  "autofeed.choice.monthly": [
+    "Monthly",
+    "Mensal"
+  ],
+  "autofeed.choice.once": [
+    "Once",
+    "Uma vez"
+  ],
+  "autofeed.choice.weekly": [
+    "Weekly",
+    "Semanal"
+  ],
+  "autofeed.command.config": [
+    "Configure allowed channels and roles.",
+    "Configurar canais e cargos permitidos."
+  ],
+  "autofeed.command.create": [
+    "Schedule text or an existing template with a preview.",
+    "Programar texto ou um modelo existente com prévia."
+  ],
+  "autofeed.command.delete": [
+    "Delete a schedule after confirmation.",
+    "Excluir uma programação após confirmação."
+  ],
+  "autofeed.command.edit": [
+    "Edit a schedule's content and time.",
+    "Editar o conteúdo e horário de uma programação."
+  ],
+  "autofeed.command.list": [
+    "View and manage scheduled posts.",
+    "Consultar e gerenciar publicações programadas."
+  ],
+  "autofeed.command.move": [
+    "Change the destination channel after saving.",
+    "Alterar o canal de destino após salvar."
+  ],
+  "autofeed.command.pause": [
+    "Temporarily pause a schedule.",
+    "Pausar temporariamente uma programação."
+  ],
+  "autofeed.command.resume": [
+    "Resume a paused schedule.",
+    "Retomar uma programação pausada."
+  ],
+  "autofeed.command.root": [
+    "Schedule and manage posts.",
+    "Programar e gerenciar publicações."
+  ],
+  "autofeed.command.silence": [
+    "Remove role pings without stopping posts.",
+    "Remover menções a cargos sem pausar publicações."
+  ],
+  "autofeed.ui.schedule_btn": [
+    "Schedules",
+    "Programações"
+  ],
   "channel.purpose.questions": [
     "Questions",
     "Dúvidas"
@@ -10999,6 +11063,10 @@
     "Changes saved. Automatic sanctions remain disabled.",
     "Alterações salvas. As sanções automáticas continuam desativadas."
   ],
+  "text.custodio.scope_help": [
+    "Apply these exemptions to all observation in this server",
+    "Aplica estas isenções a toda a observação neste servidor"
+  ],
   "text.custodio.scope.all": [
     "All nonexempt channels",
     "Todos os canais não isentos"
@@ -11014,10 +11082,6 @@
   "text.custodio.scope.outside": [
     "Only outside the listed authorized channels",
     "Somente fora dos canais autorizados indicados"
-  ],
-  "text.custodio.scope_help": [
-    "Apply these exemptions to all observation in this server",
-    "Aplica estas isenções a toda a observação neste servidor"
   ],
   "text.custodio.select_detector": [
     "Choose only behaviors expressly prohibited by this rule",
