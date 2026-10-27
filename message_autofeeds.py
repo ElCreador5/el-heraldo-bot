@@ -257,6 +257,7 @@ class DraftConfirm(discord.ui.View):
         super().__init__(timeout=300)
         self.host, self.job, self.prior = host, job, prior
         self.owner_id = job["requester"]
+        self.save.label, self.discard.label = tr("save"), tr("discard")
         self.guild_id = job["guild"]
         self.done = False
 
@@ -375,6 +376,7 @@ class ActionConfirm(discord.ui.View):
         self.snapshot = host["guild_config_get"](self.guild_id, CONFIG_KEY)
         self.confirm.style = discord.ButtonStyle.danger if action == "eliminar" else discord.ButtonStyle.success
         self.confirm.label = "Eliminar" if action == "eliminar" else tr("save")
+        self.cancel.label = tr("discard")
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -536,6 +538,7 @@ class PolicyView(discord.ui.View):
         self.roles.callback = self.pick_roles
         self.add_item(self.roles)
         self.activate.label = "Pausar" if self.current["enabled"] else "Activar"
+        self.save.label, self.discard.label = tr("save"), tr("discard")
         self.activate.style = discord.ButtonStyle.danger if self.current["enabled"] else discord.ButtonStyle.success
 
     def summary(self):
@@ -595,6 +598,16 @@ class PolicyView(discord.ui.View):
         button.label = "Pausar" if current["enabled"] else "Activar"
         button.style = discord.ButtonStyle.danger if current["enabled"] else discord.ButtonStyle.success
         await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @guild_context
+    async def back(self, interaction, button):
+        if "HeraldoMessagesView" in self.host:
+            parent = self.host["HeraldoMessagesView"](self.guild_id, self.viewer_id)
+            await interaction.response.edit_message(
+                content=self.host["heraldo_messages_command_content"](), view=parent)
+        else:
+            await interaction.response.edit_message(content=tr("discarded"), view=None)
 
 
 def install(host):
