@@ -619,6 +619,7 @@ def install(host):
         app_commands.Choice(name="Una vez", value="ninguna"),
         app_commands.Choice(name="Diaria", value="diaria"),
         app_commands.Choice(name="Semanal", value="semanal"),
+        app_commands.Choice(name="Mensual", value="mensual"),
         app_commands.Choice(name="Por intervalo", value="intervalo")])
     @guild_context
     async def crear(interaction: discord.Interaction, canal: discord.TextChannel,
