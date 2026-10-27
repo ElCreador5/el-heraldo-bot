@@ -1,3 +1,9 @@
+## 2026-10-27 — Revalidación de la primera fase de idiomas
+
+Base remota comprobada: `Pruebas@26a496dbb78d7af74fdb1ede21af7ca6a4eb9205`; worker de Lab en `8d82172ed5eb41efa146f2346d982c328c9cb770` (deployment `b7c68d40-9d48-4dbb-a47f-69d3921a4795`, SUCCESS). Se ajusta el aviso parcial exactamente al encargo vigente: «Other bot features may still appear in Spanish. In development.» y «Outras funções do bot ainda podem aparecer em espanhol. Em desenvolvimento.». Ambos idiomas siguen disponibles; no se cambia el guardado, SQLite ni la configuración H-03.
+
+Validación nueva ejecutada en Linux/Python 3.12/discord.py 2.7.1: 44 pruebas específicas de idioma correctas; auditoría con 3107 claves usadas y cero literales pendientes; suite general de 952 pruebas (950 correctas, dos omisiones históricas) y 39 de raíz correctas. `pip check` correcto. Clics reales de aceptación: PENDIENTES, el navegador conectado no está disponible y Discord muestra inicio de sesión en el navegador de pruebas. No se recuperaron credenciales ni se simularon interacciones de usuario con tokens. La publicación de esta revisión y su recibo de arranque se documentarán tras comprobar SUCCESS. Modo Custodio conserva su estado previo mientras se cierra esta primera fase; no se han activado observación ni sanciones.
+
 ## 2026-10-25 — Catálogo revisado y ayuda nativa por servidor
 
 Implementación i18n transversal: 3118 claves revisadas, cero pendientes editoriales; 3107 referencias reales y 242 campos nativos de 51 comandos. Se completan mensajes largos, español residual, perfiles antirraid, unidades/entradas localizadas y plurales. Los nombres de recursos para búsqueda/creación quedan separados de sus etiquetas traducidas. La ayuda nativa usa copias por servidor; Guardar idioma actualiza solo ese servidor y permite reintentar fallos en el mismo panel. IDs, permisos, valores, nombres reales, textos personalizados, SQL y footer Lab conservados.
