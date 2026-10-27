@@ -205,14 +205,49 @@ def can_manage(member, job):
     return member.guild_permissions.manage_guild or job.get("author") == member.id
 
 
+def referenced_mentions(guild, job):
+    """Resolve only roles/channels belonging to this guild, with a hard ping limit.
+
+    Channel mentions display as links but do not generate notifications. Role
+    references in embed text are visible; only roles in message content can ping.
+    """
+    body = (job.get("text") or "")
+    visual = job.get("embed") or {}
+    display = body + "\n" + (visual.get("description") or "") + "\n" + (visual.get("title") or "")
+    role_ids = {int(value) for value in re.findall(r"<@&(\d{1,20})>", display)}
+    channel_ids = {int(value) for value in re.findall(r"<#(\d{1,20})>", display)}
+    explicit = job.get("role")
+    if explicit:
+        role_ids.add(int(explicit))
+    if len(role_ids) > 5 or len(channel_ids) > 15:
+        raise ValueError("invalid")
+    for channel_id in channel_ids:
+        if guild.get_channel(channel_id) is None:
+            raise ValueError("invalid")
+    roles = {}
+    for role_id in role_ids:
+        role = guild.get_role(role_id)
+        if role is None or not role.mentionable:
+            raise ValueError("role")
+        roles[role_id] = role
+    # Embed text displays mentions but cannot fire a notification; only
+    # content-level tokens and the optional dedicated role produce role pings.
+    ping_ids = {int(value) for value in re.findall(r"<@&(\d{1,20})>", body)}
+    if explicit:
+        ping_ids.add(int(explicit))
+    return [roles[role_id] for role_id in sorted(ping_ids)]
+
+
 def can_deliver(host, guild, job, member, channel):
     if job.get("autofeed") is not True:
         return member.guild_permissions.manage_guild
     if not can_create(host, member, channel):
         return False
-    rid = job.get("role")
-    role = guild.get_role(rid) if rid else None
-    return not rid or (role is not None and role.mentionable)
+    try:
+        referenced_mentions(guild, job)
+    except (ValueError, TypeError):
+        return False
+    return True
 
 
 def get_jobs(host, guild_id):
@@ -390,6 +425,10 @@ class DraftConfirm(discord.ui.View):
         if not isinstance(channel, discord.TextChannel) or not is_ready(interaction, self.host, channel, role):
             return await respond_error(interaction, "denied")
         if job.get("role") and role is None:
+            return await respond_error(interaction, "role")
+        try:
+            referenced_mentions(guild, job)
+        except ValueError:
             return await respond_error(interaction, "role")
         if not job.get("text") and not job.get("embed") and not any(
             item["name"] == job.get("template") for item in self.host["heraldo_template_list"](guild.id)
