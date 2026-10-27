@@ -254,6 +254,41 @@ def atomic_change(host, guild_id, transform, expected=None):
         conn.close()
 
 
+
+
+def persist_schedule(host, guild_id, actor, job, *, snapshot=None, editing=False):
+    """Save both /programar and /setup drafts atomically, without duplicating rows."""
+    def apply(jobs, conn):
+        if editing:
+            original = next((old for old in jobs if old.get("id") == job["id"]), None)
+            if not original or not can_manage(actor, original):
+                raise ValueError("missing")
+            if original.get("autofeed") is not True:
+                raise ValueError("missing")
+            row = conn.execute(
+                "SELECT status FROM message_schedule_state WHERE guild_id=? AND job_id=?",
+                (guild_id, job["id"])).fetchone()
+            if row and row[0] == "sending":
+                raise ValueError("conflict")
+            jobs = [{k: v for k, v in job.items() if k not in ("guild", "requester")}
+                    if old.get("id") == job["id"] else old for old in jobs]
+            conn.execute(
+                "UPDATE message_schedule_state SET status=?,next_run=?,detail=NULL "
+                "WHERE guild_id=? AND job_id=?",
+                ("paused" if job.get("paused") else "pending",
+                 job["start"], guild_id, job["id"]))
+        else:
+            if any(old.get("id") == job["id"] for old in jobs):
+                raise ValueError("conflict")
+            limit = (MAX_SERVER if actor.guild_permissions.manage_guild
+                     else policy(host, guild_id)["max_per_member"])
+            if sum(old.get("author") == job["author"] for old in jobs) >= limit:
+                raise ValueError("quota")
+            jobs.append({k: v for k, v in job.items()
+                         if k not in ("guild", "requester")})
+        return jobs, job["id"]
+    return atomic_change(host, guild_id, apply, expected=snapshot)
+
 def start_from_form(value, zone):
     try:
         local = datetime.fromisoformat(value.strip().replace(" ", "T"))
@@ -288,6 +323,9 @@ def show_job(job, *, detail=True):
     frequency = job.get("repeat", "ninguna")
     if frequency == "intervalo":
         frequency += " · " + job.get("interval", "")
+    if frequency == "custom":
+        parts = job.get("repeat_parts") or {}
+        frequency += " · " + ", ".join(f"{value} {key}" for key, value in parts.items() if value)
     when = job.get("start", "")
     try:
         when = f"<t:{int(datetime.fromisoformat(when).timestamp())}:F>"
@@ -297,7 +335,8 @@ def show_job(job, *, detail=True):
              f"{tr('frequency_label')}: {frequency}", f"{tr('start_label')}: {when}",
              f"{tr('mention_label')}: {('<@&' + str(rid) + '>') if rid else tr('no_role')}"]
     if detail:
-        message = job.get("text") or (tr("template_label") + ": " + job.get("template", ""))
+        message = job.get("text") or ((job.get("embed") or {}).get("description") if job.get("embed") else None) or (
+            tr("template_label") + ": " + str(job.get("template") or ""))
         lines.append(tr("content_label") + ": " + message[:700])
     return "\n".join(lines)
 
@@ -352,29 +391,13 @@ class DraftConfirm(discord.ui.View):
             return await respond_error(interaction, "denied")
         if job.get("role") and role is None:
             return await respond_error(interaction, "role")
-        if not job.get("text") and not any(
+        if not job.get("text") and not job.get("embed") and not any(
             item["name"] == job.get("template") for item in self.host["heraldo_template_list"](guild.id)
         ):
             return await respond_error(interaction, "content")
         try:
-            def edit(jobs, conn):
-                if self.prior is None:
-                    if sum(j.get("author") == self.owner_id for j in jobs) >= (
-                        MAX_SERVER if interaction.user.guild_permissions.manage_guild else policy(self.host, guild.id)["max_per_member"]
-                    ):
-                        raise ValueError("quota")
-                    if any(j.get("id") == job["id"] for j in jobs):
-                        raise ValueError("conflict")
-                    jobs.append({k: v for k, v in job.items() if k not in ("guild", "requester")})
-                else:
-                    original = next((j for j in jobs if j.get("id") == job["id"]), None)
-                    if original is None or not can_manage(interaction.user, original):
-                        raise ValueError("missing")
-                    jobs = [{k: v for k, v in job.items() if k not in ("guild", "requester")} if j["id"] == job["id"] else j for j in jobs]
-                    conn.execute("UPDATE message_schedule_state SET status='pending',next_run=?,detail=NULL WHERE guild_id=? AND job_id=?",
-                                 (job["start"], guild.id, job["id"]))
-                return jobs, job["id"]
-            atomic_change(self.host, guild.id, edit, expected=self.prior)
+            persist_schedule(self.host, guild.id, interaction.user, job,
+                             snapshot=self.prior, editing=self.prior is not None)
         except ValueError as exc:
             return await respond_error(interaction, ("changed" if str(exc) == "conflict" else str(exc)) if str(exc) in ("quota", "missing", "conflict") else "invalid")
         self.done = True
@@ -528,9 +551,11 @@ def set_paused(host, guild_id, job_id, actor, pause):
 
 
 class ManageView(discord.ui.View):
-    def __init__(self, host, guild_id, viewer_id, jobs):
+    def __init__(self, host, guild_id, viewer_id, jobs, *, from_setup=False):
         super().__init__(timeout=900)
         self.host, self.guild_id, self.viewer_id = host, guild_id, viewer_id
+        self.from_setup = from_setup
+        self.back.label = tr("back")
         self.selected = None
         self.edit.label, self.silence.label, self.delete.label = tr("edit"), tr("silence"), tr("delete")
         self.toggle.label = tr("pause") + " / " + tr("resume")
@@ -567,8 +592,14 @@ class ManageView(discord.ui.View):
         job = self.selected_job(interaction.user)
         if job is None:
             return await respond_error(interaction, "missing")
-        await interaction.response.send_modal(FeedModal(self.host, self.guild_id, job["author"], job["channel"],
-                                                       job["repeat"], job.get("role"), job.get("template"), job))
+        if self.from_setup:
+            from autofeed_setup import AutofeedEditorView
+            editor = AutofeedEditorView(self.host, self.guild_id, self.viewer_id, job=job)
+            await interaction.response.edit_message(content=editor.summary(), embed=None, view=editor)
+        else:
+            await interaction.response.send_modal(FeedModal(
+                self.host, self.guild_id, job["author"], job["channel"],
+                job["repeat"], job.get("role"), job.get("template"), job))
 
     @discord.ui.button(label="Pausar / Reanudar", style=discord.ButtonStyle.secondary, row=1)
     @guild_context
@@ -604,10 +635,22 @@ class ManageView(discord.ui.View):
         await interaction.response.edit_message(content=tr("preview") + "\n" + show_job(job), view=view)
 
 
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def back(self, interaction, button):
+        if self.from_setup:
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(self.host, self.guild_id, self.viewer_id)
+            await interaction.response.edit_message(content=content, embed=None, view=view)
+        else:
+            await interaction.response.edit_message(content=tr("discarded"), view=None)
+
+
 class PolicyView(discord.ui.View):
-    def __init__(self, host, guild_id, viewer_id):
+    def __init__(self, host, guild_id, viewer_id, *, return_to_setup=False):
         super().__init__(timeout=900)
         self.host, self.guild_id, self.viewer_id = host, guild_id, viewer_id
+        self.return_to_setup = return_to_setup
         self.original = host["guild_config_get"](guild_id, POLICY_KEY)
         self.current = policy(host, guild_id)
         self.channels = discord.ui.ChannelSelect(
@@ -686,7 +729,11 @@ class PolicyView(discord.ui.View):
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def back(self, interaction, button):
-        if "HeraldoMessagesView" in self.host:
+        if self.return_to_setup:
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(self.host, self.guild_id, self.viewer_id)
+            await interaction.response.edit_message(content=content, embed=None, view=view)
+        elif "HeraldoMessagesView" in self.host:
             parent = self.host["HeraldoMessagesView"](self.guild_id, self.viewer_id)
             await interaction.response.edit_message(
                 content=self.host["heraldo_messages_command_content"](), view=parent)
