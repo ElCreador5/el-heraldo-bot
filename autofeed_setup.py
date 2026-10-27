@@ -437,7 +437,7 @@ class MentionPickerView(discord.ui.View):
     @guild_context
     async def insert_role(self, interaction):
         role = self.roles.values[0]
-        if role.guild.id != self.editor.guild_id or not role.mentionable:
+        if role.guild.id != self.editor.guild_id:
             return await feeds.respond_error(interaction, "role")
         try:
             self.insert(role.mention)
