@@ -14,7 +14,7 @@ La primera fase de idiomas está validada automáticamente y desplegada; los rec
 | Texto y enlaces | `custodio_detection.py`: repetición exacta, textos casi idénticos, enlaces repetidos, publicidad con enlace y llamada comercial, menciones masivas y saturación. Son indicadores provisionales vinculados por el administrador a una regla concreta. |
 | Entre canales y miembros | Repetición de un mismo actor entre canales; patrón coordinado exige contribución propia repetida y varios actores. No se atribuye culpa colectiva. La actividad normal del canal aumenta el umbral de saturación. |
 | Imágenes | SHA-256 y dHash con Pillow; imágenes poco informativas no se consideran similares por un hash trivial. Máximo cuatro imágenes de 1 MiB, cuatro millones de píxeles, una decodificación simultánea y ninguna copia en disco. |
-| Memoria | Ventana de 90 segundos, 4096 señales como máximo, huellas en lugar de transcripciones, limpieza aunque no lleguen mensajes. Revisiones y limitadores por servidor acotados. Acceso frecuente a SQLite fuera del bucle de interacciones. |
+| Memoria | Ventana de 90 segundos, 4096 señales como máximo y contadores separados por regla, incluidas las exenciones de sus mensajes previos. Huellas compartidas para el mismo mensaje sin unir historiales; limpieza aunque no lleguen mensajes. Revisiones y limitadores por servidor acotados. Acceso frecuente a SQLite fuera del bucle de interacciones. |
 | Exenciones | Propietario y personal autorizado antes de analizar contenido; roles y canales globales y por regla. Bots, webhooks y canales trampa excluidos. Sin lectura de DMs. |
 | Privacidad | El destino privado no puede ampliar la audiencia del origen. Un origen restringido por edad exige destino igualmente restringido; las exclusiones individuales impiden la copia automática. Se revalida antes de cada envío. |
 | Evidencia NH | `heraldo_evidence.py`: autor, servidor/canal, instante nativo de Discord, copia literal, regla literal, observación y medida. Las descripciones mecánicas de adjuntos se rotulan como tales. Se dividen envíos a 6000 caracteres y diez embeds sin perder partes. |
@@ -26,7 +26,7 @@ La primera fase de idiomas está validada automáticamente y desplegada; los rec
 | Condenas | Se respeta el escalado central de Advertencias cuando el administrador ya configuró Condenas. Custodio no añade una sexta sanción ni cambia condenas existentes. |
 | Temp Ban | Duración guardada por regla, expediente antes de la petición remota y reloj actualizado tras confirmación. El expirador existente confirma el desbaneo, conserva casos ante fallos y no levanta un baneo posterior con otra razón. Una petición incierta no se repite ni se da por cumplida antes de confirmarse. |
 | Ban permanente | Duración explícita cero al motor compartido; no hereda accidentalmente el valor temporal predeterminado de Test. Sin purga implícita. |
-| Interfaz | Detección y Exenciones operativas; selectores recordados, guardar/descartar y CAS. Activar/Pausar guardan únicamente su estado y conservan otros borradores. Reglas largas completas por páginas; retorno al editor con su borrador. Español, inglés y portugués brasileño. |
+| Interfaz | Detección y Exenciones operativas; selectores recordados, guardar/descartar y CAS. Activar/Pausar guardan únicamente su estado y conservan otros borradores. Reglas largas completas por páginas. Volver retorna al submenú anterior y conserva los borradores de Detección, Exenciones y Acciones; una revisión nueva invalida el borrador anterior. Sensibilidad se guarda con un clic y CAS; los guardados en curso bloquean ediciones y navegación hasta terminar. Español, inglés y portugués brasileño. |
 
 ## IA manual: impedimento real y alternativa
 
@@ -47,11 +47,13 @@ Fuentes primarias consultadas:
 
 ## Comprobaciones realizadas
 
-- Suite completa local: 997 pruebas de componentes, 995 aprobadas y dos omisiones históricas; 39 regresiones de raíz aprobadas. Total: **1034 aprobadas**, dos omitidas.
-- 45 pruebas nuevas cubren detectores, ámbitos, memoria, política por revisión, callbacks reales, duración, exenciones, privacidad, reportes concurrentes, entrega parcial/timeout, reinicios, eliminación, cinco medidas centrales, advertencias compartidas, expiración real del adaptador con transporte aislado y revisiones administrativas.
+- Suite completa local: 1004 pruebas de componentes, 1002 aprobadas y dos omisiones históricas; 39 regresiones de raíz aprobadas. Total: **1041 aprobadas**, dos omitidas.
+- 52 pruebas nuevas cubren detectores, ámbitos, memoria, política por revisión, callbacks reales, duración, exenciones, privacidad, reportes concurrentes, entrega parcial/timeout, reinicios, eliminación, cinco medidas centrales, advertencias compartidas, expiración real del adaptador con transporte aislado y revisiones administrativas.
 - Matriz de los nuevos paneles en los tres idiomas, reglas de longitud máxima, 25 roles/canales y límites reales de componentes. Gramática Python 3.11, compilación, auditoría de catálogo y `pip check` correctos.
 - Los dobles de Discord y del proveedor de IA están identificados como aislados. Ninguna sanción sobre miembros reales acredita estas pruebas.
-- CI y despliegue de este lote: pendientes de registrar después de publicar el SHA exacto. La sonda `tools/custodio_rules_health.py` solo lee las reglas del laboratorio y muestra recuento/huella, nunca el texto o el token.
+- Primer lote `1ddd2cd2bbc9efbb460523c968cd80944c49f166`: CI Lab [40516525314](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40516525314) SUCCESS (3.11/3.12/3.13 y UX), Mensajes [40516525547](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/40516525547) SUCCESS; worker deployment `a71a6d8f-fd85-45fb-9961-7706f262091b` SUCCESS. Sonda real de lectura: doce reglas oficiales, revisión `f2ada923edd532c667c9b6f1ede92ff6157ca3e730d21d08572ddb910e35d8eb`. Gateway conectado, dos autopruebas de setup y dos sincronizaciones de 51 comandos correctas. El candidato productivo sigue fallando por su referencia base histórica; no se altera main.
+- La revisión final de aislamiento por regla y navegación se publica tras estas regresiones; su CI y despliegue exactos se añadirán al recibo.
+- Medición local reproducida con mensajes de hasta 3900 caracteres y dieciséis reglas: aproximadamente 65,7 ms por mensaje antes de reutilizar huellas y 4,3 ms después (veinte mensajes, sin red). No es una medición de capacidad ni latencia de Railway.
 
 ## Protección de H-03 y publicación
 

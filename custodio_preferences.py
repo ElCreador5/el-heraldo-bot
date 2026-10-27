@@ -1,7 +1,7 @@
 """Preferencias seguras de Modo Custodio; sin sanciones ni servicios externos.
 
-El sistema todavía no procesa mensajes. Estos ajustes solo preparan el
-futuro modo Observar, y nunca habilitan el bot o sanciones automáticamente.
+Estos ajustes generales no habilitan observación ni sanciones. El permiso
+por regla y su estado optativo se guardan por separado en custodio_policy.
 """
 from __future__ import annotations
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild

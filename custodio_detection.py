@@ -56,6 +56,7 @@ class MessageSignal:
     links: frozenset[bytes]
     mentions: int
     images: tuple[tuple[str, int | None], ...] = ()
+    rule_number: int = 0
 
 
 @dataclass(frozen=True)
@@ -89,32 +90,41 @@ class LocalDetector:
                 message_id: int, now: float, content: str,
                 kinds: frozenset[str], mention_count: int = 0,
                 images: tuple[tuple[str, int | None], ...] = (),
-                sensitivity: str = "balanced") -> tuple[Detection, ...]:
+                sensitivity: str = "balanced", rule_number: int = 0) -> tuple[Detection, ...]:
         if (not all(type(v) is int and v > 0 for v in
                     (guild_id, channel_id, actor_id, message_id))
                 or type(now) not in (int, float) or isinstance(now, bool)
                 or not isinstance(content, str) or len(content) > MAX_MESSAGE_CHARS
                 or not kinds <= KINDS or type(mention_count) is not int or mention_count < 0
                 or sensitivity not in {"conservative", "balanced", "strict"}
+                or type(rule_number) is not int or not 0 <= rule_number <= 16
                 or len(images) > 4 or any(not re.fullmatch(r"[0-9a-f]{64}", h)
                       or (p is not None and (type(p) is not int or not 0 <= p < 2**64))
                       for h, p in images)):
             raise ValueError("invalid_signal")
         self.expire(float(now))
-        if any(e.guild_id == guild_id and e.message_id == message_id for e in self.events):
+        if any(e.guild_id == guild_id and e.message_id == message_id
+               and e.rule_number == rule_number for e in self.events):
             return ()
         text = normalize(content)
+        digest = sha256(text.encode()).digest() if len(text) >= 12 else None
+        previous = self.events[-1] if self.events else None
+        shared_fingerprint = bool(previous and digest is not None
+            and (previous.guild_id, previous.channel_id, previous.actor_id, previous.message_id, previous.exact)
+                == (guild_id, channel_id, actor_id, message_id, digest))
         signal = MessageSignal(
             guild_id, channel_id, actor_id, message_id, float(now),
-            sha256(text.encode()).digest() if len(text) >= 12 else None,
-            text_sketch(text) if len(text) >= 32 else None, len(text),
-            frozenset(sha256(link.rstrip(".,!?)").encode()).digest()
+            digest,
+            previous.sketch if shared_fingerprint else text_sketch(text) if len(text) >= 32 else None,
+            len(text),
+            previous.links if shared_fingerprint else frozenset(sha256(link.rstrip(".,!?)").encode()).digest()
                       for link in re.findall(r"(?:https?://|discord\.gg/|discord\.com/invite/)[^\s<>]+", text)[:20]),
-            mention_count, images,
+            mention_count, images, rule_number,
         )
         self.events.append(signal)
-        own = [e for e in self.events if e.guild_id == guild_id and e.actor_id == actor_id]
-        channel = [e for e in self.events if e.guild_id == guild_id and e.channel_id == channel_id]
+        applicable = [e for e in self.events if e.guild_id == guild_id and e.rule_number == rule_number]
+        own = [e for e in applicable if e.actor_id == actor_id]
+        channel = [e for e in applicable if e.channel_id == channel_id]
         threshold = {"conservative": 4, "balanced": 3, "strict": 3}[sensitivity]
         result = []
 
@@ -149,8 +159,7 @@ class LocalDetector:
                         and (p ^ q).bit_count() <= 3 for _, p in images for _, q in e.images)]
         if not any(d.kind == "images" for d in result):
             add("similar_images", near_images)
-        campaign = [e for e in self.events if e.guild_id == guild_id
-                    and signal.exact is not None and e.exact == signal.exact]
+        campaign = [e for e in applicable if signal.exact is not None and e.exact == signal.exact]
         if len({e.actor_id for e in campaign}) >= 3 and len(exact) >= 2:
             # Nunca atribuir la actividad ajena a un miembro con una sola entrada.
             add("coordinated", campaign, 6, coordinated=True)

@@ -149,24 +149,38 @@ class CustodioServerRuleActionsView(discord.ui.View):
             _t('text.cdf37bc5779ea5', p0=f'{self.snapshot.count}', p1=f'{self.snapshot.revision[:12]}', p2=f'{self.index + 1}', p3=f'{selected}', p4=f'{labels[self.pending[self.index]]}', p5=f'{sum((a != b for a, b in zip(self.pending, self.saved)))}')
         ) + ("\n" + str(_t("text.custodio.minutes", minutes=self.durations[self.index])) if self.pending[self.index] == "temp_ban" else "")
 
+    async def wait_for_save(self, interaction):
+        if self._saving:
+            await interaction.response.defer(thinking=False)
+            return True
+        return False
+
     async def full_rule(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         from custodio_setup import CustodioRulesView
         view = CustodioRulesView(self.parent, self.snapshot, index=self.index, return_view=self)
         await interaction.response.edit_message(content=view.summary(), view=view, embed=None)
 
     async def select_duration(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.durations[self.index] = int(self.duration_select.values[0])
         self.sync()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     @_i18n_context
     async def select_rule(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.index = int(self.rules_select.values[0])
         self.sync()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     @_i18n_context
     async def select_action(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         action = self.actions_select.values[0]
         if action in VALID_ACTIONS:
             self.pending[self.index] = action
@@ -186,6 +200,8 @@ class CustodioServerRuleActionsView(discord.ui.View):
             import os
             from custodio_source import load_server_rules
             fresh = await load_server_rules(self.parent.guild_id, os.environ.get("DISCORD_TOKEN", ""))
+            if not await self.interaction_check(interaction):
+                return
             if fresh.revision != self.snapshot.revision:
                 notice = _t('text.e5474b8245453f')
             else:
@@ -211,6 +227,8 @@ class CustodioServerRuleActionsView(discord.ui.View):
 
     @_i18n_context
     async def discard(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.original = self.parent.get_setting(self.parent.guild_id, SETTING_KEY)
         self.saved = decode(self.original, self.snapshot)
         self.saved_durations = decode_durations(self.original, self.snapshot)
@@ -221,11 +239,7 @@ class CustodioServerRuleActionsView(discord.ui.View):
 
     @_i18n_context
     async def back(self, interaction):
-        if self.pending != self.saved or self.durations != self.saved_durations:
-            await interaction.response.edit_message(
-                content=self.summary() + _t('text.c15d7d491d22ac'),
-                view=self, embed=None,
-            )
+        if await self.wait_for_save(interaction):
             return
         self.parent._sync_controls()
         await interaction.response.edit_message(

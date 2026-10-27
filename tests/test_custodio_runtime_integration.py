@@ -46,6 +46,27 @@ class DetectorTests(unittest.TestCase):
             self.assertFalse(self.signal(d, n, actor_id=n, content="Hola"))
         self.assertFalse(self.signal(d, 9, guild_id=999))
 
+    def test_rule_histories_and_delivery_deduplication_are_independent(self):
+        detector = LocalDetector()
+        self.assertFalse(self.signal(detector, 1, rule_number=1))
+        self.assertFalse(self.signal(detector, 2, rule_number=1))
+        self.assertFalse(self.signal(detector, 3, rule_number=2))
+        self.assertIn('repeat', {d.kind for d in self.signal(detector, 3, rule_number=1)})
+        self.assertFalse(self.signal(detector, 3, rule_number=1))
+        self.assertEqual(len(detector.events), 4)
+
+    def test_multiple_rules_reuse_fingerprints_without_merging_their_histories(self):
+        from custodio_detection import text_sketch
+        detector = LocalDetector()
+        text = 'Cinco palabras diferentes para comparar mensajes de prueba'
+        with patch('custodio_detection.text_sketch', wraps=text_sketch) as sketch:
+            for rule in range(1, 17):
+                self.assertFalse(self.signal(detector, 1, rule_number=rule, content=text))
+            self.assertEqual(sketch.call_count, 1)
+            self.signal(detector, 2, rule_number=1, content=text)
+            self.assertEqual(sketch.call_count, 2)
+        self.assertEqual(len(detector.events), 17)
+
     def test_similar_text_and_repeated_links_are_reportable_indicators(self):
         d = LocalDetector()
         for n in range(1, 4):
@@ -179,6 +200,20 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         await self.repeat()
         self.publisher.assert_not_awaited()
 
+    async def test_per_rule_exempt_messages_do_not_contribute_to_another_rules_threshold(self):
+        snapshot = replace(SNAPSHOT, rules=SNAPSHOT.rules + ('No saturar los canales.',))
+        self.loader.return_value = snapshot
+        self.values[KEY] = ObservePolicy(snapshot.revision, True, bindings=(
+            RuleBinding(1, frozenset({'repeat'}), channels=frozenset({202})),
+            RuleBinding(2, frozenset({'flood'})),
+        )).encode(2)
+        for number, channel_id in ((1, 202), (2, 202), (3, 203)):
+            self.message.id = number
+            self.message.channel.id = channel_id
+            self.clock[0] = 100 + number
+            await self.engine.process(self.message)
+        self.publisher.assert_not_awaited()
+
     async def test_unavailable_rules_are_backed_off_and_memory_expires(self):
         self.loader.side_effect=RulesUnavailable('unavailable')
         for n in range(3):
@@ -230,6 +265,118 @@ class EvidenceAndAITests(unittest.IsolatedAsyncioTestCase):
 
 
 class SetupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inflight_save_keeps_its_proposal_and_navigation_until_completion(self):
+        from custodio_server_rule_actions_setup import CustodioServerRuleActionsView
+        for panel in (CustodioObserveSetupView, CustodioServerRuleActionsView):
+            with self.subTest(panel=panel.__name__):
+                values = {}
+                def save(gid, old, new):
+                    values.update(new)
+                    return True
+                parent = NS(guild_id=101, owner_id=303, get_setting=lambda gid,key:values.get(key),
+                    save_atomic=Mock(side_effect=save), access_check=AsyncMock(return_value=True),
+                    _sync_controls=Mock(), summary=lambda:'parent')
+                view = panel(parent, SNAPSHOT)
+                is_observation = panel is CustodioObserveSetupView
+                if is_observation:
+                    view.update(kinds=frozenset({'repeat'}))
+                else:
+                    view.pending[0] = 'temp_ban'
+                started, finish = asyncio.Event(), asyncio.Event()
+                async def fetch(*args):
+                    started.set()
+                    await finish.wait()
+                    return SNAPSHOT
+                interaction = NS(response=NS(defer=AsyncMock(),edit_message=AsyncMock()),
+                                  edit_original_response=AsyncMock())
+                module = 'custodio_observe_setup' if is_observation else 'custodio_source'
+                with patch(module+'.load_server_rules',new=fetch):
+                    task = asyncio.create_task(view.save(interaction))
+                    await started.wait()
+                    try:
+                        if is_observation:
+                            view.kind_select._values = ['links']
+                            await view.select_kinds(interaction)
+                            self.assertEqual(view.pending.bindings[0].kinds, {'repeat'})
+                        else:
+                            view.actions_select._values = ['ban']
+                            await view.select_action(interaction)
+                            self.assertEqual(view.pending, ['temp_ban'])
+                        await view.back(interaction)
+                        parent._sync_controls.assert_not_called()
+                        parent.save_atomic.assert_not_called()
+                    finally:
+                        finish.set()
+                        await task
+                parent.save_atomic.assert_called_once()
+
+    async def test_general_preference_save_is_direct_and_uses_the_opened_draft_version(self):
+        from custodio_setup import CustodioSetupView
+        from custodio_preferences import DEFAULTS, KEY_SENSITIVITY
+        values = DEFAULTS.copy()
+        def save(gid, old, new):
+            if any(values.get(key) != value for key,value in old.items()):
+                return False
+            values.update(new)
+            return True
+        parent = CustodioSetupView(101, 303, get_setting=lambda gid,key:values.get(key),
+            save_atomic=Mock(side_effect=save), access_check=AsyncMock(return_value=True),
+            parent_factory=lambda:None)
+        interaction = NS(response=NS(defer=AsyncMock()), edit_original_response=AsyncMock())
+        parent.pending_sensitivity = 'strict'
+        await parent.save_changes(interaction)
+        self.assertEqual(values[KEY_SENSITIVITY], 'strict')
+        self.assertIs(interaction.edit_original_response.call_args.kwargs['view'], parent)
+        parent.save_atomic.assert_called_once()
+        parent.pending_sensitivity = 'balanced'
+        values[KEY_SENSITIVITY] = 'conservative'
+        await parent.save_changes(interaction)
+        self.assertEqual(values[KEY_SENSITIVITY], 'conservative')
+        self.assertEqual(parent.pending_sensitivity, 'balanced')
+
+    async def test_back_keeps_drafts_in_detection_exemptions_and_rule_actions(self):
+        from custodio_setup import CustodioSetupView
+        parent = CustodioSetupView(101, 303, get_setting=lambda gid,key:None,
+            save_atomic=Mock(return_value=True), access_check=AsyncMock(return_value=True),
+            parent_factory=lambda:None)
+        interaction = NS(response=NS(defer=AsyncMock(), edit_message=AsyncMock()),
+                         edit_original_response=AsyncMock())
+        with patch('custodio_setup.load_server_rules', new=AsyncMock(return_value=SNAPSHOT)):
+            for exemptions in (False, True):
+                await parent.open_observation(interaction, exemptions=exemptions)
+                view = interaction.edit_original_response.call_args.kwargs['view']
+                view.update(**({'roles':frozenset({707})} if exemptions else {'kinds':frozenset({'repeat'})}))
+                pending = view.pending
+                await view.back(interaction)
+                self.assertIs(interaction.response.edit_message.call_args.kwargs['view'], parent)
+                await parent.open_observation(interaction, exemptions=exemptions)
+                self.assertIs(interaction.edit_original_response.call_args.kwargs['view'], view)
+                self.assertEqual(view.pending, pending)
+            await parent.open_rule_actions(interaction)
+            actions = interaction.edit_original_response.call_args.kwargs['view']
+            actions.pending[0], actions.durations[0] = 'temp_ban', 1440
+            await actions.back(interaction)
+            self.assertIs(interaction.response.edit_message.call_args.kwargs['view'], parent)
+            await parent.open_rule_actions(interaction)
+            self.assertIs(interaction.edit_original_response.call_args.kwargs['view'], actions)
+            self.assertEqual((actions.pending, actions.durations), (['temp_ban'], [1440]))
+        parent.save_atomic.assert_not_called()
+
+    async def test_new_rules_do_not_reuse_an_old_rule_draft(self):
+        from custodio_setup import CustodioSetupView
+        parent = CustodioSetupView(101, 303, get_setting=lambda gid,key:None,
+            save_atomic=Mock(), access_check=AsyncMock(return_value=True), parent_factory=lambda:None)
+        interaction = NS(response=NS(defer=AsyncMock()), edit_original_response=AsyncMock())
+        with patch('custodio_setup.load_server_rules', new=AsyncMock(side_effect=[SNAPSHOT, replace(SNAPSHOT, revision='b'*64)])):
+            await parent.open_observation(interaction, exemptions=False)
+            old = interaction.edit_original_response.call_args.kwargs['view']
+            old.update(kinds=frozenset({'repeat'}))
+            await parent.open_observation(interaction, exemptions=False)
+            current = interaction.edit_original_response.call_args.kwargs['view']
+            self.assertIsNot(current, old)
+            self.assertFalse(current.pending.bindings[0].kinds)
+        parent.save_atomic.assert_not_called()
+
     async def test_all_new_panels_serialize_within_limits_in_three_languages(self):
         import heraldo_i18n as i18n
         from custodio_server_rule_actions_setup import CustodioServerRuleActionsView

@@ -14,7 +14,7 @@
   "discord_interactive_acceptance": "blocked_authentication",
   "global_native_command_metadata": "guild payload localization implemented; global identifiers unchanged",
   "editorial_review_complete": true,
-  "referenced_keys": 3156,
+  "referenced_keys": 3154,
   "native_command_fields": 242,
   "native_root_commands": 51
 }

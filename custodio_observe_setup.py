@@ -106,20 +106,34 @@ class CustodioObserveSetupView(discord.ui.View):
                       channels=", ".join(f"<#{v}>" for v in sorted(scope.channels)) or str(_t("common.none_sentence")),
                       pending=str(_t("text.custodio.yes" if self.pending != self.saved else "text.custodio.no"))))
 
+    async def wait_for_save(self, interaction):
+        if self.busy:
+            await interaction.response.defer(thinking=False)
+            return True
+        return False
+
     async def select_rule(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.index = int(self.rule_select.values[0])
         self.sync()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     async def select_kinds(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.update(kinds=frozenset(self.kind_select.values))
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     async def select_roles(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.update(roles=frozenset(role.id for role in self.role_select.values))
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     async def select_channels(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.update(channels=frozenset(channel.id for channel in self.channel_select.values))
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
@@ -177,6 +191,8 @@ class CustodioObserveSetupView(discord.ui.View):
         await self.persist(interaction, enabled=False)
 
     async def discard(self, interaction):
+        if await self.wait_for_save(interaction):
+            return
         self.original = self.parent.get_setting(self.guild_id, KEY)
         self.saved = ObservePolicy.decode(self.original, self.snapshot)
         self.pending = self.saved
@@ -184,8 +200,7 @@ class CustodioObserveSetupView(discord.ui.View):
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 
     async def back(self, interaction):
-        if self.pending != self.saved:
-            await interaction.response.edit_message(content=self.summary() + str(_t('text.c15d7d491d22ac')), view=self, embed=None)
+        if await self.wait_for_save(interaction):
             return
         self.parent._sync_controls()
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent, embed=None)

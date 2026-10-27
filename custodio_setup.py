@@ -18,6 +18,7 @@ from custodio_preferences import (
 )
 from custodio_source import load_server_rules
 from custodio_core import RulesUnavailable
+from custodio_policy import KEY as OBSERVATION_SETTING_KEY
 from custodio_reports import (
     SETTING_KEY, ReportChannelError, create_private_report_channel,
 )
@@ -42,6 +43,10 @@ class CustodioSetupView(discord.ui.View):
         self.access_check = access_check
         self.parent_factory = parent_factory
         self.pending_sensitivity = load_preferences(get_setting, guild_id).sensitivity
+        self.original_preferences = {key: get_setting(guild_id, key) for key in DEFAULTS}
+        self.saving = False
+        self.observation_editors = {}
+        self.actions_editor = None
 
         select = discord.ui.Select(
             placeholder=_t('text.c385fb7beb311c'),
@@ -110,8 +115,8 @@ class CustodioSetupView(discord.ui.View):
         for option in self.selector.options:
             option.default = option.value == self.pending_sensitivity
         current = load_preferences(self.get_setting, self.guild_id).sensitivity
-        self.save_button.disabled = not self._raw_changes()
-        self.discard_button.disabled = self.pending_sensitivity == current
+        self.save_button.disabled = self.saving or not self._raw_changes()
+        self.discard_button.disabled = self.saving or self.pending_sensitivity == current
 
     @_i18n_context
     def _raw_changes(self) -> dict[str, str]:
@@ -174,7 +179,13 @@ class CustodioSetupView(discord.ui.View):
         except (RulesUnavailable, ValueError):
             await interaction.edit_original_response(content=self.summary() + str(_t('text.dbb413c4fa004b')), view=self, embed=None)
             return
-        view = CustodioObserveSetupView(self, snapshot, exemptions=exemptions)
+        view = self.observation_editors.get(exemptions)
+        if (view is None or view.snapshot.revision != snapshot.revision
+                or view.is_finished()
+                or (view.pending == view.saved
+                    and view.original != self.get_setting(self.guild_id, OBSERVATION_SETTING_KEY))):
+            view = CustodioObserveSetupView(self, snapshot, exemptions=exemptions)
+            self.observation_editors[exemptions] = view
         await interaction.edit_original_response(content=view.summary(), view=view, embed=None)
 
     @_i18n_context
@@ -215,7 +226,7 @@ class CustodioSetupView(discord.ui.View):
     async def open_rule_actions(self, interaction: discord.Interaction):
         """Carga únicamente reglas oficiales del servidor actual."""
         await interaction.response.defer(thinking=False)
-        from custodio_server_rule_actions_setup import CustodioServerRuleActionsView
+        from custodio_server_rule_actions_setup import CustodioServerRuleActionsView, SETTING_KEY as ACTIONS_SETTING_KEY
         try:
             snapshot = await load_server_rules(
                 self.guild_id, os.environ.get("DISCORD_TOKEN", "")
@@ -226,7 +237,12 @@ class CustodioSetupView(discord.ui.View):
                 view=self, embed=None,
             )
             return
-        view = CustodioServerRuleActionsView(self, snapshot)
+        view = self.actions_editor
+        if (view is None or view.snapshot.revision != snapshot.revision or view.is_finished()
+                or (view.pending == view.saved and view.durations == view.saved_durations
+                    and view.original != self.get_setting(self.guild_id, ACTIONS_SETTING_KEY))):
+            view = CustodioServerRuleActionsView(self, snapshot)
+            self.actions_editor = view
         await interaction.edit_original_response(
             content=view.summary(), view=view, embed=None,
         )
@@ -258,25 +274,34 @@ class CustodioSetupView(discord.ui.View):
 
     @_i18n_context
     async def save_changes(self, interaction: discord.Interaction):
-        changes = self._raw_changes()
-        if not changes:
-            await interaction.response.send_message(
-                _t('text.4c9e4a198ac444'),
-                ephemeral=True,
-            )
+        if self.saving:
+            await interaction.response.defer(thinking=False)
             return
-        original = {k: self.get_setting(self.guild_id, k) for k in DEFAULTS}
-        confirm = CustodioConfirmView(self, changes, original)
-        await interaction.response.edit_message(
-            content=(
-                _t('text.dffce88b3c324d', p0=f'{DISPLAY[KEY_SENSITIVITY][self.pending_sensitivity]}')
-            ),
-            view=confirm, embed=None,
-        )
+        if not await self.interaction_check(interaction):
+            return
+        await interaction.response.defer(thinking=False)
+        self.saving = True
+        try:
+            changes = self._raw_changes()
+            if not changes:
+                notice = _t('text.4c9e4a198ac444')
+            elif self.save_atomic(self.guild_id, self.original_preferences, changes):
+                self.original_preferences = {key: self.get_setting(self.guild_id, key) for key in DEFAULTS}
+                self.pending_sensitivity = load_preferences(self.get_setting, self.guild_id).sensitivity
+                notice = _t('text.d6404388cff88f')
+            else:
+                notice = _t('text.55ed96514b3001')
+        except Exception:
+            notice = _t('text.b48ad3f4f5377b')
+        finally:
+            self.saving = False
+            self._sync_controls()
+        await interaction.edit_original_response(content=self.summary() + "\n\n" + str(notice), view=self, embed=None)
 
     @_i18n_context
     async def discard_changes(self, interaction: discord.Interaction):
         self.pending_sensitivity = load_preferences(self.get_setting, self.guild_id).sensitivity
+        self.original_preferences = {key: self.get_setting(self.guild_id, key) for key in DEFAULTS}
         self._sync_controls()
         await interaction.response.edit_message(content=self.summary(), view=self, embed=None)
 

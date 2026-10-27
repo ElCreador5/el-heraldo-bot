@@ -139,16 +139,18 @@ class CustodioRuntime:
                         if len(data) == attachment.size and len(data) <= 1024 * 1024:
                             images.append(await asyncio.to_thread(image_fingerprint, data))
         sensitivity = await asyncio.to_thread(self.n["guild_config_get"], guild.id, "custodio_sensitivity")
-        detections = self.detector.inspect(
-            guild_id=guild.id, channel_id=channel.id, actor_id=message.author.id,
-            message_id=message.id, now=self.clock(), content=message.content,
-            kinds=kinds, images=tuple(images),
-            mention_count=len({m.id for m in message.mentions}) + len({r.id for r in message.role_mentions})
-                          + (8 if message.mention_everyone else 0),
-            sensitivity=sensitivity or "balanced",
-        )
-        for detection in detections:
-            binding = next(b for b in bindings if detection.kind in b.kinds)
+        detections = []
+        for binding in bindings:
+            for detection in self.detector.inspect(
+                guild_id=guild.id, channel_id=channel.id, actor_id=message.author.id,
+                message_id=message.id, now=self.clock(), content=message.content,
+                kinds=binding.kinds, images=tuple(images), rule_number=binding.number,
+                mention_count=len({m.id for m in message.mentions}) + len({r.id for r in message.role_mentions})
+                              + (8 if message.mention_everyone else 0),
+                sensitivity=sensitivity or "balanced",
+            ):
+                detections.append((binding, detection))
+        for binding, detection in detections:
             key = (guild.id, message.author.id, binding.number)
             if key in self.recent and self.clock() - self.recent[key] < 90:
                 continue
