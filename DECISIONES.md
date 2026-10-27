@@ -1,3 +1,7 @@
+## 2026-10-27 — Mensajes programados inspirados en AutoFeeds (decisión y primera fase)
+
+El propietario autorizó simplificar programación al estilo AutoFeeds de Carl-bot, sin perder editores, embeds, plantillas, programaciones ni NH. `/programar` ofrece flujo de mensaje directo, rol opcional, horario, repetición y gestión desde botones/comandos. Se abre a miembros únicamente tras autorización explícita del administrador por roles y canales; valor predeterminado cerrado, cuota y comprobación de permisos en cada publicación. Silenciar solo quita mención, Pausar detiene publicaciones; son funciones distintas. Los comandos heredados permanecen en funcionamiento durante la transición. No modificar `main` hasta aceptación técnica y visual en Test. No considerar terminado el trabajo por añadir código o CI.
+
 ## 2026-10-27 — Custodio: planificador automático y paneles separados
 
 Estado vigente de implementación: 73 fichas, 24 categorías con señales locales y 49 de revisión humana. Interpretación estructurada por servidor/revisión y citas literales, asignación automática de mecanismos, correcciones reversibles, Detección separada de Exenciones y un único Activar/Pausar en el panel principal. Los borradores solo se aprueban mediante Guardar cambios. Un plan antiguo o sin aprobación no autoriza observaciones.
