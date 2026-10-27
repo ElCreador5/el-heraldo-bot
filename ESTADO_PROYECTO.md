@@ -1,3 +1,7 @@
+## 2026-10-27 — Programación AutoFeeds: candidato de desarrollo
+
+En `Pruebas` se añadió `/programar` con texto directo/plantillas, recurrencia mensual e intervalos, permisos por canales/roles y panel de gestión desde Mensajes. Se integra con la SQLite y el worker actual de `message_automation.py`; no se elimina la programación heredada. Se añadieron entradas de esquema de comandos y catálogos es-419/en-US/pt-BR, y pruebas `tests/test_autofeeds.py`. **Estado:** solo código y tests escritos; CI de este SHA, despliegue de worker y aceptación Discord sin verificar. El worker en Railway Lab seguía fijado al SHA antiguo `1407d5c2` y había fallado el pre-deploy; no se alteraron sus comandos ni variables. `main`/producción y /data conservados.
+
 ## 2026-10-27 — Custodio: planificador automático y paneles separados
 
 Estado vigente de implementación: 73 fichas, 24 categorías con señales locales y 49 de revisión humana. Interpretación estructurada por servidor/revisión y citas literales, asignación automática de mecanismos, correcciones reversibles, Detección separada de Exenciones y un único Activar/Pausar en el panel principal. Los borradores solo se aprueban mediante Guardar cambios. Un plan antiguo o sin aprobación no autoriza observaciones.
