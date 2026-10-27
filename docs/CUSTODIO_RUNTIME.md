@@ -2,6 +2,8 @@
 
 Actualización: 27 de octubre de 2026. Desarrollo exclusivo en `Pruebas`; producción fuera de alcance.
 
+**Proveedor comprobado:** `d99b2989ba83f00a2ec07786887c2d4ec97ffb2b` desplegado en Lab/worker, deployment `e92901b8-b417-4a48-9120-c727d18718cd` SUCCESS. Groq `openai/gpt-oss-20b` realizó una inferencia auténtica con regla sintética en 428 ms: esquema y cita literal validados. Sin Discord ni SQLite en la sonda; no equivale al clic real de «Analizar reglas». Gateway conectado, dos sincronizaciones de 51 comandos (en-US/es-419). Pre-deploy temporal retirado y volumen conservado. CI Lab 40562341587 (3.11/3.12/3.13 + UX) y Mensajes 40562341644 SUCCESS. Recibo: `docs/CUSTODIO_PROVIDER_DEPLOYMENT.json`. El desarrollo continúa: 73 fichas de taxonomía, interpretación automática y rediseño de Detección; no es cierre integral.
+
 ## Estado
 
 El núcleo de observación y la revisión administrativa están implementados y probados sin red. **No se declara aceptado en Discord ni preparado para activar sanciones automáticas.** La observación necesita guardar detectores por regla y pulsar Activar; no se enciende al desplegar, abrir un menú o cambiar un selector.
@@ -30,9 +32,9 @@ La primera fase de idiomas está validada automáticamente y desplegada; los rec
 
 ## IA manual: impedimento real y alternativa
 
-`custodio_ai_runtime.py` implementa una llamada manual acotada a Groq, modelo `openai/gpt-oss-20b` (sustituto vigente del anterior modelo gratuito retirado), endpoint fijo, un único texto de regla y salida JSON validada. No recibe mensajes, perfiles ni herramientas. La cita debe coincidir exactamente con la regla; toda interpretación es una propuesta y no modifica acciones. El adaptador y sus controles se probaron con transporte aislado, **no mediante una inferencia real**.
+`custodio_ai_runtime.py` implementa una llamada manual acotada a Groq, modelo `openai/gpt-oss-20b` (sustituto vigente del anterior modelo gratuito retirado), endpoint fijo, un único texto de regla y salida JSON validada. No recibe mensajes, perfiles ni herramientas. La cita debe coincidir exactamente con la regla; toda interpretación es una propuesta y no modifica acciones. El adaptador se comprobó con transporte aislado y, posteriormente, con una inferencia real de regla sintética en Railway; véase el recibo del proveedor. La aceptación del botón de Discord sigue pendiente.
 
-Lectura de metadatos del 27/10: el worker ya dispone de los nombres `CUSTODIO_AI_FREE_PROVIDER` y `CUSTODIO_GROQ_API_KEY`; no se leyeron sus valores. La presencia de ambas variables no acredita una inferencia válida. No se han creado cuentas, contratado servicios, añadido secretos ni generado solicitudes facturables. Sin configuración, el botón informa de que se necesita revisión humana.
+Lectura de metadatos del 27/10: el worker ya dispone de los nombres `CUSTODIO_AI_FREE_PROVIDER` y `CUSTODIO_GROQ_API_KEY`; no se leyeron sus valores. La presencia de ambas variables no acredita una inferencia válida. No se han creado cuentas, contratado servicios, añadido secretos ni generado solicitudes facturables. La inferencia real de la sonda ya confirmó la configuración del proveedor. El botón conserva revisión humana ante cualquier fallo.
 
 Recursos observados en Lab: 0,512 GB de RAM y 1 vCPU; el bot utiliza aproximadamente 0,160 GB, con pico observado de 0,298 GB. El fabricante publica 434 MB de pico para LFM2.5-350M Q4 en su benchmark; sumarlo al proceso existente no demuestra un margen seguro en este servicio. No se carga un modelo local sin una medición propia que demuestre viabilidad. Esto no equivale a afirmar que ningún modelo pequeño pueda ejecutarse.
 

@@ -1,0 +1,72 @@
+{
+  "phase": "provider_checkpoint",
+  "initial_head": "9aa06fcdbcab9d249332842baee42aa9a634207a",
+  "code_commit": "d99b2989ba83f00a2ec07786887c2d4ec97ffb2b",
+  "deployment_id": "e92901b8-b417-4a48-9120-c727d18718cd",
+  "deployment_status": "SUCCESS",
+  "scope": {
+    "project_id": "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61",
+    "environment_id": "71b77daf-9092-4af0-913f-32c57367fff3",
+    "service_id": "13a555fc-7ddd-4712-a9bc-e88509e18b2b",
+    "service": "worker",
+    "environment": "Lab"
+  },
+  "real_inference": {
+    "timestamp": "2026-10-27T18:48:46.319528713Z",
+    "clarification_requested": false,
+    "elapsed_ms": 428,
+    "exact_quote_validated": true,
+    "input": "synthetic_rule",
+    "max_requests": 1,
+    "model": "openai/gpt-oss-20b",
+    "schema_validated": true,
+    "status": "REAL_INFERENCE_VALIDATED"
+  },
+  "gateway_connected_at": "2026-10-27T18:49:11.432756087Z",
+  "native_command_syncs": [
+    {
+      "locale": "en-US",
+      "commands": 51
+    },
+    {
+      "locale": "es-419",
+      "commands": 51
+    }
+  ],
+  "setup_self_checks": 2,
+  "tests": {
+    "focused": 51,
+    "components": 1012,
+    "components_passed": 1010,
+    "existing_skips": 2,
+    "root_passed": 39,
+    "total_passed": 1049,
+    "compile": true,
+    "grammar311": true,
+    "pip_check": true,
+    "i18n_audit": true
+  },
+  "ci_lab": {
+    "id": 40562341587,
+    "status": "success",
+    "versions": [
+      "3.11",
+      "3.12",
+      "3.13"
+    ],
+    "ux": "success"
+  },
+  "ci_messages": {
+    "id": 40562341644,
+    "status": "success"
+  },
+  "data_volume_preserved": true,
+  "predeploy_probe_removed": true,
+  "bot_start_command": "python bot.py",
+  "production_modified": false,
+  "h03_modified": false,
+  "sanctions_automatically_enabled": false,
+  "discord_interactive_acceptance": "pending",
+  "click_on_analyze_rules_performed": false,
+  "taxonomy_and_autonomous_planner": "in_progress"
+}

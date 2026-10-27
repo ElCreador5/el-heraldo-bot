@@ -1,0 +1,3844 @@
+{
+  "schema_version": 1,
+  "taxonomy_version": "1.0.0",
+  "research_date": "2026-10-27",
+  "source_types": {
+    "discord_guidelines": {
+      "type": "oficial",
+      "url": "https://discord.com/guidelines",
+      "use": "Familias de conductas y límites de plataforma; no valida la eficacia de detectores."
+    },
+    "discord_automod": {
+      "type": "oficial/técnica",
+      "url": "https://docs.discord.com/developers/resources/auto-moderation",
+      "use": "Eventos, palabras, spam, menciones, exenciones y límites técnicos; no es comprensión semántica universal."
+    },
+    "discord_harassment": {
+      "type": "oficial",
+      "url": "https://discord.com/safety/bullying-harassment-threats-policy-explainer",
+      "use": "Definiciones de hostigamiento, intimidación y amenazas; la intención no se deduce de una coincidencia léxica."
+    },
+    "context_study": {
+      "type": "estudio primario",
+      "url": "https://aclanthology.org/2024.lrec-main.740/",
+      "use": "El contexto importa y su incorporación también plantea dificultades; no extrapolar métricas a es-419/pt-BR."
+    },
+    "use_mention_study": {
+      "type": "estudio primario",
+      "url": "https://aclanthology.org/2024.naacl-long.331/",
+      "use": "Citas y contradiscurso pueden disparar falsos positivos, incluso en modelos recientes."
+    },
+    "moderator_experience": {
+      "type": "experiencia pública ilustrativa",
+      "url": "https://www.reddit.com/r/ModSupport/comments/nzoyfa/automods_roll_out_aka_tips_from_rmodsupport/",
+      "use": "Revisión de enlaces de dominios no aprobados; no demuestra que una URL sea spam."
+    },
+    "edited_link_experience": {
+      "type": "experiencia pública ilustrativa",
+      "url": "https://www.reddit.com/r/ModSupport/comments/1romj62/heads_up_new_spam_technique_where_links_are_added/",
+      "use": "Ediciones tardías como caso de evasión; no se recopilan usuarios ni conversaciones."
+    }
+  },
+  "behaviors": [
+    {
+      "id": "exact_text",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Repetición textual",
+        "en-US": "Repeated text",
+        "pt-BR": "Repetição textual"
+      },
+      "family": "spam",
+      "description": "Mismo autor y huella textual repetida dentro de una ventana.",
+      "positive_synthetic_example": "El mismo anuncio se publica tres veces en pocos segundos.",
+      "negative_synthetic_example": "Varias personas felicitan a un miembro una vez cada una.",
+      "observable_signals": [
+        "Mismo autor y huella textual repetida dentro de una ventana."
+      ],
+      "context_and_polysemy": "Una repetición puede ser una corrección o un reenvío solicitado; «spam» también es una marca de alimento.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Una repetición puede ser una corrección o un reenvío solicitado; «spam» también es una marca de alimento."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de repetición textual, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "repeat"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Varias personas felicitan a un miembro una vez cada una.",
+        "Una repetición puede ser una corrección o un reenvío solicitado; «spam» también es una marca de alimento."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "near_text",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Mensajes casi idénticos",
+        "en-US": "Nearly identical messages",
+        "pt-BR": "Mensagens quase idênticas"
+      },
+      "family": "spam",
+      "description": "Huellas aproximadas próximas, longitud parecida y reiteración del propio actor.",
+      "positive_synthetic_example": "El mismo anuncio cambia solo un número.",
+      "negative_synthetic_example": "Respuestas de soporte que comparten una plantilla pero resuelven preguntas distintas.",
+      "observable_signals": [
+        "Huellas aproximadas próximas, longitud parecida y reiteración del propio actor."
+      ],
+      "context_and_polysemy": "La similitud léxica no demuestra intención de molestar ni equivalencia semántica.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La similitud léxica no demuestra intención de molestar ni equivalencia semántica."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de mensajes casi idénticos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "similar_text"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Respuestas de soporte que comparten una plantilla pero resuelven preguntas distintas.",
+        "La similitud léxica no demuestra intención de molestar ni equivalencia semántica."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "repeated_links",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Enlaces repetidos",
+        "en-US": "Repeated links",
+        "pt-BR": "Links repetidos"
+      },
+      "family": "spam",
+      "description": "El propio actor repite destinos de enlaces en un periodo limitado.",
+      "positive_synthetic_example": "Un mismo enlace se insiste en varias publicaciones.",
+      "negative_synthetic_example": "Dos participantes citan una documentación común.",
+      "observable_signals": [
+        "El propio actor repite destinos de enlaces en un periodo limitado."
+      ],
+      "context_and_polysemy": "Una URL puede ser documentación, cita, promoción autorizada o publicidad; no clasificar por dominio aislado.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Una URL puede ser documentación, cita, promoción autorizada o publicidad; no clasificar por dominio aislado."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de enlaces repetidos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "links"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos participantes citan una documentación común.",
+        "Una URL puede ser documentación, cita, promoción autorizada o publicidad; no clasificar por dominio aislado."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod",
+        "moderator_experience"
+      ]
+    },
+    {
+      "id": "character_flood",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Saturación de caracteres",
+        "en-US": "Character flooding",
+        "pt-BR": "Excesso de caracteres"
+      },
+      "family": "spam",
+      "description": "Secuencia extraordinariamente larga de un mismo carácter.",
+      "positive_synthetic_example": "Una publicación contiene cientos de letras iguales.",
+      "negative_synthetic_example": "Una palabra alargada de celebración.",
+      "observable_signals": [
+        "Secuencia extraordinariamente larga de un mismo carácter."
+      ],
+      "context_and_polysemy": "La longitud es verificable; la intención de interrumpir requiere contexto y prohibición expresa.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La longitud es verificable; la intención de interrumpir requiere contexto y prohibición expresa."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de saturación de caracteres, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "character_flood"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una palabra alargada de celebración.",
+        "La longitud es verificable; la intención de interrumpir requiere contexto y prohibición expresa."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "planned_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "emoji_flood",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Saturación de emojis",
+        "en-US": "Emoji flooding",
+        "pt-BR": "Excesso de emojis"
+      },
+      "family": "spam",
+      "description": "Carga extraordinaria de símbolos emoji en una publicación.",
+      "positive_synthetic_example": "Un mensaje ocupa la pantalla con emojis repetidos.",
+      "negative_synthetic_example": "Un saludo con tres emojis o una celebración permitida.",
+      "observable_signals": [
+        "Carga extraordinaria de símbolos emoji en una publicación."
+      ],
+      "context_and_polysemy": "No confundir escrituras no latinas, símbolos matemáticos y secuencias normales con abuso.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No confundir escrituras no latinas, símbolos matemáticos y secuencias normales con abuso."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de saturación de emojis, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "emoji_flood"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un saludo con tres emojis o una celebración permitida.",
+        "No confundir escrituras no latinas, símbolos matemáticos y secuencias normales con abuso."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "planned_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "fragmented_posts",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Fragmentación excesiva",
+        "en-US": "Excessive message splitting",
+        "pt-BR": "Fragmentação excessiva"
+      },
+      "family": "spam",
+      "description": "Ráfaga de publicaciones cortas del mismo actor.",
+      "positive_synthetic_example": "Una frase se divide artificialmente en veinte mensajes seguidos.",
+      "negative_synthetic_example": "Una persona escribe dos aclaraciones seguidas.",
+      "observable_signals": [
+        "Ráfaga de publicaciones cortas del mismo actor."
+      ],
+      "context_and_polysemy": "El rate-limit solo observa frecuencia; no puede probar que la fragmentación sea deliberada.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El rate-limit solo observa frecuencia; no puede probar que la fragmentación sea deliberada."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de fragmentación excesiva, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "flood"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una persona escribe dos aclaraciones seguidas.",
+        "El rate-limit solo observa frecuencia; no puede probar que la fragmentación sea deliberada."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "message_burst",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Ráfagas de mensajes",
+        "en-US": "Message bursts",
+        "pt-BR": "Rajadas de mensagens"
+      },
+      "family": "spam",
+      "description": "Cantidad propia elevada frente a la actividad reciente del canal.",
+      "positive_synthetic_example": "Un actor ocupa casi toda una ventana con mensajes rápidos.",
+      "negative_synthetic_example": "Conversación de muchos participantes durante un evento.",
+      "observable_signals": [
+        "Cantidad propia elevada frente a la actividad reciente del canal."
+      ],
+      "context_and_polysemy": "La actividad colectiva legítima debe elevar el umbral; el volumen total no atribuye culpa individual.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La actividad colectiva legítima debe elevar el umbral; el volumen total no atribuye culpa individual."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de ráfagas de mensajes, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "flood"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Conversación de muchos participantes durante un evento.",
+        "La actividad colectiva legítima debe elevar el umbral; el volumen total no atribuye culpa individual."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "cross_channel_repeat",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Repetición entre canales",
+        "en-US": "Cross-channel repetition",
+        "pt-BR": "Repetição entre canais"
+      },
+      "family": "spam",
+      "description": "Un mismo autor repite contenido en varios canales.",
+      "positive_synthetic_example": "Un anuncio idéntico aparece en tres canales sin relación.",
+      "negative_synthetic_example": "Un aviso administrativo autorizado en varios canales.",
+      "observable_signals": [
+        "Un mismo autor repite contenido en varios canales."
+      ],
+      "context_and_polysemy": "No unir historiales de reglas o servidores; las exenciones de cada canal cuentan antes del análisis.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No unir historiales de reglas o servidores; las exenciones de cada canal cuentan antes del análisis."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de repetición entre canales, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "cross_channel"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un aviso administrativo autorizado en varios canales.",
+        "No unir historiales de reglas o servidores; las exenciones de cada canal cuentan antes del análisis."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "mass_forwarding",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Reenvío masivo",
+        "en-US": "Mass forwarding",
+        "pt-BR": "Encaminhamento em massa"
+      },
+      "family": "spam",
+      "description": "Repetición propia distribuida entre canales.",
+      "positive_synthetic_example": "La misma solicitud se copia en varios espacios en una ráfaga.",
+      "negative_synthetic_example": "Información solicitada por distintos equipos.",
+      "observable_signals": [
+        "Repetición propia distribuida entre canales."
+      ],
+      "context_and_polysemy": "Un mensaje reenviado no es infracción por su forma; importan autorización, frecuencia y destino.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Un mensaje reenviado no es infracción por su forma; importan autorización, frecuencia y destino."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de reenvío masivo, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "cross_channel"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Información solicitada por distintos equipos.",
+        "Un mensaje reenviado no es infracción por su forma; importan autorización, frecuencia y destino."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "chain_messages",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Cadenas de mensajes",
+        "en-US": "Chain messages",
+        "pt-BR": "Correntes de mensagens"
+      },
+      "family": "spam",
+      "description": "Contenido que exige republicarse y se distribuye en cadena.",
+      "positive_synthetic_example": "Una cadena invita a copiar un mensaje en todos los canales.",
+      "negative_synthetic_example": "Un juego de escritura expresamente permitido.",
+      "observable_signals": [
+        "Contenido que exige republicarse y se distribuye en cadena."
+      ],
+      "context_and_polysemy": "Reconocer una instrucción de reenvío no prueba su ejecución; no usar palabras aisladas para acusar.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Reconocer una instrucción de reenvío no prueba su ejecución; no usar palabras aisladas para acusar."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de cadenas de mensajes, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un juego de escritura expresamente permitido.",
+        "Reconocer una instrucción de reenvío no prueba su ejecución; no usar palabras aisladas para acusar."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "insistent_requests",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Solicitudes insistentes",
+        "en-US": "Persistent requests",
+        "pt-BR": "Solicitações insistentes"
+      },
+      "family": "spam",
+      "description": "Reiteración propia de una solicitud dentro de una ventana de baja actividad.",
+      "positive_synthetic_example": "La misma petición interrumpe repetidamente una conversación.",
+      "negative_synthetic_example": "Una consulta repetida tras un problema técnico.",
+      "observable_signals": [
+        "Reiteración propia de una solicitud dentro de una ventana de baja actividad."
+      ],
+      "context_and_polysemy": "No se sabe si recibió respuesta o si la necesidad era legítima solo a partir de huellas.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No se sabe si recibió respuesta o si la necesidad era legítima solo a partir de huellas."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de solicitudes insistentes, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "repeat",
+        "similar_text"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una consulta repetida tras un problema técnico.",
+        "No se sabe si recibió respuesta o si la necesidad era legítima solo a partir de huellas."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "repeated_images",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Imágenes idénticas repetidas",
+        "en-US": "Repeated identical images",
+        "pt-BR": "Imagens idênticas repetidas"
+      },
+      "family": "media",
+      "description": "Hash criptográfico igual entre adjuntos acotados del propio actor.",
+      "positive_synthetic_example": "La misma imagen se publica varias veces seguidas.",
+      "negative_synthetic_example": "La misma imagen se usa una vez por persona en un juego permitido.",
+      "observable_signals": [
+        "Hash criptográfico igual entre adjuntos acotados del propio actor."
+      ],
+      "context_and_polysemy": "La igualdad de bytes no determina si publicar era indebido; no descargar adjuntos sin límite.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La igualdad de bytes no determina si publicar era indebido; no descargar adjuntos sin límite."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de imágenes idénticas repetidas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "images"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "La misma imagen se usa una vez por persona en un juego permitido.",
+        "La igualdad de bytes no determina si publicar era indebido; no descargar adjuntos sin límite."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "similar_images",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Imágenes visualmente similares",
+        "en-US": "Visually similar images",
+        "pt-BR": "Imagens visualmente semelhantes"
+      },
+      "family": "media",
+      "description": "Huellas perceptuales próximas de imágenes informativas.",
+      "positive_synthetic_example": "Variantes mínimas de una misma imagen se reiteran.",
+      "negative_synthetic_example": "Dos diagramas con fondo uniforme.",
+      "observable_signals": [
+        "Huellas perceptuales próximas de imágenes informativas."
+      ],
+      "context_and_polysemy": "Una distancia de hash no acredita identidad, significado ni intención; excluir huellas triviales.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Una distancia de hash no acredita identidad, significado ni intención; excluir huellas triviales."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de imágenes visualmente similares, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "similar_images"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos diagramas con fondo uniforme.",
+        "Una distancia de hash no acredita identidad, significado ni intención; excluir huellas triviales."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "repeated_gifs",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "GIF reiterados",
+        "en-US": "Repeated GIFs",
+        "pt-BR": "GIFs repetidos"
+      },
+      "family": "media",
+      "description": "Igualdad de bytes de GIF descargados bajo el límite de imagen.",
+      "positive_synthetic_example": "El mismo GIF se insiste varias veces.",
+      "negative_synthetic_example": "Dos GIF diferentes comparten el primer fotograma.",
+      "observable_signals": [
+        "Igualdad de bytes de GIF descargados bajo el límite de imagen."
+      ],
+      "context_and_polysemy": "El hash perceptual de un fotograma no compara toda la animación; no anunciar comprensión de vídeo.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El hash perceptual de un fotograma no compara toda la animación; no anunciar comprensión de vídeo."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de gif reiterados, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "images"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos GIF diferentes comparten el primer fotograma.",
+        "El hash perceptual de un fotograma no compara toda la animación; no anunciar comprensión de vídeo."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "repeated_stickers",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Stickers reiterados",
+        "en-US": "Repeated stickers",
+        "pt-BR": "Figurinhas repetidas"
+      },
+      "family": "media",
+      "description": "Identificador de sticker repetido por el mismo actor.",
+      "positive_synthetic_example": "Un sticker se publica repetidamente en segundos.",
+      "negative_synthetic_example": "Un sticker de saludo una sola vez.",
+      "observable_signals": [
+        "Identificador de sticker repetido por el mismo actor."
+      ],
+      "context_and_polysemy": "La repetición del ID es observable sin descargar imágenes; las celebraciones pueden estar permitidas.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La repetición del ID es observable sin descargar imágenes; las celebraciones pueden estar permitidas."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de stickers reiterados, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "sticker_repeat"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un sticker de saludo una sola vez.",
+        "La repetición del ID es observable sin descargar imágenes; las celebraciones pueden estar permitidas."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "planned_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "attachment_burst",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Saturación mediante adjuntos",
+        "en-US": "Attachment flooding",
+        "pt-BR": "Excesso de anexos"
+      },
+      "family": "media",
+      "description": "Acumulación extraordinaria de adjuntos del actor en una ventana breve.",
+      "positive_synthetic_example": "Numerosos archivos ocupan consecutivamente el canal.",
+      "negative_synthetic_example": "Un envío solicitado de varios documentos.",
+      "observable_signals": [
+        "Acumulación extraordinaria de adjuntos del actor en una ventana breve."
+      ],
+      "context_and_polysemy": "Contar archivos no analiza su contenido ni los convierte en malware; no descargar archivos arbitrarios.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Contar archivos no analiza su contenido ni los convierte en malware; no descargar archivos arbitrarios."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de saturación mediante adjuntos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "attachment_flood"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un envío solicitado de varios documentos.",
+        "Contar archivos no analiza su contenido ni los convierte en malware; no descargar archivos arbitrarios."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "planned_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "embed_burst",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Saturación mediante embeds",
+        "en-US": "Embed flooding",
+        "pt-BR": "Excesso de embeds"
+      },
+      "family": "media",
+      "description": "Reiteración de tarjetas o vistas previas que dificulta leer.",
+      "positive_synthetic_example": "Publicaciones insistentes generan muchas tarjetas.",
+      "negative_synthetic_example": "Una lista útil de recursos solicitada.",
+      "observable_signals": [
+        "Reiteración de tarjetas o vistas previas que dificulta leer."
+      ],
+      "context_and_polysemy": "Las vistas previas pueden generarlas Discord o bots permitidos; sin evento/atribución fiable, revisión humana.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Las vistas previas pueden generarlas Discord o bots permitidos; sin evento/atribución fiable, revisión humana."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de saturación mediante embeds, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una lista útil de recursos solicitada.",
+        "Las vistas previas pueden generarlas Discord o bots permitidos; sin evento/atribución fiable, revisión humana."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "unauthorized_promotion",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Promoción no autorizada",
+        "en-US": "Unauthorized promotion",
+        "pt-BR": "Promoção não autorizada"
+      },
+      "family": "promotion",
+      "description": "Enlace acompañado de llamada comercial y una regla que restringe promoción.",
+      "positive_synthetic_example": "Una oferta comercial con enlace fuera del espacio permitido.",
+      "negative_synthetic_example": "Un enlace documental sin oferta comercial.",
+      "observable_signals": [
+        "Enlace acompañado de llamada comercial y una regla que restringe promoción."
+      ],
+      "context_and_polysemy": "Un enlace no es publicidad; «oferta» puede ser de ayuda, trabajo o una cita.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Un enlace no es publicidad; «oferta» puede ser de ayuda, trabajo o una cita."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de promoción no autorizada, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "advertising"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un enlace documental sin oferta comercial.",
+        "Un enlace no es publicidad; «oferta» puede ser de ayuda, trabajo o una cita."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "repeated_promotion",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Promoción reiterada",
+        "en-US": "Repeated promotion",
+        "pt-BR": "Promoção repetida"
+      },
+      "family": "promotion",
+      "description": "Señales comerciales y reiteración propia de destino.",
+      "positive_synthetic_example": "Una oferta con enlace se repite varias veces.",
+      "negative_synthetic_example": "Una oferta autorizada una sola vez en promociones.",
+      "observable_signals": [
+        "Señales comerciales y reiteración propia de destino."
+      ],
+      "context_and_polysemy": "Respetar canales, roles y autorizaciones expresas; la repetición y la promoción son dimensiones diferentes.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Respetar canales, roles y autorizaciones expresas; la repetición y la promoción son dimensiones diferentes."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de promoción reiterada, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "advertising",
+        "links"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una oferta autorizada una sola vez en promociones.",
+        "Respetar canales, roles y autorizaciones expresas; la repetición y la promoción son dimensiones diferentes."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "server_invites",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Invitaciones a servidores",
+        "en-US": "Server invitations",
+        "pt-BR": "Convites para servidores"
+      },
+      "family": "promotion",
+      "description": "Enlaces con formato de invitación y regla que restringe invitaciones.",
+      "positive_synthetic_example": "Invitación no solicitada para captar miembros.",
+      "negative_synthetic_example": "Un enlace al propio servidor o colaboración autorizada.",
+      "observable_signals": [
+        "Enlaces con formato de invitación y regla que restringe invitaciones."
+      ],
+      "context_and_polysemy": "El formato de invitación no demuestra captación abusiva ni que el destino exista.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El formato de invitación no demuestra captación abusiva ni que el destino exista."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de invitaciones a servidores, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un enlace al propio servidor o colaboración autorizada.",
+        "El formato de invitación no demuestra captación abusiva ni que el destino exista."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "referral_links",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Referidos y recompensas",
+        "en-US": "Referral and reward links",
+        "pt-BR": "Links de indicação e recompensas"
+      },
+      "family": "promotion",
+      "description": "Referencia explícita a recompensas o atribución de referidos.",
+      "positive_synthetic_example": "Captación insistente con una recompensa.",
+      "negative_synthetic_example": "Enlace de referencia autorizado y claramente rotulado.",
+      "observable_signals": [
+        "Referencia explícita a recompensas o atribución de referidos."
+      ],
+      "context_and_polysemy": "No afirmar fraude por parámetros de URL; se necesita una prohibición concreta y contexto.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No afirmar fraude por parámetros de URL; se necesita una prohibición concreta y contexto."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de referidos y recompensas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Enlace de referencia autorizado y claramente rotulado.",
+        "No afirmar fraude por parámetros de URL; se necesita una prohibición concreta y contexto."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "commercial_solicitation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Solicitudes comerciales",
+        "en-US": "Commercial solicitation",
+        "pt-BR": "Solicitações comerciais"
+      },
+      "family": "promotion",
+      "description": "Solicitud de compra, venta o contacto comercial bajo regla aplicable.",
+      "positive_synthetic_example": "Una solicitud comercial no permitida en soporte.",
+      "negative_synthetic_example": "Consulta comercial permitida en el canal de comercio.",
+      "observable_signals": [
+        "Solicitud de compra, venta o contacto comercial bajo regla aplicable."
+      ],
+      "context_and_polysemy": "No inferir intercambio ilícito ni intención a partir de «vendo» o «compro» por sí solos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inferir intercambio ilícito ni intención a partir de «vendo» o «compro» por sí solos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de solicitudes comerciales, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Consulta comercial permitida en el canal de comercio.",
+        "No inferir intercambio ilícito ni intención a partir de «vendo» o «compro» por sí solos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "covert_advertising",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Publicidad encubierta",
+        "en-US": "Undisclosed advertising",
+        "pt-BR": "Publicidade disfarçada"
+      },
+      "family": "promotion",
+      "description": "Indicios contextuales de promoción que se presenta como recomendación neutral.",
+      "positive_synthetic_example": "Una recomendación oculta reiterada con beneficio comercial comprobable.",
+      "negative_synthetic_example": "Una recomendación espontánea sin relación comercial.",
+      "observable_signals": [
+        "Indicios contextuales de promoción que se presenta como recomendación neutral."
+      ],
+      "context_and_polysemy": "No se puede deducir una relación económica o intención oculta por similitud de textos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No se puede deducir una relación económica o intención oculta por similitud de textos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de publicidad encubierta, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una recomendación espontánea sin relación comercial.",
+        "No se puede deducir una relación económica o intención oculta por similitud de textos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "invasive_recruitment",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Captación invasiva",
+        "en-US": "Intrusive recruitment",
+        "pt-BR": "Recrutamento invasivo"
+      },
+      "family": "promotion",
+      "description": "Peticiones reiteradas de trasladar la conversación o unirse a otro espacio.",
+      "positive_synthetic_example": "Captación insistente tras una negativa verificable.",
+      "negative_synthetic_example": "Invitación aceptada a una colaboración.",
+      "observable_signals": [
+        "Peticiones reiteradas de trasladar la conversación o unirse a otro espacio."
+      ],
+      "context_and_polysemy": "No leer DMs ni atribuir negativas que el bot no presenció.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No leer DMs ni atribuir negativas que el bot no presenció."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de captación invasiva, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Invitación aceptada a una colaboración.",
+        "No leer DMs ni atribuir negativas que el bot no presenció."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "directed_insult",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Insultos dirigidos",
+        "en-US": "Directed insults",
+        "pt-BR": "Insultos direcionados"
+      },
+      "family": "interpersonal",
+      "description": "Expresión descalificadora dirigida a una persona identificable y contexto suficiente.",
+      "positive_synthetic_example": "Un ataque personal directo bajo una regla contra insultos.",
+      "negative_synthetic_example": "Cita de un insulto para denunciarlo.",
+      "observable_signals": [
+        "Expresión descalificadora dirigida a una persona identificable y contexto suficiente."
+      ],
+      "context_and_polysemy": "Citas, ironía, usos regionales, bromas consentidas y palabras polisémicas impiden una conclusión por léxico.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Citas, ironía, usos regionales, bromas consentidas y palabras polisémicas impiden una conclusión por léxico."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de insultos dirigidos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Cita de un insulto para denunciarlo.",
+        "Citas, ironía, usos regionales, bromas consentidas y palabras polisémicas impiden una conclusión por léxico."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "repeated_devaluation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Descalificación reiterada",
+        "en-US": "Repeated belittling",
+        "pt-BR": "Desqualificação repetida"
+      },
+      "family": "interpersonal",
+      "description": "Secuencia reiterada de descalificaciones a un mismo destinatario.",
+      "positive_synthetic_example": "Ataques persistentes a una persona en distintas intervenciones.",
+      "negative_synthetic_example": "Crítica concreta a una propuesta.",
+      "observable_signals": [
+        "Secuencia reiterada de descalificaciones a un mismo destinatario."
+      ],
+      "context_and_polysemy": "Distinguir crítica de ideas de ataques personales; no inferir relación interpersonal.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Distinguir crítica de ideas de ataques personales; no inferir relación interpersonal."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de descalificación reiterada, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Crítica concreta a una propuesta.",
+        "Distinguir crítica de ideas de ataques personales; no inferir relación interpersonal."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "persistent_provocation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Provocación persistente",
+        "en-US": "Persistent provocation",
+        "pt-BR": "Provocação persistente"
+      },
+      "family": "interpersonal",
+      "description": "Intervenciones repetidas que buscan una reacción bajo evidencia contextual.",
+      "positive_synthetic_example": "Provocaciones verificables que continúan tras una indicación válida.",
+      "negative_synthetic_example": "Desacuerdo intenso sobre una idea.",
+      "observable_signals": [
+        "Intervenciones repetidas que buscan una reacción bajo evidencia contextual."
+      ],
+      "context_and_polysemy": "La intención de provocar no se mide por sentimiento o frecuencia por sí solos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La intención de provocar no se mide por sentimiento o frecuencia por sí solos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de provocación persistente, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Desacuerdo intenso sobre una idea.",
+        "La intención de provocar no se mide por sentimiento o frecuencia por sí solos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "repeated_harassment",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Hostigamiento reiterado",
+        "en-US": "Repeated harassment",
+        "pt-BR": "Assédio reiterado"
+      },
+      "family": "interpersonal",
+      "description": "Persistencia dirigida no deseada respaldada por secuencia y destinatario.",
+      "positive_synthetic_example": "Insistencia dirigida tras una negativa visible.",
+      "negative_synthetic_example": "Intercambio recíproco consentido.",
+      "observable_signals": [
+        "Persistencia dirigida no deseada respaldada por secuencia y destinatario."
+      ],
+      "context_and_polysemy": "No inferir consentimiento o rechazo; no entrenar con conversaciones privadas.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inferir consentimiento o rechazo; no entrenar con conversaciones privadas."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de hostigamiento reiterado, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Intercambio recíproco consentido.",
+        "No inferir consentimiento o rechazo; no entrenar con conversaciones privadas."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "cross_channel_pursuit",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Persecución entre canales",
+        "en-US": "Cross-channel targeting",
+        "pt-BR": "Perseguição entre canais"
+      },
+      "family": "interpersonal",
+      "description": "El mismo destinatario recibe interacciones persistentes en distintos canales accesibles.",
+      "positive_synthetic_example": "Seguimiento dirigido reiterado tras un rechazo verificable.",
+      "negative_synthetic_example": "Dos miembros participan normalmente en varios canales.",
+      "observable_signals": [
+        "El mismo destinatario recibe interacciones persistentes en distintos canales accesibles."
+      ],
+      "context_and_polysemy": "Coincidir en canales no prueba persecución; preservar ACL y revisión humana.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Coincidir en canales no prueba persecución; preservar ACL y revisión humana."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de persecución entre canales, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos miembros participan normalmente en varios canales.",
+        "Coincidir en canales no prueba persecución; preservar ACL y revisión humana."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "collective_harassment",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Hostigamiento colectivo",
+        "en-US": "Coordinated harassment",
+        "pt-BR": "Assédio coletivo"
+      },
+      "family": "interpersonal",
+      "description": "Acciones dirigidas y evidencia de participación propia de varios actores.",
+      "positive_synthetic_example": "Varios actores reiteran ataques a una persona.",
+      "negative_synthetic_example": "Muchas personas responden una vez a una pregunta pública.",
+      "observable_signals": [
+        "Acciones dirigidas y evidencia de participación propia de varios actores."
+      ],
+      "context_and_polysemy": "La coincidencia temporal o pertenencia grupal no demuestra coordinación ni culpa individual.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La coincidencia temporal o pertenencia grupal no demuestra coordinación ni culpa individual."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de hostigamiento colectivo, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Muchas personas responden una vez a una pregunta pública.",
+        "La coincidencia temporal o pertenencia grupal no demuestra coordinación ni culpa individual."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "threats",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Amenazas",
+        "en-US": "Threats",
+        "pt-BR": "Ameaças"
+      },
+      "family": "interpersonal",
+      "description": "Expresión dirigida de daño con suficiente contexto y referencia verificable.",
+      "positive_synthetic_example": "[Ejemplo sintético no gráfico de una amenaza dirigida].",
+      "negative_synthetic_example": "Cita o relato para pedir ayuda.",
+      "observable_signals": [
+        "Expresión dirigida de daño con suficiente contexto y referencia verificable."
+      ],
+      "context_and_polysemy": "«Te voy a ganar» en un juego no es automáticamente amenaza; la gravedad exige más evidencia, no menos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "«Te voy a ganar» en un juego no es automáticamente amenaza; la gravedad exige más evidencia, no menos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de amenazas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Cita o relato para pedir ayuda.",
+        "«Te voy a ganar» en un juego no es automáticamente amenaza; la gravedad exige más evidencia, no menos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "intimidation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Intimidación",
+        "en-US": "Intimidation",
+        "pt-BR": "Intimidação"
+      },
+      "family": "interpersonal",
+      "description": "Presión dirigida mediante consecuencias hostiles contextualizadas.",
+      "positive_synthetic_example": "Presión intimidatoria verificable contra otro miembro.",
+      "negative_synthetic_example": "Descripción neutral de consecuencias de una regla.",
+      "observable_signals": [
+        "Presión dirigida mediante consecuencias hostiles contextualizadas."
+      ],
+      "context_and_polysemy": "No confundir advertencia administrativa legítima con intimidación.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No confundir advertencia administrativa legítima con intimidación."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de intimidación, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Descripción neutral de consecuencias de una regla.",
+        "No confundir advertencia administrativa legítima con intimidación."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "degrading_mockery",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Burlas degradantes",
+        "en-US": "Degrading mockery",
+        "pt-BR": "Deboche degradante"
+      },
+      "family": "interpersonal",
+      "description": "Burla dirigida cuya naturaleza degradante se acredita por contexto.",
+      "positive_synthetic_example": "Humillación reiterada a un miembro.",
+      "negative_synthetic_example": "Humor consentido entre participantes.",
+      "observable_signals": [
+        "Burla dirigida cuya naturaleza degradante se acredita por contexto."
+      ],
+      "context_and_polysemy": "La relación, el consentimiento y los registros regionales no pueden suponerse.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La relación, el consentimiento y los registros regionales no pueden suponerse."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de burlas degradantes, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Humor consentido entre participantes.",
+        "La relación, el consentimiento y los registros regionales no pueden suponerse."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "discrimination",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Discriminación",
+        "en-US": "Discrimination",
+        "pt-BR": "Discriminação"
+      },
+      "family": "interpersonal",
+      "description": "Trato o expresión de exclusión bajo una regla concreta y evidencia suficiente.",
+      "positive_synthetic_example": "[Ejemplo sintético no gráfico de exclusión discriminatoria].",
+      "negative_synthetic_example": "Discusión crítica de discriminación para rechazarla.",
+      "observable_signals": [
+        "Trato o expresión de exclusión bajo una regla concreta y evidencia suficiente."
+      ],
+      "context_and_polysemy": "No inferir identidad, nacionalidad, atributos sensibles ni intención de la persona.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inferir identidad, nacionalidad, atributos sensibles ni intención de la persona."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de discriminación, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Discusión crítica de discriminación para rechazarla.",
+        "No inferir identidad, nacionalidad, atributos sensibles ni intención de la persona."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "protected_attribute_attacks",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Ataques por atributos protegidos",
+        "en-US": "Protected-attribute attacks",
+        "pt-BR": "Ataques por características protegidas"
+      },
+      "family": "interpersonal",
+      "description": "Ataque dirigido basado expresamente en un atributo protegido.",
+      "positive_synthetic_example": "[Ejemplo sintético no gráfico de un ataque de odio].",
+      "negative_synthetic_example": "Contradiscurso que menciona una frase para condenarla.",
+      "observable_signals": [
+        "Ataque dirigido basado expresamente en un atributo protegido."
+      ],
+      "context_and_polysemy": "Distinguir uso de mención y reapropiación; no usar listas de términos como prueba de culpabilidad.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Distinguir uso de mención y reapropiación; no usar listas de términos como prueba de culpabilidad."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de ataques por atributos protegidos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Contradiscurso que menciona una frase para condenarla.",
+        "Distinguir uso de mención y reapropiación; no usar listas de términos como prueba de culpabilidad."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "harassment_incitement",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Incitación a hostigar",
+        "en-US": "Incitement to harass",
+        "pt-BR": "Incitação ao assédio"
+      },
+      "family": "interpersonal",
+      "description": "Llamamiento contextualizado a dirigir acciones hostiles a un destinatario.",
+      "positive_synthetic_example": "Una convocatoria verificable de hostigamiento.",
+      "negative_synthetic_example": "Invitación a denunciar una infracción de buena fe.",
+      "observable_signals": [
+        "Llamamiento contextualizado a dirigir acciones hostiles a un destinatario."
+      ],
+      "context_and_polysemy": "No confundir denuncia legítima, cita y llamada al acoso.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No confundir denuncia legítima, cita y llamada al acoso."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de incitación a hostigar, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Invitación a denunciar una infracción de buena fe.",
+        "No confundir denuncia legítima, cita y llamada al acoso."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "contextual_hostility",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Hostilidad contextual",
+        "en-US": "Contextual hostility",
+        "pt-BR": "Hostilidade contextual"
+      },
+      "family": "interpersonal",
+      "description": "Contexto conversacional suficiente para valorar lenguaje aparentemente hostil.",
+      "positive_synthetic_example": "Una expresión hostil dirigida y no consentida.",
+      "negative_synthetic_example": "Una expresión regional afectuosa entre amigos.",
+      "observable_signals": [
+        "Contexto conversacional suficiente para valorar lenguaje aparentemente hostil."
+      ],
+      "context_and_polysemy": "El sentimiento negativo o una puntuación de confianza no sustituye evidencia.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El sentimiento negativo o una puntuación de confianza no sustituye evidencia."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de hostilidad contextual, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una expresión regional afectuosa entre amigos.",
+        "El sentimiento negativo o una puntuación de confianza no sustituye evidencia."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "sexual_harassment",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Hostigamiento sexual",
+        "en-US": "Sexual harassment",
+        "pt-BR": "Assédio sexual"
+      },
+      "family": "interpersonal",
+      "description": "Conducta sexual no deseada acreditada sin divulgar material sensible.",
+      "positive_synthetic_example": "[Ejemplo sintético no gráfico de insistencia sexual no deseada].",
+      "negative_synthetic_example": "Conversación adulta consentida en un espacio autorizado.",
+      "observable_signals": [
+        "Conducta sexual no deseada acreditada sin divulgar material sensible."
+      ],
+      "context_and_polysemy": "Nunca inferir consentimiento o edad; no recopilar contenido privado ni material gráfico para entrenar.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Nunca inferir consentimiento o edad; no recopilar contenido privado ni material gráfico para entrenar."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de hostigamiento sexual, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Conversación adulta consentida en un espacio autorizado.",
+        "Nunca inferir consentimiento o edad; no recopilar contenido privado ni material gráfico para entrenar."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "discord_harassment",
+        "context_study",
+        "use_mention_study"
+      ]
+    },
+    {
+      "id": "credential_solicitation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Solicitudes de credenciales",
+        "en-US": "Credential requests",
+        "pt-BR": "Solicitações de credenciais"
+      },
+      "family": "security",
+      "description": "Petición contextualizada de secretos de acceso.",
+      "positive_synthetic_example": "Un falso soporte solicita una contraseña.",
+      "negative_synthetic_example": "Un aviso que dice que nunca se comparta la contraseña.",
+      "observable_signals": [
+        "Petición contextualizada de secretos de acceso."
+      ],
+      "context_and_polysemy": "Mencionar «contraseña», «token» o «senha» en una guía no constituye robo ni prueba fraude.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Mencionar «contraseña», «token» o «senha» en una guía no constituye robo ni prueba fraude."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de solicitudes de credenciales, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un aviso que dice que nunca se comparta la contraseña.",
+        "Mencionar «contraseña», «token» o «senha» en una guía no constituye robo ni prueba fraude."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "staff_impersonation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Suplantación de personal",
+        "en-US": "Staff impersonation",
+        "pt-BR": "Falsificação de identidade da equipe"
+      },
+      "family": "security",
+      "description": "Afirmación de autoridad contrastada con un registro autorizado.",
+      "positive_synthetic_example": "Una persona se atribuye falsamente un cargo verificable.",
+      "negative_synthetic_example": "Un mensaje que cita a una persona del equipo.",
+      "observable_signals": [
+        "Afirmación de autoridad contrastada con un registro autorizado."
+      ],
+      "context_and_polysemy": "No probar identidad con nombre, avatar o similitud; no descargar perfiles ni desanonimizar.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No probar identidad con nombre, avatar o similitud; no descargar perfiles ni desanonimizar."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de suplantación de personal, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un mensaje que cita a una persona del equipo.",
+        "No probar identidad con nombre, avatar o similitud; no descargar perfiles ni desanonimizar."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "user_impersonation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Suplantación de miembros",
+        "en-US": "Member impersonation",
+        "pt-BR": "Falsificação de identidade de membros"
+      },
+      "family": "security",
+      "description": "Afirmación engañosa de identidad contrastada con evidencia administrativa.",
+      "positive_synthetic_example": "Suplantación acreditada por revisión administrativa.",
+      "negative_synthetic_example": "Dos personas comparten un apodo.",
+      "observable_signals": [
+        "Afirmación engañosa de identidad contrastada con evidencia administrativa."
+      ],
+      "context_and_polysemy": "Un nombre parecido, cuenta nueva o idioma no demuestra suplantación.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Un nombre parecido, cuenta nueva o idioma no demuestra suplantación."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de suplantación de miembros, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos personas comparten un apodo.",
+        "Un nombre parecido, cuenta nueva o idioma no demuestra suplantación."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "phishing_links",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Enlaces potencialmente engañosos",
+        "en-US": "Potential phishing links",
+        "pt-BR": "Links potencialmente enganosos"
+      },
+      "family": "security",
+      "description": "Destino y contexto de una solicitud de acceso que requieren revisión.",
+      "positive_synthetic_example": "Un mensaje de falsa asistencia dirige a una página de acceso ajena.",
+      "negative_synthetic_example": "Documentación legítima que enlaza otra web.",
+      "observable_signals": [
+        "Destino y contexto de una solicitud de acceso que requieren revisión."
+      ],
+      "context_and_polysemy": "No visitar destinos de miembros ni afirmar phishing por un dominio desconocido.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No visitar destinos de miembros ni afirmar phishing por un dominio desconocido."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de enlaces potencialmente engañosos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Documentación legítima que enlaza otra web.",
+        "No visitar destinos de miembros ni afirmar phishing por un dominio desconocido."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "masked_link",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Diferencia entre URL visible y destino",
+        "en-US": "Visible-link destination mismatch",
+        "pt-BR": "Diferença entre URL visível e destino"
+      },
+      "family": "security",
+      "description": "Etiqueta con forma de URL cuyo host difiere del enlace Markdown real.",
+      "positive_synthetic_example": "Una etiqueta presenta https://seguro.example pero apunta a otro host.",
+      "negative_synthetic_example": "Un enlace cuyo texto no pretende ser una URL.",
+      "observable_signals": [
+        "Etiqueta con forma de URL cuyo host difiere del enlace Markdown real."
+      ],
+      "context_and_polysemy": "La discordancia es observable, pero no demuestra malicia; pueden existir redirecciones o acortadores legítimos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La discordancia es observable, pero no demuestra malicia; pueden existir redirecciones o acortadores legítimos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de diferencia entre url visible y destino, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "masked_link"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un enlace cuyo texto no pretende ser una URL.",
+        "La discordancia es observable, pero no demuestra malicia; pueden existir redirecciones o acortadores legítimos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "planned_signal",
+      "sources": [
+        "discord_automod",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "financial_scams",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Posibles estafas",
+        "en-US": "Potential scams",
+        "pt-BR": "Possíveis golpes"
+      },
+      "family": "security",
+      "description": "Solicitud de beneficio económico y elementos verificables de engaño.",
+      "positive_synthetic_example": "Una solicitud fraudulenta acreditada por revisión.",
+      "negative_synthetic_example": "Transacción autorizada con información transparente.",
+      "observable_signals": [
+        "Solicitud de beneficio económico y elementos verificables de engaño."
+      ],
+      "context_and_polysemy": "No decidir fraude, legalidad o responsabilidad basándose en una palabra o URL.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No decidir fraude, legalidad o responsabilidad basándose en una palabra o URL."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de posibles estafas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Transacción autorizada con información transparente.",
+        "No decidir fraude, legalidad o responsabilidad basándose en una palabra o URL."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "fake_support",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Falsa asistencia técnica",
+        "en-US": "Fake technical support",
+        "pt-BR": "Falso suporte técnico"
+      },
+      "family": "security",
+      "description": "Afirmación falsa de soporte y solicitud sospechosa de acceso.",
+      "positive_synthetic_example": "Un falso soporte pide secretos para resolver un problema.",
+      "negative_synthetic_example": "Soporte autorizado ofrece instrucciones públicas.",
+      "observable_signals": [
+        "Afirmación falsa de soporte y solicitud sospechosa de acceso."
+      ],
+      "context_and_polysemy": "Validar roles y alcance; un saludo de soporte no acredita identidad ni engaño.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Validar roles y alcance; un saludo de soporte no acredita identidad ni engaño."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de falsa asistencia técnica, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Soporte autorizado ofrece instrucciones públicas.",
+        "Validar roles y alcance; un saludo de soporte no acredita identidad ni engaño."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "giveaway_fraud",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Fraude de regalos o sorteos",
+        "en-US": "Giveaway fraud",
+        "pt-BR": "Fraude em brindes e sorteios"
+      },
+      "family": "security",
+      "description": "Promesa de premio con condiciones engañosas verificadas.",
+      "positive_synthetic_example": "Un premio falso exige entregar una credencial.",
+      "negative_synthetic_example": "Sorteo autorizado que no solicita secretos.",
+      "observable_signals": [
+        "Promesa de premio con condiciones engañosas verificadas."
+      ],
+      "context_and_polysemy": "«Regalo» o «giveaway» puede ser un evento legítimo; no acusar por publicidad aislada.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "«Regalo» o «giveaway» puede ser un evento legítimo; no acusar por publicidad aislada."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de fraude de regalos o sorteos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Sorteo autorizado que no solicita secretos.",
+        "«Regalo» o «giveaway» puede ser un evento legítimo; no acusar por publicidad aislada."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "nonconsensual_pii",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Divulgación no consentida de datos",
+        "en-US": "Nonconsensual personal-data disclosure",
+        "pt-BR": "Divulgação não consentida de dados"
+      },
+      "family": "security",
+      "description": "Información identificable y contexto que acredita falta de autorización.",
+      "positive_synthetic_example": "[Datos ficticios] se difunden contra una prohibición explícita.",
+      "negative_synthetic_example": "Una persona publica su propio contacto autorizado.",
+      "observable_signals": [
+        "Información identificable y contexto que acredita falta de autorización."
+      ],
+      "context_and_polysemy": "Un número no acredita que sea real, personal, ajeno o no consentido; minimizar copia y audiencia.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Un número no acredita que sea real, personal, ajeno o no consentido; minimizar copia y audiencia."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de divulgación no consentida de datos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una persona publica su propio contacto autorizado.",
+        "Un número no acredita que sea real, personal, ajeno o no consentido; minimizar copia y audiencia."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "social_engineering",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Ingeniería social",
+        "en-US": "Social engineering",
+        "pt-BR": "Engenharia social"
+      },
+      "family": "security",
+      "description": "Secuencia de manipulación y solicitud de una acción sensible respaldada por contexto.",
+      "positive_synthetic_example": "Una falsa urgencia induce a revelar acceso.",
+      "negative_synthetic_example": "Aviso legítimo de un administrador conocido.",
+      "observable_signals": [
+        "Secuencia de manipulación y solicitud de una acción sensible respaldada por contexto."
+      ],
+      "context_and_polysemy": "La urgencia o cortesía no demuestran manipulación; no atribuir intención sin prueba.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La urgencia o cortesía no demuestran manipulación; no atribuir intención sin prueba."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de ingeniería social, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Aviso legítimo de un administrador conocido.",
+        "La urgencia o cortesía no demuestran manipulación; no atribuir intención sin prueba."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "suspicious_files",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Archivos sospechosos",
+        "en-US": "Suspicious files",
+        "pt-BR": "Arquivos suspeitos"
+      },
+      "family": "security",
+      "description": "Metadatos o alerta de una fuente de seguridad autorizada.",
+      "positive_synthetic_example": "Un archivo con alerta verificable requiere revisión.",
+      "negative_synthetic_example": "Un archivo de trabajo solicitado.",
+      "observable_signals": [
+        "Metadatos o alerta de una fuente de seguridad autorizada."
+      ],
+      "context_and_polysemy": "Nombre, extensión o MIME no prueban malware; no ejecutar ni descargar archivos indiscriminadamente.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Nombre, extensión o MIME no prueban malware; no ejecutar ni descargar archivos indiscriminadamente."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de archivos sospechosos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un archivo de trabajo solicitado.",
+        "Nombre, extensión o MIME no prueban malware; no ejecutar ni descargar archivos indiscriminadamente."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "synchronized_posts",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Publicaciones sincronizadas",
+        "en-US": "Synchronized posting",
+        "pt-BR": "Publicações sincronizadas"
+      },
+      "family": "coordination",
+      "description": "Contenido coincidente de varios actores con contribución propia repetida.",
+      "positive_synthetic_example": "Varios actores repiten el mismo texto de interrupción.",
+      "negative_synthetic_example": "Felicitaciones legítimas de varias personas.",
+      "observable_signals": [
+        "Contenido coincidente de varios actores con contribución propia repetida."
+      ],
+      "context_and_polysemy": "La simultaneidad es una señal; no equivale a acuerdo previo ni culpa colectiva.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La simultaneidad es una señal; no equivale a acuerdo previo ni culpa colectiva."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de publicaciones sincronizadas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "coordinated"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Felicitaciones legítimas de varias personas.",
+        "La simultaneidad es una señal; no equivale a acuerdo previo ni culpa colectiva."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "mention_campaign",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Campañas de menciones",
+        "en-US": "Mention campaigns",
+        "pt-BR": "Campanhas de menções"
+      },
+      "family": "coordination",
+      "description": "Menciones masivas y reiteración atribuible a cada actor.",
+      "positive_synthetic_example": "Una campaña repetitiva satura destinatarios.",
+      "negative_synthetic_example": "Una convocatoria autorizada a una actividad.",
+      "observable_signals": [
+        "Menciones masivas y reiteración atribuible a cada actor."
+      ],
+      "context_and_polysemy": "No compartir atribución entre actores ni castigar una participación única.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No compartir atribución entre actores ni castigar una participación única."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de campañas de menciones, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "mentions",
+        "coordinated"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una convocatoria autorizada a una actividad.",
+        "No compartir atribución entre actores ni castigar una participación única."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "interruption_campaign",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Campañas de interrupción",
+        "en-US": "Disruption campaigns",
+        "pt-BR": "Campanhas de interrupção"
+      },
+      "family": "coordination",
+      "description": "Repetición distribuida con evidencia individual propia.",
+      "positive_synthetic_example": "Contenido idéntico se repite para interrumpir varios espacios.",
+      "negative_synthetic_example": "Un evento comunitario coordinado y permitido.",
+      "observable_signals": [
+        "Repetición distribuida con evidencia individual propia."
+      ],
+      "context_and_polysemy": "«Raid» puede ser una actividad de juego; la coordinación por sí misma no es infracción.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "«Raid» puede ser una actividad de juego; la coordinación por sí misma no es infracción."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de campañas de interrupción, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "coordinated",
+        "cross_channel"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un evento comunitario coordinado y permitido.",
+        "«Raid» puede ser una actividad de juego; la coordinación por sí misma no es infracción."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "brigading",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Brigading",
+        "en-US": "Brigading",
+        "pt-BR": "Brigading"
+      },
+      "family": "coordination",
+      "description": "Participación coordinada hostil acreditada con contexto legítimo.",
+      "positive_synthetic_example": "Una convocatoria hostil verificable dirige acciones al servidor.",
+      "negative_synthetic_example": "Llegada normal de participantes desde una colaboración.",
+      "observable_signals": [
+        "Participación coordinada hostil acreditada con contexto legítimo."
+      ],
+      "context_and_polysemy": "No inferir intención por hora de ingreso, procedencia o pertenencia común; no reimplementar antirraid.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inferir intención por hora de ingreso, procedencia o pertenencia común; no reimplementar antirraid."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de brigading, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Llegada normal de participantes desde una colaboración.",
+        "No inferir intención por hora de ingreso, procedencia o pertenencia común; no reimplementar antirraid."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "ban_evasion",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Evasión de sanciones",
+        "en-US": "Sanction evasion",
+        "pt-BR": "Evasão de sanções"
+      },
+      "family": "coordination",
+      "description": "Correspondencia de identidad establecida por un mecanismo autorizado.",
+      "positive_synthetic_example": "Evasión acreditada por el equipo con evidencia suficiente.",
+      "negative_synthetic_example": "Dos miembros coinciden en estilo de escritura.",
+      "observable_signals": [
+        "Correspondencia de identidad establecida por un mecanismo autorizado."
+      ],
+      "context_and_polysemy": "No vincular cuentas por similitud, red, nacionalidad, avatar o huella invasiva.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No vincular cuentas por similitud, red, nacionalidad, avatar o huella invasiva."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de evasión de sanciones, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos miembros coinciden en estilo de escritura.",
+        "No vincular cuentas por similitud, red, nacionalidad, avatar o huella invasiva."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "mass_mentions",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Menciones masivas",
+        "en-US": "Mass mentions",
+        "pt-BR": "Menções em massa"
+      },
+      "family": "features",
+      "description": "Muchas menciones únicas de personas o roles en un mensaje.",
+      "positive_synthetic_example": "Un mensaje menciona numerosos destinatarios contra una regla.",
+      "negative_synthetic_example": "Una convocatoria autorizada a un equipo.",
+      "observable_signals": [
+        "Muchas menciones únicas de personas o roles en un mensaje."
+      ],
+      "context_and_polysemy": "La regla puede permitir menciones en un canal o a cierto personal; contar destinatarios únicos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La regla puede permitir menciones en un canal o a cierto personal; contar destinatarios únicos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de menciones masivas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "mentions"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una convocatoria autorizada a un equipo.",
+        "La regla puede permitir menciones en un canal o a cierto personal; contar destinatarios únicos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "broadcast_mentions",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Abuso de menciones generales",
+        "en-US": "Broadcast-mention abuse",
+        "pt-BR": "Abuso de menções gerais"
+      },
+      "family": "features",
+      "description": "Uso de @everyone o @here bajo una prohibición aplicable.",
+      "positive_synthetic_example": "Una mención general no autorizada interrumpe a la comunidad.",
+      "negative_synthetic_example": "Aviso permitido de personal autorizado.",
+      "observable_signals": [
+        "Uso de @everyone o @here bajo una prohibición aplicable."
+      ],
+      "context_and_polysemy": "No inferir abuso de una cita sin ping efectivo; usar el indicador de Discord y exenciones.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inferir abuso de una cita sin ping efectivo; usar el indicador de Discord y exenciones."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de abuso de menciones generales, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "mentions"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Aviso permitido de personal autorizado.",
+        "No inferir abuso de una cita sin ping efectivo; usar el indicador de Discord y exenciones."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "objetiva/determinista (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "existing_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "directed_mentions",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Menciones insistentes",
+        "en-US": "Repeated targeted mentions",
+        "pt-BR": "Menções direcionadas repetidas"
+      },
+      "family": "features",
+      "description": "El mismo autor menciona reiteradamente al mismo destinatario.",
+      "positive_synthetic_example": "Pings repetidos a una persona en una ventana breve.",
+      "negative_synthetic_example": "Dos respuestas que mencionan a un colaborador.",
+      "observable_signals": [
+        "El mismo autor menciona reiteradamente al mismo destinatario."
+      ],
+      "context_and_polysemy": "No inferir rechazo ni acoso; la insistencia es señal provisional con contexto.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inferir rechazo ni acoso; la insistencia es señal provisional con contexto."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "GUILD_MESSAGES",
+        "MESSAGE_CONTENT",
+        "VIEW_CHANNEL",
+        "READ_MESSAGE_HISTORY"
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de menciones insistentes, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "directed_mentions"
+      ],
+      "threshold_context": "Ventanas acotadas, umbrales documentados por mecanismo y sensibilidad; nunca cambian la prohibición.",
+      "resource_cost": "Sin clasificador IA por mensaje; huellas en ventana de 90 s / 4096 eventos; imágenes solo si procede, hasta cuatro de 1 MiB / 4 Mpx.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Dos respuestas que mencionan a un colaborador.",
+        "No inferir rechazo ni acoso; la insistencia es señal provisional con contexto."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "La medida acredita solo el patrón observable; una puntuación o coincidencia no prueba culpabilidad.",
+      "capability": "heurística/contextual (señal)",
+      "automatic_action": "Solo observación provisional con regla y autorización guardadas; sin sanción automática.",
+      "human_review_required": true,
+      "implementation": "planned_signal",
+      "sources": [
+        "discord_automod"
+      ]
+    },
+    {
+      "id": "spoiler_abuse",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Abuso de spoilers",
+        "en-US": "Spoiler misuse",
+        "pt-BR": "Abuso de spoilers"
+      },
+      "family": "features",
+      "description": "Uso contextual de spoilers que incumple una regla específica.",
+      "positive_synthetic_example": "Spoilers reiterados ocultan publicaciones contra una prohibición.",
+      "negative_synthetic_example": "Contenido oculto conforme a las reglas de una discusión.",
+      "observable_signals": [
+        "Uso contextual de spoilers que incumple una regla específica."
+      ],
+      "context_and_polysemy": "El formato spoiler es una función legítima y no demuestra intención de ocultar abuso.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El formato spoiler es una función legítima y no demuestra intención de ocultar abuso."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de abuso de spoilers, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Contenido oculto conforme a las reglas de una discusión.",
+        "El formato spoiler es una función legítima y no demuestra intención de ocultar abuso."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "invisible_formatting",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Formatos invisibles engañosos",
+        "en-US": "Misleading invisible formatting",
+        "pt-BR": "Formatação invisível enganosa"
+      },
+      "family": "features",
+      "description": "Secuencias de formato y contexto de engaño o saturación.",
+      "positive_synthetic_example": "Formato engañoso acreditado que dificulta leer.",
+      "negative_synthetic_example": "Caracteres de unión válidos en una escritura.",
+      "observable_signals": [
+        "Secuencias de formato y contexto de engaño o saturación."
+      ],
+      "context_and_polysemy": "No tratar Unicode, escrituras regionales o accesibilidad como evasión por sí mismos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No tratar Unicode, escrituras regionales o accesibilidad como evasión por sí mismos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de formatos invisibles engañosos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Caracteres de unión válidos en una escritura.",
+        "No tratar Unicode, escrituras regionales o accesibilidad como evasión por sí mismos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "format_flood",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Saturación mediante formato",
+        "en-US": "Formatting overload",
+        "pt-BR": "Excesso de formatação"
+      },
+      "family": "features",
+      "description": "Repetición de formato que dificulta la lectura bajo regla expresa.",
+      "positive_synthetic_example": "Formato reiterado ocupa excesivamente un canal.",
+      "negative_synthetic_example": "Un bloque de código o fórmula útil.",
+      "observable_signals": [
+        "Repetición de formato que dificulta la lectura bajo regla expresa."
+      ],
+      "context_and_polysemy": "No equiparar código, documentación o accesibilidad con abuso.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No equiparar código, documentación o accesibilidad con abuso."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de saturación mediante formato, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un bloque de código o fórmula útil.",
+        "No equiparar código, documentación o accesibilidad con abuso."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "unauthorized_automation",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Automatización no autorizada",
+        "en-US": "Unauthorized automation",
+        "pt-BR": "Automação não autorizada"
+      },
+      "family": "features",
+      "description": "Identidad de aplicación y autorización administrativa verificables.",
+      "positive_synthetic_example": "Una aplicación conocida publica sin autorización.",
+      "negative_synthetic_example": "Un bot aprobado publica un recordatorio.",
+      "observable_signals": [
+        "Identidad de aplicación y autorización administrativa verificables."
+      ],
+      "context_and_polysemy": "Bots y webhooks están excluidos del detector de miembros; no inferir automatización por velocidad humana.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Bots y webhooks están excluidos del detector de miembros; no inferir automatización por velocidad humana."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de automatización no autorizada, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un bot aprobado publica un recordatorio.",
+        "Bots y webhooks están excluidos del detector de miembros; no inferir automatización por velocidad humana."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "reaction_spam",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Spam de reacciones",
+        "en-US": "Reaction spam",
+        "pt-BR": "Spam de reações"
+      },
+      "family": "features",
+      "description": "Eventos de reacción atribuibles a un actor con permisos y alcance legítimos.",
+      "positive_synthetic_example": "Un actor satura reacciones contra una regla expresa.",
+      "negative_synthetic_example": "Reacciones de un juego permitido.",
+      "observable_signals": [
+        "Eventos de reacción atribuibles a un actor con permisos y alcance legítimos."
+      ],
+      "context_and_polysemy": "El runtime actual no atribuye evidencia de reacción a su actor; no culpar al autor del mensaje original.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El runtime actual no atribuye evidencia de reacción a su actor; no culpar al autor del mensaje original."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de spam de reacciones, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Reacciones de un juego permitido.",
+        "El runtime actual no atribuye evidencia de reacción a su actor; no culpar al autor del mensaje original."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "component_spam",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Abuso de componentes",
+        "en-US": "Component misuse",
+        "pt-BR": "Abuso de componentes"
+      },
+      "family": "features",
+      "description": "Interacciones que pertenecen al propio bot y tienen actor verificable.",
+      "positive_synthetic_example": "Clics masivos no autorizados contra una regla aplicable.",
+      "negative_synthetic_example": "Un usuario reintenta un clic por un fallo de red.",
+      "observable_signals": [
+        "Interacciones que pertenecen al propio bot y tienen actor verificable."
+      ],
+      "context_and_polysemy": "No inspeccionar componentes de otras aplicaciones ni confundir reintentos con abuso.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No inspeccionar componentes de otras aplicaciones ni confundir reintentos con abuso."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de abuso de componentes, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un usuario reintenta un clic por un fallo de red.",
+        "No inspeccionar componentes de otras aplicaciones ni confundir reintentos con abuso."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "thread_misuse",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Uso indebido de hilos",
+        "en-US": "Thread misuse",
+        "pt-BR": "Uso indevido de tópicos"
+      },
+      "family": "features",
+      "description": "Actividad de hilos accesibles y regla específica sobre su uso.",
+      "positive_synthetic_example": "Creación repetitiva indebida de hilos acreditada.",
+      "negative_synthetic_example": "Un hilo legítimo de soporte.",
+      "observable_signals": [
+        "Actividad de hilos accesibles y regla específica sobre su uso."
+      ],
+      "context_and_polysemy": "La ruta de mensajes actual no observa todos los eventos de hilos; no anunciar esa cobertura.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La ruta de mensajes actual no observa todos los eventos de hilos; no anunciar esa cobertura."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de uso indebido de hilos, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un hilo legítimo de soporte.",
+        "La ruta de mensajes actual no observa todos los eventos de hilos; no anunciar esa cobertura."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "forum_misuse",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Uso indebido de foros",
+        "en-US": "Forum misuse",
+        "pt-BR": "Uso indevido de fóruns"
+      },
+      "family": "features",
+      "description": "Publicaciones de foro accesibles y convenciones expresas.",
+      "positive_synthetic_example": "Publicaciones repetidas incumplen una convención del foro.",
+      "negative_synthetic_example": "Una nueva consulta correctamente etiquetada.",
+      "observable_signals": [
+        "Publicaciones de foro accesibles y convenciones expresas."
+      ],
+      "context_and_polysemy": "La clasificación temática y los permisos requieren contexto; no ampliar el acceso a foros restringidos.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La clasificación temática y los permisos requieren contexto; no ampliar el acceso a foros restringidos."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de uso indebido de foros, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una nueva consulta correctamente etiquetada.",
+        "La clasificación temática y los permisos requieren contexto; no ampliar el acceso a foros restringidos."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "reply_misuse",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Abuso de respuestas",
+        "en-US": "Reply misuse",
+        "pt-BR": "Abuso de respostas"
+      },
+      "family": "features",
+      "description": "Respuestas reiteradas y dirigidas con contexto suficiente.",
+      "positive_synthetic_example": "Respuestas insistentes tras una negativa verificable.",
+      "negative_synthetic_example": "Conversación normal que utiliza respuestas.",
+      "observable_signals": [
+        "Respuestas reiteradas y dirigidas con contexto suficiente."
+      ],
+      "context_and_polysemy": "Una respuesta o cita no acredita hostigamiento ni intención.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Una respuesta o cita no acredita hostigamiento ni intención."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de abuso de respuestas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Conversación normal que utiliza respuestas.",
+        "Una respuesta o cita no acredita hostigamiento ni intención."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "edited_link_evasion",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Enlaces añadidos mediante edición",
+        "en-US": "Links added through edits",
+        "pt-BR": "Links adicionados por edição"
+      },
+      "family": "features",
+      "description": "Cambio posterior de un mensaje y contexto de evasión acreditado.",
+      "positive_synthetic_example": "Una edición añade promoción prohibida tras revisión.",
+      "negative_synthetic_example": "Corrección legítima de un enlace erróneo.",
+      "observable_signals": [
+        "Cambio posterior de un mensaje y contexto de evasión acreditado."
+      ],
+      "context_and_polysemy": "El runtime inicial solo observa nuevos mensajes; no asumir cobertura de ediciones ni duplicar sanciones.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "El runtime inicial solo observa nuevos mensajes; no asumir cobertura de ediciones ni duplicar sanciones."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de enlaces añadidos mediante edición, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Corrección legítima de un enlace erróneo.",
+        "El runtime inicial solo observa nuevos mensajes; no asumir cobertura de ediciones ni duplicar sanciones."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "edited_link_experience"
+      ]
+    },
+    {
+      "id": "off_topic",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Contenido fuera de tema",
+        "en-US": "Off-topic content",
+        "pt-BR": "Conteúdo fora do tema"
+      },
+      "family": "organization",
+      "description": "Tema del canal, regla y contexto de una publicación.",
+      "positive_synthetic_example": "Desvío persistente acreditado contra una regla temática.",
+      "negative_synthetic_example": "Un ejemplo relacionado con la conversación.",
+      "observable_signals": [
+        "Tema del canal, regla y contexto de una publicación."
+      ],
+      "context_and_polysemy": "No usar sentimiento o listas de palabras como clasificador universal de tema.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No usar sentimiento o listas de palabras como clasificador universal de tema."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de contenido fuera de tema, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un ejemplo relacionado con la conversación.",
+        "No usar sentimiento o listas de palabras como clasificador universal de tema."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "channel_conventions",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Convenciones de canales",
+        "en-US": "Channel conventions",
+        "pt-BR": "Convenções dos canais"
+      },
+      "family": "organization",
+      "description": "Convención explícita y verificable del espacio.",
+      "positive_synthetic_example": "Una publicación omite una convención expresa y aplicable.",
+      "negative_synthetic_example": "Un formato alternativo autorizado por accesibilidad.",
+      "observable_signals": [
+        "Convención explícita y verificable del espacio."
+      ],
+      "context_and_polysemy": "Diferenciar reglas oficiales, preferencias del canal y opiniones de participantes.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Diferenciar reglas oficiales, preferencias del canal y opiniones de participantes."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de convenciones de canales, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un formato alternativo autorizado por accesibilidad.",
+        "Diferenciar reglas oficiales, preferencias del canal y opiniones de participantes."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "ignored_staff_instruction",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Incumplimiento de indicaciones legítimas",
+        "en-US": "Ignoring valid staff instructions",
+        "pt-BR": "Descumprimento de instruções legítimas"
+      },
+      "family": "organization",
+      "description": "Instrucción auténtica de personal autorizado que desarrolla una regla.",
+      "positive_synthetic_example": "Una indicación vigente y válida se incumple repetidamente.",
+      "negative_synthetic_example": "Una petición de un miembro que se hace pasar por personal.",
+      "observable_signals": [
+        "Instrucción auténtica de personal autorizado que desarrolla una regla."
+      ],
+      "context_and_polysemy": "No convertir cualquier mensaje de staff en nueva norma; verificar autor, alcance, vigencia y fuente.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "No convertir cualquier mensaje de staff en nueva norma; verificar autor, alcance, vigencia y fuente."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de incumplimiento de indicaciones legítimas, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una petición de un miembro que se hace pasar por personal.",
+        "No convertir cualquier mensaje de staff en nueva norma; verificar autor, alcance, vigencia y fuente."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "requests_after_response",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Peticiones tras una respuesta",
+        "en-US": "Requests after a response",
+        "pt-BR": "Pedidos após uma resposta"
+      },
+      "family": "organization",
+      "description": "Respuesta o negativa verificable y repetición posterior de la misma petición.",
+      "positive_synthetic_example": "La misma solicitud insiste tras una respuesta clara.",
+      "negative_synthetic_example": "Una aclaración legítima sobre una respuesta incompleta.",
+      "observable_signals": [
+        "Respuesta o negativa verificable y repetición posterior de la misma petición."
+      ],
+      "context_and_polysemy": "Las huellas de texto no prueban comprensión, rechazo ni resolución de una consulta.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Las huellas de texto no prueban comprensión, rechazo ni resolución de una consulta."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de peticiones tras una respuesta, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Una aclaración legítima sobre una respuesta incompleta.",
+        "Las huellas de texto no prueban comprensión, rechazo ni resolución de una consulta."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines",
+        "use_mention_study",
+        "context_study"
+      ]
+    },
+    {
+      "id": "age_restricted_placement",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Contenido en un espacio no autorizado",
+        "en-US": "Restricted content in the wrong space",
+        "pt-BR": "Conteúdo restrito em espaço inadequado"
+      },
+      "family": "restricted",
+      "description": "Etiqueta del canal y evidencia autorizada sobre el contenido.",
+      "positive_synthetic_example": "[Ejemplo sintético no gráfico] aparece en un espacio no autorizado.",
+      "negative_synthetic_example": "Contenido adulto permitido en un canal restringido y autorizado.",
+      "observable_signals": [
+        "Etiqueta del canal y evidencia autorizada sobre el contenido."
+      ],
+      "context_and_polysemy": "La etiqueta NSFW no clasifica el contenido ni acredita la edad de nadie; no descargar medios para inferirla.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "La etiqueta NSFW no clasifica el contenido ni acredita la edad de nadie; no descargar medios para inferirla."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de contenido en un espacio no autorizado, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Contenido adulto permitido en un canal restringido y autorizado.",
+        "La etiqueta NSFW no clasifica el contenido ni acredita la edad de nadie; no descargar medios para inferirla."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    },
+    {
+      "id": "private_message_harassment",
+      "version": "1.0.0",
+      "name": {
+        "es-419": "Hostigamiento por mensajes privados",
+        "en-US": "Direct-message harassment",
+        "pt-BR": "Assédio em mensagens privadas"
+      },
+      "family": "restricted",
+      "description": "Denuncia voluntaria y evidencia autorizada examinada por el equipo.",
+      "positive_synthetic_example": "Una denuncia aporta evidencia pertinente para revisión humana.",
+      "negative_synthetic_example": "Un intercambio privado consentido.",
+      "observable_signals": [
+        "Denuncia voluntaria y evidencia autorizada examinada por el equipo."
+      ],
+      "context_and_polysemy": "Custodio no lee ni monitoriza DMs de miembros; no inferir hechos de conversaciones inaccesibles.",
+      "reasonable_exceptions": [
+        "Propietario y personal protegido; roles/canales exentos.",
+        "Permiso explícito y ámbito autorizado del reglamento.",
+        "Custodio no lee ni monitoriza DMs de miembros; no inferir hechos de conversaciones inaccesibles."
+      ],
+      "applicable_languages": [
+        "es-419",
+        "en-US",
+        "pt-BR"
+      ],
+      "events_permissions": [
+        "Revisión administrativa de evidencia legítimamente accesible; eventos no implementados no se vigilan."
+      ],
+      "required_rule": "Prohibición o restricción afirmativa vigente de hostigamiento por mensajes privados, con ámbito y excepciones verificables. La categoría no crea una norma.",
+      "method": [
+        "review_only"
+      ],
+      "threshold_context": "Sin umbral que pruebe intención o semántica; requiere revisión humana.",
+      "resource_cost": "Sin análisis automático ni API por mensaje; consulta administrativa acotada.",
+      "privacy": "Sin perfiles, DMs ni conversaciones completas en memoria; evidencia literal solo en Discord con ACL compatible y referencias mínimas en SQLite.",
+      "false_positives": [
+        "Un intercambio privado consentido.",
+        "Custodio no lee ni monitoriza DMs de miembros; no inferir hechos de conversaciones inaccesibles."
+      ],
+      "false_negatives": "Evasiones, idiomas no evaluados, señales fuera de ventana o eventos no accesibles. No se afirma exhaustividad.",
+      "justified_confidence": "No hay detector autónomo suficientemente verificado; abstención y revisión humana.",
+      "capability": "no fiable para actuación autónoma",
+      "automatic_action": "Ninguna; revisión humana.",
+      "human_review_required": true,
+      "implementation": "review_only",
+      "sources": [
+        "discord_guidelines"
+      ]
+    }
+  ]
+}

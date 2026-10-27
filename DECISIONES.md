@@ -1,5 +1,7 @@
 ## 2026-10-27 — Custodio: encargo de interpretación autónoma, fase de proveedor
 
+**Proveedor comprobado:** `d99b2989ba83f00a2ec07786887c2d4ec97ffb2b` desplegado en Lab/worker, deployment `e92901b8-b417-4a48-9120-c727d18718cd` SUCCESS. Groq `openai/gpt-oss-20b` realizó una inferencia auténtica con regla sintética en 428 ms: esquema y cita literal validados. Sin Discord ni SQLite en la sonda; no equivale al clic real de «Analizar reglas». Gateway conectado, dos sincronizaciones de 51 comandos (en-US/es-419). Pre-deploy temporal retirado y volumen conservado. CI Lab 40562341587 (3.11/3.12/3.13 + UX) y Mensajes 40562341644 SUCCESS. Recibo: `docs/CUSTODIO_PROVIDER_DEPLOYMENT.json`. El desarrollo continúa: 73 fichas de taxonomía, interpretación automática y rediseño de Detección; no es cierre integral.
+
 Base remota comprobada: `Pruebas@9aa06fcdbcab9d249332842baee42aa9a634207a`; contiene el interruptor global de `7eac8af` y la retirada de Integraciones de `9aa06fc`. Worker de Lab aún fijado en `9caeb22`, deployment `a7f6d657-0de4-4a2a-82be-1fc811305318` SUCCESS. Main `32c9f5dcc8505a3d6aacde76533d6b60dd88a542`, volumen /data y H-03 conservados.
 
 Nuevo alcance autorizado: taxonomía amplia documentada, interpretación estructurada por revisión, asignación automática de detectores, correcciones reversibles, Detección separada de Exenciones, interruptor global, disciplina central y evidencias NH. Sanciones automáticas bloqueadas; tres idiomas conservados. El bloqueo de Discord de usuario no impide desarrollar ni probar el bot autorizado.
