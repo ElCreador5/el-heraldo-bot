@@ -104,6 +104,15 @@ class CustodioSetupView(discord.ui.View):
         self.discard_button = discard_button
         self.add_item(discard_button)
 
+        activate_button = discord.ui.Button(label=_t("text.custodio.activate"), style=discord.ButtonStyle.success, row=4)
+        activate_button.callback = self.activate_observation
+        self.activate_button = activate_button
+        self.add_item(activate_button)
+        pause_button = discord.ui.Button(label=_t("text.custodio.pause"), style=discord.ButtonStyle.danger, row=4)
+        pause_button.callback = self.pause_observation
+        self.pause_button = pause_button
+        self.add_item(pause_button)
+
         back_button = discord.ui.Button(
             label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
         back_button.callback = self.back
@@ -117,6 +126,13 @@ class CustodioSetupView(discord.ui.View):
         current = load_preferences(self.get_setting, self.guild_id).sensitivity
         self.save_button.disabled = self.saving or not self._raw_changes()
         self.discard_button.disabled = self.saving or self.pending_sensitivity == current
+        import json
+        try:
+            active = json.loads(self.get_setting(self.guild_id, OBSERVATION_SETTING_KEY) or '{}').get('enabled') is True
+        except (ValueError, TypeError, AttributeError):
+            active = False
+        self.activate_button.disabled = self.saving or active
+        self.pause_button.disabled = self.saving or not active
 
     @_i18n_context
     def _raw_changes(self) -> dict[str, str]:
@@ -163,6 +179,25 @@ class CustodioSetupView(discord.ui.View):
         except (ValueError, TypeError, AttributeError):
             enabled = False
         return _t("text.custodio.runtime_summary", status=str(_t("text.custodio.on" if enabled else "text.custodio.off")))
+
+    @_i18n_context
+    async def activate_observation(self, interaction):
+        await self._toggle_observation(interaction, True)
+
+    @_i18n_context
+    async def pause_observation(self, interaction):
+        await self._toggle_observation(interaction, False)
+
+    async def _toggle_observation(self, interaction, enabled):
+        """Reutiliza la validación y persistencia CAS de Detección."""
+        from custodio_observe_setup import CustodioObserveSetupView
+        try:
+            snapshot = await load_server_rules(self.guild_id, os.environ.get("DISCORD_TOKEN", ""))
+        except (RulesUnavailable, ValueError):
+            await interaction.response.edit_message(content=self.summary() + "\\n\\n" + str(_t("text.dbb413c4fa004b")), view=self, embed=None)
+            return
+        view = CustodioObserveSetupView(self, snapshot, exemptions=False)
+        await view.persist(interaction, enabled=enabled)
 
     async def open_detection(self, interaction):
         await self.open_observation(interaction, exemptions=False)
