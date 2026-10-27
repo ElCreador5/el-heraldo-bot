@@ -63,6 +63,12 @@ def next_occurrence(job, now):
         return (now + timedelta(seconds=job['cooldown'])).isoformat()
     if job['repeat'] == 'ninguna':
         return None
+    if job['repeat'] == 'intervalo':
+        from message_autofeeds import interval_seconds
+        period = interval_seconds(job['interval'])
+        origin = datetime.fromisoformat(job['start']).astimezone(timezone.utc)
+        steps = max(1, int((now - origin).total_seconds() // period) + 1)
+        return (origin + timedelta(seconds=steps * steps.__class__(period))).isoformat()
     tz = ZoneInfo(job['zone'])
     origin = datetime.fromisoformat(job['start']).astimezone(tz)
     days = 1 if job['repeat'] == 'diaria' else 7
@@ -145,7 +151,7 @@ class ScheduledMessages:
     @_i18n_context
     async def execute(self, guild, job, now, *, context_member=None, config_key=CONFIG_KEY):
         due, status, _ = self.state(guild.id, job)
-        if status != 'pending' or not due or datetime.fromisoformat(due) > now:
+        if status != 'pending' or not due or datetime.fromisoformat(due) > now or job.get('paused'):
             return
         conn = self.host['db_connect']()
         try:
@@ -164,14 +170,31 @@ class ScheduledMessages:
             member = await guild.fetch_member(job['author'])
             user_perms = channel.permissions_for(member)
             bot_perms = channel.permissions_for(guild.me) if guild.me else discord.Permissions.none()
-            if not member.guild_permissions.manage_guild or not user_perms.view_channel or not user_perms.send_messages:
+            if job.get('autofeed'):
+                from message_autofeeds import can_deliver
+                if not can_deliver(self.host, guild, job, member, channel):
+                    raise ValueError(_t('text.fd79243eaf7cd5'))
+            elif not member.guild_permissions.manage_guild or not user_perms.view_channel or not user_perms.send_messages:
                 raise ValueError(_t('text.fd79243eaf7cd5'))
             if not bot_perms.view_channel or not bot_perms.send_messages or not bot_perms.embed_links:
                 raise ValueError(_t('text.a0250ca7797377'))
-            template = next((x for x in self.host['heraldo_template_list'](guild.id) if x['name'] == job['template']), None)
-            if template is None:
-                raise ValueError(_t('text.e751ce97a2b7f0'))
-            payload = self.host['heraldo_template_payload'](template, guild, context_member or member, channel)
+            if job.get('autofeed') and job.get('text'):
+                payload = {'content': job['text'], 'allowed_mentions': discord.AllowedMentions.none()}
+            else:
+                template = next((x for x in self.host['heraldo_template_list'](guild.id) if x['name'] == job['template']), None)
+                if template is None:
+                    raise ValueError(_t('text.e751ce97a2b7f0'))
+                payload = self.host['heraldo_template_payload'](template, guild, context_member or member, channel)
+            if job.get('autofeed'):
+                role = guild.get_role(job['role']) if job.get('role') else None
+                if job.get('role') and (role is None or not role.mentionable):
+                    raise ValueError('Rol de mención no disponible.')
+                if role:
+                    payload = {**payload,
+                               'content': ((payload.get('content') or '') + '\n' + role.mention).strip(),
+                               'allowed_mentions': discord.AllowedMentions(everyone=False, users=False, roles=[role])}
+                else:
+                    payload = {**payload, 'allowed_mentions': discord.AllowedMentions.none()}
             if not any(x['id'] == job['id'] for x in self.jobs(guild.id, config_key)):
                 self.finish(guild.id, job, 'cancelled')
                 return
@@ -330,6 +353,8 @@ def install(host):
     install_autoresponses(host, engine)
     install_sticky(host, engine)
     install_webhook(host)
+    import message_autofeeds
+    message_autofeeds.install(host)
     return engine
 
 
