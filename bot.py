@@ -26966,7 +26966,7 @@ class HeraldoMessagesView(discord.ui.View):
             text = _t('text.d81d9ca94206a7')
         await interaction.response.send_message(text, ephemeral=True)
 
-    @discord.ui.button(label="Programaciones", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label=_t('autofeed.ui.schedule_btn'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
     async def scheduled_messages(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         from message_autofeeds import PolicyView
