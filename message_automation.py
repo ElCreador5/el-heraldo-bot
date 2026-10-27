@@ -68,7 +68,7 @@ def next_occurrence(job, now):
         period = interval_seconds(job['interval'])
         origin = datetime.fromisoformat(job['start']).astimezone(timezone.utc)
         steps = max(1, int((now - origin).total_seconds() // period) + 1)
-        return (origin + timedelta(seconds=steps * steps.__class__(period))).isoformat()
+        return (origin + timedelta(seconds=steps * period)).isoformat()
     tz = ZoneInfo(job['zone'])
     origin = datetime.fromisoformat(job['start']).astimezone(tz)
     days = 1 if job['repeat'] == 'diaria' else 7
