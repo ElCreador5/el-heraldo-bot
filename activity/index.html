@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#34383e">
+  <title>El Heraldo · Crear mensaje</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<main class="dialog" aria-label="Crear mensaje">
+  <header><h1>Crear mensaje</h1><span id="environment">EL HERALDO · LAB</span></header>
+  <form id="composer" autocomplete="off">
+    <section>
+      <label for="channel">Canal</label>
+      <select id="channel" required><option value="">Selecciona un canal</option></select>
+    </section>
+    <section>
+      <label for="message">Mensaje</label>
+      <textarea id="message" maxlength="1900" placeholder="Escribe tu mensaje..." rows="5"></textarea>
+      <div class="counter"><span id="count">0</span>/1900</div>
+      <div class="mention-tools"><label for="messageRole">Insertar rol o canal en el texto</label>
+        <div class="inline-actions"><select id="messageRole"><option value="">@ Seleccionar rol</option></select>
+          <button type="button" id="insertMsgRole" class="small">Insertar</button>
+          <select id="messageChannel"><option value=""># Seleccionar canal</option></select>
+          <button type="button" id="insertMsgChannel" class="small">Insertar</button>
+        </div>
+      </div>
+    </section>
+    <section class="embed-section">
+      <button id="toggleEmbed" type="button" class="wide-button" aria-expanded="false">Mostrar editor de embed</button>
+      <div id="embedPanel" hidden>
+        <div class="embed-top"><label for="color">Color</label><input id="color" type="color" value="#5865f2">
+          <button type="button" class="text-button" id="clearEmbed">Limpiar embed</button>
+          <button type="button" class="text-button" id="hideEmbed">Ocultar</button></div>
+        <div class="grid triple">
+          <div><label for="authorIcon">Icono de autor (URL)</label><input id="authorIcon" type="url" placeholder="https://..."></div>
+          <div><label for="authorName">Nombre del autor</label><input id="authorName" maxlength="256"></div>
+          <div><label for="authorUrl">Enlace del autor</label><input id="authorUrl" type="url" placeholder="https://..."></div>
+        </div>
+        <div class="grid split">
+          <div><label for="embedTitle">Título</label><input id="embedTitle" maxlength="256"></div>
+          <div><label for="titleUrl">Enlace del título</label><input id="titleUrl" type="url" placeholder="https://..."></div>
+        </div>
+        <label for="embedDescription">Descripción</label>
+        <textarea id="embedDescription" maxlength="4000" rows="5" placeholder="Texto del embed; también puedes escribir @rol o #canal"></textarea>
+        <div class="counter"><span id="embedCount">0</span>/4000</div>
+        <div class="mention-tools"><label>Insertar mención en la descripción</label>
+          <div class="inline-actions"><select id="embedRole"><option value="">@ Seleccionar rol</option></select>
+            <button type="button" class="small" id="insertEmbedRole">Insertar</button>
+            <select id="embedChannel"><option value=""># Seleccionar canal</option></select>
+            <button type="button" class="small" id="insertEmbedChannel">Insertar</button>
+          </div>
+        </div>
+        <div id="fields" class="fields"></div>
+        <button type="button" id="addField" class="wide-button">+ Añadir campo (<span id="fieldCount">0</span>/25)</button>
+        <div class="grid split">
+          <div><label for="imageUrl">Imagen principal (URL)</label><input type="url" id="imageUrl" placeholder="https://..."></div>
+          <div><label for="thumbnailUrl">Miniatura (URL)</label><input type="url" id="thumbnailUrl" placeholder="https://..."></div>
+        </div>
+        <label class="check-line"><input type="checkbox" id="timestamp"> Mostrar fecha automática</label>
+        <div class="hint">El footer del servidor se añade automáticamente. Los roles escritos dentro de un embed no generan notificaciones.</div>
+      </div>
+    </section>
+    <section>
+      <label for="sendDate">Fecha</label><div class="hint">Usa la hora local de Santo Domingo (UTC−4). Si no eliges fecha, se publica al confirmar.</div>
+      <div class="grid split"><input id="sendDate" type="date"><input id="sendTime" type="time" aria-label="Hora" value="18:00"></div>
+    </section>
+    <section>
+      <label for="pingRole">Rol para mencionar</label>
+      <select id="pingRole"><option value="">Sin rol (no notificar)</option></select>
+    </section>
+    <section>
+      <label>Repetir cada</label>
+      <div class="grid repeat">
+        <label><input id="months" min="0" max="120" type="number" value="0">Meses</label>
+        <label><input id="days" min="0" max="365" type="number" value="0">Días</label>
+        <label><input id="hours" min="0" max="8760" type="number" value="0">Horas</label>
+        <label><input id="minutes" min="0" max="59" type="number" value="0">Minutos</label>
+      </div>
+      <div class="hint">Una repetición inferior a una hora no está permitida. Sin repetición, el mensaje se envía una sola vez.</div>
+    </section>
+    <section class="preview-wrap"><button id="togglePreview" type="button" class="wide-button">Vista previa</button>
+      <div id="preview" hidden></div></section>
+    <div id="feedback" role="status" aria-live="polite"></div>
+    <footer><button type="reset" class="cancel">Descartar</button><button type="submit" id="create" class="create">Crear mensaje</button></footer>
+  </form>
+</main>
+<dialog id="confirmDialog"><h2 id="confirmTitle">Confirmar cambios</h2>
+ <p id="confirmText"></p><div class="confirm-actions"><button type="button" id="cancelConfirm">Volver</button><button type="button" id="confirmSend" class="create">Confirmar cambios</button></div>
+</dialog>
+<script type="module" src="/assets/main.js"></script>
+</body></html>
