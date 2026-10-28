@@ -94,6 +94,36 @@ class CarlStyleFieldsTests(unittest.TestCase):
         self.assertNotIn("<@&987654321012345678>", editor.text)
         self.assertTrue(editor.dirty)
 
+    def test_embed_editor_includes_direct_role_and_channel_selectors(self):
+        editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
+        view = setup.EmbedEditorView(editor)
+        self.assertEqual(len([
+            v for v in view.children if isinstance(v, b.discord.ui.RoleSelect)]), 1)
+        self.assertEqual(len([
+            v for v in view.children if isinstance(v, b.discord.ui.ChannelSelect)]), 1)
+        self.assertEqual(view.roles.row, 0)
+        self.assertEqual(view.channels.row, 1)
+        self.assertIn(setup.t("embed_text_design"),
+                      [x.label for x in view.children if hasattr(x, "label")])
+        self.assertEqual(b.guild_config_get(901, feeds.CONFIG_KEY), self.original_config())
+
+    def original_config(self):
+        return b.guild_config_get(901, feeds.CONFIG_KEY)
+
+    def test_typed_embed_mentions_resolve_only_unique_guild_names(self):
+        role = NS(id=987654321098765432, name="Avisos oficiales")
+        duplicate_a = NS(id=123456789000000001, name="Noticias")
+        duplicate_b = NS(id=123456789000000002, name="Noticias")
+        channel = NS(id=123456789012345678, name="reglas")
+        guild = NS(roles=[role, duplicate_a, duplicate_b], text_channels=[channel])
+        result = setup.resolve_inline_embed_names(
+            guild, "Lee #reglas y avisa a @Avisos oficiales; @Noticias no cambia.")
+        self.assertIn("<#123456789012345678>", result)
+        self.assertIn("<@&987654321098765432>", result)
+        self.assertIn("@Noticias", result)
+        self.assertEqual(setup.resolve_inline_embed_names(
+            guild, "Correo a@ejemplo.com y @everyone"), "Correo a@ejemplo.com y @everyone")
+
     def test_frequency_preset_and_time_fields(self):
         editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
         self.assertEqual(setup.PRESETS["daily"]["days"], 1)
