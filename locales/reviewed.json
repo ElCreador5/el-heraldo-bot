@@ -948,8 +948,8 @@
     "A configuração foi salva, mas não foi possível sincronizar o painel publicado. Tente publicar novamente pelo editor."
   ],
   "text.038abcdd85c82f": [
-    "**El Heraldo · Templates**\n\nCreate, edit, and publish reusable templates. Use `/editar_plantilla` for the visual editor of content, multiple embeds, fields, images, author, and footer.",
-    "**El Heraldo · Modelos**\n\nCrie, edite e publique modelos reutilizáveis. Use `/editar_plantilla` para o editor visual de conteúdo, múltiplos embeds, campos, imagens, autor e rodapé."
+    "**El Heraldo · Templates**\n\nCreate and edit templates in this panel. Select a template to edit or preview it. To publish, choose a channel and press Publish.",
+    "**El Heraldo · Modelos**\n\nCrie e edite modelos neste painel. Selecione um modelo para editá-lo ou visualizá-lo. Para publicar, escolha um canal e pressione Publicar."
   ],
   "text.03b6a0dcd5f3f3": [
     "Case closed; I couldn't withdraw the timeout.",

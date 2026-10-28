@@ -2157,7 +2157,7 @@
     "text.ad4a39377a409d": "El kit no cumple el formato y los límites exigidos.",
     "text.eee9dd399821cc": "**El Heraldo · Kits de mensajes**\n\nExporte o importe plantillas. Para archivos y reemplazos confirmados, use /importkit.",
     "text.4514c576adb2d9": "**El Heraldo · Componentes**\n\nConfigure botones de roles reutilizables. Para botones y menús con opciones independientes y varias acciones, use `/componentes_mensaje` con un archivo JSON.",
-    "text.038abcdd85c82f": "**El Heraldo · Plantillas**\n\nCree, edite y publique plantillas reutilizables. Use `/editar_plantilla` para el editor visual de contenido, múltiples embeds, campos, imágenes, autor y pie.",
+    "text.038abcdd85c82f": "**El Heraldo · Plantillas**\n\nCree y edite plantillas desde este panel. Seleccione una plantilla para editarla o previsualizarla. Para publicarla, elija un canal y pulse Publicar.",
     "text.b55e813a54f230": "Ese emoji ya está usado por otro reporte.",
     "text.d67febde94a035": "Ya alcanzaste el máximo de {p0} reacciones.",
     "text.b02743e024cb70": "Los reportes necesarios deben estar entre 1 y 25.",

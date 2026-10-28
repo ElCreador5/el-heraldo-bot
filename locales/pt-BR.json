@@ -222,7 +222,7 @@
   "text.035db406efc90f": "Não é possível ativar a proteção com Condenar sem um cargo Condenado válido.",
   "text.035eb329ac8593": "Sem limpeza",
   "text.0383206f064812": "A configuração foi salva, mas não foi possível sincronizar o painel publicado. Tente publicar novamente pelo editor.",
-  "text.038abcdd85c82f": "**El Heraldo · Modelos**\n\nCrie, edite e publique modelos reutilizáveis. Use `/editar_plantilla` para o editor visual de conteúdo, múltiplos embeds, campos, imagens, autor e rodapé.",
+  "text.038abcdd85c82f": "**El Heraldo · Modelos**\n\nCrie e edite modelos neste painel. Selecione um modelo para editá-lo ou visualizá-lo. Para publicar, escolha um canal e pressione Publicar.",
   "text.03b6a0dcd5f3f3": "Caso fechado, não consegui retirar o timeout.",
   "text.03bcd1032da45d": "Escolher duração padrão",
   "text.03d9b6bacc172e": "Selecionar canal do Membro da Semana",

@@ -222,7 +222,7 @@
   "text.035db406efc90f": "No se puede activar la protección con la acción Condenar sin un rol Condenado válido.",
   "text.035eb329ac8593": "Sin purga",
   "text.0383206f064812": "La configuración se guardó, pero no se pudo sincronizar el panel publicado. Puede reintentar su publicación desde el editor.",
-  "text.038abcdd85c82f": "**El Heraldo · Plantillas**\n\nCree, edite y publique plantillas reutilizables. Use `/editar_plantilla` para el editor visual de contenido, múltiples embeds, campos, imágenes, autor y pie.",
+  "text.038abcdd85c82f": "**El Heraldo · Plantillas**\n\nCree y edite plantillas desde este panel. Seleccione una plantilla para editarla o previsualizarla. Para publicarla, elija un canal y pulse Publicar.",
   "text.03b6a0dcd5f3f3": "Caso cerrado; no pude retirar el timeout.",
   "text.03bcd1032da45d": "Elegir duración predeterminada",
   "text.03d9b6bacc172e": "Seleccionar canal de Miembro de la Semana",

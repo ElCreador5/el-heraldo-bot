@@ -1,3 +1,7 @@
+## 2026-10-28 — Ayuda contextual de Plantillas
+
+La explicación de `/setup → Mensajes → Plantillas` ya no deriva al comando heredado `/editar_plantilla`. La ayuda se refiere a las opciones que realmente existen en el propio panel: crear, editar, previsualizar, seleccionar canal y publicar. Se actualizan `es-419`, `en-US` y `pt-BR`, junto con los catálogos auxiliares y la regresión. No se modifica el comando alternativo, el editor, la persistencia ni producción; cambio exclusivamente informativo en `Pruebas`.
+
 ## 2026-10-27 — Nomenclatura de /setup → Mensajes: «Plantillas»
 
 La opción anteriormente llamada **Mensajes personalizados** ahora se presenta como **Plantillas** (en-US: **Templates**, pt-BR: **Modelos**) en el desplegable de `/setup → Mensajes`. También se actualizan la descripción de la opción, la explicación del menú y la referencia de Kits para evitar nombres anteriores. Se mantiene sin cambios el identificador interno `templates`, su editor, las plantillas existentes, la configuración por servidor y la persistencia. Alcance exclusivo: `Pruebas`; no modificar `main`.

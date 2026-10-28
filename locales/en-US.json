@@ -222,7 +222,7 @@
   "text.035db406efc90f": "Cannot enable protection with Condemn without a valid Condenado role.",
   "text.035eb329ac8593": "No purge",
   "text.0383206f064812": "The settings were saved, but the published panel could not be synchronized. Retry publication from the editor.",
-  "text.038abcdd85c82f": "**El Heraldo · Templates**\n\nCreate, edit, and publish reusable templates. Use `/editar_plantilla` for the visual editor of content, multiple embeds, fields, images, author, and footer.",
+  "text.038abcdd85c82f": "**El Heraldo · Templates**\n\nCreate and edit templates in this panel. Select a template to edit or preview it. To publish, choose a channel and press Publish.",
   "text.03b6a0dcd5f3f3": "Case closed; I couldn't withdraw the timeout.",
   "text.03bcd1032da45d": "Choose default duration",
   "text.03d9b6bacc172e": "Select Member of the Week channel",

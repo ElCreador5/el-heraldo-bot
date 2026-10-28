@@ -41,6 +41,18 @@ class I18nCatalogTests(unittest.TestCase):
                 self.assertNotIn(previous, panel)
                 self.assertNotIn(previous.casefold(), description.casefold())
 
+
+    def test_templates_panel_explains_its_controls_without_external_commands(self):
+        labels = {"es-419": ("Seleccione una plantilla", "Publicar"),
+                  "en-US": ("Select a template", "Publish"),
+                  "pt-BR": ("Selecione um modelo", "Publicar")}
+        for locale, (selection, publish) in labels.items():
+            with self.subTest(locale=locale):
+                content = translate(locale, "text.038abcdd85c82f")
+                self.assertIn(selection, content)
+                self.assertIn(publish, content)
+                self.assertNotIn("/editar_plantilla", content)
+
     def test_missing_key_raises_instead_of_using_spanish(self):
         with self.assertRaises(TranslationUnavailable):
             translate("es-419", "nonexistent")
