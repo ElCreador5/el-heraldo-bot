@@ -115,6 +115,95 @@ async def options(req):
     return reply({"guild": {"id": str(guild.id), "name": guild.name},
                   "channels": channels[:500], "roles": roles[:250]})
 
+
+async def publish(req):
+    """Secure, one-confirmation publish or persistent schedule on the real bot."""
+    from datetime import datetime, timedelta, timezone
+    import secrets
+    from autofeed_embed_builder import validate_data, has_content
+    from autofeed_setup import repeat_parts
+    from message_publish import publish_message
+    import message_autofeeds as feeds
+
+    guild, member = await authorize(req)
+    now = time.monotonic()
+    key = (guild.id, member.id)
+    last = req.app["rate"].get(key, 0)
+    if now < last:
+        return reply({"error": "slow_down"}, 429)
+    req.app["rate"][key] = now + 5
+    try:
+        raw = await req.json()
+        if not isinstance(raw, dict):
+            raise ValueError("invalid_json")
+        cid = raw.get("channel_id")
+        if not isinstance(cid, str) or not cid.isdigit():
+            raise ValueError("invalid_channel")
+        channel = guild.get_channel(int(cid))
+        if not isinstance(channel, discord.TextChannel):
+            raise ValueError("invalid_channel")
+        user_perms = channel.permissions_for(member)
+        bot_perms = channel.permissions_for(guild.me)
+        if not (user_perms.view_channel and user_perms.send_messages
+                and bot_perms.view_channel and bot_perms.send_messages and bot_perms.embed_links):
+            raise ValueError("channel_permissions")
+        text = raw.get("message", "")
+        if not isinstance(text, str) or len(text) > 1900:
+            raise ValueError("invalid_message")
+        visual = validate_data(raw["embed"]) if raw.get("embed") is not None else None
+        if not text.strip() and not has_content(visual):
+            raise ValueError("empty_message")
+        rid = raw.get("role_id")
+        if rid is not None and (not isinstance(rid, str) or not rid.isdigit()):
+            raise ValueError("invalid_role")
+        role = guild.get_role(int(rid)) if rid else None
+        if rid and (role is None or not role.mentionable):
+            raise ValueError("role_not_mentionable")
+        iso = raw.get("scheduled_at")
+        due = None
+        if iso is not None:
+            if not isinstance(iso, str) or len(iso) > 40:
+                raise ValueError("invalid_date")
+            due = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            if due.tzinfo is None:
+                raise ValueError("invalid_date")
+            due = due.astimezone(timezone.utc)
+            if due <= datetime.now(timezone.utc) + timedelta(minutes=1):
+                raise ValueError("date_must_be_future")
+        units = raw.get("repeat") or {}
+        if not isinstance(units, dict):
+            raise ValueError("invalid_repeat")
+        values = [units.get(k, 0) for k in ("months", "days", "hours", "minutes")]
+        if not all(type(v) is int for v in values):
+            raise ValueError("invalid_repeat")
+        parts = repeat_parts(*values)
+        if parts and due is None:
+            raise ValueError("repeat_needs_date")
+        job = {
+            "id": secrets.token_hex(6), "guild": guild.id,
+            "author": member.id, "requester": member.id, "channel": channel.id,
+            "role": role.id if role else None, "text": text.strip(), "embed": visual,
+            "start": due.isoformat() if due else None, "zone": "America/Santo_Domingo",
+            "repeat": "custom" if parts else "ninguna", "repeat_parts": parts,
+            "autofeed": True, "paused": False, "template": None,
+        }
+        feeds.referenced_mentions(guild, job)
+    except (ValueError, KeyError, TypeError) as exc:
+        return reply({"error": str(exc)[:120]}, 400)
+
+    if job["start"] is None:
+        try:
+            sent = await publish_message(req.app["host"], guild, channel, job)
+        except discord.HTTPException:
+            # An ambiguous Discord response must never trigger a duplicate retry.
+            return reply({"error": "delivery_uncertain_check_channel"}, 502)
+        return reply({"status": "published", "message_id": str(sent.id)})
+    try:
+        feeds.persist_schedule(req.app["host"], guild.id, member, job)
+    except ValueError as exc:
+        return reply({"error": "schedule_" + str(exc)[:80]}, 409)
+    return reply({"status": "scheduled", "id": job["id"]})
+
 def install(host):
     bot = host["bot"]
     state = {"runner": None}
@@ -133,6 +222,8 @@ def install(host):
         app.router.add_get("/api/config", config)
         app.router.add_post("/api/token", oauth)
         app.router.add_get("/api/options", options)
+        app["rate"] = {}
+        app.router.add_post("/api/messages", publish)
         runner = web.AppRunner(app)
         try:
             await runner.setup()
