@@ -36,8 +36,8 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
     async def test_create_message_has_single_editor_with_expected_controls(self):
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
         labels = [getattr(item, "label", "") for item in editor.children]
-        for key in ("message", "embed", "date_picker", "repeat_picker",
-                    "insert_mention", "silent", "save", "discard", "back"):
+        for key in ("message", "show_embed", "date_picker", "repeat_picker",
+                    "insert_mention", "silent", "send", "back"):
             self.assertIn(setup.t(key), labels)
         self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
         self.assertEqual(len(editor.children), 11)
