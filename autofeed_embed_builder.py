@@ -248,7 +248,8 @@ class SectionModal(discord.ui.Modal):
             from autofeed_setup import resolve_inline_embed_names
             values["description"] = resolve_inline_embed_names(
                 interaction.guild, values["description"])
-            values["title"] = resolve_inline_embed_names(interaction.guild, values["title"])
+            # Discord does not render role/channel references inside embed titles.
+            # Keep the title literal; description supports Discord mention tokens.
             data.update(values)
         elif self.section == "author":
             data["author"] = values
