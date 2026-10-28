@@ -36,6 +36,30 @@ async def css(req):
 async def javascript(req):
     return web.FileResponse(ROOT / "main.js", headers={"Cache-Control": "no-store"})
 
+async def sdk_module(req):
+    """Same-origin proxy for the pinned official SDK bundle.
+
+    Discord Activities block unmapped third-party script origins. The SDK is
+    retrieved from one fixed upstream; no caller-controlled URL is accepted.
+    """
+    import re
+    requested = req.match_info.get("module", "")
+    if not re.fullmatch(r"[\w@./-]{1,180}", requested) or ".." in requested:
+        raise web.HTTPNotFound()
+    upstream = "https://esm.sh/" + requested
+    if requested == "@discord/embedded-app-sdk@2.5.0":
+        upstream += "?bundle&target=es2022"
+    async with req.app["session"].get(upstream, allow_redirects=True) as res:
+        if res.status != 200:
+            raise web.HTTPBadGateway(text="sdk_upstream_unavailable")
+        source = await res.text()
+    # esm.sh sometimes returns a small re-export module referring to an
+    # absolute /... path; keep these module imports on our mapped origin.
+    source = re.sub(r'(from\s*["\\x27]|import\s*\(\s*["\\x27])/', r'\1/sdk/', source)
+    return web.Response(text=source, content_type="application/javascript",
+                        headers={"Cache-Control": "public, max-age=3600",
+                                 "X-Content-Type-Options": "nosniff"})
+
 async def health(req):
     return reply({"status": "ok", "configured": bool(os.getenv("DISCORD_ACTIVITY_CLIENT_SECRET"))})
 
@@ -218,6 +242,7 @@ def install(host):
         app.router.add_get("/", index)
         app.router.add_get("/assets/style.css", css)
         app.router.add_get("/assets/main.js", javascript)
+        app.router.add_get("/sdk/{module:.*}", sdk_module)
         app.router.add_get("/health", health)
         app.router.add_get("/api/config", config)
         app.router.add_post("/api/token", oauth)
