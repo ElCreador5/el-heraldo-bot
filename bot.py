@@ -10034,11 +10034,25 @@ class HeraldoMessagesSetupView(discord.ui.View):
             return
 
         if selected == "create_message":
-            # /setup -> Mensajes -> Crear mensaje (un único editor Carl-style).
-            # Fecha opcional: publicar ahora o programar sin un módulo paralelo.
-            from autofeed_setup import setup_panel
-            content, view = setup_panel(globals(), self.guild_id, self.owner_id)
-            await interaction.response.edit_message(content=content, embed=None, view=view)
+            # A real Discord Activity: web form inside Discord, not stacked modals.
+            if os.getenv("DISCORD_ACTIVITY_WEB_ENABLED") != "1":
+                await interaction.response.send_message(
+                    "La Activity de Crear mensaje aún no está habilitada en El Heraldo Test.",
+                    ephemeral=True)
+                return
+            if not hasattr(interaction.response, "launch_activity"):
+                await interaction.response.send_message(
+                    "El SDK de Discord necesita discord.py 2.6 o superior.", ephemeral=True)
+                return
+            try:
+                await interaction.response.launch_activity()
+            except discord.HTTPException:
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        "Activa Activities y configura el URL Mapping en el portal de Discord.", ephemeral=True)
+                else:
+                    await interaction.response.send_message(
+                        "Activa Activities y configura el URL Mapping en el portal de Discord.", ephemeral=True)
             return
 
         if selected == "kits":
@@ -26994,6 +27008,8 @@ mensajes_command.error(verify_command_error)
 
 import message_automation
 message_automation_engine = message_automation.install(globals())
+import activity_server
+activity_server.install(globals())
 message_components.install(globals())
 import message_editor
 message_editor.install(globals())
