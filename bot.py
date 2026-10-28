@@ -9973,6 +9973,8 @@ class HeraldoMessagesSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        # /setup ACK guard must reserve the initial response for the Activity.
+        self._no_defer_select_values = frozenset(("create_message",))
 
         panel_select = discord.ui.Select(
             placeholder=_t('text.461894817fa0a2'),
@@ -10044,15 +10046,24 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 await interaction.response.send_message(
                     "El SDK de Discord necesita discord.py 2.6 o superior.", ephemeral=True)
                 return
+            if interaction.response.is_done():
+                # Defensive check: a component already ACKed cannot launch an Activity.
+                print("ACTIVITY_LAUNCH status=ALREADY_ACKED source=setup", flush=True)
+                await interaction.followup.send(
+                    "No se pudo abrir Crear mensaje. Cierra este panel y vuelve a ejecutar /setup.",
+                    ephemeral=True)
+                return
             try:
                 await interaction.response.launch_activity()
-            except discord.HTTPException:
-                if interaction.response.is_done():
-                    await interaction.followup.send(
-                        "Activa Activities y configura el URL Mapping en el portal de Discord.", ephemeral=True)
-                else:
-                    await interaction.response.send_message(
-                        "Activa Activities y configura el URL Mapping en el portal de Discord.", ephemeral=True)
+                print("ACTIVITY_LAUNCH status=SUCCESS source=setup", flush=True)
+            except discord.HTTPException as exc:
+                print(f"ACTIVITY_LAUNCH status=FAILED code={exc.code} http={exc.status}", flush=True)
+                sender = (interaction.followup.send if interaction.response.is_done()
+                          else interaction.response.send_message)
+                await sender(
+                    "Discord no permitió abrir Crear mensaje. Comprueba que Activities "
+                    "esté habilitado y el URL Mapping de El Heraldo Test configurado.",
+                    ephemeral=True)
             return
 
         if selected == "kits":
