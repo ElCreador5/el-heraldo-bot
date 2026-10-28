@@ -815,7 +815,7 @@ class AutofeedEditorView(discord.ui.View):
         await interaction.response.edit_message(
             content=t("choose_frequency"), embed=None, view=picker)
 
-    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def preview(self, interaction, button):
         from autofeed_embed_builder import render
