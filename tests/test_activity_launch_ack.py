@@ -1,4 +1,4 @@
-"""Regression: /setup must reserve the initial Discord ACK to launch Activities."""
+"""Regression: hiding Create message must not break regular /setup interactions."""
 import unittest
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -15,9 +15,12 @@ class ActivityLaunchAckTests(unittest.TestCase):
     def check(self, selection):
         return NS(data={"values": [selection]})
 
-    def test_create_message_reserves_initial_response_for_activity(self):
-        self.assertIn("create_message", self.view._no_defer_select_values)
-        self.assertTrue(setup_interactions.needs_initial_response(
+    def test_create_message_is_not_available_in_setup(self):
+        self.assertNotIn(
+            "create_message", {option.value for option in self.item.options})
+        self.assertNotIn(
+            "create_message", getattr(self.view, "_no_defer_select_values", ()))
+        self.assertFalse(setup_interactions.needs_initial_response(
             self.view, self.item, self.check("create_message")))
 
     def test_other_setup_options_still_use_fast_auto_ack(self):
@@ -33,12 +36,13 @@ class ActivityLaunchAckTests(unittest.TestCase):
         self.assertFalse(setup_interactions.needs_initial_response(
             view, item, self.check("create_message")))
 
-    def test_activity_launch_is_initial_response_in_handler(self):
+    def test_messages_handler_does_not_launch_hidden_activity(self):
         source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(
             encoding="utf-8")
-        self.assertIn('self._no_defer_select_values = frozenset(("create_message",))', source)
-        self.assertIn("await interaction.response.launch_activity()", source)
-        self.assertIn("ACTIVITY_LAUNCH status=FAILED", source)
+        menu_source = source.split("class HeraldoMessagesSetupView(", 1)[1].split(
+            "def validate_setup_view_layouts(", 1)[0]
+        self.assertNotIn('"create_message"', menu_source)
+        self.assertNotIn("launch_activity(", menu_source)
 
 
 if __name__ == "__main__":

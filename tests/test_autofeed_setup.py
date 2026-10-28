@@ -17,8 +17,12 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.owner_id = 10
         self.original = b.guild_config_get(self.guild_id, feeds.CONFIG_KEY)
 
-    async def test_setup_messages_opens_create_message_directly(self):
+    async def test_setup_messages_hides_create_message_and_preserves_editors(self):
         view = b.HeraldoMessagesSetupView(self.guild_id, self.owner_id)
+        options = {option.value for option in view.panel_select.options}
+        self.assertNotIn("create_message", options)
+        self.assertTrue({"verification", "verify_dm", "suggestions",
+                         "honeypot", "condemnation", "logs", "templates"}.issubset(options))
         interaction = NS(
             guild=NS(id=self.guild_id),
             user=NS(id=self.owner_id,
@@ -27,10 +31,8 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
             response=NS(send_message=AsyncMock(), edit_message=AsyncMock()),
         )
         await view.open_editor(interaction)
-        interaction.response.send_message.assert_not_awaited()
-        _, kwargs = interaction.response.edit_message.call_args
-        self.assertIsInstance(kwargs["view"], setup.AutofeedEditorView)
-        self.assertEqual(kwargs["embed"], None)
+        interaction.response.send_message.assert_awaited_once()
+        interaction.response.edit_message.assert_not_awaited()
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
     async def test_create_message_has_single_editor_with_expected_controls(self):
