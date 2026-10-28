@@ -1,6 +1,6 @@
 # El Heraldo Test — Activity «Crear mensaje»
 
-Estado: frontend y backend implementados en `Pruebas`, servidos por el **worker de Lab** en `https://worker-lab.up.railway.app`. No se ha tocado producción ni se ha creado una segunda base de datos.
+Estado verificado: el worker Lab ejecuta **3cee72c8** con despliegue `626dac69` **SUCCESS**, muestra `ACTIVITY_WEB status=LISTENING` y tiene dominio `worker-lab.up.railway.app`. Hay código adicional en `Pruebas` para servir localmente el SDK y sus pruebas (`3706086f`); **esa última revisión aún no ha sido publicada en Railway**. No hay prueba de lanzamiento real en Discord: faltan los controles del Developer Portal y el Client Secret. Ni `main` ni producción se han cambiado.
 
 ## Activación imprescindible en Discord
 
