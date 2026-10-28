@@ -90,6 +90,19 @@ def item(callback):
 
 
 class SetupInteractionRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_messages_menu_keeps_editors_without_create_message(self):
+        from test_safety_regressions import b
+        view = b.HeraldoMessagesSetupView(901, 10)
+        options = {option.value for option in view.panel_select.options}
+        self.assertNotIn("create_message", options)
+        self.assertTrue({
+            "verification", "verify_dm", "suggestions", "honeypot",
+            "condemnation", "logs", "templates",
+        }.issubset(options))
+        self.assertNotIn(
+            "create_message", getattr(view, "_no_defer_select_values", ())
+        )
+
     async def test_ack_precedes_checks_database_and_render_for_all_root_modules(self):
         from test_safety_regressions import b
         from test_ux_panel_matrix import guild_fixture, sqlite_snapshot
