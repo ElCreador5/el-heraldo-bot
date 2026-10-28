@@ -307,10 +307,15 @@ class TemplateConfirmView(discord.ui.View):
         editor.host["heraldo_template_save"](self.guild_id, items)
         self.finished = True
         self.stop()
-        content, view = _template_panel(editor.host, self.guild_id, self.owner_id,
-                                        self.proposed["name"])
+        # Mantener canal, rol, fecha y recurrencia del borrador para el paso
+        # opcional Publicar / Programar. Guardar nunca ejecuta el envío.
+        editor.original_template = copy.deepcopy(self.proposed)
+        editor.original_name = self.proposed["name"]
+        editor.template_snapshot = copy.deepcopy(items)
+        editor.dirty = False
         await interaction.response.edit_message(
-            content=tr("saved") + "\n\n" + content, embeds=[], view=view)
+            content=tr("saved") + "\n\n" + editor.summary(),
+            embeds=[], view=editor)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
     @guild_context

@@ -59,6 +59,11 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved[0]["content"], "Hola mundo")
         self.assertNotIn("start", saved[0])
         self.assertNotIn("channel", saved[0])
+        # Seguir en el mismo editor sin perder la preparación del envío.
+        displayed = self.interaction.response.edit_message.call_args.kwargs["view"]
+        self.assertIs(displayed, view)
+        self.assertEqual(view.original_name, "Aviso")
+        self.assertFalse(view.dirty)
 
     async def test_publish_without_saved_template_is_blocked(self):
         view = TemplateEditorView(self.host, 123, 7)
