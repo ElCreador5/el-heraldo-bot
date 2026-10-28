@@ -72,6 +72,8 @@ LANG = {
         "embed_manual_note": "Los campos de Discord no sugieren menciones mientras escribes. Usa los selectores de este editor para insertarlas.",
         "embed_deleted": "Embed retirado del borrador.",
         "embed_references": "Referencias insertadas",
+        "embed_input_hint": "Escribe texto, @rol o #canal; usa los selectores si no se reconoce el nombre.",
+        "embed_auto_note": "Los nombres únicos como @rol y #canal se convierten al confirmar el formulario.",
     },
     "en-US": {
         "hub_title": "**Message schedules**", "hub_help": "Create posts like AutoFeeds: choose a channel, write a message or build an embed, set the date, mention, and repeat interval. Nothing is posted before confirmation.",
@@ -131,6 +133,8 @@ LANG = {
         "embed_manual_note": "Discord's form text fields do not suggest mentions as you type. Use these selectors to insert them.",
         "embed_deleted": "Embed removed from draft.",
         "embed_references": "Inserted references",
+        "embed_input_hint": "Type text, @role or #channel; use the selectors if a name is not recognized.",
+        "embed_auto_note": "Unique @role and #channel names are converted on form submission.",
     },
     "pt-BR": {
         "hub_title": "**Programações de mensagens**", "hub_help": "Crie publicações como no AutoFeeds: escolha canal, texto ou embed, data, menção e repetição. Nada é publicado antes de confirmar.",
@@ -190,6 +194,8 @@ LANG = {
         "embed_manual_note": "Os campos de texto do formulário Discord não sugerem menções ao digitar. Use os seletores deste editor.",
         "embed_deleted": "Embed removido do rascunho.",
         "embed_references": "Referências inseridas",
+        "embed_input_hint": "Digite texto, @cargo ou #canal; use os seletores se o nome não for reconhecido.",
+        "embed_auto_note": "Nomes únicos como @cargo e #canal são convertidos ao confirmar o formulário.",
     }
 }
 
@@ -284,6 +290,34 @@ class MessageModal(discord.ui.Modal):
             content=self.editor.summary(), embed=None, view=self.editor)
 
 
+def resolve_inline_embed_names(guild, value):
+    """Convert unique @RoleName/#channel-name references within this guild.
+
+    Discord modal text inputs cannot offer live mention autocomplete. Unknown
+    or duplicate names are left intact; this does not enable notifications.
+    """
+    if not guild or not value:
+        return value
+    for prefix, objects, render in (
+        ("@", getattr(guild, "roles", ()), lambda item: f"<@&{item.id}>"),
+        ("#", getattr(guild, "text_channels", ()), lambda item: f"<#{item.id}>"),
+    ):
+        names = {}
+        for item in objects:
+            name = str(item.name)
+            if not name or name.casefold() in ("everyone", "here"):
+                continue
+            names.setdefault(name.casefold(), []).append(item)
+        for name in sorted(names, key=len, reverse=True):
+            matches = names[name]
+            if len(matches) != 1:
+                continue
+            expr = re.compile(r"(?<![\w<])" + re.escape(prefix) + re.escape(name)
+                              + r"(?![\w])", re.IGNORECASE)
+            value = expr.sub(lambda found, item=matches[0]: render(item), value)
+    return value
+
+
 class EmbedModal(discord.ui.Modal):
     def __init__(self, editor, *, from_embed_editor=False):
         super().__init__(title=t("embed"))
@@ -293,7 +327,9 @@ class EmbedModal(discord.ui.Modal):
         self.title_input = discord.ui.TextInput(label=t("embed_title"), required=False,
                                                  max_length=256, default=old.get("title", ""))
         self.desc = discord.ui.TextInput(label=t("embed_desc"), style=discord.TextStyle.paragraph,
-                                        required=False, max_length=4000, default=old.get("description", ""))
+                                        required=False, max_length=4000,
+                                        placeholder=t("embed_input_hint"),
+                                        default=old.get("description", ""))
         self.color = discord.ui.TextInput(label=t("embed_color"), required=False,
                                          max_length=7, default=old.get("color_hex", "5865F2"))
         for item in (self.title_input, self.desc, self.color):
@@ -306,7 +342,10 @@ class EmbedModal(discord.ui.Modal):
         value = str(self.color).strip().lstrip("#")
         if value and (len(value) != 6 or any(c not in "0123456789abcdefABCDEF" for c in value)):
             return await feeds.respond_error(interaction, "invalid")
-        title, desc = str(self.title_input).strip(), str(self.desc).strip()
+        title = resolve_inline_embed_names(interaction.guild, str(self.title_input).strip())
+        desc = resolve_inline_embed_names(interaction.guild, str(self.desc).strip())
+        if len(title) > 256 or len(desc) > 4000:
+            return await feeds.respond_error(interaction, "invalid")
         self.editor.embed = ({"title": title, "description": desc,
                               "color_hex": value or "5865F2"} if (title or desc) else None)
         self.editor.dirty = True
@@ -576,6 +615,7 @@ class EmbedEditorView(discord.ui.View):
             + description_plain[:350]
             + "\n**" + t("embed_references") + ":** " + references
             + "\n\n" + t("embed_manual_note")
+            + "\n" + t("embed_auto_note")
             + "\n" + t("embed_notify_note")
         )
 
