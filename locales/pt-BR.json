@@ -140,6 +140,8 @@
   "input.remove": "remover",
   "input.toggle": "alternar",
   "language.command_sync_pending": "O idioma foi salvo, mas não foi possível atualizar a ajuda dos comandos. Pressione Salvar alterações para tentar novamente.",
+  "messages.create.description": "Escreva uma mensagem, crie um embed ou programe o envio.",
+  "messages.create.label": "Criar mensagem",
   "noun.message.many": "mensagens",
   "noun.message.one": "mensagem",
   "personality.details_locked": "Os cargos de personalidade permitem que o membro escolha como deseja participar desta comunidade. O membro pode selecionar uma opção; este servidor não permite alterá-la enquanto as mudanças de escolha estiverem desativadas.\n\n**Como funciona?**\nO membro reage com o emoji da opção escolhida para receber o cargo associado. Só é possível manter uma escolha por vez.\n\nA escolha expressa seus interesses e oferece uma experiência personalizada no servidor. Pode liberar canais conforme as permissões dos cargos; não constitui prova de identidade nem substitui a verificação de idade.",
