@@ -9474,6 +9474,10 @@ class HeraldoTemplateSetupView(discord.ui.View):
         templates = heraldo_template_list(guild_id)
         self.selected = selected if any(x["name"] == selected for x in templates) else (templates[0]["name"] if templates else None)
         self.channel_id = None
+        # Los botones del panel nombran explícitamente la acción en los tres idiomas.
+        from template_native_builder import tr as template_label
+        self.create.label = template_label("new")
+        self.edit.label = template_label("edit")
         if templates:
             choose = discord.ui.Select(
                 placeholder=_t('text.e7075c8933040a'),

@@ -9,6 +9,7 @@ import message_payload
 from template_native_builder import (
     TemplateEditorView, TemplateConfirmView, to_builder, to_raw,
 )
+from test_safety_regressions import b
 
 
 class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
@@ -29,6 +30,11 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
             response=NS(edit_message=AsyncMock(), send_message=AsyncMock(),
                         send_modal=AsyncMock()),
         )
+
+    async def test_create_template_button_has_complete_label(self):
+        view = b.HeraldoTemplateSetupView(123, 7)
+        self.assertEqual(view.create.label, "Crear plantilla")
+        self.assertEqual(view.edit.label, "Editar plantilla")
 
     async def test_single_native_view_respects_five_action_rows(self):
         view = TemplateEditorView(self.host, 123, 7)
