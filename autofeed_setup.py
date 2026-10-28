@@ -6,6 +6,7 @@ selector o un botón/modal dentro del mismo mensaje de configuración.
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
+import re
 import uuid
 
 import discord
