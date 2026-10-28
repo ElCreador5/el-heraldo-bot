@@ -229,16 +229,12 @@ class ScheduledMessages:
                 # El texto y las menciones permanecen fuera del embed, que
                 # recibe el pie de identidad obligatorio del servidor/Lab.
                 import message_payload
+                from autofeed_embed_builder import render
                 data = job.get('embed') or {}
-                if data:
-                    visual = discord.Embed(
-                        title=data.get('title') or None,
-                        description=data.get('description') or None,
-                        color=int(data.get('color_hex', '5865F2'), 16),
-                    )
-                else:
-                    visual = discord.Embed()
-                stamped = self.host['stamp_embed'](visual, guild)
+                stamped = render(data, self.host['stamp_embed'], guild)
+                if stamped is None:
+                    # The required global footer remains even for a text-only post.
+                    stamped = self.host['stamp_embed'](discord.Embed(), guild)
                 payload = {
                     'content': job.get('text') or None,
                     'embeds': message_payload.TemplateEmbeds([stamped]),
