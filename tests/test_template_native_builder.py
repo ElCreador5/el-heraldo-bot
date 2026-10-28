@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import discord
 import message_payload
+from heraldo_i18n import translate
 from template_native_builder import (
     TemplateEditorView, TemplateConfirmView, to_builder, to_raw,
 )
@@ -32,10 +33,19 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
                         send_modal=AsyncMock()),
         )
 
+    async def test_templates_menu_tells_users_to_choose_channel_in_editor(self):
+        for locale in ("es-419", "en-US", "pt-BR"):
+            explanation = translate(locale, "text.038abcdd85c82f")
+            self.assertIn("editor", explanation.lower())
+        self.assertNotIn("elija un canal y pulse Publicar",
+                         translate("es-419", "text.038abcdd85c82f"))
+
     async def test_create_template_button_has_complete_label(self):
         view = b.HeraldoTemplateSetupView(123, 7)
         self.assertEqual(view.create.label, "Crear plantilla")
         self.assertEqual(view.edit.label, "Editar plantilla")
+        self.assertFalse(any(isinstance(c, discord.ui.ChannelSelect) for c in view.children),
+                         "El canal se elige al publicar, no en el catálogo")
 
     async def test_single_native_view_respects_five_action_rows(self):
         view = TemplateEditorView(self.host, 123, 7)
@@ -64,7 +74,11 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Meses: **0**", panel.fields[6].value)
         self.assertEqual(view.publish_button.label, "Enviar")
         self.assertEqual(view.frequency.label, "Repetir cada")
-        self.assertEqual(view.name_button.label, "Nombre de plantilla")
+        self.assertIn("Nombre de plantilla", [o.label for o in view.section_select.options])
+        self.assertEqual(view.section_select.placeholder, "Editar apartado de la plantilla")
+        self.assertFalse(any(c in view.children for c in (
+            view.message, view.embed_builder, view.frequency, view.mention,
+            view.date_time, view.silent)))
 
     async def test_panel_reflects_draft_without_auto_save(self):
         view = TemplateEditorView(self.host, 123, 7)
@@ -81,11 +95,31 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_repeat_button_opens_native_numeric_modal(self):
         view = TemplateEditorView(self.host, 123, 7)
-        await view.frequency.callback(self.interaction)
+        view.section_select._values = ["repeat"]
+        await view.section_select.callback(self.interaction)
         modal = self.interaction.response.send_modal.call_args.args[0]
         self.assertEqual(len(modal.children), 4)
         self.assertEqual([field.label for field in modal.children],
                          ["Meses", "Días", "Horas", "Minutos"])
+
+    async def test_edit_selector_opens_name_without_extra_messages(self):
+        view = TemplateEditorView(self.host, 123, 7)
+        view.section_select._values = ["name"]
+        await view.section_select.callback(self.interaction)
+        modal = self.interaction.response.send_modal.call_args.args[0]
+        self.assertEqual(len(modal.children), 1)
+        self.assertEqual(modal.children[0].label, "Nombre de la plantilla")
+        self.interaction.response.edit_message.assert_not_called()
+
+    async def test_no_role_recreates_selector_and_keeps_draft(self):
+        view = TemplateEditorView(self.host, 123, 7)
+        view.role_id = 554
+        view.section_select._values = ["no_role"]
+        await view.section_select.callback(self.interaction)
+        self.assertIsNone(view.role_id)
+        self.assertTrue(view.dirty)
+        self.assertEqual(len([x for x in view.children if isinstance(x, discord.ui.RoleSelect)]), 1)
+        self.save.assert_not_called()
 
     async def test_save_requires_second_confirmation_and_does_not_publish(self):
         view = TemplateEditorView(self.host, 123, 7)

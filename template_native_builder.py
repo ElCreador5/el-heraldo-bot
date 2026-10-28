@@ -29,7 +29,7 @@ STRINGS = {
         prompt="¿Guardar esta plantilla? Guardar no la publica ni programa.",
         notice="Canal, rol, fecha y repetición son opciones de publicación; no se guardan como parte de la plantilla.",
         no_permission="No tienes permiso para editar plantillas.",
-        panel_title="Editor de plantillas", channel_label="Canal de publicación", channel_empty="Seleccionar canal", name_label="Nombre de plantilla", message_label="Mensaje", builder_label="Constructor de embed", embed_empty="Sin embed", date_label="Fecha", date_empty="Sin fecha: se envía al confirmar", role_label="Rol a mencionar", role_empty="Silencioso (sin rol)", repeat_label="Repetir cada", interval_tip="Repetición mínima: una hora.", months="Meses", days="Días", hours="Horas", minutes="Minutos", fields_count="Campos", send="Enviar", repeat_edit="Repetir cada", name_edit="Nombre de plantilla", embed_edit="Constructor de embed", message_edit="Mensaje", date_edit="Fecha", mention_edit="Insertar rol o canal", finish="Selecciona una sección para editarla; nada se guarda automáticamente.", unpublished="Guardar no publica ni programa mensajes."),
+        panel_title="Editor de plantillas", channel_label="Canal de publicación", channel_empty="Seleccionar canal", name_label="Nombre de plantilla", message_label="Mensaje", builder_label="Constructor de embed", embed_empty="Sin embed", date_label="Fecha", date_empty="Sin fecha: se envía al confirmar", role_label="Rol a mencionar", role_empty="Silencioso (sin rol)", repeat_label="Repetir cada", interval_tip="Repetición mínima: una hora.", months="Meses", days="Días", hours="Horas", minutes="Minutos", fields_count="Campos", send="Enviar", repeat_edit="Repetir cada", name_edit="Nombre de plantilla", embed_edit="Constructor de embed", message_edit="Mensaje", date_edit="Fecha", mention_edit="Insertar rol o canal", finish="Selecciona una sección para editarla; nada se guarda automáticamente.", section_prompt="Editar apartado de la plantilla", no_role_edit="Sin rol", unpublished="Guardar no publica ni programa mensajes."),
     "en-US": dict(new="Create template", edit="Edit template", name="Template name",
         name_button="Name", save="Save changes", confirm="Confirm changes",
         publish="Publish / Schedule", back="Back", discard="Discard changes",
@@ -41,7 +41,7 @@ STRINGS = {
         prompt="Save this template? Saving does not publish or schedule it.",
         notice="Channel, role, date, and repeat settings belong to the publication, not the saved template.",
         no_permission="You cannot edit templates.",
-        panel_title="Template editor", channel_label="Publication channel", channel_empty="Select channel", name_label="Template name", message_label="Message", builder_label="Embed builder", embed_empty="No embed", date_label="Date", date_empty="No date: sent on confirmation", role_label="Role to mention", role_empty="Silent (no role)", repeat_label="Repeat every", interval_tip="Minimum repeat interval: one hour.", months="Months", days="Days", hours="Hours", minutes="Minutes", fields_count="Fields", send="Send", repeat_edit="Repeat every", name_edit="Template name", embed_edit="Embed builder", message_edit="Message", date_edit="Date", mention_edit="Insert role or channel", finish="Select a section to edit; nothing is saved automatically.", unpublished="Saving does not send or schedule messages."),
+        panel_title="Template editor", channel_label="Publication channel", channel_empty="Select channel", name_label="Template name", message_label="Message", builder_label="Embed builder", embed_empty="No embed", date_label="Date", date_empty="No date: sent on confirmation", role_label="Role to mention", role_empty="Silent (no role)", repeat_label="Repeat every", interval_tip="Minimum repeat interval: one hour.", months="Months", days="Days", hours="Hours", minutes="Minutes", fields_count="Fields", send="Send", repeat_edit="Repeat every", name_edit="Template name", embed_edit="Embed builder", message_edit="Message", date_edit="Date", mention_edit="Insert role or channel", finish="Select a section to edit; nothing is saved automatically.", section_prompt="Edit template section", no_role_edit="No role", unpublished="Saving does not send or schedule messages."),
     "pt-BR": dict(new="Criar modelo", edit="Editar modelo", name="Nome do modelo",
         name_button="Nome", save="Salvar alterações", confirm="Confirmar alterações",
         publish="Publicar / Programar", back="Voltar", discard="Descartar alterações",
@@ -53,7 +53,7 @@ STRINGS = {
         prompt="Salvar este modelo? Salvar não publica nem agenda.",
         notice="Canal, cargo, data e repetição são opções de publicação, não do modelo salvo.",
         no_permission="Você não tem permissão para editar modelos.",
-        panel_title="Editor de modelos", channel_label="Canal de publicação", channel_empty="Selecionar canal", name_label="Nome do modelo", message_label="Mensagem", builder_label="Construtor de embed", embed_empty="Sem embed", date_label="Data", date_empty="Sem data: enviado após confirmação", role_label="Cargo a mencionar", role_empty="Silencioso (sem cargo)", repeat_label="Repetir a cada", interval_tip="Intervalo mínimo: uma hora.", months="Meses", days="Dias", hours="Horas", minutes="Minutos", fields_count="Campos", send="Enviar", repeat_edit="Repetir a cada", name_edit="Nome do modelo", embed_edit="Construtor de embed", message_edit="Mensagem", date_edit="Data", mention_edit="Inserir cargo ou canal", finish="Selecione uma seção para editar; nada é salvo automaticamente.", unpublished="Salvar não publica nem agenda mensagens."),
+        panel_title="Editor de modelos", channel_label="Canal de publicação", channel_empty="Selecionar canal", name_label="Nome do modelo", message_label="Mensagem", builder_label="Construtor de embed", embed_empty="Sem embed", date_label="Data", date_empty="Sem data: enviado após confirmação", role_label="Cargo a mencionar", role_empty="Silencioso (sem cargo)", repeat_label="Repetir a cada", interval_tip="Intervalo mínimo: uma hora.", months="Meses", days="Dias", hours="Horas", minutes="Minutos", fields_count="Campos", send="Enviar", repeat_edit="Repetir a cada", name_edit="Nome do modelo", embed_edit="Construtor de embed", message_edit="Mensagem", date_edit="Data", mention_edit="Inserir cargo ou canal", finish="Selecione uma seção para editar; nada é salvo automaticamente.", section_prompt="Editar seção do modelo", no_role_edit="Sem cargo", unpublished="Salvar não publica nem agenda mensagens."),
 }
 
 def tr(key):
@@ -145,10 +145,21 @@ class TemplateEditorView(AutofeedEditorView):
         self.preview.callback = self._preview_template
         self.discard.label = tr("discard")
         self.discard.callback = self._discard_template
-        self.name_button = discord.ui.Button(label=tr("name_edit"),
-                                              style=discord.ButtonStyle.primary, row=3)
-        self.name_button.callback = self._open_name
-        self.add_item(self.name_button)
+        # Discord has five component rows: use one editing selector instead of
+        # separate buttons for every field. The same editor message remains open.
+        for control in (self.message, self.embed_builder, self.mention,
+                        self.date_time, self.frequency, self.silent):
+            self.remove_item(control)
+        self.section_select = discord.ui.Select(
+            placeholder=tr("section_prompt"), row=2, options=[
+                discord.SelectOption(label=tr(label), value=value)
+                for value, label in (
+                    ("name", "name_edit"), ("message", "message_edit"),
+                    ("embed", "embed_edit"), ("date", "date_edit"),
+                    ("repeat", "repeat_edit"), ("mention", "mention_edit"),
+                    ("no_role", "no_role_edit"))])
+        self.section_select.callback = self._select_section
+        self.add_item(self.section_select)
         self.publish_button = discord.ui.Button(label=tr("send"),
                                                   style=discord.ButtonStyle.success, row=4)
         self.publish_button.callback = self._publish_template
@@ -194,6 +205,40 @@ class TemplateEditorView(AutofeedEditorView):
     @guild_context
     async def _edit_repeat_direct(self, interaction):
         await interaction.response.send_modal(CustomRepeatModal(self))
+
+    @guild_context
+    async def _select_section(self, interaction):
+        choice = self.section_select.values[0]
+        modal = {
+            "name": lambda: NameModal(self),
+            "message": lambda: __import__("autofeed_setup").MessageModal(self),
+            "date": lambda: __import__("autofeed_setup").DateTimeModal(self),
+            "repeat": lambda: CustomRepeatModal(self),
+        }
+        if choice in modal:
+            return await interaction.response.send_modal(modal[choice]())
+        if choice == "embed":
+            from autofeed_embed_builder import EmbedBuilderView
+            builder = EmbedBuilderView(self)
+            return await interaction.response.edit_message(
+                content=builder.summary(), embed=builder.preview_embed(interaction.guild),
+                view=builder, allowed_mentions=discord.AllowedMentions.none())
+        if choice == "mention":
+            from autofeed_setup import MentionPickerView, t
+            return await interaction.response.edit_message(
+                content=t("mention_help"), embed=None, view=MentionPickerView(self))
+        if choice == "no_role":
+            self.role_id = None
+            self.dirty = True
+            # Recreate the select so roles can be selected again immediately.
+            self.remove_item(self.roles)
+            from autofeed_setup import t
+            self.roles = discord.ui.RoleSelect(
+                placeholder=t("select_role"), row=1, min_values=0, max_values=1)
+            self.roles.callback = self.pick_role
+            self.add_item(self.roles)
+            return await interaction.response.edit_message(
+                content=None, embed=self.panel_embed(interaction.guild), view=self)
 
     @guild_context
     async def interaction_check(self, interaction):

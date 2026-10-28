@@ -948,8 +948,8 @@
     "A configuração foi salva, mas não foi possível sincronizar o painel publicado. Tente publicar novamente pelo editor."
   ],
   "text.038abcdd85c82f": [
-    "**El Heraldo · Templates**\n\nCreate and edit templates in this panel. Select a template to edit or preview it. To publish, choose a channel and press Publish.",
-    "**El Heraldo · Modelos**\n\nCrie e edite modelos neste painel. Selecione um modelo para editá-lo ou visualizá-lo. Para publicar, escolha um canal e pressione Publicar."
+    "**El Heraldo · Templates**\n\nCreate and edit templates in this panel. Select a template to edit or preview. To publish or schedule it, press Publish and choose the channel in the editor.",
+    "**El Heraldo · Modelos**\n\nCrie e edite modelos neste painel. Selecione um modelo para editar ou visualizar. Para publicar ou programar, pressione Publicar e selecione o canal no editor."
   ],
   "text.03b6a0dcd5f3f3": [
     "Case closed; I couldn't withdraw the timeout.",

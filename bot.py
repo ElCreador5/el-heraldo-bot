@@ -9473,7 +9473,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
         self.guild_id, self.owner_id = guild_id, owner_id
         templates = heraldo_template_list(guild_id)
         self.selected = selected if any(x["name"] == selected for x in templates) else (templates[0]["name"] if templates else None)
-        self.channel_id = None
+        # La selección de canal se realiza al publicar, no en el catálogo.
         # Los botones del panel nombran explícitamente la acción en los tres idiomas.
         from template_native_builder import tr as template_label
         self.create.label = template_label("new")
@@ -9487,10 +9487,6 @@ class HeraldoTemplateSetupView(discord.ui.View):
             )
             choose.callback = self.choose
             self.add_item(choose)
-        channel = discord.ui.ChannelSelect(placeholder=_t('text.9b43b8ae0618a0'),
-                                           channel_types=[discord.ChannelType.text], row=1)
-        channel.callback = self.channel_selected
-        self.add_item(channel)
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -9520,12 +9516,6 @@ class HeraldoTemplateSetupView(discord.ui.View):
             view=HeraldoTemplateSetupView(self.guild_id, self.owner_id, chosen["name"]),
         )
 
-    @_i18n_context
-    async def channel_selected(self, interaction: discord.Interaction):
-        values = (interaction.data or {}).get("values", [])
-        self.channel_id = int(values[0]) if values else None
-        await interaction.response.defer()
-
     @discord.ui.button(label=_t('text.3fe5ff266fc3ce'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
     async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -9554,26 +9544,17 @@ class HeraldoTemplateSetupView(discord.ui.View):
     @discord.ui.button(label=_t('text.326fdfdb1a8937'), style=discord.ButtonStyle.success, row=4)
     @_i18n_context
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button):
-        template = self._current()
-        channel = interaction.guild.get_channel(self.channel_id) if self.channel_id else None
-        if not template or not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(_t('text.e16f95187fc716'), ephemeral=True)
+        # Un único editor maneja la publicación inmediata y programada. Esto
+        # evita un segundo selector de canal y obliga a confirmar el envío.
+        selected = self._current()
+        if not selected:
+            await interaction.response.send_message(_t('text.17ebd113981edc'), ephemeral=True)
             return
-        me = interaction.guild.me
-        user_perms = channel.permissions_for(interaction.user)
-        if not user_perms.view_channel or not user_perms.send_messages:
-            await interaction.response.send_message(_t('text.f3790dd2e5e480'), ephemeral=True)
-            return
-        if not me or not channel.permissions_for(me).send_messages or not channel.permissions_for(me).embed_links:
-            await interaction.response.send_message(_t('text.95a0d3d19b581b'), ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        try:
-            await channel.send(**heraldo_template_payload(template, interaction.guild, interaction.user, channel))
-        except (discord.HTTPException, ValueError):
-            await interaction.followup.send(_t('text.8639e11e874a4a'), ephemeral=True)
-            return
-        await interaction.followup.send(_t('text.771fcda3377f05', p0=f'{channel.mention}'), ephemeral=True)
+        from template_native_builder import TemplateEditorView
+        editor = TemplateEditorView(globals(), self.guild_id, self.owner_id, selected)
+        await interaction.response.edit_message(
+            content=None, embed=editor.panel_embed(interaction.guild), view=editor,
+            allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label="JSON", style=discord.ButtonStyle.secondary, row=3)
     @_i18n_context
