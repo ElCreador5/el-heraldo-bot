@@ -9987,7 +9987,7 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label="Logs", value="logs", description=_t('text.bcd7436a95303e')),
                 discord.SelectOption(label=_t('text.f4ea025e8c2221'), value="templates", description=_t('text.685b989ce71932')),
                 discord.SelectOption(label=_t('text.b0018aa1b6e0d7'), value="components", description=_t('text.bd22abbadb4287')),
-                discord.SelectOption(label=_t('text.bd7f1dbc1a01c2'), value="schedules", description=_t('text.9915d7c896fef7')),
+                discord.SelectOption(label=_t('messages.create.label'), value="create_message", description=_t('messages.create.description')),
                 discord.SelectOption(label=_t('text.e737a4c8b2906d'), value="autoresponses", description=_t('text.92f32ae5db8fd6')),
                 discord.SelectOption(label=_t('text.8747176853dbc2'), value="sticky", description=_t('text.cb3465ca4819e5')),
                 discord.SelectOption(label=_t('text.45808d75bf8911'), value="webhooks", description=_t('text.df564bfe3231e6')),
@@ -10033,9 +10033,9 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 ephemeral=True)
             return
 
-        if selected == "schedules":
-            # Un único panel: /setup -> Mensajes -> Programaciones.
-            # No abrir una respuesta efímera adicional ni redirigir a /mensajes.
+        if selected == "create_message":
+            # /setup -> Mensajes -> Crear mensaje (un único editor Carl-style).
+            # Fecha opcional: publicar ahora o programar sin un módulo paralelo.
             from autofeed_setup import setup_panel
             content, view = setup_panel(globals(), self.guild_id, self.owner_id)
             await interaction.response.edit_message(content=content, embed=None, view=view)
