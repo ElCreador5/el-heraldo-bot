@@ -1,4 +1,4 @@
-"""Editor AutoFeeds para /setup -> Mensajes -> Programaciones.
+"""Editor de mensajes unificado en /setup -> Mensajes -> Crear mensaje.
 
 Discord no ofrece campos web tipo Carl-bot: cada fila se representa con un
 selector o un botón/modal dentro del mismo mensaje de configuración.
@@ -18,18 +18,18 @@ LANG = {
         "hub_title": "**Programaciones de mensajes**",
         "hub_help": "Crea publicaciones como en AutoFeeds: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
         "new": "Crear programación", "manage": "Gestionar programaciones", "permissions": "Permisos",
-        "new_title": "**Crear Autofeed**", "edit_title": "**Editar programación**",
+        "new_title": "**Crear mensaje**", "edit_title": "**Editar mensaje**",
         "select_channel": "Canal donde publicar", "select_role": "Rol para mencionar (opcional)",
         "message": "Mensaje", "embed": "Editor de embed", "schedule": "Fecha y repetición",
         "preview": "Vista previa", "silent": "Sin rol", "save": "Guardar cambios",
         "discard": "Descartar cambios", "confirm": "Confirmar cambios", "back": "Volver",
         "empty": "Sin definir", "no_repeat": "No se repite", "start": "Fecha y hora",
         "repeat": "Repetir cada", "members": "Rol mencionado", "none": "Ninguno",
-        "warning": "Completa el canal, el mensaje o embed y una fecha futura.",
+        "warning": "Selecciona el canal y escribe un mensaje o configura un embed.",
         "invalid_interval": "La repetición debe ser de al menos una hora (o un mes).",
         "time_format": "AAAA-MM-DD HH:MM", "months": "Meses", "days": "Días",
         "hours": "Horas", "minutes": "Minutos",
-        "saved": "Programación guardada.", "cancelled": "Cambios descartados.",
+        "saved": "Mensaje programado correctamente.", "cancelled": "Cambios descartados.",
         "unavailable": "Selecciona un canal válido y comprueba los permisos.",
         "conflict": "La programación cambió en otra sesión. Ábrela de nuevo.",
         "limit": "Se alcanzó el límite de programaciones de este servidor.",
@@ -75,22 +75,33 @@ LANG = {
         "embed_references": "Referencias insertadas",
         "embed_input_hint": "Escribe texto, @rol o #canal; usa los selectores si no se reconoce el nombre.",
         "embed_auto_note": "Los nombres únicos como @rol y #canal se convierten al confirmar el formulario.",
+        "notice": "Sin fecha: se publica al confirmar. Con fecha: se programa el envío.",
+        "start_label": "Fecha de envío",
+        "now": "Enviar ahora",
+        "schedule_now": "Programar envío",
+        "created": "Mensaje publicado.",
+        "uncertain": "No se pudo confirmar el envío. Revisa el canal antes de volver a intentarlo.",
+        "send": "Crear mensaje",
+        "show_embed": "Mostrar editor de embed",
+        "none_date": "Sin fecha (publicar ahora)",
+        "date_clear": "Quitar fecha",
+        "clear_date_help": "Borra ambos campos para publicar inmediatamente.",
     },
     "en-US": {
         "hub_title": "**Message schedules**", "hub_help": "Create posts like AutoFeeds: choose a channel, write a message or build an embed, set the date, mention, and repeat interval. Nothing is posted before confirmation.",
         "new": "Create schedule", "manage": "Manage schedules", "permissions": "Permissions",
-        "new_title": "**Create Autofeed**", "edit_title": "**Edit schedule**",
+        "new_title": "**Create message**", "edit_title": "**Edit message**",
         "select_channel": "Destination channel", "select_role": "Role to mention (optional)",
         "message": "Message", "embed": "Embed builder", "schedule": "Date and repeat",
         "preview": "Preview", "silent": "No role", "save": "Save changes",
         "discard": "Discard changes", "confirm": "Confirm changes", "back": "Back",
         "empty": "Not set", "no_repeat": "No repeat", "start": "Date and time",
         "repeat": "Repeat every", "members": "Mentioned role", "none": "None",
-        "warning": "Choose a channel, message or embed, and a future date.",
+        "warning": "Choose a channel and enter a message or create an embed.",
         "invalid_interval": "The repeat interval must be at least one hour (or one month).",
         "time_format": "YYYY-MM-DD HH:MM", "months": "Months", "days": "Days",
         "hours": "Hours", "minutes": "Minutes",
-        "saved": "Schedule saved.", "cancelled": "Changes discarded.",
+        "saved": "Message scheduled successfully.", "cancelled": "Changes discarded.",
         "unavailable": "Select a valid channel and check permissions.",
         "conflict": "The schedule changed in another session. Open it again.",
         "limit": "The server's schedule limit has been reached.",
@@ -136,22 +147,33 @@ LANG = {
         "embed_references": "Inserted references",
         "embed_input_hint": "Type text, @role or #channel; use the selectors if a name is not recognized.",
         "embed_auto_note": "Unique @role and #channel names are converted on form submission.",
+        "notice": "No date: publish after confirmation. Future date: schedule delivery.",
+        "start_label": "Delivery date",
+        "now": "Publish now",
+        "schedule_now": "Schedule message",
+        "created": "Message published.",
+        "uncertain": "Delivery could not be confirmed. Check the channel before trying again.",
+        "send": "Create message",
+        "show_embed": "Show embed builder",
+        "none_date": "No date (publish now)",
+        "date_clear": "Remove date",
+        "clear_date_help": "Clear both fields to publish immediately.",
     },
     "pt-BR": {
         "hub_title": "**Programações de mensagens**", "hub_help": "Crie publicações como no AutoFeeds: escolha canal, texto ou embed, data, menção e repetição. Nada é publicado antes de confirmar.",
         "new": "Criar programação", "manage": "Gerenciar programações", "permissions": "Permissões",
-        "new_title": "**Criar Autofeed**", "edit_title": "**Editar programação**",
+        "new_title": "**Criar mensagem**", "edit_title": "**Editar mensagem**",
         "select_channel": "Canal de destino", "select_role": "Cargo a mencionar (opcional)",
         "message": "Mensagem", "embed": "Editor de embed", "schedule": "Data e repetição",
         "preview": "Prévia", "silent": "Sem cargo", "save": "Salvar alterações",
         "discard": "Descartar alterações", "confirm": "Confirmar alterações", "back": "Voltar",
         "empty": "Não definido", "no_repeat": "Não repetir", "start": "Data e hora",
         "repeat": "Repetir a cada", "members": "Cargo mencionado", "none": "Nenhum",
-        "warning": "Escolha o canal, texto ou embed e uma data futura.",
+        "warning": "Escolha um canal e digite a mensagem ou crie um embed.",
         "invalid_interval": "O intervalo deve ser de pelo menos uma hora (ou um mês).",
         "time_format": "AAAA-MM-DD HH:MM", "months": "Meses", "days": "Dias",
         "hours": "Horas", "minutes": "Minutos",
-        "saved": "Programação salva.", "cancelled": "Alterações descartadas.",
+        "saved": "Mensagem programada com sucesso.", "cancelled": "Alterações descartadas.",
         "unavailable": "Selecione um canal válido e confira as permissões.",
         "conflict": "A programação foi alterada em outra sessão. Abra novamente.",
         "limit": "O limite de programações deste servidor foi atingido.",
@@ -197,6 +219,17 @@ LANG = {
         "embed_references": "Referências inseridas",
         "embed_input_hint": "Digite texto, @cargo ou #canal; use os seletores se o nome não for reconhecido.",
         "embed_auto_note": "Nomes únicos como @cargo e #canal são convertidos ao confirmar o formulário.",
+        "notice": "Sem data: publica após confirmar. Com data futura: agenda o envio.",
+        "start_label": "Data de envio",
+        "now": "Publicar agora",
+        "schedule_now": "Programar envio",
+        "created": "Mensagem publicada.",
+        "uncertain": "Não foi possível confirmar o envio. Confira o canal antes de tentar novamente.",
+        "send": "Criar mensagem",
+        "show_embed": "Mostrar editor de embed",
+        "none_date": "Sem data (publicar agora)",
+        "date_clear": "Remover data",
+        "clear_date_help": "Limpe ambos os campos para publicar imediatamente.",
     }
 }
 
@@ -213,62 +246,8 @@ def _owner(interaction, guild_id, owner_id):
 
 
 def setup_panel(host, guild_id, owner_id):
-    view = AutofeedHubView(host, guild_id, owner_id)
-    return view.summary(), view
-
-
-class AutofeedHubView(discord.ui.View):
-    def __init__(self, host, guild_id, owner_id):
-        super().__init__(timeout=900)
-        self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
-        self.create.label, self.manage.label = t("new"), t("manage")
-        self.permissions.label, self.back.label = t("permissions"), t("back")
-
-    def summary(self):
-        jobs = [j for j in feeds.get_jobs(self.host, self.guild_id)
-                if j.get("autofeed")]
-        active = sum(not j.get("paused") for j in jobs)
-        return (t("hub_title") + "\n\n" + t("hub_help")
-                + f"\n\n{t('manage')}: **{len(jobs)}** · {t('start')}: **{active}**")
-
-    @guild_context
-    async def interaction_check(self, interaction):
-        if not _owner(interaction, self.guild_id, self.owner_id):
-            await feeds.respond_error(interaction, "denied")
-            return False
-        return True
-
-    @discord.ui.button(label="Crear programación", style=discord.ButtonStyle.primary, row=0)
-    @guild_context
-    async def create(self, interaction, button):
-        editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=editor.summary(), embed=None, view=editor)
-
-    @discord.ui.button(label="Gestionar programaciones", style=discord.ButtonStyle.secondary, row=0)
-    @guild_context
-    async def manage(self, interaction, button):
-        jobs = [j for j in feeds.get_jobs(self.host, self.guild_id) if j.get("autofeed")]
-        if not jobs:
-            return await feeds.respond_error(interaction, "no_jobs")
-        view = feeds.ManageView(self.host, self.guild_id, self.owner_id, jobs,
-                                from_setup=True)
-        await interaction.response.edit_message(
-            content="\n".join(feeds.show_job(j, detail=False) for j in jobs[:8]),
-            embed=None, view=view)
-
-    @discord.ui.button(label="Permisos", style=discord.ButtonStyle.secondary, row=1)
-    @guild_context
-    async def permissions(self, interaction, button):
-        view = feeds.PolicyView(self.host, self.guild_id, self.owner_id, return_to_setup=True)
-        await interaction.response.edit_message(content=view.summary(), embed=None, view=view)
-
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
-    @guild_context
-    async def back(self, interaction, button):
-        await interaction.response.edit_message(
-            content=self.host["heraldo_messages_setup_content"](),
-            embed=None,
-            view=self.host["HeraldoMessagesSetupView"](self.guild_id, self.owner_id))
+    editor = AutofeedEditorView(host, guild_id, owner_id)
+    return editor.summary(), editor
 
 
 class MessageModal(discord.ui.Modal):
@@ -382,10 +361,12 @@ class DateTimeModal(discord.ui.Modal):
         local = editor.start.astimezone(editor.timezone) if editor.start else (
             datetime.now(editor.timezone) + timedelta(days=1)).replace(
                 hour=18, minute=0, second=0, microsecond=0)
-        self.date = discord.ui.TextInput(label=t("date_only"),
-            default=local.strftime("%Y-%m-%d"), placeholder="2026-11-01", max_length=10)
-        self.time = discord.ui.TextInput(label=t("time_only"),
-            default=local.strftime("%H:%M"), placeholder="18:00", max_length=5)
+        self.date = discord.ui.TextInput(label=t("date_only"), required=False,
+            default=local.strftime("%Y-%m-%d") if editor.start else "",
+            placeholder="2026-11-01", max_length=10)
+        self.time = discord.ui.TextInput(label=t("time_only"), required=False,
+            default=local.strftime("%H:%M") if editor.start else "",
+            placeholder="18:00", max_length=5)
         self.add_item(self.date)
         self.add_item(self.time)
 
@@ -393,12 +374,17 @@ class DateTimeModal(discord.ui.Modal):
     async def on_submit(self, interaction):
         if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
             return await feeds.respond_error(interaction, "denied")
-        try:
-            self.editor.start = feeds.start_from_form(
-                f"{str(self.date).strip()} {str(self.time).strip()}",
-                "America/Santo_Domingo")
-        except ValueError:
-            return await feeds.respond_error(interaction, "invalid")
+        date, clock = str(self.date).strip(), str(self.time).strip()
+        if not date and not clock:
+            self.editor.start = None
+        else:
+            if not date or not clock:
+                return await feeds.respond_error(interaction, "invalid")
+            try:
+                self.editor.start = feeds.start_from_form(
+                    f"{date} {clock}", "America/Santo_Domingo")
+            except ValueError:
+                return await feeds.respond_error(interaction, "invalid")
         self.editor.dirty = True
         await interaction.response.edit_message(
             content=self.editor.summary(), embed=None, view=self.editor)
@@ -680,7 +666,7 @@ class EmbedEditorView(discord.ui.View):
         await interaction.response.send_modal(
             EmbedModal(self.parent, from_embed_editor=True))
 
-    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def preview(self, interaction, button):
         await interaction.response.edit_message(
@@ -740,11 +726,28 @@ class AutofeedEditorView(discord.ui.View):
                           (self.silent, "silent"), (self.save, "save"),
                           (self.discard, "discard"), (self.back, "back")]:
             item.label = t(key)
+        self.embed_builder.label = t("show_embed")
+        self.save.label = t("save") if job else t("send")
+        self.dirty = False
+
+    @property
+    def dirty(self):
+        return getattr(self, "_dirty", False)
+
+    @dirty.setter
+    def dirty(self, value):
+        self._dirty = bool(value)
+        # NH: Descartar cambios only appears while there are unsaved edits.
+        if hasattr(self, "discard"):
+            if self._dirty and self.discard not in self.children:
+                self.add_item(self.discard)
+            elif not self._dirty and self.discard in self.children:
+                self.remove_item(self.discard)
 
     def summary(self):
         channel = f"<#{self.channel_id}>" if self.channel_id else t("empty")
         role = f"<@&{self.role_id}>" if self.role_id else t("none")
-        date = f"<t:{int(self.start.timestamp())}:F>" if self.start else t("empty")
+        date = f"<t:{int(self.start.timestamp())}:F>" if self.start else t("none_date")
         period = (", ".join(f"{v} {t(k)}" for k, v in self.parts.items() if v)
                   if self.parts else t("no_repeat"))
         text = (self.text[:450] + ("…" if len(self.text) > 450 else "")) or t("empty")
@@ -761,10 +764,10 @@ class AutofeedEditorView(discord.ui.View):
                 f"**{t('select_channel')}:** {channel}\n"
                 f"**{t('message')}:** {discord.utils.escape_mentions(text)}\n"
                 f"**{t('embed')}:** {discord.utils.escape_mentions(embed)}\n"
-                f"**{t('start')}:** {date}\n"
+                f"**{t('start_label')}:** {date}\n"
                 f"**{t('members')}:** {role}\n"
                 f"**{t('repeat')}:** {period}\n\n"
-                f"{t('saved_tip')}")
+                f"{t('notice')}\n{t('saved_tip')}")
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -790,7 +793,7 @@ class AutofeedEditorView(discord.ui.View):
     async def message(self, interaction, button):
         await interaction.response.send_modal(MessageModal(self))
 
-    @discord.ui.button(label="Editor de embed", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Mostrar editor de embed", style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def embed_builder(self, interaction, button):
         from autofeed_embed_builder import EmbedBuilderView
@@ -800,12 +803,12 @@ class AutofeedEditorView(discord.ui.View):
             embed=view.preview_embed(interaction.guild), view=view,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Fecha y hora", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Fecha y hora", style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def date_time(self, interaction, button):
         await interaction.response.send_modal(DateTimeModal(self))
 
-    @discord.ui.button(label="Frecuencia", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Frecuencia", style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def frequency(self, interaction, button):
         picker = FrequencyPickerView(self)
@@ -822,7 +825,7 @@ class AutofeedEditorView(discord.ui.View):
             embed=embed, view=self,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Insertar mención", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Insertar mención", style=discord.ButtonStyle.secondary, row=2)
     @guild_context
     async def mention(self, interaction, button):
         picker = MentionPickerView(self)
@@ -856,9 +859,11 @@ class AutofeedEditorView(discord.ui.View):
                 self.embed = validate_data(self.embed)
             except ValueError as exc:
                 raise ValueError("unavailable") from exc
-        if not self.start or (not self.text and not has_content(self.embed)):
+        if not self.text and not has_content(self.embed):
             raise ValueError("warning")
-        if self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
+        if self.start is None and self.parts:
+            raise ValueError("warning")
+        if self.start and self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("warning")
         try:
             feeds.referenced_mentions(guild, {
@@ -871,13 +876,14 @@ class AutofeedEditorView(discord.ui.View):
             "guild": self.guild_id, "author": previous.get("author", self.owner_id),
             "requester": self.owner_id, "channel": self.channel_id,
             "role": self.role_id, "text": self.text, "embed": self.embed,
-            "start": self.start.isoformat(), "zone": "America/Santo_Domingo",
+            "start": self.start.isoformat() if self.start else None,
+            "zone": "America/Santo_Domingo",
             "repeat": "custom" if self.parts else "ninguna",
             "repeat_parts": self.parts, "autofeed": True,
             "paused": previous.get("paused", False), "template": None,
         }
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label="Crear mensaje", style=discord.ButtonStyle.success, row=4)
     @guild_context
     async def save(self, interaction, button):
         try:
@@ -887,9 +893,12 @@ class AutofeedEditorView(discord.ui.View):
                 t(str(exc)) if str(exc) in ("unavailable", "warning") else feeds.tr("invalid"),
                 ephemeral=True)
         confirm = SetupConfirmView(self.host, prepared, self.snapshot, editing=self.original is not None)
+        from autofeed_embed_builder import render
+        preview = render(prepared.get("embed"), self.host["stamp_embed"], interaction.guild)
+        summary = (t("schedule_now") if prepared["start"] else t("now"))
         await interaction.response.edit_message(
-            content=t("preview") + "\n" + feeds.show_job(prepared) + "\n\n" + t("saved_tip"),
-            embed=None, view=confirm)
+            content=summary + "\n\n" + self.summary() + "\n\n" + t("saved_tip"),
+            embed=preview, view=confirm, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
     @guild_context
@@ -900,8 +909,9 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def back(self, interaction, button):
-        parent, view = setup_panel(self.host, self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=parent, embed=None, view=view)
+        await interaction.response.edit_message(
+            content=self.host["heraldo_messages_setup_content"](), embed=None,
+            view=self.host["HeraldoMessagesSetupView"](self.guild_id, self.owner_id))
 
 
 class SetupConfirmView(discord.ui.View):
