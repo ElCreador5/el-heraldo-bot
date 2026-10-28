@@ -1,6 +1,6 @@
 # El Heraldo Test — Activity «Crear mensaje»
 
-Estado de implementación: la Activity y su servidor están en `Pruebas`, con cambio de autenticación a **OAuth2 PKCE (cliente público)**. No hace falta conocer, revelar, recuperar ni restablecer el Client Secret. Las publicaciones siguen protegidas mediante identidad OAuth, membresía y `manage_guild`; los datos persistentes permanecen en la SQLite original. El despliegue y la prueba de extremo a extremo deben verificarse antes de declarar la Activity operativa.
+**Estado comprobado (27 oct. 2026, hora local):** código `Pruebas@61cefc1eaa990a02855536503b734906361322e4` desplegado en Railway Test `9fa387a1-e228-4ada-98d6-c2489dd7d80a` (**SUCCESS**), con 7/7 pruebas de PKCE y la Activity aprobadas, Discord Gateway conectado y `ACTIVITY_WEB status=LISTENING`. Servicio HTTPS `worker-lab.up.railway.app`; volumen SQLite `/data` montado. Se restauró el predespliegue original de Custodio. El Client Secret NO se utilizó ni se requirió. La prueba real de autorización y publicación desde Discord continúa pendiente de habilitar Activities/URL Mapping/Redirect URI en el Developer Portal; no confundir pruebas automáticas con aceptación interactiva. `main` y producción intactos.
 
 ## Activación imprescindible en Discord
 
