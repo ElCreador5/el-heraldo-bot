@@ -22,6 +22,7 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
             "heraldo_template_save": self.save,
             "HeraldoTemplateSetupView": lambda gid, uid, selected=None: discord.ui.View(),
             "configuration_access": AsyncMock(return_value=True),
+            "stamp_embed": lambda embed, guild: embed,
         }
         self.interaction = NS(
             guild_id=123,
@@ -49,6 +50,42 @@ class NativeTemplateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(view.start)
         self.assertIn("Guardar cambios", [x.label for x in view.children if hasattr(x, "label")])
         self.assertNotIn(view.discard, view.children)
+
+    async def test_main_panel_shows_reference_sections_in_order(self):
+        view = TemplateEditorView(self.host, 123, 7)
+        panel = view.panel_embed(self.interaction.guild)
+        self.assertEqual(panel.title, "Editor de plantillas")
+        self.assertEqual([field.name for field in panel.fields[:4]],
+                         ["Canal de publicación", "Nombre de plantilla",
+                          "Mensaje", "Constructor de embed"])
+        self.assertTrue(panel.fields[4].name.startswith("Fecha"))
+        self.assertEqual(panel.fields[5].name, "Rol a mencionar")
+        self.assertEqual(panel.fields[6].name, "Repetir cada")
+        self.assertIn("Meses: **0**", panel.fields[6].value)
+        self.assertEqual(view.publish_button.label, "Enviar")
+        self.assertEqual(view.frequency.label, "Repetir cada")
+        self.assertEqual(view.name_button.label, "Nombre de plantilla")
+
+    async def test_panel_reflects_draft_without_auto_save(self):
+        view = TemplateEditorView(self.host, 123, 7)
+        view.name, view.text = "Aviso", "Hola mundo"
+        view.channel_id, view.role_id = 321, 444
+        view.parts = {"months": 0, "days": 1, "hours": 2, "minutes": 0}
+        fields = view.panel_embed(self.interaction.guild).fields
+        self.assertIn("<#321>", fields[0].value)
+        self.assertIn("Aviso", fields[1].value)
+        self.assertIn("Hola mundo", fields[2].value)
+        self.assertIn("<@&444>", fields[5].value)
+        self.assertIn("Días: **1**", fields[6].value)
+        self.save.assert_not_called()
+
+    async def test_repeat_button_opens_native_numeric_modal(self):
+        view = TemplateEditorView(self.host, 123, 7)
+        await view.frequency.callback(self.interaction)
+        modal = self.interaction.response.send_modal.call_args.args[0]
+        self.assertEqual(len(modal.children), 4)
+        self.assertEqual([field.label for field in modal.children],
+                         ["Meses", "Días", "Horas", "Minutos"])
 
     async def test_save_requires_second_confirmation_and_does_not_publish(self):
         view = TemplateEditorView(self.host, 123, 7)

@@ -245,6 +245,13 @@ def _owner(interaction, guild_id, owner_id):
                 and interaction.user.guild_permissions.manage_guild)
 
 
+def editor_panel_kwargs(editor, guild):
+    """Show templates as a single native embed panel; keep AutoFeed unchanged."""
+    if hasattr(editor, "panel_embed"):
+        return {"content": None, "embed": editor.panel_embed(guild)}
+    return {"content": editor.summary(), "embed": None}
+
+
 def setup_panel(host, guild_id, owner_id):
     editor = AutofeedEditorView(host, guild_id, owner_id)
     return editor.summary(), editor
@@ -267,7 +274,7 @@ class MessageModal(discord.ui.Modal):
         self.editor.text = str(self.message).strip()
         self.editor.dirty = True
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 def resolve_inline_embed_names(guild, value):
@@ -337,7 +344,7 @@ class EmbedModal(discord.ui.Modal):
                 allowed_mentions=discord.AllowedMentions.none())
         else:
             await interaction.response.edit_message(
-                content=self.editor.summary(), embed=None, view=self.editor)
+                **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 def repeat_parts(months, days, hours, minutes):
@@ -387,7 +394,7 @@ class DateTimeModal(discord.ui.Modal):
                 return await feeds.respond_error(interaction, "invalid")
         self.editor.dirty = True
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 class CustomRepeatModal(discord.ui.Modal):
@@ -407,7 +414,7 @@ class CustomRepeatModal(discord.ui.Modal):
             return await feeds.respond_error(interaction, "denied")
         try:
             parts = repeat_parts(*(int(str(field).strip()) for field in self.fields))
-            if parts is None:
+            if parts is None and not hasattr(self.editor, "panel_embed"):
                 raise ValueError("short")
         except ValueError:
             return await interaction.response.send_message(
@@ -415,7 +422,7 @@ class CustomRepeatModal(discord.ui.Modal):
         self.editor.parts = parts
         self.editor.dirty = True
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 PRESETS = {
@@ -454,13 +461,13 @@ class FrequencyPickerView(discord.ui.View):
         self.editor.parts = dict(value) if value else None
         self.editor.dirty = True
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     @guild_context
     async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 class MentionPickerView(discord.ui.View):
@@ -523,7 +530,7 @@ class MentionPickerView(discord.ui.View):
         except ValueError:
             return await feeds.respond_error(interaction, "invalid")
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
     @guild_context
     async def insert_channel(self, interaction):
@@ -535,13 +542,13 @@ class MentionPickerView(discord.ui.View):
         except ValueError:
             return await feeds.respond_error(interaction, "invalid")
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def back(self, interaction, button):
         await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 def embed_reference_names(guild, description):
@@ -780,13 +787,13 @@ class AutofeedEditorView(discord.ui.View):
     async def pick_channel(self, interaction):
         self.channel_id = self.channels.values[0].id
         self.dirty = True
-        await interaction.response.edit_message(content=self.summary(), embed=None, view=self)
+        await interaction.response.edit_message(**editor_panel_kwargs(self, interaction.guild), view=self)
 
     @guild_context
     async def pick_role(self, interaction):
         self.role_id = self.roles.values[0].id if self.roles.values else None
         self.dirty = True
-        await interaction.response.edit_message(content=self.summary(), embed=None, view=self)
+        await interaction.response.edit_message(**editor_panel_kwargs(self, interaction.guild), view=self)
 
     @discord.ui.button(label="Mensaje", style=discord.ButtonStyle.primary, row=2)
     @guild_context

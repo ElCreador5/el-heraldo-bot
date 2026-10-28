@@ -14,7 +14,7 @@ import discord
 import message_payload
 import message_autofeeds as feeds
 from heraldo_i18n import current_locale, guild_context
-from autofeed_setup import AutofeedEditorView, SetupConfirmView
+from autofeed_setup import AutofeedEditorView, SetupConfirmView, CustomRepeatModal, editor_panel_kwargs
 from autofeed_embed_builder import has_content, validate_data
 
 STRINGS = {
@@ -28,7 +28,8 @@ STRINGS = {
         saved="Plantilla guardada.", unsaved="Guarda y confirma la plantilla antes de publicarla.",
         prompt="¿Guardar esta plantilla? Guardar no la publica ni programa.",
         notice="Canal, rol, fecha y repetición son opciones de publicación; no se guardan como parte de la plantilla.",
-        no_permission="No tienes permiso para editar plantillas."),
+        no_permission="No tienes permiso para editar plantillas.",
+        panel_title="Editor de plantillas", channel_label="Canal de publicación", channel_empty="Seleccionar canal", name_label="Nombre de plantilla", message_label="Mensaje", builder_label="Constructor de embed", embed_empty="Sin embed", date_label="Fecha", date_empty="Sin fecha: se envía al confirmar", role_label="Rol a mencionar", role_empty="Silencioso (sin rol)", repeat_label="Repetir cada", interval_tip="Repetición mínima: una hora.", months="Meses", days="Días", hours="Horas", minutes="Minutos", fields_count="Campos", send="Enviar", repeat_edit="Repetir cada", name_edit="Nombre de plantilla", embed_edit="Constructor de embed", message_edit="Mensaje", date_edit="Fecha", mention_edit="Insertar rol o canal", finish="Selecciona una sección para editarla; nada se guarda automáticamente.", unpublished="Guardar no publica ni programa mensajes."),
     "en-US": dict(new="Create template", edit="Edit template", name="Template name",
         name_button="Name", save="Save changes", confirm="Confirm changes",
         publish="Publish / Schedule", back="Back", discard="Discard changes",
@@ -39,7 +40,8 @@ STRINGS = {
         saved="Template saved.", unsaved="Save and confirm this template before publishing it.",
         prompt="Save this template? Saving does not publish or schedule it.",
         notice="Channel, role, date, and repeat settings belong to the publication, not the saved template.",
-        no_permission="You cannot edit templates."),
+        no_permission="You cannot edit templates.",
+        panel_title="Template editor", channel_label="Publication channel", channel_empty="Select channel", name_label="Template name", message_label="Message", builder_label="Embed builder", embed_empty="No embed", date_label="Date", date_empty="No date: sent on confirmation", role_label="Role to mention", role_empty="Silent (no role)", repeat_label="Repeat every", interval_tip="Minimum repeat interval: one hour.", months="Months", days="Days", hours="Hours", minutes="Minutes", fields_count="Fields", send="Send", repeat_edit="Repeat every", name_edit="Template name", embed_edit="Embed builder", message_edit="Message", date_edit="Date", mention_edit="Insert role or channel", finish="Select a section to edit; nothing is saved automatically.", unpublished="Saving does not send or schedule messages."),
     "pt-BR": dict(new="Criar modelo", edit="Editar modelo", name="Nome do modelo",
         name_button="Nome", save="Salvar alterações", confirm="Confirmar alterações",
         publish="Publicar / Programar", back="Voltar", discard="Descartar alterações",
@@ -50,7 +52,8 @@ STRINGS = {
         saved="Modelo salvo.", unsaved="Salve e confirme este modelo antes de publicar.",
         prompt="Salvar este modelo? Salvar não publica nem agenda.",
         notice="Canal, cargo, data e repetição são opções de publicação, não do modelo salvo.",
-        no_permission="Você não tem permissão para editar modelos."),
+        no_permission="Você não tem permissão para editar modelos.",
+        panel_title="Editor de modelos", channel_label="Canal de publicação", channel_empty="Selecionar canal", name_label="Nome do modelo", message_label="Mensagem", builder_label="Construtor de embed", embed_empty="Sem embed", date_label="Data", date_empty="Sem data: enviado após confirmação", role_label="Cargo a mencionar", role_empty="Silencioso (sem cargo)", repeat_label="Repetir a cada", interval_tip="Intervalo mínimo: uma hora.", months="Meses", days="Dias", hours="Horas", minutes="Minutos", fields_count="Campos", send="Enviar", repeat_edit="Repetir a cada", name_edit="Nome do modelo", embed_edit="Construtor de embed", message_edit="Mensagem", date_edit="Data", mention_edit="Inserir cargo ou canal", finish="Selecione uma seção para editar; nada é salvo automaticamente.", unpublished="Salvar não publica nem agenda mensagens."),
 }
 
 def tr(key):
@@ -109,8 +112,8 @@ class NameModal(discord.ui.Modal):
             return
         self.editor.name = str(self.field).strip()
         self.editor.dirty = True
-        await interaction.response.edit_message(content=self.editor.summary(),
-                                                embeds=[], view=self.editor)
+        await interaction.response.edit_message(
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 class TemplateEditorView(AutofeedEditorView):
@@ -128,6 +131,13 @@ class TemplateEditorView(AutofeedEditorView):
             if embeds:
                 self.embed = to_builder(embeds[0])
                 self.extra_embeds = copy.deepcopy(embeds[1:])
+        # Keep all controls inside Discord's five action rows.
+        self.message.label = tr("message_edit")
+        self.embed_builder.label = tr("embed_edit")
+        self.date_time.label = tr("date_edit")
+        self.frequency.label = tr("repeat_edit")
+        self.frequency.callback = self._edit_repeat_direct
+        self.mention.label = tr("mention_edit")
         self.save.label = tr("save")
         self.save.callback = self._save_template
         self.back.label = tr("back")
@@ -135,15 +145,55 @@ class TemplateEditorView(AutofeedEditorView):
         self.preview.callback = self._preview_template
         self.discard.label = tr("discard")
         self.discard.callback = self._discard_template
-        self.name_button = discord.ui.Button(label=tr("name_button"),
+        self.name_button = discord.ui.Button(label=tr("name_edit"),
                                               style=discord.ButtonStyle.primary, row=3)
         self.name_button.callback = self._open_name
         self.add_item(self.name_button)
-        self.publish_button = discord.ui.Button(label=tr("publish"),
+        self.publish_button = discord.ui.Button(label=tr("send"),
                                                   style=discord.ButtonStyle.success, row=4)
         self.publish_button.callback = self._publish_template
         self.add_item(self.publish_button)
         self.dirty = False
+
+    def panel_embed(self, guild):
+        """Ordered Discord panel matching the user's reference layout."""
+        e = discord.Embed(title=tr("panel_title"), description=tr("finish"),
+                          color=0x5865F2)
+        channel = f"<#{self.channel_id}>" if self.channel_id else f"*{tr('channel_empty')}*"
+        name = discord.utils.escape_markdown(self.name[:70]) if self.name else "—"
+        message = discord.utils.escape_mentions(self.text.strip())
+        message = (message[:650] + ("…" if len(message) > 650 else "")) or "—"
+        data = self.embed or {}
+        title = discord.utils.escape_markdown(str(data.get("title") or ""))
+        description = discord.utils.escape_mentions(str(data.get("description") or ""))
+        if data:
+            details = "\n".join(part for part in (
+                f"**{title[:120]}**" if title else "",
+                description[:250] + ("…" if len(description) > 250 else "") if description else "",
+                f"{tr('fields_count')}: {len(data.get('fields') or [])}",
+            ) if part)
+        else:
+            details = tr("embed_empty")
+        date = f"<t:{int(self.start.timestamp())}:F>" if self.start else tr("date_empty")
+        role = f"<@&{self.role_id}>" if self.role_id else tr("role_empty")
+        values = self.parts or {}
+        repeat = " · ".join(f"{tr(key)}: **{values.get(key, 0)}**"
+                            for key in ("months", "days", "hours", "minutes"))
+        e.add_field(name=tr("channel_label"), value=channel, inline=False)
+        e.add_field(name=tr("name_label"), value=name, inline=False)
+        e.add_field(name=tr("message_label"), value=message, inline=False)
+        e.add_field(name=tr("builder_label"), value=details, inline=False)
+        e.add_field(name=tr("date_label") + " · Santo Domingo (UTC−4)",
+                    value=date, inline=False)
+        e.add_field(name=tr("role_label"), value=role, inline=False)
+        e.add_field(name=tr("repeat_label"), value=repeat, inline=False)
+        e.add_field(name=" ", value=tr("interval_tip") + "\n" + tr("unpublished"),
+                    inline=False)
+        return self.host["stamp_embed"](e, guild) if guild else e
+
+    @guild_context
+    async def _edit_repeat_direct(self, interaction):
+        await interaction.response.send_modal(CustomRepeatModal(self))
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -201,26 +251,23 @@ class TemplateEditorView(AutofeedEditorView):
         try:
             proposed = self.template()
         except ValueError as exc:
-            await interaction.response.edit_message(content=self.summary() + "\n\n" + str(exc),
-                                                    embeds=[], view=self)
+            await interaction.response.edit_message(content=str(exc), embed=self.panel_embed(interaction.guild), view=self)
             return
         existing = self.host["heraldo_template_list"](self.guild_id)
         if (len(existing) >= 25 and self.original_name is None) or any(
                 x["name"].casefold() == proposed["name"].casefold()
                 and x["name"] != self.original_name for x in existing):
-            await interaction.response.edit_message(content=self.summary() + "\n\n" + tr("duplicate"),
-                                                    embeds=[], view=self)
+            await interaction.response.edit_message(content=tr("duplicate"), embed=self.panel_embed(interaction.guild), view=self)
             return
         confirm = TemplateConfirmView(self, proposed)
         await interaction.response.edit_message(
-            content=tr("prompt") + "\n\n" + self.summary(),
-            embeds=[], view=confirm)
+            content=tr("prompt"), embed=self.panel_embed(interaction.guild), view=confirm)
 
     @guild_context
     async def _publish_template(self, interaction):
         if not self._is_saved():
             await interaction.response.edit_message(
-                content=self.summary() + "\n\n" + tr("unsaved"), embeds=[], view=self)
+                content=tr("unsaved"), embed=self.panel_embed(interaction.guild), view=self)
             return
         try:
             job = self.prepared(interaction)
@@ -228,15 +275,14 @@ class TemplateEditorView(AutofeedEditorView):
             from autofeed_setup import t
             key = str(exc)
             await interaction.response.edit_message(
-                content=self.summary() + "\n\n" + (t(key) if key in ("warning", "unavailable") else feeds.tr("invalid")),
-                embeds=[], view=self)
+                content=(t(key) if key in ("warning", "unavailable") else feeds.tr("invalid")),
+                embed=self.panel_embed(interaction.guild), view=self)
             return
         # Envío/agenda separado de guardar plantilla; confirmación obligatoria.
         confirm = SetupConfirmView(
             self.host, job, self.schedule_snapshot, result_panel=_template_panel)
         await interaction.response.edit_message(
-            content=self.summary() + "\n\n" + tr("confirm"),
-            embeds=[], view=confirm, allowed_mentions=discord.AllowedMentions.none())
+            content=tr("prompt"), embed=self.panel_embed(interaction.guild), view=confirm, allowed_mentions=discord.AllowedMentions.none())
 
     @guild_context
     async def _preview_template(self, interaction):
@@ -246,11 +292,10 @@ class TemplateEditorView(AutofeedEditorView):
                 proposed, interaction.guild, interaction.user, interaction.channel)
             embeds = list(payload["embeds"])
         except ValueError as exc:
-            await interaction.response.edit_message(content=self.summary() + "\n\n" + str(exc),
-                                                    embeds=[], view=self)
+            await interaction.response.edit_message(content=str(exc), embed=self.panel_embed(interaction.guild), view=self)
             return
         await interaction.response.edit_message(
-            content=self.summary(), embeds=embeds, view=self,
+            content=None, embeds=[self.panel_embed(interaction.guild)] + embeds[:9], view=self,
             allowed_mentions=discord.AllowedMentions.none())
 
     @guild_context
@@ -291,17 +336,17 @@ class TemplateConfirmView(discord.ui.View):
         current = editor.host["heraldo_template_list"](self.guild_id)
         if current != editor.template_snapshot:
             await interaction.response.edit_message(content=tr("changed"),
-                                                    view=editor, embeds=[])
+                                                    view=editor, embed=editor.panel_embed(interaction.guild))
             return
         if any(x["name"].casefold() == self.proposed["name"].casefold()
                and x["name"] != editor.original_name for x in current):
             await interaction.response.edit_message(content=tr("duplicate"),
-                                                    view=editor, embeds=[])
+                                                    view=editor, embed=editor.panel_embed(interaction.guild))
             return
         items = [x for x in current if x["name"] != editor.original_name]
         if len(items) >= 25:
             await interaction.response.edit_message(content=tr("duplicate"),
-                                                    view=editor, embeds=[])
+                                                    view=editor, embed=editor.panel_embed(interaction.guild))
             return
         items.append(copy.deepcopy(self.proposed))
         editor.host["heraldo_template_save"](self.guild_id, items)
@@ -314,13 +359,12 @@ class TemplateConfirmView(discord.ui.View):
         editor.template_snapshot = copy.deepcopy(items)
         editor.dirty = False
         await interaction.response.edit_message(
-            content=tr("saved") + "\n\n" + editor.summary(),
-            embeds=[], view=editor)
+            content=tr("saved"), embed=editor.panel_embed(interaction.guild), view=editor)
 
     @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
     @guild_context
     async def discard(self, interaction, button):
         self.finished = True
         self.stop()
-        await interaction.response.edit_message(content=self.editor.summary(),
-                                                embeds=[], view=self.editor)
+        await interaction.response.edit_message(
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)

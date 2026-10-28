@@ -9531,7 +9531,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
     async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
         from template_native_builder import TemplateEditorView
         editor = TemplateEditorView(globals(), self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=editor.summary(), embed=None, view=editor)
+        await interaction.response.edit_message(content=None, embed=editor.panel_embed(interaction.guild), view=editor, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label=_t('text.2eba946b2e1ee4'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
@@ -9541,7 +9541,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
             return
         from template_native_builder import TemplateEditorView
         editor = TemplateEditorView(globals(), self.guild_id, self.owner_id, self._current())
-        await interaction.response.edit_message(content=editor.summary(), embed=None, view=editor)
+        await interaction.response.edit_message(content=None, embed=editor.panel_embed(interaction.guild), view=editor, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label=_t('text.ac96c009d7b8de'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context

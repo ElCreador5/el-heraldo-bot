@@ -568,6 +568,7 @@ class EmbedBuilderView(discord.ui.View):
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def back(self, interaction, button):
+        from autofeed_setup import editor_panel_kwargs
         await interaction.response.edit_message(
-            content=self.parent.summary(), embed=None, view=self.parent,
-            allowed_mentions=discord.AllowedMentions.none())
+            **editor_panel_kwargs(self.parent, interaction.guild),
+            view=self.parent, allowed_mentions=discord.AllowedMentions.none())
