@@ -940,6 +940,25 @@ class SetupConfirmView(discord.ui.View):
                 or not feeds.is_ready(interaction, self.host, channel, role)
                 or (job.get("role") and not role)):
             return await feeds.respond_error(interaction, "denied")
+        if job.get("start") is None:
+            if self.editing:
+                return await feeds.respond_error(interaction, "invalid")
+            # ACK before the network send to avoid Discord's interaction timeout.
+            self.finished = True
+            self.stop()
+            await interaction.response.defer()
+            try:
+                from message_publish import publish_message
+                sent = await publish_message(self.host, guild, channel, job)
+            except Exception:
+                # A failed request may have reached Discord; never auto-retry.
+                await interaction.edit_original_response(
+                    content=t("uncertain"), embed=None, view=None)
+                return
+            fresh, view = setup_panel(self.host, self.guild_id, self.owner_id)
+            await interaction.edit_original_response(
+                content=t("created") + "\n\n" + fresh, embed=None, view=view)
+            return
         try:
             feeds.persist_schedule(self.host, guild.id, interaction.user, job,
                                    snapshot=self.snapshot, editing=self.editing)
