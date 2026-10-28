@@ -140,6 +140,8 @@
   "input.remove": "quitar",
   "input.toggle": "alternar",
   "language.command_sync_pending": "El idioma se guardó, pero no se pudo actualizar la ayuda de comandos. Pulse Guardar cambios para reintentar.",
+  "messages.create.description": "Escribe un mensaje, diseña un embed o programa el envío.",
+  "messages.create.label": "Crear mensaje",
   "noun.message.many": "mensajes",
   "noun.message.one": "mensaje",
   "personality.details_locked": "Los roles de personalidad permiten al miembro elegir cómo desea participar en esta comunidad. Puede seleccionar una opción; este servidor no permite cambiarla posteriormente mientras los cambios de elección estén desactivados.\n\n**¿Cómo funciona?**\nEl miembro reacciona con el emoji de la opción elegida para obtener el rol asociado a dicho emoji. Solo puede conservar una elección a la vez.\n\nLa elección expresa su interés y ofrece una experiencia personalizada dentro del servidor. Puede desbloquear canales según los permisos de los roles; no constituye una prueba de identidad ni sustituye la verificación de edad.",
