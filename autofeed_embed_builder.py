@@ -16,7 +16,7 @@ COPY = {
     "es-419": {
         "title":"Constructor de embed", "help":"Completa las secciones con el menú. La vista previa se actualiza sin publicar ni guardar.",
         "section":"Sección del embed", "main":"Contenido y color", "author":"Autor", "media":"Imágenes",
-        "fields":"Campos adicionales", "footer":"Footer y fecha",
+        "fields":"Campos adicionales", "date":"Fecha",
         "edit":"Editar sección", "add":"Añadir campo", "timestamp":"Fecha automática",
         "preview":"Vista previa", "clear":"Quitar embed", "back":"Volver",
         "role":"Insertar rol en la descripción", "channel":"Insertar canal en la descripción",
@@ -39,7 +39,7 @@ COPY = {
     "en-US": {
         "title":"Embed builder", "help":"Complete each section using the menu. The preview updates without posting or saving.",
         "section":"Embed section", "main":"Content and color", "author":"Author", "media":"Images",
-        "fields":"Additional fields", "footer":"Footer and time",
+        "fields":"Additional fields", "date":"Date",
         "edit":"Edit section", "add":"Add field", "timestamp":"Automatic date",
         "preview":"Preview", "clear":"Remove embed", "back":"Back",
         "role":"Insert role in description", "channel":"Insert channel in description",
@@ -62,7 +62,7 @@ COPY = {
     "pt-BR": {
         "title":"Construtor de embed", "help":"Preencha as seções pelo menu. A prévia é atualizada sem publicar ou salvar.",
         "section":"Seção do embed", "main":"Conteúdo e cor", "author":"Autor", "media":"Imagens",
-        "fields":"Campos adicionais", "footer":"Rodapé e data",
+        "fields":"Campos adicionais", "date":"Data",
         "edit":"Editar seção", "add":"Adicionar campo", "timestamp":"Data automática",
         "preview":"Prévia", "clear":"Remover embed", "back":"Voltar",
         "role":"Inserir cargo na descrição", "channel":"Inserir canal na descrição",
@@ -142,7 +142,7 @@ def validate_data(data):
     result["fields"] = out_fields
     total = (len(title) + len(desc) + len(result["author"]["name"])
              + sum(len(f["name"]) + len(f["value"]) for f in out_fields))
-    if total > 5800:  # leave space for server's compulsory footer
+    if total > 5800:  # reserve space for the mandatory global footer
         raise ValueError("size")
     result["timestamp"] = bool(result.get("timestamp", False))
     return result
@@ -382,7 +382,7 @@ class EmbedBuilderView(discord.ui.View):
         self.section_select = discord.ui.Select(
             placeholder=t("section"), row=0, options=[
                 discord.SelectOption(label=t(name), value=name, default=section == name)
-                for name in ("main", "author", "media", "fields", "footer")])
+                for name in ("main", "author", "media", "fields", "date")])
         self.section_select.callback = self.pick_section
         self.add_item(self.section_select)
         self.roles = discord.ui.RoleSelect(
@@ -398,9 +398,9 @@ class EmbedBuilderView(discord.ui.View):
                             (self.timestamp, "timestamp"), (self.preview, "preview"),
                             (self.clear, "clear"), (self.back, "back")):
             button.label = t(key)
-        self.edit.disabled = section in ("footer", "fields")
+        self.edit.disabled = section in ("date", "fields")
         self.add_field.disabled = section != "fields"
-        self.timestamp.disabled = section != "footer"
+        self.timestamp.disabled = section != "date"
 
     def summary(self):
         data = self.parent.embed or {}
@@ -411,11 +411,10 @@ class EmbedBuilderView(discord.ui.View):
                  f"**{t('author')}:** {str((data.get('author') or {}).get('name') or t('empty'))[:100]}",
                  f"**{t('fields')}:** {len(data.get('fields') or [])}",
                  f"**{t('timestamp')}:** {t('timestamp_on') if data.get('timestamp') else t('timestamp_off')}"]
-        if self.section == "footer":
-            parts += ["", t("locked")]
         if self.section in ("main", "fields"):
             parts += ["", t("write_hint")]
-        return "\n".join(parts) + "\n\n" + t("safe")
+        parts += ["", t("locked"), t("safe")]
+        return "\n".join(parts)
 
     def preview_embed(self, guild):
         return render(self.parent.embed, self.parent.host["stamp_embed"], guild)
@@ -483,7 +482,7 @@ class EmbedBuilderView(discord.ui.View):
         except ValueError:
             from message_autofeeds import respond_error
             return await respond_error(interaction, "invalid")
-        await redraw(interaction, self.parent, "footer")
+        await redraw(interaction, self.parent, "date")
 
     @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
     @guild_context
