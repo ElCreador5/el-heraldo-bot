@@ -213,7 +213,13 @@ def referenced_mentions(guild, job):
     """
     body = (job.get("text") or "")
     visual = job.get("embed") or {}
-    display = body + "\n" + (visual.get("description") or "") + "\n" + (visual.get("title") or "")
+    pieces = [body, visual.get("description") or "", visual.get("title") or "",
+              (visual.get("author") or {}).get("name") or ""]
+    for field in visual.get("fields") or ():
+        if isinstance(field, dict):
+            pieces.extend((str(field.get("name") or ""),
+                           str(field.get("value") or "")))
+    display = "\n".join(pieces)
     role_ids = {int(value) for value in re.findall(r"<@&(\d{1,20})>", display)}
     channel_ids = {int(value) for value in re.findall(r"<#(\d{1,20})>", display)}
     explicit = job.get("role")
