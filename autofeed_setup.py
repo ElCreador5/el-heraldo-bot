@@ -57,6 +57,21 @@ LANG = {
         "custom": "Personalizada",
         "role_again": "Para volver a elegir un rol de aviso, utiliza el selector superior.",
         "date_help": "Zona horaria: Santo Domingo (UTC−4). Fecha y hora se configuran por separado.",
+        "embed_hub_title": "**Editor de embed**",
+        "embed_hub_hint": "Selecciona un rol o canal para colocarlo en la descripción. Después puedes abrir Editar texto y diseño. No necesitas escribir IDs.",
+        "embed_notify_note": "Los roles dentro del embed se muestran, pero no envían notificaciones. Para avisar utiliza el rol de aviso o el texto normal.",
+        "embed_choose_role": "Añadir rol al embed",
+        "embed_choose_channel": "Añadir canal al embed",
+        "embed_text_design": "Editar texto y diseño",
+        "embed_preview": "Vista previa del embed",
+        "embed_remove": "Quitar embed",
+        "embed_inserted": "Mención añadida a la descripción del embed.",
+        "embed_none": "Todavía no hay texto ni menciones en el embed.",
+        "embed_section_title": "Título",
+        "embed_section_desc": "Descripción",
+        "embed_manual_note": "Los campos de Discord no sugieren menciones mientras escribes. Usa los selectores de este editor para insertarlas.",
+        "embed_deleted": "Embed retirado del borrador.",
+        "embed_references": "Referencias insertadas",
     },
     "en-US": {
         "hub_title": "**Message schedules**", "hub_help": "Create posts like AutoFeeds: choose a channel, write a message or build an embed, set the date, mention, and repeat interval. Nothing is posted before confirmation.",
@@ -101,6 +116,21 @@ LANG = {
         "custom": "Custom",
         "role_again": "To pick an alert role again, use the role selector above.",
         "date_help": "Time zone: Santo Domingo (UTC−4). Choose date and time separately.",
+        "embed_hub_title": "**Embed editor**",
+        "embed_hub_hint": "Select a role or channel to insert it into the description. Then use Edit text and design. No IDs needed.",
+        "embed_notify_note": "Roles inside embeds display but do not notify. To ping a role, use the alert role or regular message text.",
+        "embed_choose_role": "Add role to embed",
+        "embed_choose_channel": "Add channel to embed",
+        "embed_text_design": "Edit text and design",
+        "embed_preview": "Embed preview",
+        "embed_remove": "Remove embed",
+        "embed_inserted": "Mention added to the embed description.",
+        "embed_none": "No embed text or mentions yet.",
+        "embed_section_title": "Title",
+        "embed_section_desc": "Description",
+        "embed_manual_note": "Discord's form text fields do not suggest mentions as you type. Use these selectors to insert them.",
+        "embed_deleted": "Embed removed from draft.",
+        "embed_references": "Inserted references",
     },
     "pt-BR": {
         "hub_title": "**Programações de mensagens**", "hub_help": "Crie publicações como no AutoFeeds: escolha canal, texto ou embed, data, menção e repetição. Nada é publicado antes de confirmar.",
@@ -145,6 +175,21 @@ LANG = {
         "custom": "Personalizada",
         "role_again": "Para voltar a selecionar um cargo de aviso, use o seletor acima.",
         "date_help": "Fuso horário: Santo Domingo (UTC−4). Defina data e hora separadamente.",
+        "embed_hub_title": "**Editor de embed**",
+        "embed_hub_hint": "Selecione um cargo ou canal para inserir na descrição. Depois use Editar texto e design. Não precisa de IDs.",
+        "embed_notify_note": "Cargos dentro do embed aparecem, mas não notificam. Para avisar, use o cargo de aviso ou texto normal.",
+        "embed_choose_role": "Adicionar cargo ao embed",
+        "embed_choose_channel": "Adicionar canal ao embed",
+        "embed_text_design": "Editar texto e design",
+        "embed_preview": "Prévia do embed",
+        "embed_remove": "Remover embed",
+        "embed_inserted": "Menção adicionada à descrição do embed.",
+        "embed_none": "Ainda não há texto nem menções no embed.",
+        "embed_section_title": "Título",
+        "embed_section_desc": "Descrição",
+        "embed_manual_note": "Os campos de texto do formulário Discord não sugerem menções ao digitar. Use os seletores deste editor.",
+        "embed_deleted": "Embed removido do rascunho.",
+        "embed_references": "Referências inseridas",
     }
 }
 
@@ -240,9 +285,10 @@ class MessageModal(discord.ui.Modal):
 
 
 class EmbedModal(discord.ui.Modal):
-    def __init__(self, editor):
+    def __init__(self, editor, *, from_embed_editor=False):
         super().__init__(title=t("embed"))
         self.editor = editor
+        self.from_embed_editor = from_embed_editor
         old = editor.embed or {}
         self.title_input = discord.ui.TextInput(label=t("embed_title"), required=False,
                                                  max_length=256, default=old.get("title", ""))
@@ -264,8 +310,15 @@ class EmbedModal(discord.ui.Modal):
         self.editor.embed = ({"title": title, "description": desc,
                               "color_hex": value or "5865F2"} if (title or desc) else None)
         self.editor.dirty = True
-        await interaction.response.edit_message(
-            content=self.editor.summary(), embed=None, view=self.editor)
+        if self.from_embed_editor:
+            view = EmbedEditorView(self.editor)
+            await interaction.response.edit_message(
+                content=view.summary(interaction.guild),
+                embed=view.preview_embed(interaction.guild), view=view,
+                allowed_mentions=discord.AllowedMentions.none())
+        else:
+            await interaction.response.edit_message(
+                content=self.editor.summary(), embed=None, view=self.editor)
 
 
 def repeat_parts(months, days, hours, minutes):
@@ -465,6 +518,153 @@ class MentionPickerView(discord.ui.View):
             content=self.editor.summary(), embed=None, view=self.editor)
 
 
+def embed_reference_names(guild, description):
+    """Human-readable reference inventory; never ping during editor preview."""
+    if not guild:
+        return "—"
+    pieces = []
+    for role_id in re.findall(r"<@&(\d+)>", description or ""):
+        role = guild.get_role(int(role_id))
+        if role:
+            pieces.append("@" + role.name)
+    for channel_id in re.findall(r"<#(\d+)>", description or ""):
+        channel = guild.get_channel(int(channel_id))
+        if channel:
+            pieces.append("#" + channel.name)
+    return ", ".join(dict.fromkeys(pieces)) or "—"
+
+
+class EmbedEditorView(discord.ui.View):
+    """Embed-specific controls in the same message, with an actual embed preview.
+
+    The Discord modal text field itself cannot offer live @/# autocomplete,
+    therefore selection is integrated into this embed editor surface.
+    """
+    def __init__(self, parent):
+        super().__init__(timeout=900)
+        self.parent = parent
+        self.guild_id, self.owner_id = parent.guild_id, parent.owner_id
+        self.roles = discord.ui.RoleSelect(
+            placeholder=t("embed_choose_role"), min_values=1, max_values=1, row=0)
+        self.roles.callback = self.add_role
+        self.add_item(self.roles)
+        self.channels = discord.ui.ChannelSelect(
+            placeholder=t("embed_choose_channel"), min_values=1, max_values=1,
+            row=1, channel_types=[discord.ChannelType.text])
+        self.channels.callback = self.add_channel
+        self.add_item(self.channels)
+        for control, key in (
+            (self.edit, "embed_text_design"),
+            (self.preview, "embed_preview"),
+            (self.clear, "embed_remove"),
+            (self.back, "back")
+        ):
+            control.label = t(key)
+
+    def summary(self, guild):
+        data = self.parent.embed or {}
+        title = data.get("title") or "—"
+        description = data.get("description") or t("embed_none")
+        references = embed_reference_names(guild, description)
+        # Avoid unbounded strings and unintended mentions in the panel itself;
+        # the embed preview shows the exact stored description separately.
+        description_plain = re.sub(r"<@&\d+>|<#\d+>", "●", description)
+        return (
+            t("embed_hub_title") + "\n\n" + t("embed_hub_hint")
+            + "\n\n" + "**" + t("embed_section_title") + ":** " + title[:180]
+            + "\n**" + t("embed_section_desc") + ":** "
+            + description_plain[:350]
+            + "\n**" + t("embed_references") + ":** " + references
+            + "\n\n" + t("embed_manual_note")
+            + "\n" + t("embed_notify_note")
+        )
+
+    def preview_embed(self, guild):
+        data = self.parent.embed
+        if not data or not (data.get("title") or data.get("description")):
+            return None
+        embed = discord.Embed(
+            title=data.get("title") or None,
+            description=data.get("description") or None,
+            color=int(data.get("color_hex", "5865F2"), 16),
+        )
+        return self.parent.host["stamp_embed"](embed, guild)
+
+    @guild_context
+    async def interaction_check(self, interaction):
+        if not _owner(interaction, self.guild_id, self.owner_id):
+            await feeds.respond_error(interaction, "denied")
+            return False
+        return True
+
+    async def add_token(self, interaction, token):
+        current = dict(self.parent.embed or {"color_hex": "5865F2"})
+        old = current.get("description") or ""
+        if len(old) + len(token) + 1 > 4000:
+            return await feeds.respond_error(interaction, "invalid")
+        current["description"] = (old + " " + token).strip()
+        try:
+            feeds.referenced_mentions(interaction.guild, {
+                "text": self.parent.text, "embed": current,
+                "role": self.parent.role_id,
+            })
+        except ValueError:
+            return await feeds.respond_error(interaction, "invalid")
+        self.parent.embed = current
+        self.parent.dirty = True
+        next_view = EmbedEditorView(self.parent)
+        await interaction.response.edit_message(
+            content=next_view.summary(interaction.guild),
+            embed=next_view.preview_embed(interaction.guild), view=next_view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @guild_context
+    async def add_role(self, interaction):
+        role = self.roles.values[0]
+        if role.guild.id != self.guild_id:
+            return await feeds.respond_error(interaction, "role")
+        await self.add_token(interaction, role.mention)
+
+    @guild_context
+    async def add_channel(self, interaction):
+        channel = self.channels.values[0]
+        if channel.guild.id != self.guild_id:
+            return await feeds.respond_error(interaction, "invalid")
+        await self.add_token(interaction, channel.mention)
+
+    @discord.ui.button(label="Editar texto y diseño", style=discord.ButtonStyle.primary, row=2)
+    @guild_context
+    async def edit(self, interaction, button):
+        await interaction.response.send_modal(
+            EmbedModal(self.parent, from_embed_editor=True))
+
+    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def preview(self, interaction, button):
+        await interaction.response.edit_message(
+            content=self.summary(interaction.guild),
+            embed=self.preview_embed(interaction.guild), view=self,
+            allowed_mentions=discord.AllowedMentions.none())
+
+    @discord.ui.button(label="Quitar embed", style=discord.ButtonStyle.danger, row=3)
+    @guild_context
+    async def clear(self, interaction, button):
+        self.parent.embed = None
+        self.parent.dirty = True
+        next_view = EmbedEditorView(self.parent)
+        await interaction.response.edit_message(
+            content=next_view.summary(interaction.guild), embed=None,
+            view=next_view, allowed_mentions=discord.AllowedMentions.none())
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @guild_context
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content=self.parent.summary(), embed=None, view=self.parent,
+            allowed_mentions=discord.AllowedMentions.none())
+
+
 class AutofeedEditorView(discord.ui.View):
     def __init__(self, host, guild_id, owner_id, *, job=None):
         super().__init__(timeout=900)
@@ -507,8 +707,15 @@ class AutofeedEditorView(discord.ui.View):
         period = (", ".join(f"{v} {t(k)}" for k, v in self.parts.items() if v)
                   if self.parts else t("no_repeat"))
         text = (self.text[:450] + ("…" if len(self.text) > 450 else "")) or t("empty")
-        embed = ((self.embed.get("title") or self.embed.get("description", "")[:100])
-                 if self.embed else t("empty"))
+        if self.embed:
+            description = self.embed.get("description") or ""
+            title = self.embed.get("title") or ""
+            references = re.findall(r"<@&\d+>|<#\d+>", description)
+            # Show the description too, even when the embed has a title.
+            embed = (title[:65] + (" · " if title and description else "")
+                     + description[:155] + (f" ({len(references)} refs)" if references else ""))
+        else:
+            embed = t("empty")
         return (f"{t('edit_title') if self.original else t('new_title')}\n\n"
                 f"**{t('select_channel')}:** {channel}\n"
                 f"**{t('message')}:** {discord.utils.escape_mentions(text)}\n"
@@ -545,7 +752,11 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label="Editor de embed", style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def embed_builder(self, interaction, button):
-        await interaction.response.send_modal(EmbedModal(self))
+        view = EmbedEditorView(self)
+        await interaction.response.edit_message(
+            content=view.summary(interaction.guild),
+            embed=view.preview_embed(interaction.guild), view=view,
+            allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label="Fecha y hora", style=discord.ButtonStyle.primary, row=2)
     @guild_context
