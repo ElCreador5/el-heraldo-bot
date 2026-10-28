@@ -9973,9 +9973,6 @@ class HeraldoMessagesSetupView(discord.ui.View):
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
-        # /setup ACK guard must reserve the initial response for the Activity.
-        self._no_defer_select_values = frozenset(("create_message",))
-
         panel_select = discord.ui.Select(
             placeholder=_t('text.461894817fa0a2'),
             min_values=1,
@@ -9989,7 +9986,6 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label="Logs", value="logs", description=_t('text.bcd7436a95303e')),
                 discord.SelectOption(label=_t('text.f4ea025e8c2221'), value="templates", description=_t('text.685b989ce71932')),
                 discord.SelectOption(label=_t('text.b0018aa1b6e0d7'), value="components", description=_t('text.bd22abbadb4287')),
-                discord.SelectOption(label=_t('messages.create.label'), value="create_message", description=_t('messages.create.description')),
                 discord.SelectOption(label=_t('text.e737a4c8b2906d'), value="autoresponses", description=_t('text.92f32ae5db8fd6')),
                 discord.SelectOption(label=_t('text.8747176853dbc2'), value="sticky", description=_t('text.cb3465ca4819e5')),
                 discord.SelectOption(label=_t('text.45808d75bf8911'), value="webhooks", description=_t('text.df564bfe3231e6')),
@@ -10033,37 +10029,6 @@ class HeraldoMessagesSetupView(discord.ui.View):
             await interaction.response.send_message(
                 _t('text.1438403c6cd256'),
                 ephemeral=True)
-            return
-
-        if selected == "create_message":
-            # A real Discord Activity: web form inside Discord, not stacked modals.
-            if os.getenv("DISCORD_ACTIVITY_WEB_ENABLED") != "1":
-                await interaction.response.send_message(
-                    "La Activity de Crear mensaje aún no está habilitada en El Heraldo Test.",
-                    ephemeral=True)
-                return
-            if not hasattr(interaction.response, "launch_activity"):
-                await interaction.response.send_message(
-                    "El SDK de Discord necesita discord.py 2.6 o superior.", ephemeral=True)
-                return
-            if interaction.response.is_done():
-                # Defensive check: a component already ACKed cannot launch an Activity.
-                print("ACTIVITY_LAUNCH status=ALREADY_ACKED source=setup", flush=True)
-                await interaction.followup.send(
-                    "No se pudo abrir Crear mensaje. Cierra este panel y vuelve a ejecutar /setup.",
-                    ephemeral=True)
-                return
-            try:
-                await interaction.response.launch_activity()
-                print("ACTIVITY_LAUNCH status=SUCCESS source=setup", flush=True)
-            except discord.HTTPException as exc:
-                print(f"ACTIVITY_LAUNCH status=FAILED code={exc.code} http={exc.status}", flush=True)
-                sender = (interaction.followup.send if interaction.response.is_done()
-                          else interaction.response.send_message)
-                await sender(
-                    "Discord no permitió abrir Crear mensaje. Comprueba que Activities "
-                    "esté habilitado y el URL Mapping de El Heraldo Test configurado.",
-                    ephemeral=True)
             return
 
         if selected == "kits":
