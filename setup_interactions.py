@@ -78,6 +78,21 @@ def may_open_modal(callback, view, visited=None):
     return False
 
 
+
+@_i18n_context
+def needs_initial_response(view, item, interaction):
+    """Never ACK before Discord-only first responses (modal or Activity).
+
+    Only the explicitly selected route is exempt. Other /setup selections
+    retain the fast defer/ACK protection and avoid 'Interaction failed'.
+    """
+    if may_open_modal(item.callback, view):
+        return True
+    values = (getattr(interaction, "data", None) or {}).get("values") or ()
+    routes = getattr(view, "_no_defer_select_values", ())
+    return bool(values and values[0] in routes)
+
+
 def install(discord):
     """Compatibilidad probada con el despacho de discord.py en CI."""
     if getattr(discord.ui.View._scheduled_task, "_heraldo_setup_guard", False):
@@ -151,7 +166,7 @@ def install(discord):
         if claimed:
             _busy.add(key)
         try:
-            if not may_open_modal(item.callback, view) and not interaction.response.is_done():
+            if not needs_initial_response(view, item, interaction) and not interaction.response.is_done():
                 try:
                     await interaction.response.defer()
                 except discord.HTTPException as exc:
