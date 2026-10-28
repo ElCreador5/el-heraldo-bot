@@ -1,3 +1,7 @@
+## 2026-10-27 — Nomenclatura de /setup → Mensajes: «Plantillas»
+
+La opción anteriormente llamada **Mensajes personalizados** ahora se presenta como **Plantillas** (en-US: **Templates**, pt-BR: **Modelos**) en el desplegable de `/setup → Mensajes`. También se actualizan la descripción de la opción, la explicación del menú y la referencia de Kits para evitar nombres anteriores. Se mantiene sin cambios el identificador interno `templates`, su editor, las plantillas existentes, la configuración por servidor y la persistencia. Alcance exclusivo: `Pruebas`; no modificar `main`.
+
 ## 2026-10-27 — Ajuste de navegación: retirar «Crear mensaje» del menú de Mensajes
 
 Por petición expresa del propietario, en `/setup → Mensajes` se retira la entrada **Crear mensaje**. Se conservan las opciones de mensajes editables (verificación, DM, sugerencias, Honeypot, condenas y logs), las plantillas y otros módulos existentes. No se eliminan plantillas guardadas, programaciones ni su persistencia; los editores subyacentes se conservan para una reorganización posterior. Se retira el tratamiento excepcional de interacciones de Activity asociado exclusivamente a esa entrada. Se actualizan los tests de navegación y ACK para que el menú oculto no bloquee el despliegue. Alcance: rama `Pruebas`; producción queda intacta.

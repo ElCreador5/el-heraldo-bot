@@ -26,6 +26,21 @@ class I18nCatalogTests(unittest.TestCase):
                 "pt-BR": "Outras funções do bot podem aparecer em espanhol. Em desenvolvimento.",
             }[locale])
 
+
+    def test_custom_messages_section_has_templates_name_in_every_language(self):
+        names = {"es-419": ("Plantillas", "Mensajes personalizados"),
+                 "en-US": ("Templates", "Custom messages"),
+                 "pt-BR": ("Modelos", "Mensagens personalizadas")}
+        for locale, (current, previous) in names.items():
+            with self.subTest(locale=locale):
+                self.assertEqual(translate(locale, "text.f4ea025e8c2221"), current)
+                description = translate(locale, "text.685b989ce71932")
+                panel = translate(locale, "text.6902f6b5d77eb7")
+                self.assertIn(current.casefold(), description.casefold())
+                self.assertIn(current, panel)
+                self.assertNotIn(previous, panel)
+                self.assertNotIn(previous.casefold(), description.casefold())
+
     def test_missing_key_raises_instead_of_using_spanish(self):
         with self.assertRaises(TranslationUnavailable):
             translate("es-419", "nonexistent")

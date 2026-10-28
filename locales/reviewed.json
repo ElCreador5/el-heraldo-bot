@@ -5636,8 +5636,8 @@
     "> **Duração:** {p0}"
   ],
   "text.685b989ce71932": [
-    "Additional messages created by the administrator.",
-    "Mensagens adicionais criadas pelo administrador."
+    "Reusable templates created by the administrator.",
+    "Modelos reutilizáveis criados pelo administrador."
   ],
   "text.685f5034b8a778": [
     "purge already in progress",
@@ -5660,8 +5660,8 @@
     "Canal mesclado com #{p0} por {p1}"
   ],
   "text.6902f6b5d77eb7": [
-    "**El Heraldo · Messages**\n\nChoose a message to edit. System messages have fixed names; optional named templates are under Custom messages. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
-    "**El Heraldo · Mensagens**\n\nEscolha a mensagem a editar. Mensagens do sistema têm nomes fixos; modelos opcionais com nomes próprios ficam em Mensagens personalizadas. As alterações são isoladas por servidor e painéis publicados são sincronizados quando aplicável.\n\n**Editáveis:** Verificação, mensagem privada de verificação, Sugestões, Honeypot, Condenações e Registros.\n**Excluídos intencionalmente:** Variáveis, comandos, listas, estados, perfis, históricos, rankings e qualquer painel que mostre dados reais ou gerados em tempo real."
+    "**El Heraldo · Messages**\n\nChoose a message to edit. System messages have fixed names; optional named templates are under Templates. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
+    "**El Heraldo · Mensagens**\n\nEscolha a mensagem a editar. Mensagens do sistema têm nomes fixos; modelos opcionais com nomes próprios ficam em Modelos. As alterações são isoladas por servidor e painéis publicados são sincronizados quando aplicável.\n\n**Editáveis:** Verificação, mensagem privada de verificação, Sugestões, Honeypot, Condenações e Registros.\n**Excluídos intencionalmente:** Variáveis, comandos, listas, estados, perfis, históricos, rankings e qualquer painel que mostre dados reais ou gerados em tempo real."
   ],
   "text.690539f1e42528": [
     "Error: The URL should start with https:// or http://.",
@@ -12472,8 +12472,8 @@
     "Máximo atingido: o membro é protegido contra ações automáticas."
   ],
   "text.edfc400b4aa520": [
-    "Import or export personalized messages.",
-    "Importar ou exportar mensagens personalizadas."
+    "Import or export templates.",
+    "Importar ou exportar modelos."
   ],
   "text.ee00b96fff266f": [
     "Description",
@@ -12784,8 +12784,8 @@
     "Erro: Painel não publicado: o cargo {p0} {p1}. Escolha outro com `/verify_setup`."
   ],
   "text.f4ea025e8c2221": [
-    "Custom messages",
-    "Mensagens personalizadas"
+    "Templates",
+    "Modelos"
   ],
   "text.f510f793dcec40": [
     "The card exists, but could not synchronize its reactions.",
