@@ -64,35 +64,48 @@ async def sdk_module(req):
                                  "X-Content-Type-Options": "nosniff"})
 
 async def health(req):
-    return reply({"status": "ok", "configured": bool(os.getenv("DISCORD_ACTIVITY_CLIENT_SECRET"))})
+    return reply({"status": "ok", "configured": True, "oauth_mode": "pkce_public_client"})
 
 async def config(req):
     bot = req.app["bot"]
-    return reply({"client_id": str(bot.application_id or bot.user.id),
-                  "ready": bool(os.getenv("DISCORD_ACTIVITY_CLIENT_SECRET")),
-                  "stage": "Lab"})
+    client_id = str(bot.application_id or bot.user.id)
+    return reply({"client_id": client_id, "ready": bool(client_id),
+                  "oauth_mode": "pkce_public_client", "stage": "Lab"})
+
+def valid_code_verifier(verifier):
+    """RFC 7636: public-client PKCE verifier, never log or persist it."""
+    import re
+    return (isinstance(verifier, str)
+            and re.fullmatch(r"[A-Za-z0-9._~-]{43,128}", verifier) is not None)
 
 async def oauth(req):
     verify_origin(req)
-    secret = os.getenv("DISCORD_ACTIVITY_CLIENT_SECRET")
-    if not secret:
-        return reply({"error": "oauth_not_configured"}, 503)
-    obj = await req.json()
-    code = obj.get("code")
+    try:
+        obj = await req.json()
+    except (ValueError, Exception):
+        return reply({"error": "invalid_request"}, 400)
+    if not isinstance(obj, dict):
+        return reply({"error": "invalid_request"}, 400)
+    code, verifier = obj.get("code"), obj.get("code_verifier")
     if not isinstance(code, str) or not 2 <= len(code) <= 300:
         return reply({"error": "invalid_code"}, 400)
+    if not valid_code_verifier(verifier):
+        return reply({"error": "invalid_code_verifier"}, 400)
     app_id = str(req.app["bot"].application_id or req.app["bot"].user.id)
+    # The Discord app's Public Client option is enabled. PKCE replaces
+    # client_secret; Discord validates the S256 verifier against the challenge.
     async with req.app["session"].post(API + "/oauth2/token", data={
         "client_id": app_id,
-        "client_secret": secret,
         "grant_type": "authorization_code",
         "code": code,
+        "code_verifier": verifier,
         "redirect_uri": "https://127.0.0.1",
     }) as resp:
         if resp.status != 200:
             return reply({"error": "discord_oauth_failed"}, 401)
         data = await resp.json()
-    return reply({"access_token": data["access_token"], "expires_in": data.get("expires_in", 3600)})
+    return reply({"access_token": data["access_token"],
+                  "expires_in": data.get("expires_in", 3600)})
 
 async def authorize(req):
     verify_origin(req)
