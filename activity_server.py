@@ -55,7 +55,10 @@ async def sdk_module(req):
         source = await res.text()
     # esm.sh sometimes returns a small re-export module referring to an
     # absolute /... path; keep these module imports on our mapped origin.
-    source = re.sub(r'(from\s*["\\x27]|import\s*\(\s*["\\x27])/', r'\1/sdk/', source)
+    source = (source.replace('from "/', 'from "/sdk/')
+              .replace("from '/", "from '/sdk/")
+              .replace('import("/', 'import("/sdk/')
+              .replace("import('/", "import('/sdk/"))
     return web.Response(text=source, content_type="application/javascript",
                         headers={"Cache-Control": "public, max-age=3600",
                                  "X-Content-Type-Options": "nosniff"})
