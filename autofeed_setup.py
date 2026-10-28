@@ -793,9 +793,10 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label="Editor de embed", style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def embed_builder(self, interaction, button):
-        view = EmbedEditorView(self)
+        from autofeed_embed_builder import EmbedBuilderView
+        view = EmbedBuilderView(self)
         await interaction.response.edit_message(
-            content=view.summary(interaction.guild),
+            content=view.summary(),
             embed=view.preview_embed(interaction.guild), view=view,
             allowed_mentions=discord.AllowedMentions.none())
 
@@ -814,12 +815,8 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=2)
     @guild_context
     async def preview(self, interaction, button):
-        embed = None
-        if self.embed:
-            embed = discord.Embed(title=self.embed.get("title") or None,
-                                  description=self.embed.get("description") or None,
-                                  color=int(self.embed.get("color_hex", "5865F2"), 16))
-            embed = self.host["stamp_embed"](embed, interaction.guild)
+        from autofeed_embed_builder import render
+        embed = render(self.embed, self.host["stamp_embed"], interaction.guild)
         await interaction.response.edit_message(
             content=self.summary() + "\n\n" + t("new_preview"),
             embed=embed, view=self,
@@ -853,7 +850,13 @@ class AutofeedEditorView(discord.ui.View):
                 and feeds.is_ready(interaction, self.host, channel, role)
                 and (self.role_id is None or role is not None)):
             raise ValueError("unavailable")
-        if not self.start or (not self.text and not self.embed):
+        from autofeed_embed_builder import has_content, validate_data
+        if self.embed:
+            try:
+                self.embed = validate_data(self.embed)
+            except ValueError as exc:
+                raise ValueError("unavailable") from exc
+        if not self.start or (not self.text and not has_content(self.embed)):
             raise ValueError("warning")
         if self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("warning")
