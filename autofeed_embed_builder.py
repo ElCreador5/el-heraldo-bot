@@ -6,6 +6,7 @@ The server footer is always stamped by El Heraldo; it cannot be overwritten.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import re
 from urllib.parse import urlsplit
 
@@ -35,6 +36,9 @@ COPY = {
         "timestamp_on":"Activada", "timestamp_off":"Desactivada", "new_field":"Nuevo campo",
         "info":"Formato Discord: título, descripción, color, autor, miniatura, imagen, hasta 25 campos, fecha y footer automático.",
         "write_hint":"Puedes escribir @Nombre del rol o #canal en la descripción. Utiliza los selectores para evitar errores de nombres.",
+        "date_error": "Introduce una fecha válida de Santo Domingo o deja vacío para limpiar.",
+        "date_input": "Fecha del embed (AAAA-MM-DD HH:MM)",
+        "date_manual": "Seleccionar fecha",
     },
     "en-US": {
         "title":"Embed builder", "help":"Complete each section using the menu. The preview updates without posting or saving.",
@@ -58,6 +62,9 @@ COPY = {
         "timestamp_on":"On", "timestamp_off":"Off", "new_field":"New field",
         "info":"Discord format: title, description, color, author, thumbnail, image, up to 25 fields, timestamp and automatic footer.",
         "write_hint":"You may type @Role name or #channel in descriptions. Use the selectors when names are ambiguous.",
+        "date_error": "Enter a valid Santo Domingo date or leave empty to clear.",
+        "date_input": "Embed date (YYYY-MM-DD HH:MM)",
+        "date_manual": "Select date",
     },
     "pt-BR": {
         "title":"Construtor de embed", "help":"Preencha as seções pelo menu. A prévia é atualizada sem publicar ou salvar.",
@@ -81,6 +88,9 @@ COPY = {
         "timestamp_on":"Ativada", "timestamp_off":"Desativada", "new_field":"Novo campo",
         "info":"Formato Discord: título, descrição, cor, autor, miniatura, imagem, até 25 campos, data e rodapé automático.",
         "write_hint":"É possível digitar @Nome do cargo ou #canal na descrição. Use os seletores para nomes ambíguos.",
+        "date_error": "Digite uma data válida de Santo Domingo ou deixe vazio para limpar.",
+        "date_input": "Data do embed (AAAA-MM-DD HH:MM)",
+        "date_manual": "Selecionar data",
     }
 }
 
@@ -145,6 +155,15 @@ def validate_data(data):
     if total > 5800:  # reserve space for the mandatory global footer
         raise ValueError("size")
     result["timestamp"] = bool(result.get("timestamp", False))
+    custom_date = str(result.get("timestamp_value") or "").strip()
+    if custom_date:
+        try:
+            parsed = datetime.fromisoformat(custom_date.replace("Z", "+00:00"))
+            if parsed.tzinfo is None or len(custom_date) > 40:
+                raise ValueError("date")
+        except ValueError as exc:
+            raise ValueError("date") from exc
+    result["timestamp_value"] = custom_date
     return result
 
 
@@ -165,7 +184,8 @@ def render(data, stamp, guild):
         description=data.get("description") or None,
         url=data.get("url") or None,
         color=int(data["color_hex"], 16),
-        timestamp=datetime.now(timezone.utc) if data["timestamp"] else None,
+        timestamp=(datetime.fromisoformat(data["timestamp_value"]) if data["timestamp_value"]
+                   else datetime.now(timezone.utc)) if data["timestamp"] else None,
     )
     author = data.get("author") or {}
     if author.get("name"):
@@ -261,6 +281,48 @@ class SectionModal(discord.ui.Modal):
             from message_autofeeds import respond_error
             return await respond_error(interaction, "invalid")
         await redraw(interaction, self.parent, self.section)
+
+
+
+class DateStampModal(discord.ui.Modal):
+    """Fecha mostrada dentro del embed, independiente de la programación."""
+    def __init__(self, parent):
+        super().__init__(title=t("date_manual"))
+        self.parent = parent
+        previous = (parent.embed or {}).get("timestamp_value") or ""
+        if previous:
+            try:
+                previous = datetime.fromisoformat(previous).astimezone(
+                    ZoneInfo("America/Santo_Domingo")).strftime("%Y-%m-%d %H:%M")
+            except ValueError:
+                previous = ""
+        self.date = discord.ui.TextInput(label=t("date_input"), required=False,
+                                         max_length=16, default=previous)
+        self.add_item(self.date)
+
+    @guild_context
+    async def on_submit(self, interaction):
+        if not owner(interaction, self.parent):
+            return await denied(interaction)
+        raw = str(self.date).strip()
+        data = dict(self.parent.embed or {})
+        if raw:
+            try:
+                local = datetime.strptime(raw, "%Y-%m-%d %H:%M")
+                instant = local.replace(tzinfo=ZoneInfo("America/Santo_Domingo"))
+                data["timestamp_value"] = instant.astimezone(timezone.utc).isoformat()
+                data["timestamp"] = True
+            except ValueError:
+                from message_autofeeds import respond_error
+                return await interaction.response.send_message(t("date_error"), ephemeral=True)
+        else:
+            data["timestamp_value"], data["timestamp"] = "", False
+        try:
+            update(self.parent, data)
+        except ValueError:
+            from message_autofeeds import respond_error
+            return await respond_error(interaction, "invalid")
+        await redraw(interaction, self.parent, "date")
 
 
 class FieldModal(discord.ui.Modal):
@@ -396,12 +458,13 @@ class EmbedBuilderView(discord.ui.View):
         self.channels.callback = self.add_channel
         self.add_item(self.channels)
         for button, key in ((self.edit, "edit"), (self.add_field, "add"),
-                            (self.timestamp, "timestamp"), (self.preview, "preview"),
+                            (self.timestamp, "timestamp"), (self.date_manual, "date_manual"), (self.preview, "preview"),
                             (self.clear, "clear"), (self.back, "back")):
             button.label = t(key)
         self.edit.disabled = section in ("date", "fields")
         self.add_field.disabled = section != "fields"
         self.timestamp.disabled = section != "date"
+        self.date_manual.disabled = section != "date"
 
     def summary(self):
         data = self.parent.embed or {}
@@ -411,7 +474,7 @@ class EmbedBuilderView(discord.ui.View):
                  f"**{t('description')}:** {str(data.get('description') or t('empty'))[:200]}",
                  f"**{t('author')}:** {str((data.get('author') or {}).get('name') or t('empty'))[:100]}",
                  f"**{t('fields')}:** {len(data.get('fields') or [])}",
-                 f"**{t('timestamp')}:** {t('timestamp_on') if data.get('timestamp') else t('timestamp_off')}"]
+                 f"**{t('timestamp')}:** {str(data.get('timestamp_value') or t('timestamp_on')) if data.get('timestamp') else t('timestamp_off')}"]
         if self.section in ("main", "fields"):
             parts += ["", t("write_hint")]
         parts += ["", t("locked"), t("safe")]
@@ -484,6 +547,11 @@ class EmbedBuilderView(discord.ui.View):
             from message_autofeeds import respond_error
             return await respond_error(interaction, "invalid")
         await redraw(interaction, self.parent, "date")
+
+    @discord.ui.button(label="Seleccionar fecha", style=discord.ButtonStyle.primary, row=3)
+    @guild_context
+    async def date_manual(self, interaction, button):
+        await interaction.response.send_modal(DateStampModal(self.parent))
 
     @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
     @guild_context

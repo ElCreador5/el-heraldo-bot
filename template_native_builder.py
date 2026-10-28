@@ -71,6 +71,7 @@ def to_builder(raw):
         "thumbnail_url": (raw.get("thumbnail") or {}).get("url", ""),
         "fields": copy.deepcopy(raw.get("fields") or []),
         "timestamp": bool(raw.get("timestamp")),
+        "timestamp_value": str(raw.get("timestamp") or ""),
     }
     return validate_data(data)
 
@@ -90,7 +91,7 @@ def to_raw(data):
     if data.get("fields"):
         raw["fields"] = copy.deepcopy(data["fields"])
     if data.get("timestamp"):
-        raw["timestamp"] = datetime.now(timezone.utc).isoformat()
+        raw["timestamp"] = data.get("timestamp_value") or datetime.now(timezone.utc).isoformat()
     return raw
 
 
