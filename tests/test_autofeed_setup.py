@@ -17,49 +17,60 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.owner_id = 10
         self.original = b.guild_config_get(self.guild_id, feeds.CONFIG_KEY)
 
-    async def test_setup_messages_schedules_opens_hub_in_same_message(self):
+    async def test_setup_messages_opens_create_message_directly(self):
         view = b.HeraldoMessagesSetupView(self.guild_id, self.owner_id)
         interaction = NS(
             guild=NS(id=self.guild_id),
             user=NS(id=self.owner_id,
                     guild_permissions=b.discord.Permissions(manage_guild=True)),
-            data={"values": ["schedules"]},
+            data={"values": ["create_message"]},
             response=NS(send_message=AsyncMock(), edit_message=AsyncMock()),
         )
         await view.open_editor(interaction)
         interaction.response.send_message.assert_not_awaited()
         _, kwargs = interaction.response.edit_message.call_args
-        self.assertIsInstance(kwargs["view"], setup.AutofeedHubView)
+        self.assertIsInstance(kwargs["view"], setup.AutofeedEditorView)
         self.assertEqual(kwargs["embed"], None)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
-    async def test_setup_hub_has_direct_editor_with_expected_controls(self):
-        hub = setup.AutofeedHubView(b.__dict__, self.guild_id, self.owner_id)
+    async def test_create_message_has_single_editor_with_expected_controls(self):
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
-        self.assertTrue(any(getattr(item, "label", "") == setup.t("new") for item in hub.children))
         labels = [getattr(item, "label", "") for item in editor.children]
         for key in ("message", "embed", "date_picker", "repeat_picker",
                     "insert_mention", "silent", "save", "discard", "back"):
             self.assertIn(setup.t(key), labels)
         self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
-        self.assertEqual(len(editor.children), 12)
+        self.assertEqual(len(editor.children), 11)
+        self.assertNotIn(setup.t("discard"), labels)
+        self.assertIsNone(editor.start)
+        self.assertIn(setup.t("notice"), editor.summary())
         self.assertIsInstance(setup.DateTimeModal(editor), b.discord.ui.Modal)
         self.assertIsInstance(setup.FrequencyPickerView(editor), b.discord.ui.View)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
     async def test_back_returns_exact_parent_from_setup(self):
-        content, hub = setup.setup_panel(b.__dict__, self.guild_id, self.owner_id)
+        content, editor = setup.setup_panel(b.__dict__, self.guild_id, self.owner_id)
         interaction = NS(
             guild=NS(id=self.guild_id),
             user=NS(id=self.owner_id,
                     guild_permissions=b.discord.Permissions(manage_guild=True)),
             response=NS(edit_message=AsyncMock(), send_message=AsyncMock()),
         )
-        await hub.back.callback(interaction)
+        await editor.back.callback(interaction)
         kwargs = interaction.response.edit_message.call_args.kwargs
         self.assertIsInstance(kwargs["view"], b.HeraldoMessagesSetupView)
         self.assertEqual(kwargs["content"], b.heraldo_messages_setup_content())
 
+
+    async def test_editor_draft_requires_confirmation_not_persistence(self):
+        editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
+        prior = b.guild_config_get(901, feeds.CONFIG_KEY)
+        editor.text = "Ejemplo"
+        editor.dirty = True
+        self.assertIn(editor.discard, editor.children)
+        self.assertEqual(b.guild_config_get(901, feeds.CONFIG_KEY), prior)
+        editor.dirty = False
+        self.assertNotIn(editor.discard, editor.children)
 
 class CarlStyleFieldsTests(unittest.TestCase):
     def test_repeat_fields_and_limit(self):
