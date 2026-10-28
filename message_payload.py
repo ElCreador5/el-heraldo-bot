@@ -2,6 +2,7 @@
 from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
 import copy
 import re
+from datetime import datetime
 from urllib.parse import urlsplit
 
 VARIABLES = {'usuario', 'usuario_id', 'servidor', 'servidor_id', 'canal', 'fecha'}
@@ -42,13 +43,20 @@ def validate(values):
         raise ValueError(_t('text.a32aad3e849f80'))
     total = 0
     for embed in embeds:
-        if not isinstance(embed, dict) or set(embed) - {'title', 'description', 'url', 'color', 'image', 'thumbnail', 'footer', 'author', 'fields'}:
+        if not isinstance(embed, dict) or set(embed) - {'title', 'description', 'url', 'color', 'image', 'thumbnail', 'footer', 'author', 'fields', 'timestamp'}:
             raise ValueError(_t('text.e30fc1bebd0a1f'))
         if not any(embed.get(k) for k in ('title', 'description', 'image', 'thumbnail', 'footer', 'author', 'fields')):
             raise ValueError(_t('text.a460bbdb699931'))
         for key, limit in (('title', 256), ('description', 4096)):
             total += len(text(embed.get(key, ''), limit))
         url(embed.get('url', ''))
+        if 'timestamp' in embed:
+            try:
+                value = embed['timestamp']
+                if not isinstance(value, str) or len(value) > 40 or datetime.fromisoformat(value.replace('Z', '+00:00')).tzinfo is None:
+                    raise ValueError('timestamp')
+            except (ValueError, TypeError) as exc:
+                raise ValueError('Invalid embed timestamp') from exc
         color = embed.get('color', 0x2B2D31)
         if type(color) is not int or not 0 <= color <= 0xFFFFFF:
             raise ValueError(_t('text.28724350339107'))

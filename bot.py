@@ -9525,7 +9525,9 @@ class HeraldoTemplateSetupView(discord.ui.View):
     @discord.ui.button(label=_t('text.3fe5ff266fc3ce'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
     async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id))
+        from template_native_builder import TemplateEditorView
+        editor = TemplateEditorView(globals(), self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=editor.summary(), embed=None, view=editor)
 
     @discord.ui.button(label=_t('text.2eba946b2e1ee4'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
@@ -9533,7 +9535,9 @@ class HeraldoTemplateSetupView(discord.ui.View):
         if not self._current():
             await interaction.response.send_message(_t('text.17ebd113981edc'), ephemeral=True)
             return
-        await interaction.response.send_modal(HeraldoTemplateModal(self.guild_id, self.owner_id, self.selected))
+        from template_native_builder import TemplateEditorView
+        editor = TemplateEditorView(globals(), self.guild_id, self.owner_id, self._current())
+        await interaction.response.edit_message(content=editor.summary(), embed=None, view=editor)
 
     @discord.ui.button(label=_t('text.ac96c009d7b8de'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context

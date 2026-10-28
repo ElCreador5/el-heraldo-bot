@@ -915,9 +915,10 @@ class AutofeedEditorView(discord.ui.View):
 
 
 class SetupConfirmView(discord.ui.View):
-    def __init__(self, host, job, snapshot, *, editing=False):
+    def __init__(self, host, job, snapshot, *, editing=False, result_panel=None):
         super().__init__(timeout=300)
         self.host, self.job, self.snapshot, self.editing = host, job, snapshot, editing
+        self.result_panel = result_panel or setup_panel
         self.guild_id, self.owner_id = job["guild"], job["requester"]
         self.confirm.label, self.cancel.label = t("confirm"), t("discard")
         self.finished = False
@@ -955,7 +956,7 @@ class SetupConfirmView(discord.ui.View):
                 await interaction.edit_original_response(
                     content=t("uncertain"), embed=None, view=None)
                 return
-            fresh, view = setup_panel(self.host, self.guild_id, self.owner_id)
+            fresh, view = self.result_panel(self.host, self.guild_id, self.owner_id)
             await interaction.edit_original_response(
                 content=t("created") + "\n\n" + fresh, embed=None, view=view)
             return
@@ -968,7 +969,7 @@ class SetupConfirmView(discord.ui.View):
                 t(key) if key else feeds.tr("invalid"), ephemeral=True)
         self.finished = True
         self.stop()
-        parent, view = setup_panel(self.host, self.guild_id, self.owner_id)
+        parent, view = self.result_panel(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(
             content=t("saved") + "\n\n" + parent, embed=None, view=view)
 
@@ -977,5 +978,5 @@ class SetupConfirmView(discord.ui.View):
     async def cancel(self, interaction, button):
         self.finished = True
         self.stop()
-        parent, view = setup_panel(self.host, self.guild_id, self.owner_id)
+        parent, view = self.result_panel(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(content=parent, embed=None, view=view)
