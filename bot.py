@@ -10577,7 +10577,7 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
                 raise ValueError()
             number, unit = int(match.group(1)), match.group(2)
             seconds = number * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
-            is_test = os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+            is_test = heraldo_is_test()
             if seconds < (10 if is_test else 86400) or seconds > 365 * 86400 or (unit == "s" and not is_test):
                 raise ValueError()
             start = str(self.date).strip()
@@ -10711,7 +10711,7 @@ def reminder_next_due(settings, now):
             seconds = int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match.group(2)]
         else:
             seconds = max(1, min(365, int(interval))) * 86400  # configuración heredada
-        is_test = os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+        is_test = heraldo_is_test()
         seconds = max(10 if is_test else 86400, min(seconds, 365 * 86400))
         days = None
     start = settings["report_reminder_start"]
@@ -16541,7 +16541,8 @@ HERALDO_TEST_REASON = _t('text.490ef3a71dc429')
 
 
 def heraldo_is_test() -> bool:
-    return os.getenv("RAILWAY_PROJECT_ID") == HERALDO_TEST_PROJECT
+    from enzonic_test_host import is_test
+    return is_test()
 
 
 @_i18n_context
@@ -16662,7 +16663,7 @@ async def heraldo_ban(member: discord.Member, *, reason: str,
 
 def test_dm_notice_embed(embed: discord.Embed) -> discord.Embed:
     """Añade un aviso únicamente en mensajes privados del proyecto Railway Test."""
-    if os.getenv("RAILWAY_PROJECT_ID") != "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61":
+    if not heraldo_is_test():
         return embed
     result = embed.copy()
     result.add_field(
@@ -18740,7 +18741,7 @@ class CondemnationCaseActionModal(discord.ui.Modal):
             return
         reason = str(self.reason_input).strip()
         if not reason:
-            if os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61":
+            if heraldo_is_test():
                 reason = _t('text.490ef3a71dc429')
             else:
                 await interaction.response.send_message(
@@ -20070,7 +20071,7 @@ async def condenar(
 ) -> None:
     guild = interaction.guild
     reason = (motivo or "").strip()[:1000]
-    is_heraldo_test = os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+    is_heraldo_test = heraldo_is_test()
     if not reason and is_heraldo_test:
         reason = _t('text.490ef3a71dc429')
     if not reason:
@@ -25165,7 +25166,7 @@ import embed_schedules as embed_schedule_engine
 
 
 def scheduled_embed_test_mode():
-    return os.getenv("RAILWAY_PROJECT_ID") == "747a1ee0-cdab-4ad5-8e45-a6ddfccc9b61"
+    return heraldo_is_test()
 
 
 def scheduled_embed_db():
@@ -26987,6 +26988,8 @@ custodio_discipline_engine = custodio_discipline.CustodioDiscipline(globals())
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    from enzonic_test_host import refuse_legacy_test_start
+    refuse_legacy_test_start()
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         raise RuntimeError(
@@ -26996,7 +26999,9 @@ if __name__ == "__main__":
         # Impide restaurar SQLite mientras este proceso mantiene el Gateway vivo.
         # El bloqueo se libera al cerrar o interrumpirse el proceso.
         from sqlite_recovery import service_lock
-        with service_lock(DB_PATH):
+        from enzonic_test_host import is_enzonic, before_discord
+        with service_lock(DB_PATH, exclusive=is_enzonic()):
+            before_discord()
             bot.run(token)
     except discord.PrivilegedIntentsRequired:
         if os.environ.get("MESSAGE_CONTENT_INTENT") != "1":

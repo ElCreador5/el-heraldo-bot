@@ -37,6 +37,10 @@ PRODUCTION_STATE_DIR = Path("/data/.heraldo-h03-daily")
 
 def _test_volume(source, state_root):
     """Only the actual Test worker volume and configured live database."""
+    if os.environ.get("HERALDO_HOSTING_PROVIDER") == "enzonic":
+        from enzonic_test_host import guard
+        guard(source, state_root)
+        return
     observed = tuple(os.environ.get(k) for k in
                      ("RAILWAY_PROJECT_ID", "RAILWAY_ENVIRONMENT_ID", "RAILWAY_SERVICE_ID"))
     if observed != TEST_IDS or os.environ.get("HERALDO_TEST_BACKUP_ENABLED") != "enabled":
@@ -221,6 +225,9 @@ def _remaining_backup_space(root):
     When HERALDO_BACKUP_VOLUME_CAP_MB is supplied, account for all existing
     files on that volume. Never remove files to make room.
     """
+    if os.environ.get("HERALDO_HOSTING_PROVIDER") == "enzonic":
+        from enzonic_test_host import remaining_space
+        return remaining_space(root)
     available = shutil.disk_usage(root).free
     configured = os.environ.get("HERALDO_BACKUP_VOLUME_CAP_MB")
     if configured is None:
@@ -259,9 +266,13 @@ def run_once(source, state_root, *, environment, revision, now=None,
     """Respaldo diario o preactualización vinculada a una revisión, sin reintento ciego."""
     source, state_root = Path(source), Path(state_root)
     _guard(environment, source, state_root)
+    expected_test_revision = os.environ.get("RAILWAY_GIT_COMMIT_SHA")
+    if environment == "heraldo-test" and os.environ.get("HERALDO_HOSTING_PROVIDER") == "enzonic":
+        from enzonic_test_host import revision as enzonic_revision
+        expected_test_revision = enzonic_revision()
     if environment == "heraldo-test" and (
             not re.fullmatch(r"[0-9a-f]{40}", revision or "") or
-            revision != os.environ.get("RAILWAY_GIT_COMMIT_SHA")):
+            revision != expected_test_revision):
         raise BackupJobError("source_revision_mismatch")
     if not revision or len(revision) > 100 or not re.fullmatch(r"[A-Za-z0-9_.-]+", revision):
         raise BackupJobError("invalid_revision")
@@ -277,6 +288,11 @@ def run_once(source, state_root, *, environment, revision, now=None,
             raise BackupJobError("invalid_target_revision")
         operation = {"purpose": purpose, "request_id": request_id,
                      "source_revision": revision, "target_revision": target_revision}
+    elif (purpose == "validation" and environment == "heraldo-test"
+          and os.environ.get("HERALDO_HOSTING_PROVIDER") == "enzonic"):
+        if not isinstance(request_id, str) or not re.fullmatch(r"[0-9a-f]{32}", request_id) or target_revision is not None:
+            raise BackupJobError("invalid_validation_id")
+        operation = {"purpose": purpose, "request_id": request_id, "source_revision": revision}
     elif purpose != "daily" or request_id is not None or target_revision is not None:
         raise BackupJobError("invalid_backup_purpose")
     root = _private_root(state_root)
@@ -285,7 +301,7 @@ def run_once(source, state_root, *, environment, revision, now=None,
         raise BackupJobError("naive_time")
     stamp = today.astimezone(timezone.utc).strftime("%Y%m%d")
     basename = (environment + "-" + stamp if purpose == "daily" else
-                environment + "-preupdate-" + request_id)
+                environment + "-" + purpose + "-" + request_id)
     receipt_path = root / (basename + ".json")
     with _exclusive_job_lock(root):
         if receipt_path.is_symlink() or receipt_path.exists():

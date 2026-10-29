@@ -12,7 +12,9 @@ _last_status = None
 
 def _invoke():
     env = {k: v for k, v in os.environ.items() if k != "DISCORD_TOKEN"}
-    result = subprocess.run([sys.executable, "-m", "test_backup_runtime", "due"],
+    module = ("enzonic_test_backup" if env.get("HERALDO_HOSTING_PROVIDER") == "enzonic"
+              else "test_backup_runtime")
+    result = subprocess.run([sys.executable, "-m", module, "due"],
                             env=env, capture_output=True, timeout=240)
     # Do not pass through provider output or an exception traceback.
     if result.returncode:
@@ -34,6 +36,16 @@ async def _check_due():
 
 
 def start_if_authorized():
+    if os.environ.get("HERALDO_HOSTING_PROVIDER") == "enzonic":
+        from enzonic_test_host import FLAG
+        if not os.environ.get(FLAG):
+            return False
+        from enzonic_test_backup import scheduler_preflight
+        scheduler_preflight()
+        if not _check_due.is_running():
+            _check_due.start()
+            print("H03_TEST_SCHEDULE status=SCHEDULED provider=enzonic utc=06:15", flush=True)
+        return True
     if not os.environ.get("HERALDO_TEST_BACKUP_ENABLED"):
         return False
     identity = tuple(os.environ.get(k) for k in

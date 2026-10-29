@@ -37,7 +37,7 @@ def _preflight():
         raise MigrationBlocked("CARPETA_DESTINO_NO_VALIDA")
     if DESTINATION.exists() or DESTINATION.is_symlink():
         raise MigrationBlocked("YA_EXISTE_BASE_NO_SOBRESCRIBIR")
-    if any(Path(str(DESTINATION) + ext).exists() for ext in ("-wal", "-shm", "-journal")):
+    if any(os.path.lexists(str(DESTINATION) + ext) for ext in ("-wal", "-shm", "-journal")):
         raise MigrationBlocked("ARCHIVOS_SQLITE_EXISTENTES")
     object_name = os.environ.get("HERALDO_TEST_RECOVERY_OBJECT", "")
     if not re.fullmatch(r"heraldo-test/[0-9]{8}/[0-9a-f]{32}\.h03e", object_name):
@@ -47,8 +47,14 @@ def _preflight():
                 "SUPABASE_BACKUP_PASSWORD", "SUPABASE_BACKUP_USER_ID")
     if any(not os.environ.get(name) for name in required):
         raise MigrationBlocked("CREDENCIALES_TEST_INCOMPLETAS")
-    if os.environ.get("HERALDO_TEST_BACKUP_ENABLED"):
+    if "HERALDO_TEST_BACKUP_ENABLED" in os.environ:
         raise MigrationBlocked("PLANIFICADOR_ANTIGUO_HABILITADO")
+    from enzonic_test_host import provider_preflight, check_test_secrets, require_persistence, STATE
+    provider_preflight()
+    check_test_secrets()
+    require_persistence()
+    if os.path.lexists(STATE / "migration.json"):
+        raise MigrationBlocked("RECIBO_PREVIO_REQUIERE_REVISION")
     return object_name
 
 
@@ -82,27 +88,43 @@ def _install_verified_copy(source, expected_hash):
 
 def main():
     try:
-        object_name = _preflight()
         from supabase_backup import download_verify
-        from sqlite_recovery import validate_backup
+        from sqlite_recovery import validate_backup, service_lock, inspect_database
         from backup_job import _isolated_restore
-        with tempfile.TemporaryDirectory(prefix=".heraldo-recovery-", dir=DESTINATION.parent) as directory:
-            root = Path(directory)
-            remote = download_verify(object_name, ENVIRONMENT, destination=root / "package")
-            package = Path(remote["local_package"])
-            manifest = validate_backup(package, environment=ENVIRONMENT)
-            source = package / "database.sqlite"
-            if manifest["sha256"] != remote["plaintext_sha256"] or _sha256(source) != manifest["sha256"]:
-                raise MigrationBlocked("RESPALDO_NO_VALIDADO")
-            _isolated_restore(package, root / "isolated.sqlite", manifest)
-            _install_verified_copy(source, manifest["sha256"])
+        # El bot mantiene el mismo bloqueo durante toda su conexión al Gateway.
+        with service_lock(DESTINATION, exclusive=True):
+            object_name = _preflight()
+            with tempfile.TemporaryDirectory(prefix=".heraldo-recovery-", dir=DESTINATION.parent) as directory:
+                root = Path(directory)
+                remote = download_verify(object_name, ENVIRONMENT, destination=root / "package")
+                package = Path(remote["local_package"])
+                manifest = validate_backup(package, environment=ENVIRONMENT)
+                source = package / "database.sqlite"
+                if manifest["sha256"] != remote["plaintext_sha256"] or _sha256(source) != manifest["sha256"]:
+                    raise MigrationBlocked("RESPALDO_NO_VALIDADO")
+                _isolated_restore(package, root / "isolated.sqlite", manifest)
+                _install_verified_copy(source, manifest["sha256"])
+                if inspect_database(DESTINATION) != {key: manifest[key] for key in
+                        ("schema_sha256", "rows", "user_version", "application_id")}:
+                    raise MigrationBlocked("BASE_INSTALADA_NO_COINCIDE")
+                from enzonic_test_host import write_receipt
+                write_receipt("migration.json", {"status": "verified_and_installed",
+                              "environment": ENVIRONMENT, "object": object_name,
+                              "sqlite_sha256": manifest["sha256"],
+                              "schema_sha256": manifest["schema_sha256"],
+                              "source_revision": manifest["revision"]})
         print("HERALDO_TEST_RECOVERY status=VERIFIED_AND_INSTALLED", flush=True)
         return 0
     except MigrationBlocked as exc:
         print("HERALDO_TEST_RECOVERY status=BLOCKED reason=" + str(exc), flush=True)
         return 1
-    except Exception:
-        print("HERALDO_TEST_RECOVERY status=BLOCKED reason=RECOVERY_FAILED", flush=True)
+    except Exception as exc:
+        trusted = {( "sqlite_recovery", "RecoveryError"), ("supabase_backup", "CloudBackupError"),
+                   ("backup_job", "BackupJobError")}
+        reason = str(exc) if (type(exc).__module__, type(exc).__name__) in trusted else "RECOVERY_FAILED"
+        if not re.fullmatch(r"[A-Za-z0-9_]+", reason):
+            reason = "RECOVERY_FAILED"
+        print("HERALDO_TEST_RECOVERY status=BLOCKED reason=" + reason, flush=True)
         return 1
 
 

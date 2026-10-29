@@ -9,5 +9,6 @@ __pycache__/
 *.service.lock
 .recovery-history/
 backups/
+/.heraldo-h03-enzonic/
 *.sqlite
 .obsidian/

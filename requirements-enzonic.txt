@@ -1,0 +1,4 @@
+# Runtime completo del worker Enzonic de 512 MB, validado con Python 3.12.
+-r requirements-ci.txt
+cryptography==46.0.7
+Pillow==12.3.0

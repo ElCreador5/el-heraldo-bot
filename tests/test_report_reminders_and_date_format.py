@@ -64,7 +64,7 @@ class ReminderAndDateFormatTests(unittest.TestCase):
     def test_short_intervals_are_test_only(self):
         code = ast.unparse(ast.parse(_source_text(SOURCE, encoding='utf-8')))
         modal = code[code.index("class ReportReminderOptionsModal"):code.index("class ReportReminderSetupView")]
-        self.assertIn("RAILWAY_PROJECT_ID", modal)
+        self.assertIn("is_test = heraldo_is_test()", modal)
         self.assertIn("unit == 's' and (not is_test)", modal)
         self.assertIn("report_reminder_interval", modal)
         self.assertNotIn("guild_config_set", modal)
