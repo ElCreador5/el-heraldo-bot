@@ -1,12 +1,44 @@
 # Migración de El Heraldo Test a Enzonic — 29/10/2026
 
-**Estado: preparada en código, NO completada en el proveedor.** Base auditada:
-`Pruebas@5850def8f2f40619348e6eaddd3be3427ebb5456`. No se ha iniciado Discord,
-restaurado la SQLite real ni habilitado el programador de Enzonic desde esta sesión.
+**Estado actual: SQLite histórica restaurada y ensayo H-03 real verificado;
+Discord y aceptación final PENDIENTES.** Base auditada:
+`Pruebas@5850def8f2f40619348e6eaddd3be3427ebb5456`; preparación desplegada por
+fast-forward a `d52686f`. El bot continúa detenido en mantenimiento.
 `main`, servicio oficial, volumen, variables, datos y respaldos de producción no
 se modificaron. No se eliminó ningún recurso de Railway.
 
-## Comprobaciones reales, sin modificación
+## Continuación operativa comprobada
+
+El propietario autorizó Google y accedió al panel; al no disponer esta sesión de
+control del navegador, ejecutó los comandos revisados y aportó sus salidas.
+Free Tier confirmado por captura (512 MiB/1 GiB). Dependencias instaladas,
+`pip check` correcto, variables Enzonic configuradas, DB_PATH corregido a
+`/home/container/heraldo.db`, credenciales Test y AES conservados. La comprobación
+REST confirmó `TEST_IDENTITY_VERIFIED` sin abrir Gateway. El marcador sobrevivió
+al reinicio (`VERIFIED_AFTER_RESTART`). El recuperador original instaló la base
+histórica (`VERIFIED_AND_INSTALLED`) y `inspect` dio `PREFLIGHT_VERIFIED`.
+
+El ensayo remoto produjo `VERIFIED_AND_RESTORED` dos veces y también tras un
+reinicio posterior; el conector confirmó una sola generación nueva de validación
+en Supabase Test. La copia diaria adoptada fue verificada y su repetición devolvió
+`ALREADY_VERIFIED`. La bandera Enzonic se habilitó después del ensayo. Railway Test
+worker/cron siguen Offline y sus volúmenes se conservan. El bucle del programador
+todavía no ha arrancado porque no se ha iniciado el bot.
+
+Al repetir los 34 tests en el proveedor aparecieron dos fallos de simulación
+Railway: la ubicación real de `host.__file__` seguía siendo `/home/container`.
+La corrección aísla esa ubicación en el fixture y añade una regresión para
+preservar el rechazo de identidad Railway desde la ruta Enzonic. No cambia
+código de ejecución. Localmente pasan 35 tests en cada ubicación simulada
+local/Railway/Enzonic, 85 regresiones de respaldo y compilación. Actualizar por
+fast-forward y repetir las 35 en Enzonic. **No volver a ejecutar la restauración**
+ni borrar bases o recibos para esta corrección.
+
+Tras pasar esas pruebas, verificar de nuevo Railway Test apagado y restablecer
+`python3 bot.py`. Faltan Gateway, programador a 06:15 UTC, consumo real, recorridos
+Discord, footer Labs, reinicio y primer respaldo programado. Migración no finalizada.
+
+## Comprobaciones de preparación (históricas, antes de esta continuación)
 
 - Railway Test/Lab: worker y cron observados **Offline**, sin despliegues activos
   ni operaciones pendientes. Conservar ambos volúmenes y todos los respaldos.

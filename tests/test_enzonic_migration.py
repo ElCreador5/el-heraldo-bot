@@ -43,6 +43,10 @@ class EnzonicFixture(unittest.TestCase):
                    HERALDO_BACKUP_ENCRYPTION_KEY=base64.b64encode(b'x'*32).decode())
         self.env = patch.dict(os.environ, env, clear=True)
         self.env.start(); self.addCleanup(self.env.stop)
+        # También simular la ubicación: la ruta real /home/container activa la
+        # detección de Enzonic incluso al vaciar el entorno para simular Railway.
+        source_patch = patch.object(host, '__file__', str(self.root / 'enzonic_test_host.py'))
+        source_patch.start(); self.addCleanup(source_patch.stop)
         for name, value in (('ROOT', self.root), ('DATABASE', self.db), ('STATE', self.state),
                             ('TEST_UID_SHA256', hashlib.sha256(uid.encode()).hexdigest())):
             p = patch.object(host, name, value); p.start(); self.addCleanup(p.stop)
@@ -169,6 +173,17 @@ class RecoverySafety(EnzonicFixture):
 
 
 class HostSafety(EnzonicFixture):
+    def test_real_container_path_rejects_railway_identity_before_gateway(self):
+        with patch.object(host, '__file__', '/home/container/enzonic_test_host.py'):
+            for project in (host.TEST_PROJECT, job.PRODUCTION_IDS[0]):
+                with self.subTest(project=project), patch.dict(os.environ,
+                        {'RAILWAY_PROJECT_ID': project}, clear=True):
+                    self.assertTrue(host.is_enzonic())
+                    self.assertFalse(host.is_test())
+                    with self.assertRaisesRegex(job.BackupJobError, 'enzonic_identity_mismatch'):
+                        host.before_discord()
+        self.assertFalse(self.db.exists())
+
     def test_missing_provider_on_real_container_path_fails_before_sqlite_creation(self):
         os.environ.pop('HERALDO_HOSTING_PROVIDER')
         with patch.object(host,'__file__','/home/container/enzonic_test_host.py'):
