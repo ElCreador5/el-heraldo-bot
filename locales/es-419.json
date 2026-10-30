@@ -707,7 +707,7 @@
   "text.2de621923133d5": "Duración no permitida.",
   "text.2e1e396c157975": "Error: No tengo permiso para enviar mensajes o embeds en {p0}.",
   "text.2e2946769ed603": "Sanción o advertencia por reacción de moderación.",
-  "text.2e2c1ff499c328": "**Recordatorios de reportes**\n\n{p0}\n\n**Estado propuesto:** {p1}\n**Frecuencia:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** <#{p4}>\nPersonalizar: 1d–365d o equivalente; en Test también 30s, 2m o 1h. Solo una confirmación administrativa guarda estos cambios.\n**Próxima publicación estimada:** {p5}",
+  "text.2e2c1ff499c328": "**Recordatorios de reportes**\n\n{p0}\n\n**Estado guardado:** {p1}\n**Frecuencia:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** {p4}\nLos selectores preparan un borrador. «Guardar cambios» conserva la programación; «Activar/Desactivar» aplica solo el estado, inmediatamente. «Personalizar» permite intervalos de 1d–365d y, en Test, desde 10s.\n**Próxima publicación estimada:** {p5}",
   "text.2e2ea18f980de9": "Advertencia: Conversación privada pendiente",
   "text.2eaaf547035da1": "Borrar los mensajes que los sancionados mandaron desde que entraron",
   "text.2eb03796ac8a31": "**Borrador sin guardar.** Pulse **{p0}** para revisar la configuración antes de confirmarla. Cancelar descarta el borrador.",
