@@ -707,7 +707,7 @@
   "text.2de621923133d5": "Duração não permitida.",
   "text.2e1e396c157975": "Erro: Não tenho permissão para enviar mensagens ou embeds para {p0}.",
   "text.2e2946769ed603": "Sanção ou advertência por reação de moderação.",
-  "text.2e2c1ff499c328": "**Lembretes de denúncias**\n\n{p0}\n\n**Estado proposto:** {p1}\n**Frequência:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** <#{p4}>\nPersonalizar: 1d–365d ou equivalente; em Test também 30s, 2m ou 1h. Somente a confirmação administrativa salva estas alterações.\n**Próxima publicação estimada:** {p5}",
+  "text.2e2c1ff499c328": "**Lembretes de denúncias**\n\n{p0}\n\n**Estado salvo:** {p1}\n**Frequência:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** {p4}\nOs seletores preparam um rascunho. «Salvar alterações» grava a programação; «Ativar/Desativar» altera imediatamente apenas o estado. «Personalizar» aceita intervalos de 1d–365d e, em Test, a partir de 10s.\n**Próxima publicação estimada:** {p5}",
   "text.2e2ea18f980de9": "Advertência: Conversa privada pendente",
   "text.2eaaf547035da1": "Eliminar as mensagens que os sancionados enviaram desde que entraram",
   "text.2eb03796ac8a31": "**Rascunho não salvo.** Pressione **{p0}** para revisar a configuração antes de confirmar. Cancelar descarta o rascunho.",
