@@ -1,3 +1,9 @@
+## 2026-10-29 — Retiro de servicios Railway y alcance de revisión remota
+
+El propietario decidió retirar los servicios Test `worker` y `heraldo-h03-lab-cron` desde Railway tras verificar los datos y respaldos de Enzonic. El panel aplicó únicamente esas eliminaciones y desconectó los dos volúmenes, que siguen conservados y consumen almacenamiento según uso. No se autorizó eliminar volúmenes/proyecto/respaldos ni recursos de producción. La aceptación final de Enzonic permanece pendiente.
+
+Para la comprobación remota de `/setup`, se permiten diagnósticos de solo lectura y pruebas aisladas, sin sanciones, sin modificar configuraciones reales y sin iniciar otra instancia del bot. No confundir la autoprueba de construcción al arrancar ni los mocks con una interacción de usuario en Discord. La credencial disponible en este entorno devolvió HTTP 401; no rotarla ni pedir secretos en el chat. La evidencia actual queda registrada en `PRUEBAS_DISCORD.md`.
+
 ## 2026-10-29 — Continuidad de Enzonic: corregir aislamiento de pruebas sin debilitar controles
 
 El acceso Google ya fue autorizado explícitamente por el propietario; no volver a pedir esa autorización. Ante la falta de control del navegador en esta sesión, las operaciones Enzonic se realizaron por el propietario con comandos revisados y salidas de consola. SQLite histórica, persistencia y ensayo remoto H-03 ya tienen resultados positivos; no repetir el recuperador ni reemplazar la base. La bandera Enzonic se habilitó después del ensayo; el bot permanece detenido hasta completar las comprobaciones previas.

@@ -1,13 +1,28 @@
 # Migración de El Heraldo Test a Enzonic — 29/10/2026
 
-**Estado actual: SQLite histórica restaurada y ensayo H-03 real verificado;
-Discord y aceptación final PENDIENTES.** Base auditada:
+**Estado actual: SQLite histórica restaurada, ensayo H-03 real verificado,
+Gateway Enzonic conectado; aceptación interactiva y reinicio final PENDIENTES.** Base auditada:
 `Pruebas@5850def8f2f40619348e6eaddd3be3427ebb5456`; preparación desplegada por
-fast-forward a `d52686f`. El bot continúa detenido en mantenimiento.
+fast-forward a `d52686f`, seguido de la corrección de tests `92867b6`.
 `main`, servicio oficial, volumen, variables, datos y respaldos de producción no
 se modificaron. No se eliminó ningún recurso de Railway.
 
 ## Continuación operativa comprobada
+
+**Último punto de control:** el propietario aportó 35 pruebas correctas sobre
+`92867b6` y el arranque normal `python3 bot.py`: Gateway conectado, autoprueba
+de construcción `/setup` correcta, tres vistas históricas recuperadas y H-03
+programado a 06:15 UTC. Por conector se confirmó el retiro posterior de ambos
+servicios Railway Test, sin cambios pendientes y con los dos volúmenes antiguos
+conservados y desconectados. No se ha autorizado borrar esos volúmenes.
+
+La revisión en segundo plano de `/setup` ejecutó 207 tests aislados sobre ese
+código: 206 correctos y el fallo heredado de auditoría de literales ya conocido.
+El intento REST desde este entorno devolvió HTTP 401; no se rotaron secretos ni
+se abrió otra conexión Gateway. No hay acceso al proceso Enzonic para ejecutar
+allí interacciones. Siguen pendientes los clics reales, footer visible, reinicio
+del bot conectado y primer respaldo programado. Los párrafos siguientes relatan
+las etapas anteriores; no volver a restaurar ni mantener el comando temporal.
 
 El propietario autorizó Google y accedió al panel; al no disponer esta sesión de
 control del navegador, ejecutó los comandos revisados y aportó sus salidas.
