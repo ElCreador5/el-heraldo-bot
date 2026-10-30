@@ -10587,66 +10587,154 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
             await interaction.response.send_message(_t('text.ba197b2069f756'), ephemeral=True)
             return
         self.parent.pending.update(report_reminder_interval=interval, report_reminder_start=start, report_reminder_frequency="custom")
+        self.parent._refresh_controls()
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
 
 
 class ReportReminderSetupView(discord.ui.View):
-    FREQUENCIES = {"daily": _t('text.ffa5b3464a52f5'), "weekly": _t('text.01ab23786167d1'), "fortnightly": _t('text.3c1f686b4ecb2f'),
+    """Editor de recordatorios: borrador separado de activación inmediata."""
+    FREQUENCIES = {"daily": _t('text.ffa5b3464a52f5'), "weekly": _t('text.01ab23786167d1'),
+                   "fortnightly": _t('text.3c1f686b4ecb2f'),
                    "monthly": _t('text.acacad0708eeed'), "custom": _t('text.4290938ed5e690')}
+
     @_i18n_context
     def __init__(self, guild_id, owner_id):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.original = reminder_settings(guild_id)
+        self.original_raw = {key: guild_config_get(guild_id, key) for key in self.original}
         self.pending = dict(self.original)
+        self.selectors = {}
+        self.weekday_names = (_t('text.d0e80862185ff7'), _t('text.fff8867b824e73'),
+                              _t('text.0635bc16ddbe4c'), _t('text.ca7b8cbccb8fd8'),
+                              _t('text.7e9a9f126f1f58'), _t('text.f7a8575b1a8fe0'),
+                              _t('text.424e93aa513406'))
         menus = [
-            ("report_reminder_frequency", 0, [(key, value) for key, value in self.FREQUENCIES.items()]),
-            ("report_reminder_day", 1, [(str(i), name) for i, name in enumerate((_t('text.d0e80862185ff7'), _t('text.fff8867b824e73'), _t('text.0635bc16ddbe4c'), _t('text.ca7b8cbccb8fd8'), _t('text.7e9a9f126f1f58'), _t('text.f7a8575b1a8fe0'), _t('text.424e93aa513406')))]),
+            ("report_reminder_frequency", 0, list(self.FREQUENCIES.items())),
+            ("report_reminder_day", 1, [(str(i), label) for i, label in enumerate(self.weekday_names)]),
             ("report_reminder_hour", 2, [(str(i), f"{i:02d}:00") for i in range(24)]),
         ]
+        placeholders = {
+            "report_reminder_frequency": _t('text.e1867c7f9bb33f'),
+            "report_reminder_day": _t('text.443602a5f76f49'),
+            "report_reminder_hour": _t('text.a956c649a226cc'),
+        }
         for field, row, options in menus:
-            select = discord.ui.Select(placeholder={"report_reminder_frequency": _t('text.e1867c7f9bb33f'),
-                "report_reminder_day": _t('text.443602a5f76f49'), "report_reminder_hour": _t('text.a956c649a226cc')}[field],
-                row=row, options=[discord.SelectOption(label=label, value=value, default=value == self.pending[field]) for value, label in options])
+            select = discord.ui.Select(
+                placeholder=placeholders[field], row=row,
+                options=[discord.SelectOption(label=label, value=value,
+                           default=value == self.pending[field]) for value, label in options],
+            )
+
             @_i18n_context
             async def change(interaction, name=field, control=select):
                 value = (interaction.data or {}).get("values", [None])[0]
-                valid = set(dict(next(o for k, _r, o in menus if k == name)))
-                if value not in valid:
-                    await interaction.response.send_message(_t('text.a7c68929bd9fe8'), ephemeral=True)
+                if value not in {item.value for item in control.options}:
+                    await interaction.response.edit_message(
+                        content=self.summary(_t('text.a7c68929bd9fe8')), view=self)
+                    return
+                if name == "report_reminder_frequency" and value == "custom":
+                    # Elegir «Personalizado» abre los parámetros reales del intervalo.
+                    await interaction.response.send_modal(ReportReminderOptionsModal(self))
                     return
                 self.pending[name] = value
-                for option in control.options:
-                    option.default = option.value == value
+                if name == "report_reminder_frequency" and value != "custom":
+                    # Un ancla oculta de otro modo no puede afectar la nueva frecuencia.
+                    self.pending["report_reminder_start"] = ""
+                self._refresh_controls()
                 await interaction.response.edit_message(content=self.summary(), view=self)
+
             select.callback = change
+            self.selectors[field] = select
             self.add_item(select)
-        channel = discord.ui.ChannelSelect(placeholder=_t('text.231c902172232f'), channel_types=[discord.ChannelType.text], row=3)
+        channel = discord.ui.ChannelSelect(
+            placeholder=_t('text.231c902172232f'),
+            channel_types=[discord.ChannelType.text], row=3,
+        )
         channel.callback = self.channel_changed
+        self.channel_select = channel
         self.add_item(channel)
+        self._refresh_controls()
 
     @_i18n_context
     async def interaction_check(self, interaction):
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
+    def _has_pending_changes(self):
+        return any(self.pending[key] != self.original[key]
+                   for key in self.pending if key != "report_reminder_enabled")
+
     @_i18n_context
-    def summary(self):
+    def _refresh_controls(self):
+        for field, select in self.selectors.items():
+            for option in select.options:
+                option.default = option.value == self.pending[field]
+        # El selector de día únicamente se utiliza en el modo semanal.
+        day_select = self.selectors["report_reminder_day"]
+        if self.pending["report_reminder_frequency"] == "weekly":
+            if day_select not in self.children:
+                self.add_item(day_select)
+        elif day_select in self.children:
+            self.remove_item(day_select)
+        channel_id = int(self.pending["report_reminder_channel"])
+        self.channel_select.default_values = (
+            [discord.SelectDefaultValue(id=channel_id, type=discord.SelectDefaultValueType.channel)]
+            if channel_id else []
+        )
+        enabled = self.original["report_reminder_enabled"] == "1"
+        self.toggle.label = _t('text.7ef1cd2d3486b2') if enabled else _t('text.8e38c2571d87f6')
+        self.toggle.style = discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
+        self.confirm.disabled = not self._has_pending_changes()
+
+    @_i18n_context
+    def summary(self, notice=""):
         p = self.pending
-        state = _t('text.0a0ca661486c7e') if p["report_reminder_enabled"] == "1" else _t('text.e252efe6974743')
-        return (_t('text.2e2c1ff499c328', p0=f'{REPORT_REMINDER_HELP}', p1=f'{state}', p2=f"{self.FREQUENCIES[p['report_reminder_frequency']]}", p3=f"{int(p['report_reminder_hour']):02d}", p4=f"{p['report_reminder_channel']}", p5=f'{format_configured_datetime(self.guild_id, reminder_next_due(p, datetime.now(timezone.utc)))}'))
+        frequency = p["report_reminder_frequency"]
+        detail = self.FREQUENCIES.get(frequency, frequency)
+        if frequency == "weekly":
+            detail += f" ({self.weekday_names[int(p['report_reminder_day'])]})"
+        elif frequency == "custom":
+            detail += f" ({p['report_reminder_interval']})"
+        channel_id = int(p["report_reminder_channel"])
+        channel = f"<#{channel_id}>" if channel_id else _t('text.3488019931bf2e')
+        now = datetime.now(timezone.utc)
+        due = None
+        if p == self.original:
+            signature = guild_config_get(self.guild_id, "report_reminder_signature")
+            saved = guild_config_get(self.guild_id, "report_reminder_next_due")
+            if saved and signature == json.dumps(p, sort_keys=True):
+                try:
+                    candidate = datetime.fromisoformat(saved)
+                    if candidate.tzinfo is not None and candidate > now:
+                        due = candidate
+                except ValueError:
+                    pass
+        if due is None:
+            due = reminder_next_due(p, now)
+        state = (_t('text.0a0ca661486c7e') if self.original["report_reminder_enabled"] == "1"
+                 else _t('text.e252efe6974743'))
+        content = _t('text.2e2c1ff499c328', p0=f'{REPORT_REMINDER_HELP}',
+                     p1=f'{state}', p2=f'{detail}',
+                     p3=f"{int(p['report_reminder_hour']):02d}", p4=f'{channel}',
+                     p5=f'{format_configured_datetime(self.guild_id, due)}')
+        return content + (f"\n\n{notice}" if notice else "")
 
     @_i18n_context
     async def channel_changed(self, interaction):
         values = (interaction.data or {}).get("values", [])
         channel = interaction.guild.get_channel(int(values[0])) if values else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(_t('text.41863cde0a5312'), ephemeral=True)
+            await interaction.response.edit_message(
+                content=self.summary(_t('text.41863cde0a5312')), view=self)
             return
-        perms = channel.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links):
-            await interaction.response.send_message(_t('text.000135b3cd2a46'), ephemeral=True)
+        me = interaction.guild.me
+        perms = channel.permissions_for(me) if me else None
+        if not perms or not (perms.view_channel and perms.send_messages and perms.embed_links):
+            await interaction.response.edit_message(
+                content=self.summary(_t('text.000135b3cd2a46')), view=self)
             return
         self.pending["report_reminder_channel"] = str(channel.id)
+        self._refresh_controls()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
     @discord.ui.button(label=_t('text.af283098bcccea'), style=discord.ButtonStyle.primary, row=4)
@@ -10659,34 +10747,74 @@ class ReportReminderSetupView(discord.ui.View):
     async def preview(self, interaction, button):
         await interaction.response.send_message(content=reminder_preview(self.guild_id), ephemeral=True)
 
-    @discord.ui.button(label=_t('text.0cfccadccb64bc'), style=discord.ButtonStyle.primary, row=4)
+    @discord.ui.button(label=_t('text.8e38c2571d87f6'), style=discord.ButtonStyle.success, row=4)
     @_i18n_context
     async def toggle(self, interaction, button):
-        self.pending["report_reminder_enabled"] = "0" if self.pending["report_reminder_enabled"] == "1" else "1"
+        # Activar/desactivar persiste únicamente el estado, jamás otros borradores.
+        enabled = self.original["report_reminder_enabled"] == "1"
+        if not enabled:
+            saved = reminder_settings(self.guild_id)
+            channel = interaction.guild.get_channel(int(saved["report_reminder_channel"]))
+            me = interaction.guild.me
+            perms = channel.permissions_for(me) if isinstance(channel, discord.TextChannel) and me else None
+            if not perms or not (perms.view_channel and perms.send_messages and perms.embed_links):
+                await interaction.response.edit_message(
+                    content=self.summary(_t('text.949b46403f79ae')), view=self)
+                return
+        next_state = "0" if enabled else "1"
+        if not verification_atomic_setup_save(
+            self.guild_id,
+            {"report_reminder_enabled": self.original_raw["report_reminder_enabled"]},
+            {"report_reminder_enabled": next_state},
+        ):
+            await interaction.response.edit_message(
+                content=self.summary(_t('text.b1b45910f213f2')), view=self)
+            return
+        self.original_raw["report_reminder_enabled"] = next_state
+        self.original["report_reminder_enabled"] = next_state
+        self.pending["report_reminder_enabled"] = next_state
+        self._refresh_controls()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label=_t('text.0c180627ae3f2b'), style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=4)
     @_i18n_context
     async def confirm(self, interaction, button):
-        if reminder_settings(self.guild_id) != self.original:
-            await interaction.response.send_message(_t('text.b1b45910f213f2'), ephemeral=True)
-            return
-        if self.pending["report_reminder_enabled"] == "1":
-            channel = interaction.guild.get_channel(int(self.pending["report_reminder_channel"]))
-            if not isinstance(channel, discord.TextChannel):
-                await interaction.response.send_message(_t('text.949b46403f79ae'), ephemeral=True)
-                return
-        changes = {k: v for k, v in self.pending.items() if v != self.original[k]}
+        # Guardar solo campos de programación; activar es una operación independiente.
+        changes = {k: v for k, v in self.pending.items()
+                   if k != "report_reminder_enabled" and v != self.original[k]}
         if not changes:
-            await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
+            await interaction.response.edit_message(
+                content=self.summary(_t('text.ed5c91affb2e42')), view=self)
             return
-        await confirm_configuration(interaction, self.guild_id, changes)
+        if self.original["report_reminder_enabled"] == "1":
+            channel = interaction.guild.get_channel(int(self.pending["report_reminder_channel"]))
+            me = interaction.guild.me
+            perms = channel.permissions_for(me) if isinstance(channel, discord.TextChannel) and me else None
+            if not perms or not (perms.view_channel and perms.send_messages and perms.embed_links):
+                await interaction.response.edit_message(
+                    content=self.summary(_t('text.000135b3cd2a46')), view=self)
+                return
+        if not verification_atomic_setup_save(
+            self.guild_id,
+            {key: self.original_raw[key] for key in changes},
+            changes,
+        ):
+            await interaction.response.edit_message(
+                content=self.summary(_t('text.b1b45910f213f2')), view=self)
+            return
+        self.original = reminder_settings(self.guild_id)
+        self.original_raw = {key: guild_config_get(self.guild_id, key) for key in self.original}
+        self.pending = dict(self.original)
+        self._refresh_controls()
+        await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger, row=4)
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=4)
     @_i18n_context
     async def cancel(self, interaction, button):
+        # Volver descarta el borrador sin generar otro mensaje.
         self.stop()
-        await interaction.response.edit_message(content=_t('text.5f333b254e5329'), view=None)
+        parent = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=parent._content(interaction.guild), view=parent)
 
 
 def reminder_next_due(settings, now):
