@@ -707,7 +707,7 @@
   "text.2de621923133d5": "Duration not allowed.",
   "text.2e1e396c157975": "Error: I do not have permission to send messages or embeds to {p0}.",
   "text.2e2946769ed603": "Sanction or warning from a moderation reaction.",
-  "text.2e2c1ff499c328": "**Report reminders**\n\n{p0}\n\n**Proposed state:** {p1}\n**Frequency:** {p2}\n**Time:** {p3}:00 (Santo Domingo)\n**Channel:** <#{p4}>\nCustom: 1d–365d or equivalent; Test also allows 30s, 2m, or 1h. Only administrative confirmation saves these changes.\n**Estimated next publication:** {p5}",
+  "text.2e2c1ff499c328": "**Report reminders**\n\n{p0}\n\n**Saved state:** {p1}\n**Frequency:** {p2}\n**Time:** {p3}:00 (Santo Domingo)\n**Channel:** {p4}\nSelectors edit a draft. “Save changes” saves the schedule; “Enable/Disable” immediately changes only the enabled state. “Customize” supports intervals from 1d–365d, or from 10s in Test.\n**Estimated next publication:** {p5}",
   "text.2e2ea18f980de9": "Warning: Private conversation pending",
   "text.2eaaf547035da1": "Delete the messages the sanctioned sent since they entered.",
   "text.2eb03796ac8a31": "**Unsaved draft.** Press **{p0}** to review the settings before confirming. Cancel discards the draft.",
