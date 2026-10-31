@@ -3834,7 +3834,127 @@ async def configuration_access(interaction, guild_id=None, owner_id=None) -> boo
     return valid
 
 
-class HeraldoChannelSetupView(discord.ui.View):
+
+def _setup_has_unsaved_changes(view: discord.ui.View) -> bool:
+    """Compara el borrador con los valores efectivos: seleccionar lo mismo no es cambio."""
+    kind = type(view).__name__
+    guild_id = getattr(view, "guild_id", None)
+
+    def changed(name: str, current) -> bool:
+        value = getattr(view, name, None)
+        return value is not None and value != current
+
+    if kind == "HeraldoHoneypotDraftSubView":
+        return _setup_has_unsaved_changes(view.parent)
+    if hasattr(view, "_has_pending_changes"):
+        return bool(view._has_pending_changes())
+    if kind == "HeraldoChannelSetupView":
+        return any(value != get_guild_channel_id(guild_id, key)
+                   for key, value in view.pending_channels.items())
+    if kind == "HeraldoRoleSetupView":
+        return any(value != get_guild_role_id(guild_id, key)
+                   for key, value in view.pending_roles.items())
+    if kind == "HeraldoJoinRolesBasicView":
+        return any((
+            changed("pending_role_ids", get_join_role_ids(guild_id)),
+            changed("pending_screening", join_roles_wait_screening(guild_id)),
+            changed("pending_enabled", join_roles_enabled(guild_id)),
+            changed("pending_delay", get_join_roles_delay(guild_id)),
+        ))
+    if kind == "HeraldoJoinRolesUsersView":
+        return changed("pending_remove_after", join_roles_remove_specific_after_join(guild_id))
+    if kind == "HeraldoJoinRolesBotsView":
+        return any((
+            changed("pending_role_ids", get_join_bot_role_ids(guild_id)),
+            changed("pending_enabled", join_roles_bot_enabled(guild_id)),
+            changed("pending_delay", join_roles_bot_apply_delay(guild_id)),
+            changed("pending_different", join_roles_bot_use_different(guild_id)),
+        ))
+    if kind == "HeraldoJoinRolesSyncView":
+        return changed("pending_excluded", get_join_sync_excluded_role_ids(guild_id))
+    if kind == "HeraldoOrientationSetupView":
+        return any((
+            changed("pending_channel_id", get_orientation_channel_id(guild_id)),
+            changed("pending_bindings", get_orientation_bindings(guild_id)),
+            changed("pending_enabled", orientation_enabled(guild_id)),
+            changed("pending_required", personality_required(guild_id)),
+            changed("pending_allow_change", personality_allow_change(guild_id)),
+            changed("pending_dm_template", guild_config_get(guild_id, "personality_recovery_dm_template")),
+        ))
+    if kind == "HeraldoMotwSetupView":
+        return changed("pending_channel_id", get_motw_channel_id(guild_id))
+    if kind == "HeraldoHoneypotSetupView":
+        return any((
+            view.pending_trap_id is not None and view.pending_trap_id not in hp_traps(guild_id),
+            changed("pending_enabled", honeypot_enabled(guild_id)),
+            changed("pending_paused", honeypot_paused(guild_id)),
+            changed("pending_action", hp_action(guild_id)),
+            changed("pending_kick_purge_minutes", hp_kick_purge_minutes(guild_id)),
+            changed("pending_ban_minutes", hp_ban_duration_minutes(guild_id)),
+            changed("pending_timeout_minutes", hp_timeout_minutes(guild_id)),
+            changed("pending_purge_spec", hp_purge_spec(guild_id)),
+        ))
+    if kind == "HeraldoVerificationSetupView":
+        return any((
+            changed("pending_role_id", get_verify_role_id(guild_id)),
+            changed("pending_sin_role_id", get_guild_role_id(guild_id, "sin_verificar")),
+            changed("pending_channel_id", get_guild_channel_id(guild_id, "verification")),
+            changed("pending_enabled", verify_enabled(guild_id)),
+        ))
+    if kind == "HeraldoRaidDetectionView":
+        return view.draft != view.original
+    if kind == "HeraldoRaidSetupView":
+        return any((
+            changed("pending_action", raid_action(guild_id)),
+            changed("pending_role_id", raid_ping_role_id(guild_id)),
+            changed("pending_enabled", raid_enabled(guild_id)),
+            changed("pending_invites", raid_lock_invites_enabled(guild_id)),
+            changed("pending_purge", raid_purge_enabled(guild_id)),
+        ))
+    if kind == "HeraldoCondemnationSetupView":
+        return any((
+            changed("pending_channel_id", condemnation_channel_id(guild_id)),
+            changed("pending_role_id", get_condenado_role_id(guild_id)),
+        ))
+    if kind == "HeraldoLoggingSetupView":
+        return changed("pending_channel_id", get_log_channel_id(guild_id))
+    if kind == "ExitCommentSetupView":
+        return changed("pending", exit_comments_enabled(guild_id))
+    if kind == "HeraldoMemberLogSetupView":
+        return any((
+            changed("pending_channel_id", log_member_channel_id(guild_id, view.event_key)),
+            changed("pending_enabled", log_member_event_enabled(guild_id, view.event_key)),
+        ))
+    if kind in {"HeraldoDateFormatSetupView", "HeraldoLanguageView"}:
+        return view.pending != view.original
+    return False
+
+
+class _SetupDirtySaveView(discord.ui.View):
+    """Sin guardado posible cuando el panel carece de modificaciones reales.
+
+    Discord vuelve a serializar el View al abrir, editar, guardar o descartar.
+    De ese modo todos los caminos (select, modal, subpanel y confirmación)
+    aplican la misma regla sin guardar automáticamente.
+    """
+
+    def to_components(self):
+        dirty = _setup_has_unsaved_changes(self)
+        for item in self.children:
+            if not isinstance(item, discord.ui.Button):
+                continue
+            callback = getattr(item, "callback", None)
+            callback = getattr(callback, "callback", callback)
+            action = getattr(callback, "__name__", "")
+            if (action in {"save", "save_changes"}
+                    or item.label == _t('text.14bdfaf2face3a')
+                    or (type(self).__name__ == "HeraldoDateFormatSetupView" and action == "confirm")
+                    or (type(self).__name__ == "ReportReminderSetupView" and action == "confirm")):
+                item.disabled = not dirty
+        return super().to_components()
+
+
+class HeraldoChannelSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -4061,7 +4181,7 @@ class HeraldoChannelSetupView(discord.ui.View):
 
 
 
-class HeraldoRoleSetupView(discord.ui.View):
+class HeraldoRoleSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -4307,7 +4427,7 @@ class JoinRolesScheduleModal(discord.ui.Modal, title=_t('text.ac9bede7647c35')):
         })
 
 
-class _JoinRolesOwnedView(discord.ui.View):
+class _JoinRolesOwnedView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -5002,7 +5122,7 @@ class PersonalityRecoveryDMModal(discord.ui.Modal, title=_t('text.a3a3af1be58616
         await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
 
 
-class HeraldoOrientationSetupView(discord.ui.View):
+class HeraldoOrientationSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -5559,7 +5679,7 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
         )
 
 
-class HeraldoMotwSetupView(discord.ui.View):
+class HeraldoMotwSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -5669,7 +5789,7 @@ class HeraldoMotwSetupView(discord.ui.View):
 
 
 
-class HeraldoHoneypotSetupView(discord.ui.View):
+class HeraldoHoneypotSetupView(_SetupDirtySaveView):
     """Selectores en borrador; Activar, Pausar y Reanudar guardan solo su estado."""
 
     @_i18n_context
@@ -6207,7 +6327,7 @@ class HoneypotRemovalSaveConfirmView(discord.ui.View):
         await self.parent._refresh(interaction, _t('text.59f4d07803b218'))
 
 
-class HeraldoHoneypotSubView(discord.ui.View):
+class HeraldoHoneypotSubView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, parent: HeraldoHoneypotSetupView) -> None:
         super().__init__(timeout=600)
@@ -6794,7 +6914,7 @@ def heraldo_permissions_summary(guild: discord.Guild) -> str:
 
 
 
-class HeraldoVerificationSetupView(discord.ui.View):
+class HeraldoVerificationSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -7334,7 +7454,7 @@ class HeraldoRaidCustomModal(discord.ui.Modal):
         await interaction.response.edit_message(content=self.editor.summary(), view=self.editor)
 
 
-class HeraldoRaidDetectionView(discord.ui.View):
+class HeraldoRaidDetectionView(_SetupDirtySaveView):
     """Dos páginas con borrador, perfiles orientativos y guardado explícito."""
 
     @_i18n_context
@@ -7506,7 +7626,7 @@ class HeraldoRaidDetectionView(discord.ui.View):
         await confirm_configuration(interaction, self.guild_id, changes)
 
 
-class HeraldoRaidSetupView(discord.ui.View):
+class HeraldoRaidSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -10397,7 +10517,7 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
 
 
-class ReportReminderSetupView(discord.ui.View):
+class ReportReminderSetupView(_SetupDirtySaveView):
     """Editor de recordatorios: borrador separado de activación inmediata."""
     FREQUENCIES = {"daily": _t('text.ffa5b3464a52f5'), "weekly": _t('text.01ab23786167d1'),
                    "fortnightly": _t('text.3c1f686b4ecb2f'),
@@ -10742,7 +10862,7 @@ async def before_report_reminders_loop():
     await bot.wait_until_ready()
 
 
-class HeraldoUserReportsSetupView(discord.ui.View):
+class HeraldoUserReportsSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -11264,7 +11384,7 @@ class CondemnationChannelAccessConfirmView(discord.ui.View):
             content=_t('text.a5b098518eee9f'), view=None)
 
 
-class HeraldoCondemnationSetupView(discord.ui.View):
+class HeraldoCondemnationSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -11742,7 +11862,7 @@ class HeraldoVerificationHubView(discord.ui.View):
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
-class HeraldoLoggingSetupView(discord.ui.View):
+class HeraldoLoggingSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
         super().__init__(timeout=900)
@@ -11885,7 +12005,7 @@ def log_member_channel_id(guild_id: int, event_key: str) -> int:
 
 
 
-class ExitCommentSetupView(discord.ui.View):
+class ExitCommentSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
         super().__init__(timeout=900)
@@ -11949,7 +12069,7 @@ class ExitCommentSetupView(discord.ui.View):
                                                 view=back_view)
 
 
-class HeraldoMemberLogSetupView(discord.ui.View):
+class HeraldoMemberLogSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
         super().__init__(timeout=900)
@@ -13051,7 +13171,7 @@ def format_configured_datetime(guild_id: int, dt: datetime) -> str:
     return local.strftime("%Y-%m-%d %H:%M")
 
 
-class HeraldoDateFormatSetupView(discord.ui.View):
+class HeraldoDateFormatSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
         super().__init__(timeout=900)
@@ -13144,7 +13264,7 @@ def language_panel_text(guild_id: int, selected: str | None = None) -> str:
     return text
 
 
-class HeraldoLanguageView(discord.ui.View):
+class HeraldoLanguageView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int, *, from_setup: bool = False):
         super().__init__(timeout=900)
