@@ -179,6 +179,8 @@ def render(data, stamp, guild):
     if not has_content(data):
         return None
     data = validate_data(data)
+    from channel_mentions import embed_channel_mentions
+    data = embed_channel_mentions(data, guild)
     embed = discord.Embed(
         title=data.get("title") or None,
         description=data.get("description") or None,
@@ -528,7 +530,7 @@ class EmbedBuilderView(discord.ui.View):
         channel = self.channels.values[0]
         if channel.guild.id != self.parent.guild_id:
             return await denied(interaction)
-        await self.add_token(interaction, channel.mention)
+        await self.add_token(interaction, f"{{#{channel.id}}}")
 
     @discord.ui.button(label=COPY["es-419"]["edit"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
