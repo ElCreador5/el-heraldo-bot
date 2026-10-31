@@ -1266,5 +1266,11 @@
     "scope": "TemplateEditorView.panel_embed",
     "text": " · Santo Domingo (UTC−4)",
     "reason": "Nombre fijo de zona horaria y desplazamiento UTC, compartido en los tres idiomas."
+  },
+  "90fb0de38b87c24eed99": {
+    "file": "autofeed_setup.py",
+    "scope": "",
+    "text": "ninguna",
+    "reason": "Identificador interno estable del esquema de recurrencia sin repetición; no se muestra al usuario ni se traduce."
   }
 }
