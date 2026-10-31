@@ -91,7 +91,7 @@ def has_unsaved_changes(view):
             return bool(view.name.strip() or view.text.strip()
                         or view.embed or view.extra_embeds)
         try:
-            return view.template() != view.original_template
+            return not view._is_saved()
         except ValueError:
             return bool(view.dirty)
     if name == "AutofeedEditorView":
@@ -99,10 +99,16 @@ def has_unsaved_changes(view):
             return None  # «Enviar», no «Guardar cambios».
         saved = view.original
         try:
+            source = sys.modules.get(type(view).__module__)
+            presets = getattr(source, "PRESETS", {}) if source else {}
+            repeat = saved.get("repeat")
+            preset = {"diaria": "daily", "semanal": "weekly", "mensual": "monthly"}.get(repeat)
+            old_parts = (saved.get("repeat_parts") if repeat == "custom" else
+                         dict(presets[preset]) if preset in presets else None)
             values = (view.channel_id, view.role_id, view.text, view.embed,
                       view.start.isoformat() if view.start else None, view.parts)
             before = (saved.get("channel"), saved.get("role"), saved.get("text") or "",
-                      saved.get("embed"), saved.get("start"), saved.get("repeat_parts"))
+                      saved.get("embed"), saved.get("start"), old_parts)
             return values != before
         except (TypeError, AttributeError, ValueError):
             return bool(view.dirty)
