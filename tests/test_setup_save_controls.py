@@ -6,8 +6,8 @@ from types import SimpleNamespace as NS
 from setup_save_controls import refresh_save_button, has_unsaved_changes
 
 
-def panel(name, **fields):
-    cls = type(name, (), {})
+def panel(kind, **fields):
+    cls = type(kind, (), {})
     view = cls()
     view.children = [NS(label="Guardar cambios", disabled=False),
                      NS(label="Confirmar cambios", disabled=False),
