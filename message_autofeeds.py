@@ -220,13 +220,18 @@ def referenced_mentions(guild, job):
     display = "\n".join(pieces)
     role_ids = {int(value) for value in re.findall(r"<@&(\d{1,20})>", display)}
     channel_ids = {int(value) for value in re.findall(r"<#(\d{1,20})>", display)}
+    # También validar las referencias escritas con la variable oficial {#ID}.
+    channel_ids.update(
+        int(value) for value in re.findall(r"\{#([1-9]\d{0,19})\}", display)
+    )
     explicit = job.get("role")
     if explicit:
         role_ids.add(int(explicit))
     if len(role_ids) > 5 or len(channel_ids) > 15:
         raise ValueError("invalid")
     for channel_id in channel_ids:
-        if guild.get_channel(channel_id) is None:
+        if (guild.get_channel(channel_id) is None
+                and getattr(guild, "get_thread", lambda _id: None)(channel_id) is None):
             raise ValueError("invalid")
     roles = {}
     for role_id in role_ids:
