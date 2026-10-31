@@ -8306,6 +8306,12 @@ class DefaultMessageStudioView(discord.ui.View):
 
     @_i18n_context
     async def go_back(self, interaction: discord.Interaction) -> None:
+        if self.return_to == "suggestions_setup":
+            from suggestions_setup import SuggestionsSetupView
+            view = SuggestionsSetupView(globals(), self.guild_id, self.owner_id)
+            await interaction.response.edit_message(
+                content=view.summary(interaction.guild), embed=None, view=view)
+            return
         if self.return_to == "messages_setup":
             await interaction.response.edit_message(
                 content=heraldo_messages_setup_content(),
