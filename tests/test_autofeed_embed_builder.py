@@ -69,10 +69,13 @@ class EmbedBuilderTests(unittest.TestCase):
 
     def test_form_modal_separates_author_images_and_content(self):
         parent = setup.AutofeedEditorView(b.__dict__, 901, 10)
-        for section, count in (("main", 4), ("author", 3), ("media", 2)):
+        for section, count in (("main", 3), ("author", 3), ("media", 2)):
             with self.subTest(section=section):
                 self.assertEqual(len(builder.SectionModal(parent, section).children), count)
         self.assertEqual(len(builder.FieldModal(parent).children), 3)
+        main = builder.SectionModal(parent, "main")
+        self.assertNotIn("url", main.inputs)
+        self.assertIn("Guardar", main.title)
 
     def test_parent_editor_uses_new_builder_and_persists_only_on_confirmation(self):
         parent = setup.AutofeedEditorView(b.__dict__, 901, 10)
