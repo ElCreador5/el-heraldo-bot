@@ -221,9 +221,13 @@ def update(parent, data):
 
 async def redraw(interaction, parent, section):
     next_view = EmbedBuilderView(parent, section=section)
-    await interaction.response.edit_message(
-        content=next_view.summary(), embed=next_view.preview_embed(interaction.guild),
-        view=next_view, allowed_mentions=discord.AllowedMentions.none())
+    payload = dict(content=next_view.summary(),
+                   embed=next_view.preview_embed(interaction.guild),
+                   view=next_view, allowed_mentions=discord.AllowedMentions.none())
+    if interaction.response.is_done():
+        await interaction.edit_original_response(**payload)
+    else:
+        await interaction.response.edit_message(**payload)
 
 
 class SectionModal(discord.ui.Modal):
@@ -261,6 +265,9 @@ class SectionModal(discord.ui.Modal):
     async def on_submit(self, interaction):
         if not owner(interaction, self.parent):
             return await denied(interaction)
+        # ACK modal submission immediately before any rendering or validation;
+        # ephemeral native panels can otherwise display "interaction expired".
+        await interaction.response.defer()
         data = dict(self.parent.embed or {})
         values = {key: str(input_field).strip() for key, input_field in self.inputs.items()}
         if self.section == "main":
@@ -277,8 +284,7 @@ class SectionModal(discord.ui.Modal):
         try:
             update(self.parent, data)
         except ValueError:
-            from message_autofeeds import respond_error
-            return await respond_error(interaction, "invalid")
+            return await interaction.followup.send(t("invalid"), ephemeral=True)
         await redraw(interaction, self.parent, self.section)
 
 
