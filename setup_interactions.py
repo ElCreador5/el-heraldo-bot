@@ -13,6 +13,8 @@ from functools import wraps
 import inspect
 import time
 
+from setup_save_controls import refresh_save_button
+
 
 ACK_KEY = "heraldo_setup_deferred"
 STARTED_KEY = "heraldo_view_started"
@@ -102,10 +104,13 @@ def install(discord):
     original_send = discord.InteractionResponse.send_message
     original_edit = discord.InteractionResponse.edit_message
     original_defer = discord.InteractionResponse.defer
+    original_original_edit = discord.Interaction.edit_original_response
+    original_message_edit = discord.Message.edit
     original_error = discord.ui.View.on_error
 
     @wraps(original_send)
     async def send(response, *args, **kwargs):
+        refresh_save_button(kwargs.get("view"))
         interaction = response._parent
         if interaction.extras.get(ACK_KEY) and response.is_done():
             return await interaction.followup.send(*args, **kwargs)
@@ -113,10 +118,21 @@ def install(discord):
 
     @wraps(original_edit)
     async def edit(response, **kwargs):
+        refresh_save_button(kwargs.get("view"))
         interaction = response._parent
         if interaction.extras.get(ACK_KEY) and response.is_done():
             return await interaction.edit_original_response(**kwargs)
         return await original_edit(response, **kwargs)
+
+    @wraps(original_original_edit)
+    async def edit_original(interaction, **kwargs):
+        refresh_save_button(kwargs.get("view"))
+        return await original_original_edit(interaction, **kwargs)
+
+    @wraps(original_message_edit)
+    async def message_edit(message, **kwargs):
+        refresh_save_button(kwargs.get("view"))
+        return await original_message_edit(message, **kwargs)
 
     @wraps(original_defer)
     async def defer(response, **kwargs):
@@ -211,6 +227,8 @@ def install(discord):
     discord.InteractionResponse.send_message = send
     discord.InteractionResponse.edit_message = edit
     discord.InteractionResponse.defer = defer
+    discord.Interaction.edit_original_response = edit_original
+    discord.Message.edit = message_edit
     discord.ui.View._scheduled_task = contextual_scheduled
     discord.ui.Modal._scheduled_task = modal_scheduled
     discord.ui.View.on_error = on_error
