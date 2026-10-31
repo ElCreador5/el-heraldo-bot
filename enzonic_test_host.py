@@ -101,7 +101,7 @@ def _git_blob_sha(path, size):
             or size < 0 or size > 32 * 1024 * 1024 or path.stat().st_size != size):
         blocked("enzonic_checkout_unverified")
     digest = hashlib.sha1()
-    digest.update(f"blob {size}\\0".encode("ascii"))
+    digest.update(f"blob {size}\0".encode("ascii"))
     try:
         with path.open("rb") as stream:
             while chunk := stream.read(128 * 1024):
@@ -139,7 +139,7 @@ def _verified_github_deployment():
         name, sha, size = item.get("path"), item.get("sha"), item.get("size")
         if (item.get("type") != "blob" or item.get("mode") not in ("100644", "100755")
                 or not isinstance(name, str) or not name or name.startswith("/")
-                or "\\\\" in name or ".." in Path(name).parts or name == ".git"
+                or "\\" in name or ".." in Path(name).parts or name == ".git"
                 or name.startswith(".git/") or name in tracked
                 or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha)
                 or type(size) is not int or size < 0):
