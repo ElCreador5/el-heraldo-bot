@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import sys
 
-SAVE_LABELS = {"Guardar cambios", "Save changes", "Salvar alterações"}
 # Las variantes del catálogo son traducibles sin depender del idioma del usuario.
 SUPPORTED = {
     "HeraldoChannelSetupView", "HeraldoRoleSetupView",
@@ -162,11 +161,8 @@ def refresh_save_button(view):
     pending = has_unsaved_changes(view)
     if pending is None:
         return None
-    try:
-        from heraldo_i18n import variants
-        labels = SAVE_LABELS | set(variants("text.14bdfaf2face3a"))
-    except (ImportError, KeyError, TypeError):
-        labels = SAVE_LABELS
+    from heraldo_i18n import variants
+    labels = set(variants("text.14bdfaf2face3a"))
     for item in view.children:
         if getattr(item, "label", None) in labels:
             item.disabled = not pending
