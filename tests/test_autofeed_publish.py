@@ -49,6 +49,30 @@ class MessageCreateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["allowed_mentions"].roles, [self.role])
         self.assertEqual(payload["embeds"][0].footer.text, "El Heraldo's Labs 🧪")
 
+    async def test_nonpublic_role_is_allowed_only_with_bot_mention_permission(self):
+        self.role.mentionable = False
+        self.guild.get_channel = lambda value: self.channel if value == 4321 else None
+        job = {"text": "Hola", "role": self.role.id, "channel": 4321,
+               "embed": {"title": "Aviso"}}
+        self.channel.permissions_for.return_value = discord.Permissions(
+            view_channel=True, send_messages=True, embed_links=True,
+            mention_everyone=True)
+        await message_publish.publish_message(self.host, self.guild, self.channel, job)
+        sent = self.channel.send.call_args.kwargs
+        self.assertIn(self.role.mention, sent["content"])
+        self.assertEqual(sent["allowed_mentions"].roles, [self.role])
+
+    async def test_nonpublic_role_without_bot_permission_is_rejected(self):
+        self.role.mentionable = False
+        self.guild.get_channel = lambda value: self.channel if value == 4321 else None
+        job = {"text": "Hola", "role": self.role.id, "channel": 4321,
+               "embed": {"title": "Aviso"}}
+        self.channel.permissions_for.return_value = discord.Permissions(
+            view_channel=True, send_messages=True, embed_links=True)
+        with self.assertRaises(ValueError):
+            await message_publish.publish_message(self.host, self.guild, self.channel, job)
+        self.channel.send.assert_not_awaited()
+
     async def test_does_not_double_append_alert_role(self):
         job = {"text": "Hola " + self.role.mention, "role": self.role.id, "embed": None}
         await message_publish.publish_message(self.host, self.guild, self.channel, job)
