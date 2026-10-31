@@ -64,6 +64,19 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(setup.FrequencyPickerView(editor), b.discord.ui.View)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
+    def test_compact_announcement_layout_never_overflows_discord(self):
+        editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
+        width = {row: 0 for row in range(5)}
+        for item in editor.children:
+            weight = 5 if isinstance(item, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect)) else 1
+            width[item.row] += weight
+        self.assertEqual(width, {0: 5, 1: 5, 2: 3, 3: 3, 4: 1})
+        self.assertEqual(editor.frequency.row, 2)
+        self.assertEqual(editor.save.row, 3)
+        self.assertEqual(editor.publish_button.row, 3)
+        self.assertTrue(editor.save.disabled)
+        self.assertTrue(editor.discard.disabled)
+
     def interaction(self):
         return NS(
             guild=NS(id=self.guild_id),
@@ -85,6 +98,7 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         modal = i.response.send_modal.call_args.args[0]
         self.assertIsInstance(modal, SectionModal)
         self.assertEqual(modal.section, "main")
+        self.assertTrue(modal.return_to_editor)
         self.assertEqual(len(modal.children), 3)
         self.assertIn("Guardar", modal.title)
         self.assertNotIn("url", modal.inputs)
