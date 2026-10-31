@@ -1,3 +1,7 @@
+## 2026-10-31 — Retirar Componentes y Kits, preservar Plantillas
+
+El propietario solicita suprimir los módulos independientes **Componentes** y **Kits** de `Pruebas`, y de `main` únicamente si existen. La inspección confirma que `main` no ofrece dichos módulos. En `Pruebas` se retiran menú, vistas, confirmaciones exclusivas y `/importkit`. No borrar ni migrar configuraciones guardadas ni invalidar componentes de roles incluidos en plantillas y mensajes ya publicados; esa compatibilidad pertenece al editor/motor de Plantillas, no a un módulo autónomo. La retirada requiere regresión del menú y revisión de comandos.
+
 ## 2026-10-31 — Recuperación de arranque Enzonic ante HTTP 403 de GitHub
 
 **Incidencia observada:** el bot Lab cae en `before_discord → revision → _verified_github_deployment` con `HTTP Error 403: rate limit exceeded`, y termina en `BackupJobError: enzonic_checkout_unverified`. La protección falla de forma segura pero impide iniciar el servicio, sin evidencia de problemas de RAM ni de SQLite.

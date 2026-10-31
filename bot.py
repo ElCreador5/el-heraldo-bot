@@ -9178,8 +9178,6 @@ class HeraldoMessageConfirmView(discord.ui.View):
             if isinstance(child, discord.ui.Button) and child.label in _i18n_variants('text.14bdfaf2face3a') and operation == "delete":
                 child.label = _t('text.b4bb6c6db58f7c')
                 child.style = discord.ButtonStyle.danger
-            elif isinstance(child, discord.ui.Button) and child.label in _i18n_variants('text.14bdfaf2face3a') and operation == "kit":
-                child.label = _t('text.ec61c0c95ffcf9')
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -9244,30 +9242,6 @@ class HeraldoMessageConfirmView(discord.ui.View):
                     await interaction.response.send_message(_t('text.5fd94525f251ae', p0=f'{exc}'), ephemeral=True)
                     return
             heraldo_template_save(self.guild_id, items)
-        elif op == "component":
-            components = heraldo_message_role_config(self.guild_id)
-            item = payload["item"]
-            role, me = interaction.guild.get_role(item["role_id"]), interaction.guild.me
-            if not role or not me or role.is_default() or role.managed or role >= me.top_role or not me.guild_permissions.manage_roles or not self_service_role_safe(role):
-                await interaction.response.send_message(_t('text.122287d27b6d16'), ephemeral=True)
-                return
-            if len(components) >= 20 or any(x["label"].casefold() == item["label"].casefold() for x in components):
-                await interaction.response.send_message(_t('text.baaa90565f63be'), ephemeral=True)
-                return
-            components.append(item)
-            guild_config_set(self.guild_id, "message_role_components", json.dumps(components, ensure_ascii=False))
-        elif op == "kit":
-            items = heraldo_template_list(self.guild_id)
-            new = payload["items"]
-            names = {x["name"].casefold() for x in items}
-            if payload.get("replace"):
-                incoming_names = {x["name"].casefold() for x in new}
-                items = [x for x in items if x['name'].casefold() not in incoming_names]
-                names = {x['name'].casefold() for x in items}
-            if len(items) + len(new) > 25 or any(t["name"].casefold() in names for t in new):
-                await interaction.response.send_message(_t('text.87338f40f19f1b'), ephemeral=True)
-                return
-            heraldo_template_save(self.guild_id, items + new)
         else:
             await interaction.response.send_message(_t('text.4168f28be3e8d7'), ephemeral=True)
             return
@@ -9611,7 +9585,7 @@ class HeraldoTemplateSetupView(discord.ui.View):
 
 
 
-# Componentes de mensajes: gestión persistente de roles con comprobación de jerarquías.
+# Compatibilidad de roles de mensajes publicados previamente; sin módulo independiente.
 @_i18n_context
 def heraldo_message_role_config(guild_id: int) -> list[dict]:
     try:
@@ -9619,78 +9593,6 @@ def heraldo_message_role_config(guild_id: int) -> list[dict]:
     except (TypeError, ValueError):
         return []
     return [x for x in data if isinstance(x, dict) and x.get("role_id") and x.get("label")][:20] if isinstance(data, list) else []
-
-
-class HeraldoMessageRoleModal(discord.ui.Modal, title=_t('text.63bedeb36a72bc')):
-    label_text = discord.ui.TextInput(label=_t('text.14fa6745ea2b4e'), max_length=70)
-    role_text = discord.ui.TextInput(label=_t('text.615c174296b31c'), max_length=22)
-    action_text = discord.ui.TextInput(label=_t('text.9439a1ab629445'), default=_t("input.toggle"), max_length=12)
-
-    @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int):
-        super().__init__()
-        self.guild_id, self.owner_id = guild_id, owner_id
-
-    @_i18n_context
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.82cc43e419dbbd'), ephemeral=True)
-            return
-        label = str(self.label_text).strip()
-        raw_id = str(self.role_text).strip()
-        action = i18n.canonical_fixed(str(self.action_text).strip().casefold())
-        if not raw_id.isdecimal() or action not in {"añadir", "quitar", "alternar"}:
-            await interaction.response.send_message(_t('text.6358b9f81fe1db'), ephemeral=True)
-            return
-        role = interaction.guild.get_role(int(raw_id))
-        me = interaction.guild.me
-        if not role or role.is_default() or role.managed or not me or role >= me.top_role:
-            await interaction.response.send_message(_t('text.a0e7ffa13d846c'), ephemeral=True)
-            return
-        components = heraldo_message_role_config(self.guild_id)
-        if len(components) >= 20:
-            await interaction.response.send_message(_t('text.b19f74366283ab'), ephemeral=True)
-            return
-        if any(x["label"].casefold() == label.casefold() for x in components):
-            await interaction.response.send_message(_t('text.bf06e737769c2c'), ephemeral=True)
-            return
-        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
-            "component", {"item": {"label": label, "role_id": role.id, "action": action}},
-            _t('text.088568e387f846') + discord.utils.escape_markdown(label) + _t('text.39f13e6e6557de') + action + "** pendientes.")
-
-
-class HeraldoMessageComponentsSetupView(discord.ui.View):
-    @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int):
-        super().__init__(timeout=900)
-        self.guild_id, self.owner_id = guild_id, owner_id
-
-    @_i18n_context
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
-            return False
-        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.59c523a3d76a05'), ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label=_t('text.4c117aad334f4e'), style=discord.ButtonStyle.primary)
-    @_i18n_context
-    async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(HeraldoMessageRoleModal(self.guild_id, self.owner_id))
-
-    @discord.ui.button(label=_t('text.86016c201b9290'), style=discord.ButtonStyle.secondary)
-    @_i18n_context
-    async def list_components(self, interaction: discord.Interaction, button: discord.ui.Button):
-        items = heraldo_message_role_config(self.guild_id)
-        lines = [f"**{discord.utils.escape_markdown(x['label'])}** · <@&{x['role_id']}> · {i18n.fixed_label(x.get('action', 'alternar'))}" for x in items]
-        await interaction.response.send_message(_i18n_join("\n", lines)[:1900] if lines else _t('text.a279ab82b21808'), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
-
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary)
-    @_i18n_context
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content=heraldo_messages_setup_content(), embed=None,
-                                                view=HeraldoMessagesSetupView(self.guild_id, self.owner_id))
 
 
 class HeraldoAttachRoleModal(discord.ui.Modal, title=_t('text.1ed3751ee0b8b7')):
@@ -9883,79 +9785,6 @@ async def heraldo_expired_panel_reply(interaction: discord.Interaction):
 
 
 
-class HeraldoMessageKitImportModal(discord.ui.Modal, title=_t('text.0ed31384410410')):
-    payload = discord.ui.TextInput(label=_t('text.1746ff06bed392'), style=discord.TextStyle.paragraph, max_length=4000)
-
-    @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int):
-        super().__init__()
-        self.guild_id, self.owner_id = guild_id, owner_id
-
-    @_i18n_context
-    async def on_submit(self, interaction: discord.Interaction):
-        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.82cc43e419dbbd'), ephemeral=True)
-            return
-        try:
-            data = json.loads(str(self.payload))
-            cleaned = message_payload.import_kit(data)
-        except (ValueError, TypeError, KeyError):
-            await interaction.response.send_message(_t('text.ad4a39377a409d'), ephemeral=True)
-            return
-        current = heraldo_template_list(self.guild_id)
-        existing = {x["name"].casefold() for x in current}
-        duplicates = [x["name"] for x in cleaned if x["name"].casefold() in existing]
-        if duplicates:
-            await interaction.response.send_message(
-                _t('text.f9d8ea6c28a138'),
-                ephemeral=True,
-            )
-            return
-        if len(current) + len(cleaned) > 25:
-            await interaction.response.send_message(_t('text.610a7f60eb0179'), ephemeral=True)
-            return
-        await heraldo_message_request_confirmation(interaction, self.guild_id, self.owner_id,
-            "kit", {"items": cleaned},
-            _t('text.1b4376ad840926', p0=f'{len(cleaned)}'))
-
-
-class HeraldoMessageKitsView(discord.ui.View):
-    @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int):
-        super().__init__(timeout=900)
-        self.guild_id, self.owner_id = guild_id, owner_id
-
-    @_i18n_context
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
-            return False
-        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.321291a0c8ce78'), ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label=_t('text.789de2ba07118f'), style=discord.ButtonStyle.primary)
-    @_i18n_context
-    async def export(self, interaction: discord.Interaction, button: discord.ui.Button):
-        templates = heraldo_template_list(self.guild_id)
-        safe = [{k: v for k, v in t.items() if k in message_payload.VISUAL_KEYS | {"name"}} for t in templates]
-        content = json.dumps({"version": 2, "templates": safe}, ensure_ascii=False, indent=2).encode("utf-8")
-        await interaction.response.send_message(
-            _t('text.9f211b49cc2926'),
-            file=discord.File(io.BytesIO(content), filename="heraldo-message-kit.json"), ephemeral=True)
-
-    @discord.ui.button(label=_t('text.fbbdbd152b0e11'), style=discord.ButtonStyle.primary)
-    @_i18n_context
-    async def import_kit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(HeraldoMessageKitImportModal(self.guild_id, self.owner_id))
-
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary)
-    @_i18n_context
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content=heraldo_messages_setup_content(), embed=None,
-                                                view=HeraldoMessagesSetupView(self.guild_id, self.owner_id))
-
-
 class HeraldoMessagesSetupView(discord.ui.View):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
@@ -9974,11 +9803,9 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label="Honeypot", value="honeypot", description=_t('text.9799c0b54380f6')),
                 discord.SelectOption(label="Logs", value="logs", description=_t('text.bcd7436a95303e')),
                 discord.SelectOption(label=_t('text.f4ea025e8c2221'), value="templates", description=_t('text.685b989ce71932')),
-                discord.SelectOption(label=_t('text.b0018aa1b6e0d7'), value="components", description=_t('text.bd22abbadb4287')),
                 discord.SelectOption(label=_t('text.e737a4c8b2906d'), value="autoresponses", description=_t('text.92f32ae5db8fd6')),
                 discord.SelectOption(label=_t('text.8747176853dbc2'), value="sticky", description=_t('text.cb3465ca4819e5')),
                 discord.SelectOption(label=_t('text.45808d75bf8911'), value="webhooks", description=_t('text.df564bfe3231e6')),
-                discord.SelectOption(label=_t('text.299efd75adc002'), value="kits", description=_t('text.edfc400b4aa520')),
             ],
             row=0,
         )
@@ -10018,16 +9845,6 @@ class HeraldoMessagesSetupView(discord.ui.View):
             await interaction.response.send_message(
                 _t('text.1438403c6cd256'),
                 ephemeral=True)
-            return
-
-        if selected == "kits":
-            await interaction.response.edit_message(content=_t('text.eee9dd399821cc'), embed=None,
-                view=HeraldoMessageKitsView(self.guild_id, self.owner_id))
-            return
-
-        if selected == "components":
-            await interaction.response.edit_message(content=_t('text.4514c576adb2d9'), embed=None,
-                view=HeraldoMessageComponentsSetupView(self.guild_id, self.owner_id))
             return
 
         if selected == "templates":
@@ -10100,8 +9917,6 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
         ("HeraldoTemplateSetupView", lambda: HeraldoTemplateSetupView(guild_id, 0)),
-        ("HeraldoMessageComponentsSetupView", lambda: HeraldoMessageComponentsSetupView(guild_id, 0)),
-        ("HeraldoMessageKitsView", lambda: HeraldoMessageKitsView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
         ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
@@ -13573,41 +13388,6 @@ class HeraldoSetupView(discord.ui.View):
         await interaction.response.edit_message(content=_t('text.83e4a94cefc9df'), view=None)
 
 
-
-
-@bot.tree.command(name="importkit", description="Importa un archivo JSON de plantillas con revisión y confirmación.")
-@app_commands.default_permissions(manage_guild=True)
-@app_commands.guild_only()
-@_i18n_context
-async def heraldo_importkit(interaction: discord.Interaction, archivo: discord.Attachment, reemplazar: bool = False):
-    if not await configuration_access(interaction):
-        return
-    if archivo.size > 131072 or not archivo.filename.lower().endswith('.json'):
-        await interaction.response.send_message(_t('text.5717bb2a3f6d78'), ephemeral=True)
-        return
-    await interaction.response.defer(ephemeral=True)
-    try:
-        raw = await archivo.read()
-        if len(raw) > 131072:
-            raise ValueError(_t('text.e35a4ecd141701'))
-        items = message_payload.import_kit(json.loads(raw.decode('utf-8-sig')))
-    except (ValueError, UnicodeError, discord.HTTPException):
-        await interaction.followup.send(_t('text.a6ced4482e953e'), ephemeral=True)
-        return
-    current = heraldo_template_list(interaction.guild.id)
-    names = {x['name'].casefold() for x in current}
-    duplicates = [x['name'] for x in items if x['name'].casefold() in names]
-    if duplicates and not reemplazar:
-        await interaction.followup.send(_t('text.0ee0fd7d17e184'), ephemeral=True)
-        return
-    if len(current) + len(items) - (len(duplicates) if reemplazar else 0) > 25:
-        await interaction.followup.send(_t('text.012489178235ed'), ephemeral=True)
-        return
-    summary = _t('text.cc618b46ca9a05', p0=f'{len(items) - len(duplicates)}', p1=f'{len(duplicates)}')
-    summary += _i18n_join('\n', ((_t('text.c851b894c97790') if x['name'] in duplicates else _t('text.e3bc8317158df3')) + discord.utils.escape_markdown(x['name']) for x in items))
-    await interaction.followup.send(summary + _t('text.4f576a529f810c'),
-        view=HeraldoMessageConfirmView(interaction.guild.id, interaction.user.id, 'kit', {'items': items, 'replace': reemplazar}),
-        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
 @bot.tree.command(name="sendtemplate", description="Publica una plantilla de mensajes del servidor.")

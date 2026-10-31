@@ -1,3 +1,7 @@
+## 2026-10-31 — Retiro de Componentes y Kits de Pruebas
+
+Por petición del propietario se retiran los módulos independientes **Componentes** y **Kits** del selector de `/setup → Mensajes`. Se eliminan sus vistas administrativas, rutas de navegación, confirmaciones específicas y el comando legado `/importkit`. No se borra ningún valor SQLite ni plantilla guardada. Se conserva la infraestructura de botones/menús ya publicados y las asociaciones de roles preexistentes para no romper los mensajes en Discord; también permanece el editor de Plantillas y su publicación. `main` se comprobó sin los dos módulos ni el comando y no requiere cambios. Prueba de regresión: `tests/test_retired_message_modules.py`. Las secciones antiguas a continuación son historial de desarrollo, no describen los accesos vigentes.
+
 ## 2026-10-28 — Ayuda contextual de Plantillas
 
 La explicación de `/setup → Mensajes → Plantillas` ya no deriva al comando heredado `/editar_plantilla`. La ayuda se refiere a las opciones que realmente existen en el propio panel: crear, editar, previsualizar, seleccionar canal y publicar. Se actualizan `es-419`, `en-US` y `pt-BR`, junto con los catálogos auxiliares y la regresión. No se modifica el comando alternativo, el editor, la persistencia ni producción; cambio exclusivamente informativo en `Pruebas`.

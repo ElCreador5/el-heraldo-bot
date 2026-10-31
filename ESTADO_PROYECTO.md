@@ -1,3 +1,7 @@
+## 2026-10-31 — Retirados Componentes y Kits como módulos de Mensajes
+
+En `Pruebas` se elimina la navegación autónoma **Componentes** y **Kits**, junto a sus vistas y el comando `/importkit`. No se borra SQLite, plantillas ni botones ya publicados. El motor de componentes de Plantillas conserva compatibilidad con mensajes existentes. `main` ya carece de estas entradas: sin modificación productiva. Añadida regresión estructural `tests/test_retired_message_modules.py`. Comprobar compilación/tests y clics reales en Discord para aceptación final. Los apartados anteriores se conservan como historial.
+
 ## 2026-10-29 — Enzonic conectado; revisión remota de /setup con acceso limitado
 
 El propietario confirmó por consola el fast-forward a `92867b6`, 35 tests correctos y `PREFLIGHT_VERIFIED`. Se restableció `python3 bot.py`: Gateway conectado, 52 comandos por servidor, tres vistas históricas de perdón recuperadas, autoprueba de construcción `/setup` correcta en Heraldo's Lab y programador `SCHEDULED provider=enzonic utc=06:15`. La revisión inicial de verificación informó cero expulsiones/cambios de roles. Estos son resultados del contenedor aportados por el propietario; no equivalen a clics reales en todos los módulos.
