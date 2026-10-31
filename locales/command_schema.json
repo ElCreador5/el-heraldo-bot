@@ -1,8 +1,4 @@
 {
-  "importkit.description": {
-    "key": "command.9f8f97a2776ca712",
-    "source": "Importa un archivo JSON de plantillas con revisión y confirmación."
-  },
   "sendtemplate.description": {
     "key": "command.3994ad55e30586a4",
     "source": "Publica una plantilla de mensajes del servidor."
