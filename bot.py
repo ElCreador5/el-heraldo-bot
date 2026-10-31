@@ -11962,7 +11962,7 @@ class HeraldoMemberLogSetupView(discord.ui.View):
             discord.SelectOption(label=label, value=key,
                 description=(_t('text.cb5a761240123d') if key == "member_leave"
                              else _t('text.e88756a2ea549c')),
-                default=key == self.event_key)
+                default=False)
             for key, label in LOG_EVENT_CATALOG["members"]
         ])
         self.event_select.callback = self.select_event
@@ -12062,12 +12062,16 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         if self.pending_enabled is not None:
             guild_config_set(self.guild_id, f"log_member.enabled.{self.event_key}", "1" if self.pending_enabled else "0")
         self.pending_enabled, self.pending_channel_id = None, None
+        for option in self.event_select.options:
+            option.default = False
         await interaction.response.edit_message(content=self.content(interaction.guild) + _t('text.f1c5938f74bc84'), view=self)
 
     @discord.ui.button(label=_t('text.1a878a55c594b0'), style=discord.ButtonStyle.danger, row=3)
     @_i18n_context
     async def discard(self, interaction, button):
         self.pending_enabled, self.pending_channel_id = None, None
+        for option in self.event_select.options:
+            option.default = False
         await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
 
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=3)
