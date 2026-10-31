@@ -8,10 +8,11 @@ import discord
 import message_payload
 from autofeed_embed_builder import render, has_content
 from message_autofeeds import referenced_mentions
+from channel_mentions import channel_mentions
 
 
 def create_payload(host, guild, job):
-    text = (job.get("text") or "").strip()
+    text = (channel_mentions(job.get("text") or "", guild) or "").strip()
     data = job.get("embed")
     if not text and not has_content(data):
         raise ValueError("empty")
