@@ -9916,6 +9916,7 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoVerificationSetupView", lambda: HeraldoVerificationSetupView(guild_id, 0)),
         ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
+        ("AutoFeedsHomeView", lambda: __import__("autofeed_setup").AutoFeedsHomeView(globals(), guild_id, 0)),
         ("HeraldoTemplateSetupView", lambda: HeraldoTemplateSetupView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
@@ -13251,6 +13252,7 @@ class HeraldoSetupView(discord.ui.View):
         ("role_connections", "setup.module.role_connections.label", "setup.module.role_connections.description"),
         ("logging", "setup.module.logging.label", "setup.module.logging.description"),
         ("messages", "setup.module.messages.label", "setup.module.messages.description"),
+        ("autofeeds", "setup.module.autofeeds.label", "setup.module.autofeeds.description"),
         ("verification", "setup.module.verification.label", "setup.module.verification.description"),
         ("language", "setup.module.language.label", "setup.module.language.description"),
         ("date_format", "setup.module.date_format.label", "setup.module.date_format.description"),
@@ -13344,6 +13346,9 @@ class HeraldoSetupView(discord.ui.View):
         elif selected == "messages":
             content = heraldo_messages_setup_content()
             view = HeraldoMessagesSetupView(self.guild_id, self.owner_id)
+        elif selected == "autofeeds":
+            from autofeed_setup import setup_panel as autofeeds_setup_panel
+            content, view = autofeeds_setup_panel(globals(), self.guild_id, self.owner_id)
         elif selected == "verification":
             content = verification_hub_content(self.guild_id)
             view = HeraldoVerificationHubView(self.guild_id, self.owner_id)
