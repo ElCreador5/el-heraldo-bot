@@ -6,6 +6,7 @@ selector o un botón/modal dentro del mismo mensaje de configuración.
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
+import copy
 import re
 import uuid
 
@@ -82,7 +83,10 @@ LANG = {
         "schedule_now": "Programar envío",
         "created": "Mensaje publicado.",
         "uncertain": "No se pudo confirmar el envío. Revisa el canal antes de volver a intentarlo.",
-        "send": "Publicar",
+        "send": "Publicar", "draft_saved": "Borrador guardado; ya puedes pulsar Publicar.",
+        "draft_confirm": "¿Guardar cambios en el borrador? No se publicará nada.",
+        "draft_first": "Guarda y confirma los cambios antes de publicar.",
+        "images_button": "Imágenes (HTTPS)", "embed_channel": "Mencionar canal",
         "show_embed": "Mostrar editor de embed",
         "none_date": "Sin fecha (publicar ahora)",
         "date_clear": "Quitar fecha",
@@ -155,7 +159,10 @@ LANG = {
         "schedule_now": "Schedule message",
         "created": "Message published.",
         "uncertain": "Delivery could not be confirmed. Check the channel before trying again.",
-        "send": "Publish",
+        "send": "Publish", "draft_saved": "Draft saved; you may now select Publish.",
+        "draft_confirm": "Save changes to the draft? Nothing will be published.",
+        "draft_first": "Save and confirm changes before publishing.",
+        "images_button": "Images (HTTPS)", "embed_channel": "Mention channel",
         "show_embed": "Show embed builder",
         "none_date": "No date (publish now)",
         "date_clear": "Remove date",
@@ -228,7 +235,10 @@ LANG = {
         "schedule_now": "Programar envio",
         "created": "Mensagem publicada.",
         "uncertain": "Não foi possível confirmar o envio. Confira o canal antes de tentar novamente.",
-        "send": "Publicar",
+        "send": "Publicar", "draft_saved": "Rascunho salvo; você já pode selecionar Publicar.",
+        "draft_confirm": "Salvar as alterações do rascunho? Nada será publicado.",
+        "draft_first": "Salve e confirme antes de publicar.",
+        "images_button": "Imagens (HTTPS)", "embed_channel": "Mencionar canal",
         "show_embed": "Mostrar editor de embed",
         "none_date": "Sem data (publicar agora)",
         "date_clear": "Remover data",
@@ -253,6 +263,22 @@ def editor_panel_kwargs(editor, guild):
     if hasattr(editor, "panel_embed"):
         return {"content": None, "embed": editor.panel_embed(guild)}
     return {"content": editor.summary(), "embed": None}
+
+
+ANNOUNCEMENT_DRAFT_PREFIX = "announcement_draft:"
+
+def _draft_key(owner_id):
+    return f"{ANNOUNCEMENT_DRAFT_PREFIX}{int(owner_id)}"
+
+def load_announcement_draft(host, guild_id, owner_id):
+    raw = host["guild_config_get"](guild_id, _draft_key(owner_id))
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) and data.get("version") == 1 else None
+    except (ValueError, TypeError):
+        return None
 
 
 def setup_panel(host, guild_id, owner_id):
@@ -777,22 +803,72 @@ class EmbedEditorView(discord.ui.View):
             allowed_mentions=discord.AllowedMentions.none())
 
 
+class EmbedChannelSelectView(discord.ui.View):
+    """Insert a channel mention into embed description without publishing."""
+
+    def __init__(self, editor):
+        super().__init__(timeout=900)
+        self.editor = editor
+        self.channels = discord.ui.ChannelSelect(
+            placeholder=t("embed_choose_channel"), row=0,
+            min_values=1, max_values=1,
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news])
+        self.channels.callback = self.insert_channel
+        self.add_item(self.channels)
+        self.back.label = t("back")
+
+    @guild_context
+    async def interaction_check(self, interaction):
+        if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            await feeds.respond_error(interaction, "denied")
+            return False
+        return True
+
+    @guild_context
+    async def insert_channel(self, interaction):
+        channel = self.channels.values[0]
+        if channel.guild.id != self.editor.guild_id:
+            return await feeds.respond_error(interaction, "invalid")
+        data = dict(self.editor.embed or {"color_hex": "5865F2"})
+        description = str(data.get("description") or "")
+        token = f"<#{channel.id}>"
+        if len(description) + len(token) + 1 > 4000:
+            return await feeds.respond_error(interaction, "invalid")
+        data["description"] = (description + " " + token).strip()
+        from autofeed_embed_builder import update
+        try:
+            update(self.editor, data)
+        except ValueError:
+            return await feeds.respond_error(interaction, "invalid")
+        await interaction.response.edit_message(
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
+
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
+    @guild_context
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
+
+
 class AutofeedEditorView(discord.ui.View):
     def __init__(self, host, guild_id, owner_id, *, job=None):
         super().__init__(timeout=900)
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
         self.original = job
         self.snapshot = host["guild_config_get"](guild_id, feeds.CONFIG_KEY)
-        self.channel_id = job.get("channel") if job else None
-        self.role_id = job.get("role") if job else None
-        self.text = (job.get("text") or "") if job else ""
-        self.embed = job.get("embed") if job else None
-        self.start = datetime.fromisoformat(job["start"]) if job else None
+        self.restored_draft = None if job else load_announcement_draft(host, guild_id, owner_id)
+        restored = job or self.restored_draft or {}
+        self.channel_id = restored.get("channel")
+        self.role_id = restored.get("role")
+        self.text = restored.get("text") or ""
+        self.embed = copy.deepcopy(restored.get("embed"))
+        self.start = datetime.fromisoformat(restored["start"]) if restored.get("start") else None
         self.timezone = __import__("zoneinfo").ZoneInfo("America/Santo_Domingo")
-        self.parts = (job.get("repeat_parts") if job and job.get("repeat") == "custom" else
-                      dict(PRESETS["daily"]) if job and job.get("repeat") == "diaria" else
-                      dict(PRESETS["weekly"]) if job and job.get("repeat") == "semanal" else
-                      dict(PRESETS["monthly"]) if job and job.get("repeat") == "mensual" else None)
+        self.parts = (copy.deepcopy(restored.get("repeat_parts")) if restored.get("repeat") == "custom" else
+                      dict(PRESETS["daily"]) if restored.get("repeat") == "diaria" else
+                      dict(PRESETS["weekly"]) if restored.get("repeat") == "semanal" else
+                      dict(PRESETS["monthly"]) if restored.get("repeat") == "mensual" else None)
+        self.saved_draft = self.draft_data() if self.restored_draft else None
         self.dirty = False
 
         self.channels = discord.ui.ChannelSelect(
@@ -806,14 +882,25 @@ class AutofeedEditorView(discord.ui.View):
         self.roles.callback = self.pick_role
         self.add_item(self.roles)
         for item, key in [(self.message, "message"), (self.embed_builder, "embed"),
+                          (self.images_button, "images_button"), (self.embed_channel, "embed_channel"),
                           (self.date_time, "date_picker"), (self.frequency, "repeat_picker"),
                           (self.preview, "preview"), (self.mention, "insert_mention"),
                           (self.silent, "silent"), (self.save, "save"),
-                          (self.discard, "discard"), (self.back, "back")]:
+                          (self.publish_button, "send"), (self.discard, "discard"),
+                          (self.back, "back")]:
             item.label = t(key)
         self.embed_builder.label = t("show_embed")
-        self.save.label = t("save") if job else t("send")
+        self.save.label = t("save")
         self.dirty = False
+
+    def draft_data(self):
+        return {
+            "version": 1, "channel": self.channel_id, "role": self.role_id,
+            "text": self.text, "embed": copy.deepcopy(self.embed),
+            "start": self.start.isoformat() if self.start else None,
+            "repeat": "custom" if self.parts else "ninguna",
+            "repeat_parts": copy.deepcopy(self.parts),
+        }
 
     @property
     def dirty(self):
@@ -886,6 +973,19 @@ class AutofeedEditorView(discord.ui.View):
         # campos, fecha) sin introducir un panel intermedio innecesario.
         from autofeed_embed_builder import SectionModal
         await interaction.response.send_modal(SectionModal(self, "main"))
+
+    @discord.ui.button(label=LANG["es-419"]["images_button"], style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def images_button(self, interaction, button):
+        from autofeed_embed_builder import SectionModal
+        await interaction.response.send_modal(SectionModal(self, "media"))
+
+    @discord.ui.button(label=LANG["es-419"]["embed_channel"], style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def embed_channel(self, interaction, button):
+        chooser = EmbedChannelSelectView(self)
+        await interaction.response.edit_message(
+            content=t("embed_choose_channel"), embed=None, view=chooser)
 
     @discord.ui.button(label=LANG["es-419"]["start"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
@@ -967,21 +1067,37 @@ class AutofeedEditorView(discord.ui.View):
             "paused": previous.get("paused", False), "template": None,
         }
 
-    @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label=LANG["es-419"]["save"], style=discord.ButtonStyle.primary, row=4)
     @guild_context
     async def save(self, interaction, button):
+        from autofeed_embed_builder import validate_data
+        try:
+            if self.embed:
+                validate_data(self.embed)
+        except ValueError:
+            return await feeds.respond_error(interaction, "invalid")
+        await interaction.response.edit_message(
+            content=t("draft_confirm") + "\\n\\n" + self.summary(),
+            embed=None, view=AnnouncementDraftConfirmView(self))
+
+    @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=4)
+    @guild_context
+    async def publish_button(self, interaction, button):
+        if self.saved_draft is None or self.saved_draft != self.draft_data():
+            return await interaction.response.send_message(t("draft_first"), ephemeral=True)
         try:
             prepared = self.prepared(interaction)
         except ValueError as exc:
             return await interaction.response.send_message(
                 t(str(exc)) if str(exc) in ("unavailable", "warning") else feeds.tr("invalid"),
                 ephemeral=True)
-        confirm = SetupConfirmView(self.host, prepared, self.snapshot, editing=self.original is not None)
+        confirm = SetupConfirmView(self.host, prepared, self.snapshot,
+                                   editing=self.original is not None)
         from autofeed_embed_builder import render
         preview = render(prepared.get("embed"), self.host["stamp_embed"], interaction.guild)
-        summary = (t("schedule_now") if prepared["start"] else t("now"))
+        summary = t("schedule_now") if prepared["start"] else t("now")
         await interaction.response.edit_message(
-            content=summary + "\n\n" + self.summary() + "\n\n" + t("saved_tip"),
+            content=summary + "\\n\\n" + self.summary() + "\\n\\n" + t("saved_tip"),
             embed=preview, view=confirm, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger, row=4)
@@ -996,6 +1112,49 @@ class AutofeedEditorView(discord.ui.View):
         content, panel = setup_panel(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(
             content=content, embed=None, view=panel)
+
+
+class AnnouncementDraftConfirmView(discord.ui.View):
+    """Only explicit confirmation persists a draft. No publishing or scheduling."""
+
+    def __init__(self, editor):
+        super().__init__(timeout=900)
+        self.editor = editor
+        self.pending = editor.draft_data()
+        self.confirm.label, self.back.label = t("confirm"), t("back")
+        self.finished = False
+
+    @guild_context
+    async def interaction_check(self, interaction):
+        if self.finished or not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            await feeds.respond_error(interaction, "denied")
+            return False
+        return True
+
+    @discord.ui.button(label=LANG["es-419"]["confirm"], style=discord.ButtonStyle.success)
+    @guild_context
+    async def confirm(self, interaction, button):
+        await interaction.response.defer()
+        try:
+            self.editor.host["guild_config_set"](
+                self.editor.guild_id, _draft_key(self.editor.owner_id),
+                json.dumps(self.pending, ensure_ascii=False))
+        except Exception:
+            return await interaction.followup.send(feeds.tr("invalid"), ephemeral=True)
+        self.finished = True
+        self.stop()
+        self.editor.saved_draft = copy.deepcopy(self.pending)
+        self.editor.dirty = False
+        await interaction.edit_original_response(
+            content=t("draft_saved") + "\\n\\n" + self.editor.summary(),
+            embed=None, view=self.editor)
+
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary)
+    @guild_context
+    async def back(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 class SetupConfirmView(discord.ui.View):
