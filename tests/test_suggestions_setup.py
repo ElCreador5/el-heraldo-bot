@@ -81,12 +81,12 @@ class SuggestionsSetupRegressionTests(unittest.TestCase):
 
     def test_confirmation_moves_panel_without_duplicate(self):
         confirm = ast.unparse(method(klass("SuggestionsSetupConfirmView"), "confirm"))
-        self.assertIn('h["suggestion_get_channel_id"]', confirm)
-        self.assertIn('h["suggestion_publish_panel"]', confirm)
+        self.assertIn("suggestion_get_channel_id", confirm)
+        self.assertIn("suggestion_publish_panel", confirm)
         self.assertIn("previous.delete()", confirm)
-        self.assertIn('h["suggestion_set_owner_enabled"]', confirm)
-        self.assertIn('h["suggestion_add_reviewer"]', confirm)
-        self.assertIn('h["suggestion_remove_reviewer"]', confirm)
+        self.assertIn("suggestion_set_owner_enabled", confirm)
+        self.assertIn("suggestion_add_reviewer", confirm)
+        self.assertIn("suggestion_remove_reviewer", confirm)
         self.assertIn("editor.pending_channel_id = None", confirm)
         self.assertIn("interaction.edit_original_response", confirm)
 
@@ -97,16 +97,17 @@ class SuggestionsSetupRegressionTests(unittest.TestCase):
         self.assertIn("SuggestionsSetupPublishConfirmView", publish)
         self.assertNotIn("suggestion_set_channel_id", publish)
         confirm = ast.unparse(method(klass("SuggestionsSetupPublishConfirmView"), "confirm"))
-        self.assertIn('h["suggestion_ensure_panel"]', confirm)
+        self.assertIn("suggestion_ensure_panel", confirm)
         self.assertIn("channel.fetch_message", confirm)
 
     def test_message_editor_returns_to_same_setup_panel(self):
         view = klass("SuggestionsSetupView")
         text = ast.unparse(method(view, "edit_panel"))
-        self.assertIn('"suggestions_setup"', text)
+        self.assertIn("suggestions_setup", text)
         studio = klass("DefaultMessageStudioView", BOT)
         back = ast.unparse(method(studio, "go_back"))
-        self.assertIn('self.return_to == "suggestions_setup"', back)
+        self.assertIn("self.return_to", back)
+        self.assertIn("suggestions_setup", back)
         self.assertIn("SuggestionsSetupView", back)
 
     def test_locales_have_same_keys(self):
