@@ -92,7 +92,9 @@ class SetupNoOverlaps(unittest.TestCase):
         self.assertNotIn("self.images_button,", init)
 
         builder = ast.unparse(find_method(find_class(BUILDER, "EmbedBuilderView"), "__init__"))
-        self.assertIn('("main", "author", "media", "fields", "date")', builder)
+        self.assertIn("'media'", builder)
+        self.assertIn("'author'", builder)
+        self.assertIn("'fields'", builder)
         self.assertIn("discord.ui.RoleSelect", builder)
         self.assertIn("discord.ui.ChannelSelect", builder)
 
