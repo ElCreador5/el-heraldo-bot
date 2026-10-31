@@ -22,31 +22,40 @@ def method(name, item):
 
 class MotwSelectorTests(unittest.TestCase):
     def test_day_and_hour_are_dropdowns_with_valid_ranges(self):
-        node = cls("HeraldoMotwScheduleSelectView")
+        node = cls("HeraldoMotwSetupView")
         init = ast.unparse(method(node.name, "__init__"))
         self.assertEqual(init.count("discord.ui.Select("), 2)
+        self.assertIn("discord.ui.ChannelSelect(", init)
         self.assertIn("enumerate(MOTW_WEEKDAY_NAMES)", init)
         self.assertIn("range(24)", init)
         self.assertIn("row=0", init)
         self.assertIn("row=1", init)
+        self.assertIn("row=2", init)
         self.assertNotIn("discord.ui.TextInput", ast.unparse(node))
 
-    def test_preview_cancel_and_explicit_confirmation(self):
-        node = cls("HeraldoMotwScheduleSelectView")
-        self.assertIn("original_weekday", ast.unparse(method(node.name, "_summary")))
-        self.assertIn("get_motw_hour", ast.unparse(method(node.name, "review")))
-        self.assertIn("confirm_configuration", ast.unparse(method(node.name, "review")))
-        self.assertIn("self.stop()", ast.unparse(method(node.name, "cancel")))
-        self.assertNotIn("guild_config_set", ast.unparse(node))
-        self.assertNotIn("set_motw_channel_id", ast.unparse(node))
-        self.assertIn("configuration_access", ast.unparse(method(node.name, "interaction_check")))
+    def test_cancel_and_explicit_confirmation(self):
+        editor = cls("HeraldoMotwSetupView")
+        confirm = cls("HeraldoMotwConfirmView")
+        self.assertIn("original_weekday", ast.unparse(method(editor.name, "_content")))
+        self.assertIn("get_motw_hour", ast.unparse(method(editor.name, "save_changes")))
+        self.assertIn("HeraldoMotwConfirmView", ast.unparse(method(editor.name, "save_changes")))
+        self.assertIn("set_motw_schedule", ast.unparse(method(confirm.name, "confirm")))
+        self.assertIn("set_motw_channel_id", ast.unparse(method(confirm.name, "confirm")))
+        self.assertIn("self.stop()", ast.unparse(method(confirm.name, "cancel")))
+        self.assertNotIn("guild_config_set", ast.unparse(editor))
+        self.assertIn("configuration_access", ast.unparse(method(editor.name, "interaction_check")))
 
-    def test_editor_opens_one_stateful_selector(self):
-        schedule = ast.unparse(method("HeraldoMotwSetupView", "schedule"))
-        self.assertIn("schedule_view = HeraldoMotwScheduleSelectView", schedule)
-        self.assertIn("content=schedule_view._summary()", schedule)
-        self.assertIn("view=schedule_view", schedule)
-        self.assertNotIn("send_modal", schedule)
+    def test_editor_has_one_stateful_panel_no_second_schedule_view(self):
+        editor = cls("HeraldoMotwSetupView")
+        init = ast.unparse(method(editor.name, "__init__"))
+        self.assertIn("self.channel_select = channel", init)
+        self.assertIn("self.day_select = days", init)
+        self.assertIn("self.hour_select = hours", init)
+        self.assertIn("self.add_item", init)
+        self.assertNotIn("send_modal", init)
+        with self.assertRaises(StopIteration):
+            cls("HeraldoMotwScheduleSelectView")
+        self.assertIn("_has_pending_changes", ast.unparse(method(editor.name, "save_changes")))
 
 
 class ModerationRuleSelectorTests(unittest.TestCase):
