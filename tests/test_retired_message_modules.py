@@ -1,7 +1,6 @@
 """Evita que los módulos retirados Componentes/Kits reaparezcan en /setup.
 
-La compatibilidad de botones antiguos sigue activa para no romper plantillas
-ni componentes publicados. No exige Gateway ni acceso a Discord.
+Se preservan los botones de roles básicos ya publicados; no se mantienen\ninterfaces para crear plantillas. No exige Gateway ni acceso a Discord.
 """
 import ast
 from pathlib import Path
@@ -48,12 +47,28 @@ class RetiredMessageModulesTests(unittest.TestCase):
             self.assertNotIn(retired, classes)
         self.assertNotIn('@bot.tree.command(name="importkit"', SOURCE)
 
-    def test_existing_published_components_and_templates_remain_supported(self):
+    def test_plantillas_retiradas_sin_ruptura_de_roles_heredados(self):
+        # Los mensajes ya publicados no se borran ni pierden los roles básicos.
         self.assertIn("def heraldo_message_role_config", SOURCE)
-        self.assertIn("message_components.install(globals())", SOURCE)
-        self.assertIn("class HeraldoTemplateSetupView", SOURCE)
+        self.assertIn("def heraldo_message_role_action", SOURCE)
+        self.assertNotIn("class HeraldoTemplateSetupView", SOURCE)
+        self.assertNotIn("class HeraldoTemplateModal", SOURCE)
+        self.assertNotIn("template_native_builder", SOURCE)
+        self.assertNotIn("message_components.install(globals())", SOURCE)
+        self.assertNotIn("message_editor.install(globals())", SOURCE)
+        self.assertNotIn("message_automation.install(globals())", SOURCE)
         self.assertNotIn('value="templates"', SOURCE)
         self.assertNotIn('@bot.tree.command(name="sendtemplate"', SOURCE)
+        self.assertIn("message_autofeeds.install(globals())", SOURCE)
+
+    def test_motor_de_anuncios_no_ejecuta_trabajos_de_plantillas(self):
+        worker = (ROOT / "message_automation.py").read_text(encoding="utf-8")
+        announcements = (ROOT / "message_autofeeds.py").read_text(encoding="utf-8")
+        self.assertIn("if not job.get('autofeed')", worker)
+        self.assertNotIn("for config_key in (CONFIG_KEY, STICKY_KEY):", worker)
+        self.assertNotIn('plantilla: str = None', announcements)
+        self.assertNotIn('host["heraldo_template_list"]', announcements)
+        self.assertFalse((ROOT / "template_native_builder.py").exists())
 
 
 if __name__ == "__main__":
