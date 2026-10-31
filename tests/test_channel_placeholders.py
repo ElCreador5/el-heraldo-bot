@@ -63,7 +63,9 @@ class ChannelPlaceholderTests(unittest.TestCase):
     def test_announcement_renders_mention_at_delivery_and_preview(self):
         automation = code("message_automation.py")
         builder = code("autofeed_embed_builder.py")
+        instant = code("message_publish.py")
         self.assertIn("channel_mentions(job.get('text') or None, guild)", automation)
+        self.assertIn('channel_mentions(job.get("text") or "", guild)', instant)
         self.assertIn("embed_channel_mentions(data, guild)", builder)
         self.assertIn('f"{{#{channel.id}}}"', builder)
         self.assertIn("embed_channel_mentions", builder)
@@ -71,7 +73,7 @@ class ChannelPlaceholderTests(unittest.TestCase):
     def test_autofeed_validates_brace_ids_as_channel_references(self):
         af = code("message_autofeeds.py")
         self.assertIn('channel_ids.update(', af)
-        self.assertIn(r'\\{#([1-9]\\d{0,19})\\}', af)
+        self.assertIn(r'\{#([1-9]\d{0,19})\}', af)
 
     def test_variable_autocomplete_uses_id(self):
         bot = code("bot.py")
