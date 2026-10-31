@@ -11309,7 +11309,7 @@ class HeraldoModerationSetupView(discord.ui.View):
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
 
-    @discord.ui.button(label="Sugerencias", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label=_t('text.70cf296fe178d5'), style=discord.ButtonStyle.primary, row=1)
     @_i18n_context
     async def suggestions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         from suggestions_setup import SuggestionsSetupView
