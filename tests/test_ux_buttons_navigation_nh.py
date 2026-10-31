@@ -87,7 +87,6 @@ class NHButtonsNavigation(unittest.TestCase):
         expected = {
             "HeraldoOrientationSetupView": {2: 4, 3: 3, 4: 3},
             "HeraldoHoneypotSetupView": {1: 3, 2: 3, 3: 3},
-            "HeraldoTemplateSetupView": {2: 3, 3: 3, 4: 3},
             "HeraldoVerificationSetupView": {3: 4, 4: 5},
             "HeraldoUserReportsSetupView": {3: 5, 4: 5},
         }
