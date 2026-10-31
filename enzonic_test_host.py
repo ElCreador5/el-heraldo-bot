@@ -202,7 +202,8 @@ def _verified_git_deployment():
             metadata, name = item.split("\t", 1)
         except ValueError:
             blocked("enzonic_checkout_unverified")
-        match = re.fullmatch(r"(100644|100755) blob ([0-9a-f]{40}) ([0-9]+)", metadata)
+        # ls-tree -l rellena el tamaño con espacios; mantenemos SHA, modo y bytes exactos.
+        match = re.fullmatch(r"(100644|100755) blob ([0-9a-f]{40}) +([0-9]+)", metadata)
         if match is None:
             blocked("enzonic_checkout_unverified")
         sha, size = match.group(2), int(match.group(3))

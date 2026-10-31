@@ -15,12 +15,58 @@ HUMAN = re.compile(r'[áéíóúñÁÉÍÓÚÑ¿¡]|\b(?:el|la|los|las|para|sin|
 SQL = ('SELECT ', 'INSERT ', 'UPDATE ', 'DELETE ', 'CREATE ', 'ALTER ', 'PRAGMA ', 'WITH ', 'DROP ', 'ON ', 'WHERE ', 'AND ', 'FROM ', 'VALUES ', 'BEGIN ', 'ORDER BY ', ') VALUES ')
 
 
+def localized_catalog_constants(tree):
+    """Excluye valores YA traducidos en catálogos completos es/en/pt.
+
+    Comprueba nombres y paridad de claves. Las etiquetas independientes siguen
+    auditadas y las pruebas del runtime cubren todos los idiomas del catálogo.
+    """
+    locales = {'es-419', 'en-US', 'pt-BR'}
+    translated = set()
+
+    def keys_of(value):
+        if isinstance(value, ast.Dict):
+            if any(not isinstance(k, ast.Constant) or not isinstance(k.value, str)
+                   for k in value.keys):
+                return None
+            return {key.value for key in value.keys}
+        if (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == 'dict' and not value.args
+                and all(kw.arg is not None for kw in value.keywords)):
+            return {kw.arg for kw in value.keywords}
+        return None
+
+    for statement in tree.body:
+        if not (isinstance(statement, ast.Assign) and len(statement.targets) == 1
+                and isinstance(statement.targets[0], ast.Name)
+                and statement.targets[0].id in {'COPY', 'LANG', 'STRINGS'}
+                and isinstance(statement.value, ast.Dict)):
+            continue
+        mapping = statement.value
+        if not all(isinstance(k, ast.Constant) and isinstance(k.value, str)
+                   for k in mapping.keys):
+            continue
+        by_locale = dict(zip((key.value for key in mapping.keys), mapping.values))
+        if set(by_locale) != locales:
+            continue
+        key_sets = [keys_of(by_locale[locale]) for locale in sorted(locales)]
+        if not all(key_sets) or any(keys != key_sets[0] for keys in key_sets[1:]):
+            continue
+        for value in mapping.values:
+            translated.update(id(node) for node in ast.walk(value)
+                              if isinstance(node, ast.Constant))
+    return translated
+
+
 def findings(source, filename):
     tree = ast.parse(source)
     parents = {id(c): n for n in ast.walk(tree) for c in ast.iter_child_nodes(n)}
+    catalog_values = localized_catalog_constants(tree)
     result = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        if id(node) in catalog_values:
             continue
         value = node.value
         if re.match(r'^(?:text|setup|language|common|access|personality|suggestion)\.', value):

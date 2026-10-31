@@ -404,19 +404,19 @@ class FieldManageView(discord.ui.View):
                 ("\n".join(f"{i+1}. {f['name'][:80]}" for i, f in enumerate(fields))
                  if fields else t("nothing")))
 
-    @discord.ui.button(label="Añadir campo", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label=COPY["es-419"]["add"], style=discord.ButtonStyle.primary, row=1)
     @guild_context
     async def new(self, interaction, button):
         await interaction.response.send_modal(FieldModal(self.parent))
 
-    @discord.ui.button(label="Editar campo", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=COPY["es-419"]["edit_field"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
     async def edit(self, interaction, button):
         if self.selected is None:
             return await interaction.response.send_message(t("field_select"), ephemeral=True)
         await interaction.response.send_modal(FieldModal(self.parent, index=self.selected))
 
-    @discord.ui.button(label="Retirar campo", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label=COPY["es-419"]["delete_field"], style=discord.ButtonStyle.danger, row=1)
     @guild_context
     async def remove(self, interaction, button):
         if self.selected is None:
@@ -432,7 +432,7 @@ class FieldManageView(discord.ui.View):
                 self.parent.host["stamp_embed"], interaction.guild), view=new_view,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=COPY["es-419"]["back"], style=discord.ButtonStyle.secondary, row=2)
     @guild_context
     async def back(self, interaction, button):
         await redraw(interaction, self.parent, "fields")
@@ -523,12 +523,12 @@ class EmbedBuilderView(discord.ui.View):
             return await denied(interaction)
         await self.add_token(interaction, channel.mention)
 
-    @discord.ui.button(label="Editar sección", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label=COPY["es-419"]["edit"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def edit(self, interaction, button):
         await interaction.response.send_modal(SectionModal(self.parent, self.section))
 
-    @discord.ui.button(label="Añadir campo", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=COPY["es-419"]["add"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def add_field(self, interaction, button):
         view = FieldManageView(self.parent)
@@ -536,7 +536,7 @@ class EmbedBuilderView(discord.ui.View):
             content=view.summary(), embed=self.preview_embed(interaction.guild),
             view=view, allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Fecha automática", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=COPY["es-419"]["timestamp"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def timestamp(self, interaction, button):
         data = dict(self.parent.embed or {})
@@ -548,24 +548,24 @@ class EmbedBuilderView(discord.ui.View):
             return await respond_error(interaction, "invalid")
         await redraw(interaction, self.parent, "date")
 
-    @discord.ui.button(label="Seleccionar fecha", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label=COPY["es-419"]["date_manual"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def date_manual(self, interaction, button):
         await interaction.response.send_modal(DateStampModal(self.parent))
 
-    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=COPY["es-419"]["preview"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def preview(self, interaction, button):
         await redraw(interaction, self.parent, self.section)
 
-    @discord.ui.button(label="Quitar embed", style=discord.ButtonStyle.danger, row=4)
+    @discord.ui.button(label=COPY["es-419"]["clear"], style=discord.ButtonStyle.danger, row=4)
     @guild_context
     async def clear(self, interaction, button):
         self.parent.embed = None
         self.parent.dirty = True
         await redraw(interaction, self.parent, "main")
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=COPY["es-419"]["back"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def back(self, interaction, button):
         from autofeed_setup import editor_panel_kwargs

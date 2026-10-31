@@ -463,7 +463,7 @@ class FrequencyPickerView(discord.ui.View):
         await interaction.response.edit_message(
             **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
     async def back(self, interaction, button):
         await interaction.response.edit_message(
@@ -544,7 +544,7 @@ class MentionPickerView(discord.ui.View):
         await interaction.response.edit_message(
             **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def back(self, interaction, button):
         await interaction.response.edit_message(
@@ -667,13 +667,13 @@ class EmbedEditorView(discord.ui.View):
             return await feeds.respond_error(interaction, "invalid")
         await self.add_token(interaction, channel.mention)
 
-    @discord.ui.button(label="Editar texto y diseño", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["embed_text_design"], style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def edit(self, interaction, button):
         await interaction.response.send_modal(
             EmbedModal(self.parent, from_embed_editor=True))
 
-    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=LANG["es-419"]["preview"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def preview(self, interaction, button):
         await interaction.response.edit_message(
@@ -681,7 +681,7 @@ class EmbedEditorView(discord.ui.View):
             embed=self.preview_embed(interaction.guild), view=self,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Quitar embed", style=discord.ButtonStyle.danger, row=3)
+    @discord.ui.button(label=LANG["es-419"]["embed_remove"], style=discord.ButtonStyle.danger, row=3)
     @guild_context
     async def clear(self, interaction, button):
         self.parent.embed = None
@@ -691,7 +691,7 @@ class EmbedEditorView(discord.ui.View):
             content=next_view.summary(interaction.guild), embed=None,
             view=next_view, allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def back(self, interaction, button):
         await interaction.response.edit_message(
@@ -795,12 +795,12 @@ class AutofeedEditorView(discord.ui.View):
         self.dirty = True
         await interaction.response.edit_message(**editor_panel_kwargs(self, interaction.guild), view=self)
 
-    @discord.ui.button(label="Mensaje", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["message"], style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def message(self, interaction, button):
         await interaction.response.send_modal(MessageModal(self))
 
-    @discord.ui.button(label="Mostrar editor de embed", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["show_embed"], style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def embed_builder(self, interaction, button):
         from autofeed_embed_builder import EmbedBuilderView
@@ -810,19 +810,19 @@ class AutofeedEditorView(discord.ui.View):
             embed=view.preview_embed(interaction.guild), view=view,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Fecha y hora", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["start"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def date_time(self, interaction, button):
         await interaction.response.send_modal(DateTimeModal(self))
 
-    @discord.ui.button(label="Frecuencia", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["repeat_picker"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def frequency(self, interaction, button):
         picker = FrequencyPickerView(self)
         await interaction.response.edit_message(
             content=t("choose_frequency"), embed=None, view=picker)
 
-    @discord.ui.button(label="Vista previa", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=LANG["es-419"]["preview"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def preview(self, interaction, button):
         from autofeed_embed_builder import render
@@ -832,14 +832,14 @@ class AutofeedEditorView(discord.ui.View):
             embed=embed, view=self,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Insertar mención", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["insert_mention"], style=discord.ButtonStyle.secondary, row=2)
     @guild_context
     async def mention(self, interaction, button):
         picker = MentionPickerView(self)
         await interaction.response.edit_message(
             content=t("mention_help"), embed=None, view=picker)
 
-    @discord.ui.button(label="Sin rol", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["silent"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def silent(self, interaction, button):
         self.role_id = None
@@ -890,7 +890,7 @@ class AutofeedEditorView(discord.ui.View):
             "paused": previous.get("paused", False), "template": None,
         }
 
-    @discord.ui.button(label="Crear mensaje", style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=4)
     @guild_context
     async def save(self, interaction, button):
         try:
@@ -907,13 +907,13 @@ class AutofeedEditorView(discord.ui.View):
             content=summary + "\n\n" + self.summary() + "\n\n" + t("saved_tip"),
             embed=preview, view=confirm, allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=4)
+    @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger, row=4)
     @guild_context
     async def discard(self, interaction, button):
         parent, view = setup_panel(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(content=parent, embed=None, view=view)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=4)
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def back(self, interaction, button):
         await interaction.response.edit_message(
@@ -937,7 +937,7 @@ class SetupConfirmView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=LANG["es-419"]["confirm"], style=discord.ButtonStyle.success)
     @guild_context
     async def confirm(self, interaction, button):
         job = self.job
@@ -980,7 +980,7 @@ class SetupConfirmView(discord.ui.View):
         await interaction.response.edit_message(
             content=t("saved") + "\n\n" + parent, embed=None, view=view)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger)
     @guild_context
     async def cancel(self, interaction, button):
         self.finished = True

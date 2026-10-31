@@ -374,7 +374,7 @@ class TemplateConfirmView(discord.ui.View):
             return False
         return await self.editor.interaction_check(interaction)
 
-    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=STRINGS["es-419"]["confirm"], style=discord.ButtonStyle.success)
     @guild_context
     async def confirm(self, interaction, button):
         editor = self.editor
@@ -406,7 +406,7 @@ class TemplateConfirmView(discord.ui.View):
         await interaction.response.edit_message(
             content=tr("saved"), embed=editor.panel_embed(interaction.guild), view=editor)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=STRINGS["es-419"]["discard"], style=discord.ButtonStyle.danger)
     @guild_context
     async def discard(self, interaction, button):
         self.finished = True

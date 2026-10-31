@@ -1,8 +1,8 @@
 name: Issue 23 - selective production candidate
 
+# Preparación selectiva de Issue #23: invocación explícita de lanzamiento.
+# Sigue probando lo mismo, pero no se ejecuta para ediciones no relacionadas de Lab.
 on:
-  push:
-    branches: [Pruebas]
   workflow_dispatch:
 
 permissions:

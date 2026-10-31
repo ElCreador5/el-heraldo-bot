@@ -29,7 +29,7 @@ STRINGS = {
         "resumed": "Programación reanudada.",
         "discarded": "Cambios descartados.",
         "choose": "Selecciona una programación",
-        "save": "Guardar cambios",
+        "save": "Guardar cambios", "confirm": "Confirmar cambios",
         "discard": "Descartar cambios",
         "back": "Volver",
         "preview": "Vista previa de la programación",
@@ -80,7 +80,7 @@ STRINGS = {
         "resumed": "Schedule resumed.",
         "discarded": "Changes discarded.",
         "choose": "Select a schedule",
-        "save": "Save changes",
+        "save": "Save changes", "confirm": "Confirm changes",
         "discard": "Discard changes",
         "back": "Back",
         "preview": "Schedule preview",
@@ -131,7 +131,7 @@ STRINGS = {
         "resumed": "Programação retomada.",
         "discarded": "Alterações descartadas.",
         "choose": "Selecione uma programação",
-        "save": "Salvar alterações",
+        "save": "Salvar alterações", "confirm": "Confirmar alterações",
         "discard": "Descartar alterações",
         "back": "Voltar",
         "preview": "Prévia da programação",
@@ -422,7 +422,7 @@ class DraftConfirm(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=STRINGS["es-419"]["save"], style=discord.ButtonStyle.success)
     @guild_context
     async def save(self, interaction, button):
         job = self.job
@@ -450,7 +450,7 @@ class DraftConfirm(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content=tr("saved") + "\n" + show_job(job), embed=None, view=None)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=STRINGS["es-419"]["discard"], style=discord.ButtonStyle.danger)
     @guild_context
     async def discard(self, interaction, button):
         self.done = True
@@ -537,7 +537,7 @@ class ActionConfirm(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
+    @discord.ui.button(label=STRINGS["es-419"]["confirm"], style=discord.ButtonStyle.success)
     @guild_context
     async def confirm(self, interaction, button):
         if self.action == "mover":
@@ -575,7 +575,7 @@ class ActionConfirm(discord.ui.View):
             await interaction.response.edit_message(
                 content=tr("removed") if self.action == "eliminar" else tr("saved"), view=None)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=STRINGS["es-419"]["discard"], style=discord.ButtonStyle.danger)
     @guild_context
     async def cancel(self, interaction, button):
         self.finished = True
@@ -647,7 +647,7 @@ class ManageView(discord.ui.View):
         self.toggle.style = discord.ButtonStyle.success if job.get("paused") else discord.ButtonStyle.danger
         await interaction.response.edit_message(content=show_job(job), view=self)
 
-    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label=STRINGS["es-419"]["edit"], style=discord.ButtonStyle.primary, row=1)
     @guild_context
     async def edit(self, interaction, button):
         job = self.selected_job(interaction.user)
@@ -662,7 +662,7 @@ class ManageView(discord.ui.View):
                 self.host, self.guild_id, job["author"], job["channel"],
                 job["repeat"], job.get("role"), job.get("template"), job))
 
-    @discord.ui.button(label="Pausar / Reanudar", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=STRINGS["es-419"]["pause"] + " / " + STRINGS["es-419"]["resume"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
     async def toggle(self, interaction, button):
         job = self.selected_job(interaction.user)
@@ -680,7 +680,7 @@ class ManageView(discord.ui.View):
             content=tr("paused" if paused else "resumed") + "\n\n" + show_job(current),
             view=self)
 
-    @discord.ui.button(label="Silenciar", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label=STRINGS["es-419"]["silence"], style=discord.ButtonStyle.primary, row=1)
     @guild_context
     async def silence(self, interaction, button):
         job = self.selected_job(interaction.user)
@@ -690,7 +690,7 @@ class ManageView(discord.ui.View):
                              from_setup=self.from_setup)
         await interaction.response.edit_message(content=tr("preview") + "\n" + show_job(job), view=view)
 
-    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label=STRINGS["es-419"]["delete"], style=discord.ButtonStyle.danger, row=2)
     @guild_context
     async def delete(self, interaction, button):
         job = self.selected_job(interaction.user)
@@ -701,7 +701,7 @@ class ManageView(discord.ui.View):
         await interaction.response.edit_message(content=tr("preview") + "\n" + show_job(job), view=view)
 
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=STRINGS["es-419"]["back"], style=discord.ButtonStyle.secondary, row=2)
     @guild_context
     async def back(self, interaction, button):
         if self.from_setup:
@@ -758,7 +758,7 @@ class PolicyView(discord.ui.View):
         self.current["roles"] = [item.id for item in self.roles.values]
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label=STRINGS["es-419"]["save"], style=discord.ButtonStyle.success, row=2)
     @guild_context
     async def save(self, interaction, button):
         latest = self.host["guild_config_get"](self.guild_id, POLICY_KEY)
@@ -771,14 +771,14 @@ class PolicyView(discord.ui.View):
         self.current = policy(self.host, self.guild_id)
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label=STRINGS["es-419"]["discard"], style=discord.ButtonStyle.danger, row=2)
     @guild_context
     async def discard(self, interaction, button):
         self.original = self.host["guild_config_get"](self.guild_id, POLICY_KEY)
         self.current = policy(self.host, self.guild_id)
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Activar", style=discord.ButtonStyle.success, row=3)
+    @discord.ui.button(label=STRINGS["es-419"]["activate"], style=discord.ButtonStyle.success, row=3)
     @guild_context
     async def activate(self, interaction, button):
         current = policy(self.host, self.guild_id)
@@ -792,7 +792,7 @@ class PolicyView(discord.ui.View):
         button.style = discord.ButtonStyle.danger if current["enabled"] else discord.ButtonStyle.success
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=STRINGS["es-419"]["back"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def back(self, interaction, button):
         if self.return_to_setup:
