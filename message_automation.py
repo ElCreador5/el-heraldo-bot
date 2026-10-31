@@ -340,13 +340,16 @@ class ScheduledMessages:
     async def worker(self):
         for guild in self.host['bot'].guilds:
             with _i18n_guild(guild.id):
-                for config_key in (CONFIG_KEY, STICKY_KEY):
-                    for job in self.jobs(guild.id, config_key):
-                        try:
-                            await self.execute(guild, job, datetime.now(timezone.utc), config_key=config_key)
-                        except Exception:
-                            # Una fila dañada no impide atender los demás servidores.
-                            self.host['traceback'].print_exc()
+                # Únicamente los Anuncios siguen activos. Los trabajos antiguos
+                # basados en Plantillas quedan inertes, pero sus datos se conservan.
+                for job in self.jobs(guild.id, CONFIG_KEY):
+                    if not job.get('autofeed') or not (job.get('text') or job.get('embed')):
+                        continue
+                    try:
+                        await self.execute(guild, job, datetime.now(timezone.utc), config_key=CONFIG_KEY)
+                    except Exception:
+                        # Una fila dañada no impide atender los demás servidores.
+                        self.host['traceback'].print_exc()
 
 
 def install(host):
