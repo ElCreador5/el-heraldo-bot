@@ -3322,5 +3322,6 @@
   "text.ffb94c3fd3c42b": "Buscar recursos del servidor por nombre o ID",
   "text.ffe4eebf612d10": "`{canal_mencion:reglas}` → mención de un canal por nombre o ID\n`{rol_mencion:Moderador}` → mención de un rol por nombre o ID\n`{usuario_mencion:Nombre}` → mención de un miembro por nombre o ID\n`{emoji:fuego}` → emoji personalizado del servidor\nAtajos compatibles: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nEjemplo: `Hola {usuario_mencion}, lee {canal_mencion:reglas}` · imagen: `{servidor_icono_url}`",
   "text.fff331093852fa": "\n\nRol creado: {p0}. Quedó seleccionado en **{p1}**. Pulsa **Guardar** para aplicar la configuración de la reacción. El rol ya existe en el servidor aunque salgas sin guardar.",
-  "text.fff8867b824e73": "Martes"
+  "text.fff8867b824e73": "Martes",
+  "text.evidence.archive.create_reason": "Crear un archivo privado de evidencias separado de los registros de moderación."
 }

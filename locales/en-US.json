@@ -3322,5 +3322,6 @@
   "text.ffb94c3fd3c42b": "Search for server resources by name or ID",
   "text.ffe4eebf612d10": "`{canal_mencion:reglas}` → mention a channel by name or ID\n`{rol_mencion:Moderador}` → mention a role by name or ID\n`{usuario_mencion:Nombre}` → mention a member by name or ID\n`{emoji:fuego}` → custom server emoji\nSupported shortcuts: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nExample: `Hello {usuario_mencion}, read {canal_mencion:reglas}` · image: `{servidor_icono_url}`",
   "text.fff331093852fa": "\n\nRole created: {p0}. It was selected in **{p1}**. Press **Save** to apply the reaction settings. The role already exists in the server even if you leave without saving.",
-  "text.fff8867b824e73": "Tuesday"
+  "text.fff8867b824e73": "Tuesday",
+  "text.evidence.archive.create_reason": "Create a private evidence archive separate from moderation logs."
 }

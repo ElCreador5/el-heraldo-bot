@@ -18,6 +18,7 @@ ARCHIVE_CHANNEL_TOPIC = "El Heraldo · Archivo privado de evidencias verificadas
 _archive_channel_locks: dict[int, asyncio.Lock] = {}
 
 
+@_i18n_context
 async def ensure_private_archive(guild, *, log_channel_id: int = 0):
     """Aisla los archivos técnicos y no utiliza nunca el canal de registros."""
     if guild is None or guild.me is None:
@@ -50,7 +51,7 @@ async def ensure_private_archive(guild, *, log_channel_id: int = 0):
             ch = await guild.create_text_channel(
                 ARCHIVE_CHANNEL_NAME, topic=ARCHIVE_CHANNEL_TOPIC,
                 overwrites=overrides, nsfw=True,
-                reason="Separar evidencias técnicas de los registros de moderación.",
+                reason=str(_t('text.evidence.archive.create_reason')),
             )
         except (discord.Forbidden, discord.HTTPException):
             return None

@@ -3322,5 +3322,6 @@
   "text.ffb94c3fd3c42b": "Buscar recursos do servidor por nome ou ID",
   "text.ffe4eebf612d10": "`{canal_mencion:reglas}` → mencionar um canal por nome ou ID\n`{rol_mencion:Moderador}` → mencionar um cargo por nome ou ID\n`{usuario_mencion:Nombre}` → mencionar um membro por nome ou ID\n`{emoji:fuego}` → emoji personalizado do servidor\nAtalhos compatíveis: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nExemplo: `Olá {usuario_mencion}, leia {canal_mencion:reglas}` · imagem: `{servidor_icono_url}`",
   "text.fff331093852fa": "\n\nCargo criado: {p0}. Foi selecionado em **{p1}**. Pressione **Salvar** para aplicar a configuração da reação. O cargo já existe no servidor mesmo que você saia sem salvar.",
-  "text.fff8867b824e73": "Terça-feira"
+  "text.fff8867b824e73": "Terça-feira",
+  "text.evidence.archive.create_reason": "Criar um arquivo privado de evidências separado dos registros de moderação."
 }
