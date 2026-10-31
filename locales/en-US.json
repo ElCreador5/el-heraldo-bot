@@ -8,7 +8,7 @@
   "autofeed.choice.once": "Once",
   "autofeed.choice.weekly": "Weekly",
   "autofeed.command.config": "Check who can schedule announcements.",
-  "autofeed.command.create": "Schedule text or an existing template with a preview.",
+  "autofeed.command.create": "Schedule an announcement with a preview.",
   "autofeed.command.delete": "Delete a schedule after confirmation.",
   "autofeed.command.edit": "Edit a schedule's content and time.",
   "autofeed.command.list": "View and manage scheduled posts.",
