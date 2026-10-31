@@ -1975,6 +1975,10 @@ def set_log_channel_id(channel_id: int, guild_id: int | None = None) -> None:
     else:
         guild_resource_set(guild_id, "channel", "logs", channel_id)
         guild_config_set(guild_id, "log_channel_id", str(channel_id))
+        # El canal oficial activa de una vez todos los registros de miembros.
+        # Sus destinos personalizados siguen intactos: son rutas independientes.
+        for event_key in MEMBER_LOG_EVENTS:
+            guild_config_set(guild_id, f"log_member.enabled.{event_key}", "1")
 
 
 @_i18n_context
