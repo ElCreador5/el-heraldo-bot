@@ -248,7 +248,8 @@ class ScheduledMessages:
             if job.get('autofeed'):
                 role = guild.get_role(job['role']) if job.get('role') else None
                 if job.get('role') and (role is None or not role.mentionable):
-                    raise ValueError('Rol de mención no disponible.')
+                    from message_autofeeds import tr as autofeed_message
+                    raise ValueError(autofeed_message('role_unavailable'))
                 from message_autofeeds import referenced_mentions
                 allowed_roles = referenced_mentions(guild, job)
                 if role:

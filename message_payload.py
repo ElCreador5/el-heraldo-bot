@@ -1,5 +1,5 @@
 """Validación y renderizado de plantillas. No realiza operaciones de red."""
-from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild
+from heraldo_i18n import text as _t, guild_context as _i18n_context, use_guild as _i18n_guild, current_locale
 import copy
 import re
 from datetime import datetime
@@ -7,6 +7,12 @@ from urllib.parse import urlsplit
 
 VARIABLES = {'usuario', 'usuario_id', 'servidor', 'servidor_id', 'canal', 'fecha'}
 VISUAL_KEYS = {'title', 'description', 'image', 'button_label', 'button_url', 'content', 'embeds'}
+
+STRINGS = {
+    "es-419": {"error_timestamp": "Fecha del embed no válida."},
+    "en-US": {"error_timestamp": "Invalid embed timestamp."},
+    "pt-BR": {"error_timestamp": "Data do embed inválida."},
+}
 
 
 class TemplateEmbeds(list):
@@ -56,7 +62,7 @@ def validate(values):
                 if not isinstance(value, str) or len(value) > 40 or datetime.fromisoformat(value.replace('Z', '+00:00')).tzinfo is None:
                     raise ValueError('timestamp')
             except (ValueError, TypeError) as exc:
-                raise ValueError('Invalid embed timestamp') from exc
+                raise ValueError(STRINGS.get(current_locale(), STRINGS["es-419"])["error_timestamp"]) from exc
         color = embed.get('color', 0x2B2D31)
         if type(color) is not int or not 0 <= color <= 0xFFFFFF:
             raise ValueError(_t('text.28724350339107'))

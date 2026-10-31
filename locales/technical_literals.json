@@ -1128,5 +1128,143 @@
     "scope": "",
     "text": "El Heraldo · Archivo privado de evidencias verificadas",
     "reason": "Marcador técnico estable para identificar y recuperar el canal privado sin alterar identificadores al cambiar idioma del servidor."
+  },
+  "6ba1a4641059d986ce79": {
+    "file": "activity_server.py",
+    "scope": "reply",
+    "text": "no-store",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "f308edb70e7378dcd243": {
+    "file": "activity_server.py",
+    "scope": "verify_origin",
+    "text": "invalid_origin",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "783e2e203470dc031b54": {
+    "file": "activity_server.py",
+    "scope": "index",
+    "text": "no-store",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "ea2f095fab08869a8f6f": {
+    "file": "activity_server.py",
+    "scope": "javascript",
+    "text": "no-store",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "e370fff9129cc3a3669c": {
+    "file": "activity_server.py",
+    "scope": "authorize",
+    "text": "login_required",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "b9137d721e07d9c6ee09": {
+    "file": "activity_server.py",
+    "scope": "authorize",
+    "text": "guild_id_required",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "786fdac643b6e044ad01": {
+    "file": "activity_server.py",
+    "scope": "authorize",
+    "text": "guild_not_found",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "e84691ae05a43dd08957": {
+    "file": "activity_server.py",
+    "scope": "authorize",
+    "text": "manage_guild_required",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "ee477caf3bec2afb8563": {
+    "file": "activity_server.py",
+    "scope": "publish",
+    "text": "ninguna",
+    "reason": "Valor fijo de recurrencia en el protocolo interno; no se presenta al usuario."
+  },
+  "17399b4c28f2f23cb96f": {
+    "file": "activity_server.py",
+    "scope": "sdk_module",
+    "text": "sdk_upstream_unavailable",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "8fc83ed866a0544fb310": {
+    "file": "activity_server.py",
+    "scope": "authorize",
+    "text": "member_not_found",
+    "reason": "Identificador de respuesta HTTP, cabecera o código de error para Activity; no es texto de interfaz."
+  },
+  "5455188d0d14f0b34b7c": {
+    "file": "autofeed_embed_builder.py",
+    "scope": "FieldModal.on_submit",
+    "text": "sí",
+    "reason": "Token permitido del analizador multilingüe sí/no; no es una etiqueta mostrada."
+  },
+  "5e426ea3d3ab095decf8": {
+    "file": "autofeed_embed_builder.py",
+    "scope": "FieldModal.on_submit",
+    "text": "no",
+    "reason": "Token permitido del analizador multilingüe sí/no; no es una etiqueta mostrada."
+  },
+  "4ded33917d447e393214": {
+    "file": "autofeed_embed_builder.py",
+    "scope": "FieldModal.__init__",
+    "text": "sí",
+    "reason": "Token permitido del analizador multilingüe sí/no; no es una etiqueta mostrada."
+  },
+  "563a8d6359ebe0f0d46e": {
+    "file": "autofeed_embed_builder.py",
+    "scope": "FieldModal.__init__",
+    "text": "no",
+    "reason": "Token permitido del analizador multilingüe sí/no; no es una etiqueta mostrada."
+  },
+  "328514e86fd86e01bdec": {
+    "file": "autofeed_setup.py",
+    "scope": "AutofeedEditorView.prepared",
+    "text": "ninguna",
+    "reason": "Valor interno de frecuencia sin repetición; no es una etiqueta mostrada."
+  },
+  "01e6f34347d9945539af": {
+    "file": "enzonic_test_backup.py",
+    "scope": "main",
+    "text": "Operaciones exclusivas de Enzonic Test; sin iniciar Discord",
+    "reason": "Descripción de la utilidad CLI de mantenimiento; no se envía a Discord."
+  },
+  "ef46facaf79618b869b9": {
+    "file": "enzonic_test_host.py",
+    "scope": "",
+    "text": "El Heraldo's Lab 🧪#6700",
+    "reason": "Identidad exacta del bot, URL de origen oficial o argumento Git de seguridad; literal de protocolo."
+  },
+  "a9e6d2ebeee5643f87c4": {
+    "file": "enzonic_test_host.py",
+    "scope": "_github_metadata",
+    "text": "https://api.github.com/repos/ElCreador5/el-heraldo-bot/",
+    "reason": "Identidad exacta del bot, URL de origen oficial o argumento Git de seguridad; literal de protocolo."
+  },
+  "d06a269a770158d88998": {
+    "file": "enzonic_test_host.py",
+    "scope": "_verified_git_deployment",
+    "text": "--no-tags",
+    "reason": "Identidad exacta del bot, URL de origen oficial o argumento Git de seguridad; literal de protocolo."
+  },
+  "3521c95de35cb8c40ea4": {
+    "file": "message_autofeeds.py",
+    "scope": "show_job",
+    "text": "ninguna",
+    "reason": "Valor interno de frecuencia sin repetición; no es una etiqueta mostrada."
+  },
+  "00a5bcf48b70305a2be5": {
+    "file": "message_autofeeds.py",
+    "scope": "set_paused.apply",
+    "text": "ninguna",
+    "reason": "Valor interno de frecuencia sin repetición; no es una etiqueta mostrada."
+  },
+  "bb2d7120784fae8de892": {
+    "file": "template_native_builder.py",
+    "scope": "TemplateEditorView.panel_embed",
+    "text": " · Santo Domingo (UTC−4)",
+    "reason": "Nombre fijo de zona horaria y desplazamiento UTC, compartido en los tres idiomas."
   }
 }

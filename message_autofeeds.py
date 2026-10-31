@@ -38,7 +38,7 @@ STRINGS = {
         "policy_on": "Programación de miembros activada.",
         "policy_off": "Programación de miembros pausada.",
         "policy_needs": "Configura primero al menos un canal autorizado.",
-        "role": "El rol seleccionado debe poder mencionarse.",
+        "role": "El rol seleccionado debe poder mencionarse.", "role_unavailable": "Rol de mención no disponible.",
         "quota": "Se alcanzó el límite de programaciones.",
         "content": "Escribe un mensaje o selecciona una plantilla existente.",
         "past": "Selecciona una fecha futura.",
@@ -89,7 +89,7 @@ STRINGS = {
         "policy_on": "Member scheduling enabled.",
         "policy_off": "Member scheduling paused.",
         "policy_needs": "Configure at least one permitted channel first.",
-        "role": "The selected role must be mentionable.",
+        "role": "The selected role must be mentionable.", "role_unavailable": "Mention role unavailable.",
         "quota": "The scheduling limit has been reached.",
         "content": "Enter a message or select an existing template.",
         "past": "Select a future date.",
@@ -140,7 +140,7 @@ STRINGS = {
         "policy_on": "Programação dos membros ativada.",
         "policy_off": "Programação dos membros pausada.",
         "policy_needs": "Configure pelo menos um canal permitido primeiro.",
-        "role": "O cargo selecionado deve permitir menções.",
+        "role": "O cargo selecionado deve permitir menções.", "role_unavailable": "Cargo de menção indisponível.",
         "quota": "O limite de programações foi atingido.",
         "content": "Digite uma mensagem ou selecione um modelo existente.",
         "past": "Selecione uma data futura.",
@@ -458,7 +458,7 @@ class DraftConfirm(discord.ui.View):
         await interaction.response.edit_message(content=tr("discarded"), embed=None, view=None)
 
 
-class FeedModal(discord.ui.Modal, title="Programar mensaje"):
+class FeedModal(discord.ui.Modal, title=STRINGS["es-419"]["modal"]):
     def __init__(self, host, guild_id, author, channel_id, repeat, role_id, template=None, job=None):
         super().__init__()
         self.title = tr("modal")
@@ -466,14 +466,14 @@ class FeedModal(discord.ui.Modal, title="Programar mensaje"):
         self.channel_id, self.repeat, self.role_id = channel_id, repeat, role_id
         self.template, self.job = template, job
         self.snapshot = host["guild_config_get"](guild_id, CONFIG_KEY) if job else None
-        self.message = discord.ui.TextInput(label="Mensaje", style=discord.TextStyle.paragraph,
+        self.message = discord.ui.TextInput(label=STRINGS["es-419"]["msg"], style=discord.TextStyle.paragraph,
                                             required=not bool(template or (job or {}).get("embed")), max_length=1900,
                                             default=(job or {}).get("text", ""))
-        self.date = discord.ui.TextInput(label="Fecha y hora local (AAAA-MM-DD HH:MM)",
+        self.date = discord.ui.TextInput(label=STRINGS["es-419"]["date"],
                                          placeholder="2026-10-30 18:00", max_length=24,
                                          default=((datetime.fromisoformat(job["start"]).astimezone(
                                              ZoneInfo(job["zone"])).strftime("%Y-%m-%d %H:%M")) if job else None))
-        self.interval = discord.ui.TextInput(label="Intervalo (ej. 6h, 2d)", required=False,
+        self.interval = discord.ui.TextInput(label=STRINGS["es-419"]["interval_ui"], required=False,
                                              max_length=10, default=(job or {}).get("interval", ""))
         self.message.label = tr("msg")
         self.date.label = tr("date")
@@ -720,12 +720,12 @@ class PolicyView(discord.ui.View):
         self.original = host["guild_config_get"](guild_id, POLICY_KEY)
         self.current = policy(host, guild_id)
         self.channels = discord.ui.ChannelSelect(
-            placeholder="Canales permitidos para miembros", min_values=0, max_values=10,
+            placeholder=STRINGS["es-419"]["channels"], min_values=0, max_values=10,
             channel_types=[discord.ChannelType.text], row=0)
         self.channels.callback = self.pick_channels
         self.add_item(self.channels)
         self.roles = discord.ui.RoleSelect(
-            placeholder="Roles que pueden programar", min_values=0, max_values=10, row=1)
+            placeholder=STRINGS["es-419"]["roles_ui"], min_values=0, max_values=10, row=1)
         self.roles.callback = self.pick_roles
         self.add_item(self.roles)
         self.activate.label = tr("pause") if self.current["enabled"] else tr("activate")
