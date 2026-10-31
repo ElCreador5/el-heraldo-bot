@@ -1,4 +1,4 @@
-"""Editor de mensajes unificado en /setup -> Mensajes -> Crear mensaje.
+"""Editor de publicaciones de /setup -> AutoFeeds -> Crear publicación.
 
 Discord no ofrece campos web tipo Carl-bot: cada fila se representa con un
 selector o un botón/modal dentro del mismo mensaje de configuración.
@@ -253,8 +253,71 @@ def editor_panel_kwargs(editor, guild):
 
 
 def setup_panel(host, guild_id, owner_id):
-    editor = AutofeedEditorView(host, guild_id, owner_id)
-    return editor.summary(), editor
+    """Entrada independiente a AutoFeeds desde /setup."""
+    panel = AutoFeedsHomeView(host, guild_id, owner_id)
+    return panel.summary(), panel
+
+
+class AutoFeedsHomeView(discord.ui.View):
+    """Configuración de publicaciones: crear, administrar y permisos."""
+
+    @guild_context
+    def __init__(self, host, guild_id, owner_id):
+        super().__init__(timeout=900)
+        self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
+        self.create.label = t("new")
+        self.manage.label = t("manage")
+        self.permissions.label = t("permissions")
+        self.back.label = t("back")
+
+    def summary(self):
+        return t("hub_title") + "\n\n" + t("hub_help")
+
+    @guild_context
+    async def interaction_check(self, interaction):
+        return await self.host["configuration_access"](
+            interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label=LANG["es-419"]["new"], style=discord.ButtonStyle.primary, row=0)
+    @guild_context
+    async def create(self, interaction, button):
+        editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=editor.summary(), embed=None, view=editor)
+
+    @discord.ui.button(label=LANG["es-419"]["manage"], style=discord.ButtonStyle.secondary, row=0)
+    @guild_context
+    async def manage(self, interaction, button):
+        jobs = [
+            job for job in feeds.get_jobs(self.host, self.guild_id)
+            if job.get("autofeed") and feeds.can_manage(interaction.user, job)
+        ]
+        if not jobs:
+            await interaction.response.edit_message(
+                content=self.summary() + "\n\n" + feeds.tr("no_jobs"),
+                embed=None, view=self)
+            return
+        view = feeds.ManageView(
+            self.host, self.guild_id, self.owner_id, jobs, from_setup=True)
+        await interaction.response.edit_message(
+            content=feeds.tr("choose"), embed=None, view=view)
+
+    @discord.ui.button(label=LANG["es-419"]["permissions"], style=discord.ButtonStyle.secondary, row=0)
+    @guild_context
+    async def permissions(self, interaction, button):
+        view = feeds.PolicyView(
+            self.host, self.guild_id, self.owner_id, return_to_setup=True)
+        await interaction.response.edit_message(
+            content=view.summary(), embed=None, view=view)
+
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
+    @guild_context
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content=self.host["heraldo_setup_home_content"](self.guild_id),
+            embed=None,
+            view=self.host["HeraldoSetupView"](self.guild_id, self.owner_id))
+
 
 
 class MessageModal(discord.ui.Modal):
@@ -916,9 +979,9 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def back(self, interaction, button):
+        content, panel = setup_panel(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(
-            content=self.host["heraldo_messages_setup_content"](), embed=None,
-            view=self.host["HeraldoMessagesSetupView"](self.guild_id, self.owner_id))
+            content=content, embed=None, view=panel)
 
 
 class SetupConfirmView(discord.ui.View):
