@@ -3863,6 +3863,10 @@ def _setup_has_unsaved_changes(view: discord.ui.View) -> bool:
         ))
     if kind == "HeraldoJoinRolesUsersView":
         return changed("pending_remove_after", join_roles_remove_specific_after_join(guild_id))
+    if kind == "HeraldoReactionRolesEditorView":
+        message_id = view.panel.get("message_id")
+        current = reaction_role_panel_find(guild_id, int(message_id)) if message_id else None
+        return current is None or view.panel != current
     if kind == "HeraldoJoinRolesBotsView":
         return any((
             changed("pending_role_ids", get_join_bot_role_ids(guild_id)),
@@ -3946,6 +3950,12 @@ class _SetupDirtySaveView(discord.ui.View):
             callback = getattr(item, "callback", None)
             callback = getattr(callback, "callback", callback)
             action = getattr(callback, "__name__", "")
+            if (type(self).__name__ == "HeraldoJoinRolesUsersView" and action == "save_user"):
+                user_id = self.selected_user_id
+                current = get_join_specific_roles(self.guild_id).get(user_id, []) if user_id is not None else []
+                item.disabled = (user_id is None or not self.selected_role_ids
+                                 or self.selected_role_ids == current)
+                continue
             if (action in {"save", "save_changes"}
                     or item.label == _t('text.14bdfaf2face3a')
                     or (type(self).__name__ == "HeraldoDateFormatSetupView" and action == "confirm")
@@ -12549,7 +12559,7 @@ class HeraldoReactionRoleCreateModal(discord.ui.Modal, title=_t('text.c552207229
         )
 
 
-class HeraldoReactionRolesEditorView(discord.ui.View):
+class HeraldoReactionRolesEditorView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int, panel: dict, selected: int = 0,
                  created_role: discord.Role | None = None):
