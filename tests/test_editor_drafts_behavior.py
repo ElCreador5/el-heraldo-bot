@@ -73,11 +73,16 @@ class SelectorBehaviorTests(unittest.TestCase):
 
     def test_motw_day_selection_updates_only_preview(self):
         options = [SimpleNamespace(value=str(i), default=i == 1) for i in range(7)]
-        view = SimpleNamespace(weekday=1, day_select=SimpleNamespace(options=options))
-        view._summary = lambda: "Horario propuesto"
+        view = SimpleNamespace(weekday=1, hour=18,
+                               day_select=SimpleNamespace(options=options))
+        def sync_controls():
+            for option in view.day_select.options:
+                option.default = option.value == str(view.weekday)
+        view._sync_controls = sync_controls
+        view._content = lambda guild: "Horario propuesto"
         response = Response()
-        interaction = SimpleNamespace(data={"values": ["6"]}, response=response)
-        callback = isolated_method("HeraldoMotwScheduleSelectView", "select_day")
+        interaction = SimpleNamespace(data={"values": ["6"]}, guild=None, response=response)
+        callback = isolated_method("HeraldoMotwSetupView", "select_day")
         asyncio.run(callback(view, interaction))
         self.assertEqual(view.weekday, 6)
         self.assertEqual([x.value for x in options if x.default], ["6"])
@@ -88,7 +93,7 @@ class SelectorBehaviorTests(unittest.TestCase):
         view = SimpleNamespace(hour=9, hour_select=SimpleNamespace(options=options))
         response = Response()
         interaction = SimpleNamespace(data={"values": ["24"]}, response=response)
-        callback = isolated_method("HeraldoMotwScheduleSelectView", "select_hour")
+        callback = isolated_method("HeraldoMotwSetupView", "select_hour")
         asyncio.run(callback(view, interaction))
         self.assertEqual(view.hour, 9)
         self.assertIsNotNone(response.sent)
