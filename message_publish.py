@@ -7,7 +7,7 @@ from __future__ import annotations
 import discord
 import message_payload
 from autofeed_embed_builder import render, has_content
-from message_autofeeds import referenced_mentions
+from message_autofeeds import referenced_mentions, can_mention_role
 from channel_mentions import channel_mentions
 
 
@@ -19,7 +19,8 @@ def create_payload(host, guild, job):
     allowed = referenced_mentions(guild, job)
     if job.get("role"):
         role = guild.get_role(job["role"])
-        if role is None or not role.mentionable:
+        target = guild.get_channel(job.get("channel")) if job.get("channel") else None
+        if role is None or not can_mention_role(guild, role, target):
             raise ValueError("role")
         if role.mention not in text:
             text = (text + "\n" + role.mention).strip()
