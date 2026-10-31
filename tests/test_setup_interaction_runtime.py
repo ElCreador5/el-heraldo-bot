@@ -96,9 +96,10 @@ class SetupInteractionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         options = {option.value for option in view.panel_select.options}
         self.assertNotIn("create_message", options)
         self.assertNotIn("autofeeds", options)
+        self.assertNotIn("templates", options)
         self.assertTrue({
             "verification", "verify_dm", "suggestions", "honeypot",
-            "condemnation", "logs", "templates",
+            "condemnation", "logs",
         }.issubset(options))
         self.assertNotIn(
             "create_message", getattr(view, "_no_defer_select_values", ())
