@@ -867,101 +867,13 @@
     "key": "command.c766bdc0fce3972c",
     "source": "Editar los paneles y mensajes visuales personalizables de El Heraldo."
   },
-  "programar_mensaje.description": {
-    "key": "command.f7b222c2dd8b244f",
-    "source": "Programación persistente de plantillas."
-  },
-  "programar_mensaje.crear.description": {
-    "key": "command.9cc26bef16a00ce1",
-    "source": "Propone publicar una plantilla en una fecha y zona horaria."
-  },
-  "programar_mensaje.crear.fecha.description": {
-    "key": "text.5b617234bc1705",
-    "source": "Fecha local: AAAA-MM-DD HH:MM"
-  },
-  "programar_mensaje.crear.zona.description": {
-    "key": "text.7288daf3b35948",
-    "source": "Zona IANA, por ejemplo America/Santo_Domingo"
-  },
-  "programar_mensaje.crear.repeticion.choice.4f32a84368e9": {
-    "key": "command.308b666bfd216587",
-    "source": "ninguna"
-  },
-  "programar_mensaje.crear.repeticion.choice.0fd40abf5464": {
-    "key": "command.afda2ef5af478a3d",
-    "source": "diaria"
-  },
-  "programar_mensaje.crear.repeticion.choice.b0cae07d63d1": {
-    "key": "command.029ee779388e664c",
-    "source": "semanal"
-  },
-  "programar_mensaje.listar.description": {
-    "key": "command.b2c9845124e46492",
-    "source": "Consulta próximas ejecuciones y errores de las programaciones."
-  },
-  "programar_mensaje.retirar.description": {
-    "key": "command.ec362672f7941de6",
-    "source": "Retira una programación tras confirmación; conserva mensajes enviados."
-  },
-  "autorespuesta.description": {
-    "key": "command.e643bd8fbc51f717",
-    "source": "Respuestas por palabras o frases con límites de frecuencia."
-  },
-  "autorespuesta.crear.description": {
-    "key": "command.3d71cd4c3db354b7",
-    "source": "Propone una respuesta con plantilla, canal y palabra o frase."
-  },
-  "autorespuesta.crear.coincidencia.choice.3bea7671a89e": {
-    "key": "command.0352803394aaa0c7",
-    "source": "Mensaje exacto"
-  },
-  "autorespuesta.crear.coincidencia.choice.b1fe98217e13": {
-    "key": "command.0056613826f54a44",
-    "source": "Palabra o frase incluida"
-  },
-  "autorespuesta.listar.description": {
-    "key": "command.fea759719d82292c",
-    "source": "Consulta las reglas de autorespuesta y su estado."
-  },
-  "autorespuesta.retirar.description": {
-    "key": "command.dbd81a01a8aed31d",
-    "source": "Retira una regla tras confirmar; conserva las respuestas publicadas."
-  },
-  "sticky.description": {
-    "key": "command.4cdb03121982ee8d",
-    "source": "Mantiene una plantilla al final de un canal."
-  },
-  "sticky.crear.description": {
-    "key": "command.f44b6f0c02cf1d7c",
-    "source": "Propone una publicación sticky; confirmar habilita su publicación."
-  },
-  "sticky.listar.description": {
-    "key": "command.545012681b6d0d7d",
-    "source": "Consulta los mensajes sticky y errores que requieren revisión."
-  },
-  "sticky.retirar.description": {
-    "key": "command.cae7954dfbcdcd3e",
-    "source": "Detiene el sticky previa confirmación; conserva la última publicación."
-  },
-  "webhook_mensaje.description": {
-    "key": "command.dfa7a1aa4d446cb9",
-    "source": "Publica una plantilla mediante un webhook del propio bot, previa confirmación."
-  },
-  "componentes_mensaje.description": {
-    "key": "command.035e42af9cecabd1",
-    "source": "Configura botones y menús independientes mediante un archivo JSON confirmado."
-  },
-  "editar_plantilla.description": {
-    "key": "command.cb3234ec1a480fb4",
-    "source": "Abre el editor visual de texto, embeds, campos e imágenes."
-  },
   "programar.description": {
     "key": "autofeed.command.root",
     "source": "Programar y administrar publicaciones."
   },
   "programar.crear.description": {
     "key": "autofeed.command.create",
-    "source": "Programar texto o una plantilla con vista previa."
+    "source": "Programar un anuncio con vista previa."
   },
   "programar.crear.frecuencia.choice.4f32a84368e9": {
     "key": "autofeed.choice.once",
