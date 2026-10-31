@@ -1,3 +1,7 @@
+## 2026-10-31 — Evidencias técnicas fuera de los registros (Pruebas)
+
+Por instrucción del propietario, los archivos `*-evidence.json` dejan de enviarse al canal configurado para logs. Las rutas de purga moderativa y condenas pasan a emplear el canal separado `archivo-evidencias`, exclusivo, privado y restringido por edad, creado de forma idempotente cuando hay permisos. Los canales de registros mantienen los embeds de sucesos. Si no puede preservarse evidencia verificable, se bloquea el borrado normal. Honeypot sigue sin archivo. Los archivos anteriores no se borran ni migran automáticamente. Pendiente confirmar CI y aceptación en Discord Test/Enzonic.
+
 ## 2026-10-29 — Retiro de servicios Railway y alcance de revisión remota
 
 El propietario decidió retirar los servicios Test `worker` y `heraldo-h03-lab-cron` desde Railway tras verificar los datos y respaldos de Enzonic. El panel aplicó únicamente esas eliminaciones y desconectó los dos volúmenes, que siguen conservados y consumen almacenamiento según uso. No se autorizó eliminar volúmenes/proyecto/respaldos ni recursos de producción. La aceptación final de Enzonic permanece pendiente.

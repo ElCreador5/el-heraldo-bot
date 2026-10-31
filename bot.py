@@ -18091,7 +18091,12 @@ async def delete_with_evidence(channel, message_id: int) -> bool:
     try:
         message = await channel.fetch_message(message_id)
         original_snapshot = evidence_archive.snapshot(message)
-        archive = guild.get_channel(get_log_channel_id(guild.id))
+        archive = await evidence_archive.ensure_private_archive(
+            guild, log_channel_id=get_log_channel_id(guild.id)
+        )
+        if archive is None:
+            print("Evidencias: archivo privado no disponible; borrado bloqueado.")
+            return False
         reference = await evidence_archive.preserve(message, archive, DB_PATH)
         if not reference:
             print("Evidencias: borrado bloqueado; archivo privado incompleto o pendiente de revisión.")
@@ -18471,8 +18476,12 @@ async def condemnation_archive_evidence(
     message = await condemnation_fetch_source_message(guild, source_message_url)
     if message is None or message.author.id != member.id:
         return None, None
-    archive_channel = guild.get_channel(get_log_channel_id(guild.id))
-    if not bot.intents.message_content or not evidence_archive.private_channel(guild, archive_channel):
+    if not bot.intents.message_content:
+        return None, None
+    archive_channel = await evidence_archive.ensure_private_archive(
+        guild, log_channel_id=get_log_channel_id(guild.id)
+    )
+    if archive_channel is None:
         return None, None
     try:
         reference = await evidence_archive.preserve(message, archive_channel, DB_PATH)

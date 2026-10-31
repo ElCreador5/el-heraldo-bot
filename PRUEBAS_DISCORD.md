@@ -1,3 +1,7 @@
+## 2026-10-31 — Evidencias técnicas fuera de los registros (Pruebas)
+
+Por instrucción del propietario, los archivos `*-evidence.json` dejan de enviarse al canal configurado para logs. Las rutas de purga moderativa y condenas pasan a emplear el canal separado `archivo-evidencias`, exclusivo, privado y restringido por edad, creado de forma idempotente cuando hay permisos. Los canales de registros mantienen los embeds de sucesos. Si no puede preservarse evidencia verificable, se bloquea el borrado normal. Honeypot sigue sin archivo. Los archivos anteriores no se borran ni migran automáticamente. Pendiente confirmar CI y aceptación en Discord Test/Enzonic.
+
 ## 2026-10-29 — Arranque Enzonic y auditoría de /setup sin interacción de usuario
 
 **CONSOLA APORTADA POR EL PROPIETARIO:** `92867b6` actualizado por fast-forward; 35 regresiones de migración correctas en Enzonic y `PREFLIGHT_VERIFIED`. Arranque normal `python3 bot.py`, Gateway conectado con la identidad Test, 52 comandos por servidor, tres vistas históricas restauradas, autoprueba `/setup` correcta en Heraldo's Lab y `H03_TEST_SCHEDULE status=SCHEDULED provider=enzonic utc=06:15`. El mensaje de revisión de verificación informó cero expulsiones/cambios de roles.

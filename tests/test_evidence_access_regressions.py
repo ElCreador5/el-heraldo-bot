@@ -43,6 +43,7 @@ class EvidenceRuntimeTests(unittest.IsolatedAsyncioTestCase):
         guild, member = NS(id=901, get_channel=lambda _: NS()), NS(id=11)
         with patch.object(b, 'condemnation_fetch_source_message', new=AsyncMock(return_value=message)), \
                 patch.object(b.evidence_archive, 'private_channel', return_value=True), \
+                patch.object(b.evidence_archive, 'ensure_private_archive', new=AsyncMock(return_value=guild.get_channel(0))), \
                 patch.object(b.evidence_archive, 'preserve', new=AsyncMock(return_value='private-reference')) as preserve, \
                 patch.object(type(b.bot), 'intents', new_callable=lambda: property(lambda _: NS(message_content=True))):
             result = await b.condemnation_archive_evidence(guild, member,

@@ -19,6 +19,8 @@ class PurgeEvidenceTests(unittest.IsolatedAsyncioTestCase):
         self.guild = NS(id=1, me=NS(id=99), default_role=everyone, roles=[everyone], filesize_limit=8000000)
         self.channel = MagicMock(spec=b.discord.TextChannel)
         self.channel.id, self.channel.guild, self.channel.overwrites = 2, self.guild, {}
+        self.channel.topic = archive.ARCHIVE_CHANNEL_TOPIC
+        self.channel.is_nsfw.return_value = True
         self.channel.permissions_for.side_effect = lambda obj: b.discord.Permissions(
             view_channel=obj is self.guild.me, send_messages=True, attach_files=True, read_message_history=True)
         self.guild.get_channel = lambda _: self.channel
@@ -47,6 +49,7 @@ class PurgeEvidenceTests(unittest.IsolatedAsyncioTestCase):
 
     async def delete(self):
         with patch.object(b, 'DB_PATH', self.db), patch.object(b, 'get_log_channel_id', return_value=2), \
+                patch.object(archive, 'ensure_private_archive', new=AsyncMock(return_value=self.channel)), \
                 patch.object(b.bot, '_connection', wraps=b.bot._connection):
             # Gateway no se inicia; el intent se habilita solo para esta prueba.
             with patch.object(type(b.bot), 'intents', new_callable=lambda: property(lambda _: NS(message_content=True))):

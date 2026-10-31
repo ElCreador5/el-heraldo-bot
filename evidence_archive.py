@@ -13,6 +13,53 @@ import sqlite3
 
 import discord
 
+ARCHIVE_CHANNEL_NAME = "archivo-evidencias"
+ARCHIVE_CHANNEL_TOPIC = "El Heraldo · Archivo privado de evidencias verificadas"
+_archive_channel_locks: dict[int, asyncio.Lock] = {}
+
+
+async def ensure_private_archive(guild, *, log_channel_id: int = 0):
+    """Aisla los archivos técnicos y no utiliza nunca el canal de registros."""
+    if guild is None or guild.me is None:
+        return None
+    lock = _archive_channel_locks.setdefault(guild.id, asyncio.Lock())
+    async with lock:
+        matches = [
+            ch for ch in guild.text_channels
+            if isinstance(ch, discord.TextChannel) and ch.topic == ARCHIVE_CHANNEL_TOPIC
+        ]
+        if matches:
+            if len(matches) != 1:
+                return None
+            ch = matches[0]
+            if (ch.id == log_channel_id or not ch.is_nsfw()
+                    or ch.overwrites_for(guild.default_role).view_channel is not False
+                    or not private_channel(guild, ch)):
+                return None
+            return ch
+        if not guild.me.guild_permissions.manage_channels:
+            return None
+        overrides = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, attach_files=True,
+                read_message_history=True,
+            ),
+        }
+        try:
+            ch = await guild.create_text_channel(
+                ARCHIVE_CHANNEL_NAME, topic=ARCHIVE_CHANNEL_TOPIC,
+                overwrites=overrides, nsfw=True,
+                reason="Separar evidencias técnicas de los registros de moderación.",
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            return None
+        if (ch.id == log_channel_id or not ch.is_nsfw()
+                or ch.overwrites_for(guild.default_role).view_channel is not False
+                or not private_channel(guild, ch)):
+            return None
+        return ch
+
 
 @_i18n_context
 def private_channel(guild, channel):
@@ -80,6 +127,8 @@ async def verify(channel, receipts):
     if not receipts:
         return False
     for receipt in receipts:
+        if receipt.get('channel_id') != channel.id:
+            return False
         copy = await channel.fetch_message(receipt['message_id'])
         if copy.author.id != channel.guild.me.id or len(copy.attachments) != 1:
             return False
@@ -96,7 +145,10 @@ async def verify(channel, receipts):
 async def preserve(message, archive_channel, db_path):
     """Devuelve referencia solo tras lectura íntegra. Los errores los maneja el llamador."""
     guild = message.guild
-    if not private_channel(guild, archive_channel) or message.channel.id == archive_channel.id:
+    if (archive_channel is None or archive_channel.topic != ARCHIVE_CHANNEL_TOPIC
+            or not archive_channel.is_nsfw()
+            or not private_channel(guild, archive_channel)
+            or message.channel.id == archive_channel.id):
         return None
     metadata = snapshot(message)
     fingerprint = hashlib.sha256(encoded(metadata)).hexdigest()
