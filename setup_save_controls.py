@@ -128,8 +128,11 @@ def has_unsaved_changes(view):
         except ValueError:
             return bool(view.dirty)
     if name == "AutofeedEditorView":
+        checker = getattr(view, "_has_pending_changes", None)
+        if callable(checker):
+            return bool(checker())
         if view.original is None:
-            return None  # «Enviar», no «Guardar cambios».
+            return None  # Compatibilidad con vistas antiguas.
         saved = view.original
         try:
             source = sys.modules.get(type(view).__module__)
@@ -166,4 +169,9 @@ def refresh_save_button(view):
     for item in view.children:
         if getattr(item, "label", None) in labels:
             item.disabled = not pending
+    # En Anuncios, Descartar cambia de estado junto con Guardar.
+    if type(view).__name__ == "AutofeedEditorView":
+        discard = getattr(view, "discard", None)
+        if discard in view.children:
+            discard.disabled = not pending
     return pending
