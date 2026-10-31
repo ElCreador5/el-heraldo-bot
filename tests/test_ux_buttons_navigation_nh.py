@@ -88,7 +88,7 @@ class NHButtonsNavigation(unittest.TestCase):
             "HeraldoOrientationSetupView": {2: 4, 3: 3, 4: 3},
             "HeraldoHoneypotSetupView": {1: 3, 2: 3, 3: 3},
             "HeraldoTemplateSetupView": {2: 3, 3: 3, 4: 3},
-            "HeraldoVerificationSetupView": {3: 5, 4: 5},
+            "HeraldoVerificationSetupView": {3: 4, 4: 5},
             "HeraldoUserReportsSetupView": {3: 5, 4: 5},
         }
         for name, rows in expected.items():
