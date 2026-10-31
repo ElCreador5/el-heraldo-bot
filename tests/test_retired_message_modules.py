@@ -28,7 +28,7 @@ class RetiredMessageModulesTests(unittest.TestCase):
             for kw in node.keywords
             if kw.arg == "value" and isinstance(kw.value, ast.Constant)
         ]
-        self.assertIn("templates", options)
+        self.assertNotIn("templates", options)
         self.assertNotIn("components", options)
         self.assertNotIn("kits", options)
         editor = next(n for n in view.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "open_editor")
@@ -52,8 +52,8 @@ class RetiredMessageModulesTests(unittest.TestCase):
         self.assertIn("def heraldo_message_role_config", SOURCE)
         self.assertIn("message_components.install(globals())", SOURCE)
         self.assertIn("class HeraldoTemplateSetupView", SOURCE)
-        self.assertIn('value="templates"', SOURCE)
-        self.assertIn('@bot.tree.command(name="sendtemplate"', SOURCE)
+        self.assertNotIn('value="templates"', SOURCE)
+        self.assertNotIn('@bot.tree.command(name="sendtemplate"', SOURCE)
 
 
 if __name__ == "__main__":
