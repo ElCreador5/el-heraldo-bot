@@ -1,4 +1,4 @@
-"""Editor de publicaciones de /setup -> AutoFeeds -> Crear publicación.
+"""Editor de publicaciones de /setup -> Anuncios -> Crear anuncio.
 
 Discord no ofrece campos web tipo Carl-bot: cada fila se representa con un
 selector o un botón/modal dentro del mismo mensaje de configuración.
@@ -16,7 +16,7 @@ import message_autofeeds as feeds
 LANG = {
     "es-419": {
         "hub_title": "**Anuncios**",
-        "hub_help": "Crea publicaciones como anuncios: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
+        "hub_help": "Crea anuncios: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
         "staff_only": "Solo los administradores y moderadores pueden programar mensajes.",
         "new": "Crear Anuncio", "manage": "Gestionar Anuncios", "permissions": "Permisos",
         "new_title": "**Crear mensaje**", "edit_title": "**Editar mensaje**",
@@ -27,7 +27,7 @@ LANG = {
         "empty": "Sin definir", "no_repeat": "No se repite", "start": "Fecha y hora",
         "repeat": "Repetir cada", "members": "Rol mencionado", "none": "Ninguno",
         "warning": "Selecciona el canal y escribe un mensaje o configura un embed.",
-        "invalid_interval": "La repetición debe ser de al menos una hora (o un mes).",
+        "invalid_interval": "En pruebas, la repetición mínima es de 5 minutos; fuera de pruebas, una hora (o un mes).",
         "time_format": "AAAA-MM-DD HH:MM", "months": "Meses", "days": "Días",
         "hours": "Horas", "minutes": "Minutos",
         "saved": "Mensaje programado correctamente.", "cancelled": "Cambios descartados.",
@@ -410,7 +410,11 @@ def repeat_parts(months, days, hours, minutes):
         raise ValueError("negative")
     if months > 120 or days > 365 or hours > 8760 or minutes > 59:
         raise ValueError("range")
-    if months == 0 and days * 1440 + hours * 60 + minutes < 60:
+    # En Lab se permite ensayar cada cinco minutos; en otros entornos
+    # se mantiene el mínimo de una hora para evitar publicaciones excesivas.
+    from enzonic_test_host import is_test
+    minimum = 5 if is_test() else 60
+    if months == 0 and days * 1440 + hours * 60 + minutes < minimum:
         if any(values):
             raise ValueError("short")
         return None
@@ -458,11 +462,13 @@ class CustomRepeatModal(discord.ui.Modal):
     def __init__(self, editor):
         super().__init__(title=t("repeat_picker"))
         self.editor = editor
-        # Una frecuencia personalizada nueva empieza en 1 hora, no en cero.
-        # Mantener los valores previos al editar y evitar el falso error al
-        # confirmar el formulario con los valores iniciales.
+        # En Lab se parte de cinco minutos; la configuración de producción
+        # conserva una hora. Al editar se mantienen exactamente los valores.
+        from enzonic_test_host import is_test
         parts = editor.parts if editor.parts is not None else PRESETS["once"]
-        parts = parts or {"months": 0, "days": 0, "hours": 1, "minutes": 0}
+        parts = parts or ({"months": 0, "days": 0, "hours": 0, "minutes": 5}
+                          if is_test() else
+                          {"months": 0, "days": 0, "hours": 1, "minutes": 0})
         self.fields = [discord.ui.TextInput(
             label=t(key), default=str(parts.get(key, 0)), max_length=4)
             for key in ("months", "days", "hours", "minutes")]
