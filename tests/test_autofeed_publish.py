@@ -64,8 +64,9 @@ class MessageCreateTests(unittest.IsolatedAsyncioTestCase):
     def test_one_editor_can_publish_now_or_schedule(self):
         editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
         self.assertIsNone(editor.start)
-        self.assertNotIn(setup.t("discard"), [x.label for x in editor.children
-                                              if hasattr(x, "label")])
+        self.assertIn(editor.discard, editor.children)
+        self.assertTrue(editor.discard.disabled)
+        self.assertTrue(editor.save.disabled)
         editor.start = None
         editor.parts = setup.PRESETS["daily"]
         self.assertIsNotNone(editor.parts)
