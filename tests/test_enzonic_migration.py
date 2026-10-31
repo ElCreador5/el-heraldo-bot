@@ -272,10 +272,80 @@ class HostSafety(EnzonicFixture):
                         'commit','-qm','fixture'],check=True)
         self.assertRegex(host.revision(),r'^[0-9a-f]{40}$')
         (self.root/'marker').write_text('changed')
-        with self.assertRaisesRegex(job.BackupJobError,'checkout_unverified'): host.revision()
+        with patch.object(host, '_github_metadata', side_effect=job.BackupJobError('enzonic_checkout_unverified')):
+            with self.assertRaisesRegex(job.BackupJobError,'checkout_unverified'):
+                host.revision()
         (self.root/'marker').write_text('safe')
         subprocess.run(['git','-C',str(self.root),'branch','-m','main'],check=True)
         with self.assertRaisesRegex(job.BackupJobError,'wrong_branch'): host.revision()
+
+
+    def test_github_deploy_overlay_verified_against_exact_remote_tree(self):
+        """HEAD viejo: se acepta solo si TODOS los archivos coinciden con Pruebas."""
+        self.git_patch.stop()
+        subprocess.run(['git', 'init', '-q', '-b', 'Pruebas', str(self.root)], check=True)
+        (self.root / 'bot.py').write_bytes(b'old program\\n')
+        (self.root / 'enzonic_test_host.py').write_bytes(b'old guard\\n')
+        subprocess.run(['git', '-C', str(self.root), 'add', 'bot.py', 'enzonic_test_host.py'], check=True)
+        subprocess.run(['git', '-C', str(self.root), '-c', 'user.name=Fixture',
+                        '-c', 'user.email=fixture@example.invalid',
+                        'commit', '-qm', 'fixture'], check=True)
+        local = host.revision()
+        (self.root / 'bot.py').write_bytes(b'updated program\\n')
+        (self.root / 'enzonic_test_host.py').write_bytes(b'updated guard\\n')
+        remote = 'b' * 40
+        tree_id = 'c' * 40
+
+        def manifest():
+            return {'sha': tree_id, 'truncated': False, 'tree': [
+                {'path': path, 'type': 'blob', 'mode': '100644',
+                 'sha': host._git_blob_sha(self.root / path, (self.root / path).stat().st_size),
+                 'size': (self.root / path).stat().st_size}
+                for path in ('bot.py', 'enzonic_test_host.py')]}
+
+        # El manifiesto queda inmóvil durante el ensayo, aunque cambie el disco.
+        tree = manifest()
+        with patch.object(host, '_github_metadata', side_effect=[
+            {'sha': remote, 'commit': {'tree': {'sha': tree_id}}}, tree
+        ]) as fetch:
+            self.assertEqual(host.revision(), remote)
+            self.assertEqual(fetch.call_count, 2)
+        self.assertNotEqual(local, remote)
+        # Una modificación no publicada y un archivo ausente bloquean el arranque.
+        (self.root / 'bot.py').write_bytes(b'unauthorized change\\n')
+        with patch.object(host, '_github_metadata', side_effect=[
+            {'sha': remote, 'commit': {'tree': {'sha': tree_id}}}, tree
+        ]):
+            with self.assertRaisesRegex(job.BackupJobError, 'enzonic_checkout_unverified'):
+                host.revision()
+        (self.root / 'bot.py').unlink()
+        with patch.object(host, '_github_metadata', side_effect=[
+            {'sha': remote, 'commit': {'tree': {'sha': tree_id}}}, tree
+        ]):
+            with self.assertRaisesRegex(job.BackupJobError, 'enzonic_checkout_unverified'):
+                host.revision()
+
+    def test_remote_manifest_invalid_or_incomplete_stays_blocked(self):
+        self.git_patch.stop()
+        subprocess.run(['git', 'init', '-q', '-b', 'Pruebas', str(self.root)], check=True)
+        (self.root / 'marker').write_text('old')
+        subprocess.run(['git', '-C', str(self.root), 'add', 'marker'], check=True)
+        subprocess.run(['git', '-C', str(self.root), '-c', 'user.name=Fixture',
+                        '-c', 'user.email=fixture@example.invalid',
+                        'commit', '-qm', 'fixture'], check=True)
+        (self.root / 'marker').write_text('updated')
+        sha = 'd' * 40
+        for remote_tree in (
+            {'sha': 'c' * 40, 'truncated': True, 'tree': []},
+            {'sha': 'c' * 40, 'truncated': False, 'tree': []},
+            {'sha': 'c' * 40, 'truncated': False, 'tree': [
+                {'path': '../bot.py', 'type': 'blob', 'mode': '100644', 'sha': sha, 'size': 3}]},
+        ):
+            with self.subTest(tree=remote_tree), patch.object(host, '_github_metadata', side_effect=[
+                {'sha': sha, 'commit': {'tree': {'sha': 'c' * 40}}}, remote_tree
+            ]):
+                with self.assertRaisesRegex(job.BackupJobError, 'enzonic_checkout_unverified'):
+                    host.revision()
 
 
 class BackupSafety(EnzonicFixture):
