@@ -1402,7 +1402,7 @@
   "text.686d82b1910e2d": "Pausar invitaciones",
   "text.68793fa9ca3981": "El miembro objetivo ya no está disponible.",
   "text.689a0afe41c5c0": "Canal fusionado con #{p0} por {p1}",
-  "text.6902f6b5d77eb7": "**El Heraldo · Mensajes**\n\nElige el mensaje que deseas editar. Los mensajes del sistema tienen nombres fijos; las plantillas con nombres propios son opcionales y se encuentran en Plantillas. Los cambios quedan aislados por servidor y los paneles publicados se sincronizan cuando corresponde.\n\n**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot, Condenas y Logs.\n**Excluidos a propósito:** Variables, comandos, listas, estados, perfiles, historiales, rankings y cualquier panel cuyo contenido represente datos reales o generados en tiempo real.",
+  "text.6902f6b5d77eb7": "**El Heraldo · Mensajes**\n\nElige el mensaje del sistema que deseas editar. Los cambios quedan aislados por servidor y los paneles publicados se sincronizan cuando corresponde.\n\n**Editables:** Verificación, DM de verificación, Sugerencias, Honeypot, Condenas y Logs.\n**Excluidos a propósito:** Variables, comandos, listas, estados, perfiles, historiales, rankings y cualquier panel cuyo contenido represente datos reales o generados en tiempo real.",
   "text.690539f1e42528": "Error: La URL debe comenzar por https:// o http://.",
   "text.69102c5732d1cd": "Miembro cuyos datos usan {usuario}, {mencion}, {avatar}… (opcional)",
   "text.6982631f6a5311": "La proporción exige una edad de cuenta mayor que cero. La duración aquí NO termina una condena o baneo. «Solo registrar» evita sanciones, pero puede pausar invitaciones si así se configuró.",
