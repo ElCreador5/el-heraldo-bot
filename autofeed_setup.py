@@ -1033,13 +1033,13 @@ class AutofeedEditorView(discord.ui.View):
         from autofeed_embed_builder import SectionModal
         await interaction.response.send_modal(SectionModal(self, "main", return_to_editor=True))
 
-    @discord.ui.button(label=LANG["es-419"]["images_button"], style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["images_button"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def images_button(self, interaction, button):
         from autofeed_embed_builder import SectionModal
         await interaction.response.send_modal(SectionModal(self, "media"))
 
-    @discord.ui.button(label=LANG["es-419"]["embed_channel"], style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["embed_channel"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def embed_channel(self, interaction, button):
         chooser = EmbedChannelSelectView(self)
@@ -1068,7 +1068,7 @@ class AutofeedEditorView(discord.ui.View):
             embed=embed, view=self,
             allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label=LANG["es-419"]["insert_mention"], style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=LANG["es-419"]["insert_mention"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def mention(self, interaction, button):
         picker = MentionPickerView(self)
