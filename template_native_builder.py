@@ -166,6 +166,20 @@ class TemplateEditorView(AutofeedEditorView):
         self.add_item(self.publish_button)
         self.dirty = False
 
+    def _template_has_changes(self):
+        """Guardar solo si el contenido de la plantilla difiere del guardado."""
+        if self.original_template is None:
+            return bool((self.name or "").strip() or (self.text or "").strip()
+                        or self.embed or self.extra_embeds)
+        return not self._is_saved()
+
+    def to_components(self):
+        changed = self._template_has_changes()
+        self.save.disabled = not changed
+        if self.discard in self.children:
+            self.discard.disabled = not changed
+        return super().to_components()
+
     def panel_embed(self, guild):
         """Ordered Discord panel matching the user's reference layout."""
         e = discord.Embed(title=tr("panel_title"), description=tr("finish"),
