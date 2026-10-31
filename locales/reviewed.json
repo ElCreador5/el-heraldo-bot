@@ -660,12 +660,12 @@
     "**El Heraldo · Configurações**\n\nSelecione uma seção para abri-la diretamente. Salve as alterações somente quando estiver satisfeito.\nVocê pode voltar a este menu pelas opções de navegação de cada módulo."
   ],
   "setup.module.autofeeds.description": [
-    "Automatic and scheduled posts",
-    "Publicações automáticas e programadas"
+    "Create and manage scheduled announcements.",
+    "Criar e gerenciar anúncios programados."
   ],
   "setup.module.autofeeds.label": [
-    "AutoFeeds",
-    "AutoFeeds"
+    "Announcements",
+    "Anúncios"
   ],
   "setup.module.automod.description": [
     "Automatic server protections",
