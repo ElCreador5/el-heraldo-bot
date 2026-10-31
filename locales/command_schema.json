@@ -1021,6 +1021,6 @@
   },
   "programar.configurar.description": {
     "key": "autofeed.command.config",
-    "source": "Configurar canales y roles autorizados."
+    "source": "Consultar quién puede programar anuncios."
   }
 }
