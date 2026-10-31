@@ -92,12 +92,13 @@ class SetupNoOverlaps(unittest.TestCase):
         editor = find_class(ANNOUNCEMENTS, "AutofeedEditorView")
         methods = {method for method, _ in decorated_buttons(editor)}
         self.assertTrue({"message", "embed_builder", "save", "publish_button"}.issubset(methods))
-        self.assertTrue({"mention", "embed_channel", "images_button"}.isdisjoint(methods))
+        # Los métodos heredados existen para compatibilidad con editores antiguos,
+        # pero sus botones deben retirarse de la vista principal.
+        self.assertTrue({"mention", "embed_channel", "images_button"}.issubset(methods))
         init = ast.unparse(find_method(editor, "__init__"))
         self.assertIn("self.embed_builder", init)
-        self.assertNotIn("self.mention,", init)
-        self.assertNotIn("self.embed_channel,", init)
-        self.assertNotIn("self.images_button,", init)
+        self.assertIn("self.remove_item(control)", init)
+        self.assertIn("self.images_button, self.embed_channel, self.mention", init)
 
         builder = ast.unparse(find_method(find_class(BUILDER, "EmbedBuilderView"), "__init__"))
         self.assertIn("'media'", builder)
