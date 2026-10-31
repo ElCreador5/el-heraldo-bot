@@ -18,7 +18,7 @@ CONFIG_KEY = "message_schedules"
 MAX_SERVER = 25
 STRINGS = {
     "es-419": {
-        "denied": "No tienes permiso para programar en ese canal.",
+        "denied": "Solo los administradores y moderadores pueden programar mensajes en los canales permitidos.", "staff_only": "Solo los administradores y moderadores pueden programar mensajes.",
         "no_jobs": "No hay programaciones disponibles.",
         "invalid": "Revisa la fecha, la frecuencia y el contenido.",
         "changed": "La programación cambió en otra sesión. Vuelve a abrirla.",
@@ -69,7 +69,7 @@ STRINGS = {
         "policy_help": "Las listas se guardan con Guardar cambios. Activar/Pausar solo cambia el estado guardado.",
     },
     "en-US": {
-        "denied": "You cannot schedule messages in that channel.",
+        "denied": "Only administrators and moderators can schedule messages in permitted channels.", "staff_only": "Only administrators and moderators can schedule messages.",
         "no_jobs": "No schedules are available.",
         "invalid": "Check the date, frequency, and content.",
         "changed": "This schedule changed in another session. Open it again.",
@@ -120,7 +120,7 @@ STRINGS = {
         "policy_help": "Save lists with Save changes. Enable/Pause only updates the saved state.",
     },
     "pt-BR": {
-        "denied": "Você não pode programar mensagens nesse canal.",
+        "denied": "Somente administradores e moderadores podem programar mensagens nos canais permitidos.", "staff_only": "Somente administradores e moderadores podem agendar mensagens.",
         "no_jobs": "Não há programações disponíveis.",
         "invalid": "Confira a data, a frequência e o conteúdo.",
         "changed": "Esta programação mudou em outra sessão. Abra-a novamente.",
@@ -190,19 +190,23 @@ def policy(host, guild_id):
     return {"enabled": False, "channels": [], "roles": [], "max_per_member": 3}
 
 
+def can_schedule(member):
+    """Exige permisos reales de Discord: administrador o moderador."""
+    perms = getattr(member, "guild_permissions", None)
+    return bool(perms and (
+        perms.administrator or perms.manage_guild or perms.manage_messages))
+
+
 def can_create(host, member, channel):
-    perms = channel.permissions_for(member)
-    if not (perms.view_channel and perms.send_messages):
+    """El antiguo ajuste para miembros no autoriza nuevas programaciones."""
+    if not can_schedule(member):
         return False
-    if member.guild_permissions.manage_guild:
-        return True
-    p = policy(host, member.guild.id)
-    return (p["enabled"] and channel.id in p["channels"]
-            and any(role.id in p["roles"] for role in member.roles))
+    perms = channel.permissions_for(member)
+    return bool(perms.view_channel and perms.send_messages)
 
 
 def can_manage(member, job):
-    return member.guild_permissions.manage_guild or job.get("author") == member.id
+    return can_schedule(member)
 
 
 def referenced_mentions(guild, job):
@@ -249,7 +253,15 @@ def can_deliver(host, guild, job, member, channel):
     if job.get("autofeed") is not True:
         return member.guild_permissions.manage_guild
     if not can_create(host, member, channel):
-        return False
+        # Compatibilidad para anuncios YA programados bajo el acceso legado.
+        # Nunca permite crear o editar nuevas programaciones como miembro.
+        perms = channel.permissions_for(member)
+        old = policy(host, guild.id)
+        if (can_schedule(member) or job.get("author") != member.id
+                or not (perms.view_channel and perms.send_messages)
+                or not (old["enabled"] and channel.id in old["channels"])
+                or not any(role.id in old["roles"] for role in getattr(member, "roles", ()))):
+            return False
     try:
         referenced_mentions(guild, job)
     except (ValueError, TypeError):
@@ -300,6 +312,8 @@ def atomic_change(host, guild_id, transform, expected=None):
 
 def persist_schedule(host, guild_id, actor, job, *, snapshot=None, editing=False):
     """Save both /programar and /setup drafts atomically, without duplicating rows."""
+    if not can_schedule(actor):
+        raise ValueError("denied")
     def apply(jobs, conn):
         if editing:
             original = next((old for old in jobs if old.get("id") == job["id"]), None)
@@ -322,8 +336,7 @@ def persist_schedule(host, guild_id, actor, job, *, snapshot=None, editing=False
         else:
             if any(old.get("id") == job["id"] for old in jobs):
                 raise ValueError("conflict")
-            limit = (MAX_SERVER if actor.guild_permissions.manage_guild
-                     else policy(host, guild_id)["max_per_member"])
+            limit = MAX_SERVER
             if sum(old.get("author") == job["author"] for old in jobs) >= limit:
                 raise ValueError("quota")
             jobs.append({k: v for k, v in job.items()
@@ -896,13 +909,12 @@ def install(host):
             tr("preview") + "\n" + show_job(job),
             view=ActionConfirm(host, {**job, "guild": interaction.guild.id}, "eliminar"), ephemeral=True)
 
-    @group.command(name="configurar", description="Configurar canales y roles autorizados.")
+    @group.command(name="configurar", description="Consultar quién puede programar anuncios.")
     @guild_context
     async def configurar(interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.manage_guild:
+        if not can_schedule(interaction.user):
             return await respond_error(interaction, "denied")
-        view = PolicyView(host, interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(view.summary(), view=view, ephemeral=True)
+        await interaction.response.send_message(tr("staff_only"), ephemeral=True)
 
     host["bot"].tree.add_command(group)
     return group
