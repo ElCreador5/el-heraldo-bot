@@ -5667,9 +5667,9 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
             if channel_id else []
         )
         for option in self.day_select.options:
-            option.default = option.value == str(self.weekday)
+            option.default = bool(channel_id) and option.value == str(self.weekday)
         for option in self.hour_select.options:
-            option.default = option.value == str(self.hour)
+            option.default = bool(channel_id) and option.value == str(self.hour)
         dirty = self._has_pending_changes()
         self.save_changes.disabled = not dirty
         self.discard_changes.disabled = not dirty
@@ -12826,7 +12826,7 @@ class HeraldoDateFormatSetupView(_SetupDirtySaveView):
         selection = discord.ui.Select(
             placeholder=_t('text.a2d518f29c1efe'),
             options=[discord.SelectOption(label=label, value=value,
-                                          default=value == self.pending)
+                                          default=bool(guild_config_get(guild_id, "display_date_format")) and value == self.pending)
                      for value, label in DATE_FORMAT_CHOICES.items()],
             row=0,
         )
@@ -24860,7 +24860,8 @@ class EmbedScheduleView(discord.ui.View):
     def __init__(self, owner_id, guild_id, name):
         super().__init__(timeout=900)
         self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
-        self.mode = "weekly"
+        self.mode = "weekly"  # Valor interno hasta que el usuario elija la frecuencia.
+        self.mode_selected = False
         self.config = None
         self.channel_id = None
         self.active = False
@@ -24870,7 +24871,7 @@ class EmbedScheduleView(discord.ui.View):
         self.channel_menu.callback = self.select_channel
         self.add_item(self.channel_menu)
         self.mode_menu = discord.ui.Select(placeholder=_t('text.441cc909a46990'),
-            options=[discord.SelectOption(label=label, value=key, default=key == self.mode) for key,label in self.MODES],
+            options=[discord.SelectOption(label=label, value=key) for key,label in self.MODES],
             row=1)
         self.mode_menu.callback = self.select_mode
         self.add_item(self.mode_menu)
@@ -24933,6 +24934,7 @@ class EmbedScheduleView(discord.ui.View):
     async def select_mode(self, interaction):
         value = self.mode_menu.values[0]
         self.mode = value
+        self.mode_selected = True
         self.config = None
         self.invalidate_review()
         for opt in self.mode_menu.options:
@@ -24958,7 +24960,7 @@ class EmbedScheduleView(discord.ui.View):
     async def save(self, interaction, button):
         if isinstance(self, EmbedScheduleEditView):
             return await self.save_existing(interaction, button)
-        if self.channel_id is None or self.config is None:
+        if not self.mode_selected or self.channel_id is None or self.config is None:
             await interaction.response.send_message(_t('text.059aeae72d2de2'), ephemeral=True)
             return
         if embed_get(self.guild_id, self.name) is None:
@@ -25243,6 +25245,7 @@ class EmbedScheduleEditView(EmbedScheduleView):
         super().__init__(owner_id, guild_id, name)
         self.schedule_id, self.version = schedule_id, version
         self.channel_id, self.mode, self.config, self.active = channel_id, mode, json.loads(config_json), bool(enabled)
+        self.mode_selected = True  # Edición: frecuencia cargada desde un anuncio guardado.
         self.toggle.label = _t('text.88c0ffe30005b1') if self.active else _t('text.254052ea94561f')
         self.toggle.style = discord.ButtonStyle.danger if self.active else discord.ButtonStyle.success
         for option in self.mode_menu.options:
