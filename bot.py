@@ -11309,6 +11309,14 @@ class HeraldoModerationSetupView(discord.ui.View):
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
 
+    @discord.ui.button(label="Sugerencias", style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
+    async def suggestions(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        from suggestions_setup import SuggestionsSetupView
+        view = SuggestionsSetupView(globals(), self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=view.summary(interaction.guild), embed=None, view=view)
+
     @discord.ui.button(label=_t('text.8976e54ff734bd'), style=discord.ButtonStyle.primary, row=1)
     @_i18n_context
     async def ban_duration(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -11316,7 +11324,7 @@ class HeraldoModerationSetupView(discord.ui.View):
         view = HeraldoBanDurationSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view.content(), view=view)
 
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
