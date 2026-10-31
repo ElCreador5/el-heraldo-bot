@@ -1402,7 +1402,7 @@
   "text.686d82b1910e2d": "Pause invites",
   "text.68793fa9ca3981": "Target member is no longer available.",
   "text.689a0afe41c5c0": "Channel merged with #{p0} by {p1}",
-  "text.6902f6b5d77eb7": "**El Heraldo · Messages**\n\nChoose a message to edit. System messages have fixed names; optional named templates are under Templates. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
+  "text.6902f6b5d77eb7": "**El Heraldo · Messages**\n\nChoose a system message to edit. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
   "text.690539f1e42528": "Error: The URL should start with https:// or http://.",
   "text.69102c5732d1cd": "Member whose data fills {usuario}, {mencion}, {avatar}… (optional)",
   "text.6982631f6a5311": "The ratio requires an account age greater than zero. This duration does NOT end a condemnation or ban. Log only avoids sanctions but may pause invites if configured.",
