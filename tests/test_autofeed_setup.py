@@ -101,6 +101,11 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         i.response.edit_message.reset_mock()
         await policy.back.callback(i)
         self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
+        # También /programar configurar conserva la independencia de Mensajes.
+        i.response.edit_message.reset_mock()
+        command_policy = feeds.PolicyView(b.__dict__, self.guild_id, self.owner_id)
+        await command_policy.back.callback(i)
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
 
