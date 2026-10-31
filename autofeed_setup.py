@@ -342,9 +342,20 @@ def resolve_inline_embed_names(guild, value):
     """
     if not guild or not value:
         return value
+    # Discord no proporciona autocompletado dentro de un modal.
+    # Resolver referencias por nombre único; aceptar canales de texto y
+    # canales publicados en guild.channels (p. ej. foros/anuncios).
+    channels = list(getattr(guild, "text_channels", ()) or ())
+    seen = {getattr(channel, "id", None) for channel in channels}
+    for channel in getattr(guild, "channels", ()) or ():
+        if (getattr(channel, "id", None) not in seen
+                and getattr(channel, "name", None)
+                and getattr(channel, "mention", None)):
+            channels.append(channel)
+            seen.add(channel.id)
     for prefix, objects, render in (
         ("@", getattr(guild, "roles", ()), lambda item: f"<@&{item.id}>"),
-        ("#", getattr(guild, "text_channels", ()), lambda item: f"<#{item.id}>"),
+        ("#", channels, lambda item: f"<#{item.id}>"),
     ):
         names = {}
         for item in objects:
