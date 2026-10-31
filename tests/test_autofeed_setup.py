@@ -54,7 +54,7 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Crear anuncio", editor.panel_embed(None).title)
         self.assertNotIn("**Mensaje:**", editor.summary())
         frequency = setup.FrequencyPickerView(editor)
-        self.assertIn(setup.t("date_picker"), [item.label for item in frequency.children if item.label])
+        self.assertIn(setup.t("date_picker"), [item.label for item in frequency.children if getattr(item, "label", None)])
         self.assertIn(setup.t("discard"), labels)
         self.assertTrue(editor.save.disabled)
         self.assertTrue(editor.discard.disabled)
