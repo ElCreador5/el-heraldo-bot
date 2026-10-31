@@ -8,7 +8,7 @@
   "autofeed.choice.once": "Una vez",
   "autofeed.choice.weekly": "Semanal",
   "autofeed.command.config": "Consultar quién puede programar anuncios.",
-  "autofeed.command.create": "Programar texto o una plantilla con vista previa.",
+  "autofeed.command.create": "Programar un anuncio con vista previa.",
   "autofeed.command.delete": "Eliminar una programación previa confirmación.",
   "autofeed.command.edit": "Editar el contenido y horario de una programación.",
   "autofeed.command.list": "Consultar y administrar las publicaciones programadas.",
