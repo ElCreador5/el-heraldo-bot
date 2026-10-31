@@ -99,18 +99,39 @@ class AutofeedTests(unittest.TestCase):
         self.assertEqual(next_occurrence(by_hour, datetime(2027, 1, 31, 16, tzinfo=timezone.utc)),
                          "2027-01-31T22:00:00+00:00")
 
-    def test_member_scope_and_revocation(self):
+    def test_only_admins_and_moderators_can_schedule(self):
         member = NS(id=77, guild_permissions=discord.Permissions.none(),
                     roles=[NS(id=3)], guild=NS(id=1))
-        channel = NS(id=10, permissions_for=lambda _: discord.Permissions(view_channel=True,send_messages=True))
+        channel = NS(id=10, permissions_for=lambda _: discord.Permissions(
+            view_channel=True, send_messages=True))
         self.assertFalse(feeds.can_create(self.host, member, channel))
         self.set(1, feeds.POLICY_KEY, json.dumps({"enabled": True, "channels": [10],
                                                  "roles": [3]}))
-        self.assertTrue(feeds.can_create(self.host, member, channel))
-        channel.id = 11
         self.assertFalse(feeds.can_create(self.host, member, channel))
-        self.assertFalse(feeds.can_manage(member, self.job))
+        self.assertFalse(feeds.can_manage(member, dict(self.job, author=77)))
+        with self.assertRaisesRegex(ValueError, "denied"):
+            feeds.persist_schedule(self.host, 1, member, dict(self.job, author=77))
         self.assertTrue(feeds.can_manage(self.actor, self.job))
+
+        moderator = NS(id=88, guild_permissions=discord.Permissions(manage_messages=True))
+        self.assertTrue(feeds.can_schedule(moderator))
+        self.assertTrue(feeds.can_create(self.host, moderator, channel))
+        self.assertTrue(feeds.can_manage(moderator, self.job))
+        channel.id = 11
+        self.assertTrue(feeds.can_create(self.host, moderator, channel))
+
+    def test_existing_member_schedules_can_finish_under_previous_policy(self):
+        member = NS(id=77, guild_permissions=discord.Permissions.none(),
+                    roles=[NS(id=3)], guild=NS(id=1))
+        channel = NS(id=10, permissions_for=lambda _: discord.Permissions(
+            view_channel=True, send_messages=True))
+        old_job = dict(self.job, author=77)
+        self.set(1, feeds.POLICY_KEY, json.dumps({"enabled": True, "channels": [10],
+                                                 "roles": [3]}))
+        self.assertTrue(feeds.can_deliver(self.host, member.guild, old_job, member, channel))
+        self.assertFalse(feeds.can_create(self.host, member, channel))
+        channel.id = 11
+        self.assertFalse(feeds.can_deliver(self.host, member.guild, old_job, member, channel))
 
 
 
