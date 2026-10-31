@@ -233,9 +233,10 @@ async def redraw(interaction, parent, section):
 
 
 class SectionModal(discord.ui.Modal):
-    def __init__(self, parent, section):
+    def __init__(self, parent, section, *, return_to_editor=False):
         super().__init__(title=(t("save_modal") + " " + t(section))[:45], timeout=900)
         self.parent, self.section = parent, section
+        self.return_to_editor = return_to_editor
         old = parent.embed or {}
         fields = {
             "main": (
@@ -287,7 +288,13 @@ class SectionModal(discord.ui.Modal):
             update(self.parent, data)
         except ValueError:
             return await interaction.followup.send(t("invalid"), ephemeral=True)
-        await redraw(interaction, self.parent, self.section)
+        if self.return_to_editor:
+            from autofeed_setup import editor_panel_kwargs
+            await interaction.edit_original_response(
+                **editor_panel_kwargs(self.parent, interaction.guild),
+                view=self.parent)
+        else:
+            await redraw(interaction, self.parent, self.section)
 
 
 
