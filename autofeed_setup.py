@@ -876,6 +876,8 @@ class AutofeedEditorView(discord.ui.View):
                       dict(PRESETS["weekly"]) if restored.get("repeat") == "semanal" else
                       dict(PRESETS["monthly"]) if restored.get("repeat") == "mensual" else None)
         self.saved_draft = self.draft_data() if self.restored_draft else None
+        # Estado de referencia: anuncio recién abierto o último borrador confirmado.
+        self._initial_draft = copy.deepcopy(self.draft_data())
         self.dirty = False
 
         self.channels = discord.ui.ChannelSelect(
@@ -909,14 +911,28 @@ class AutofeedEditorView(discord.ui.View):
             "repeat_parts": copy.deepcopy(self.parts),
         }
 
+    def _has_pending_changes(self):
+        """Detecta cambios reales frente al último borrador confirmado."""
+        reference = self.saved_draft if self.saved_draft is not None else self._initial_draft
+        return self.draft_data() != reference
+
     @property
     def dirty(self):
+        if type(self) is AutofeedEditorView and hasattr(self, "_initial_draft"):
+            return self._has_pending_changes()
         return getattr(self, "_dirty", False)
 
     @dirty.setter
     def dirty(self, value):
         self._dirty = bool(value)
-        # NH: Descartar cambios only appears while there are unsaved edits.
+        if type(self) is AutofeedEditorView and hasattr(self, "_initial_draft"):
+            # Mantener visibles los dos botones, pero inactivos sin cambios reales.
+            pending = self._has_pending_changes()
+            self._dirty = pending
+            self.save.disabled = not pending
+            self.discard.disabled = not pending
+            return
+        # Los editores heredados conservan su disposición anterior.
         if hasattr(self, "discard"):
             if self._dirty and self.discard not in self.children:
                 self.add_item(self.discard)
