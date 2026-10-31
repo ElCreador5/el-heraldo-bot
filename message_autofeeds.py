@@ -795,16 +795,11 @@ class PolicyView(discord.ui.View):
     @discord.ui.button(label=STRINGS["es-419"]["back"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
     async def back(self, interaction, button):
-        if self.return_to_setup:
-            from autofeed_setup import setup_panel
-            content, view = setup_panel(self.host, self.guild_id, self.viewer_id)
-            await interaction.response.edit_message(content=content, embed=None, view=view)
-        elif "HeraldoMessagesView" in self.host:
-            parent = self.host["HeraldoMessagesView"](self.guild_id, self.viewer_id)
-            await interaction.response.edit_message(
-                content=self.host["heraldo_messages_command_content"](), view=parent)
-        else:
-            await interaction.response.edit_message(content=tr("discarded"), view=None)
+        # Los permisos de /programar siempre vuelven al módulo AutoFeeds.
+        # No volver a Mensajes ni crear un panel paralelo.
+        from autofeed_setup import setup_panel
+        content, view = setup_panel(self.host, self.guild_id, self.viewer_id)
+        await interaction.response.edit_message(content=content, embed=None, view=view)
 
 
 def install(host):
