@@ -22,7 +22,8 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         options = {option.value for option in view.panel_select.options}
         self.assertNotIn("create_message", options)
         self.assertTrue({"verification", "verify_dm", "suggestions",
-                         "honeypot", "condemnation", "logs", "templates"}.issubset(options))
+                         "honeypot", "condemnation", "logs"}.issubset(options))
+        self.assertNotIn("templates", options)
         interaction = NS(
             guild=NS(id=self.guild_id),
             user=NS(id=self.owner_id,
@@ -70,7 +71,9 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         modal = i.response.send_modal.call_args.args[0]
         self.assertIsInstance(modal, SectionModal)
         self.assertEqual(modal.section, "main")
-        self.assertEqual(len(modal.children), 4)
+        self.assertEqual(len(modal.children), 3)
+        self.assertIn("Guardar", modal.title)
+        self.assertNotIn("url", modal.inputs)
         i.response.edit_message.assert_not_called()
         self.assertEqual(before, b.guild_config_get(self.guild_id, feeds.CONFIG_KEY))
 
@@ -90,6 +93,8 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
     async def test_autofeeds_is_a_separate_setup_module(self):
         root = b.HeraldoSetupView(self.guild_id, self.owner_id)
         self.assertIn("autofeeds", {opt.value for opt in root.module_select.options})
+        self.assertEqual(next(opt.label for opt in root.module_select.options
+                              if opt.value == "autofeeds"), "Anuncios")
         messages = b.HeraldoMessagesSetupView(self.guild_id, self.owner_id)
         self.assertNotIn("autofeeds", {opt.value for opt in messages.panel_select.options})
         i = self.interaction()
@@ -210,6 +215,33 @@ class CarlStyleFieldsTests(unittest.TestCase):
         self.assertIn("@Noticias", result)
         self.assertEqual(setup.resolve_inline_embed_names(
             guild, "Correo a@ejemplo.com y @everyone"), "Correo a@ejemplo.com y @everyone")
+
+    def test_five_minute_lab_repeat_and_scheduler_without_changing_production(self):
+        with patch("enzonic_test_host.is_test", return_value=True):
+            custom = setup.repeat_parts(0, 0, 0, 5)
+            editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
+            modal = setup.CustomRepeatModal(editor)
+            self.assertEqual([str(x.default) for x in modal.fields], ["0", "0", "0", "5"])
+            now = datetime(2027, 2, 1, 12, 2, tzinfo=timezone.utc)
+            job = dict(start="2027-02-01T12:00:00+00:00", repeat="custom",
+                       repeat_parts=custom, zone="UTC")
+            self.assertEqual(next_occurrence(job, now), "2027-02-01T12:05:00+00:00")
+            self.assertEqual(feeds.interval_seconds("5m"), 300)
+            with self.assertRaises(ValueError):
+                setup.repeat_parts(0, 0, 0, 4)
+        with patch("enzonic_test_host.is_test", return_value=False):
+            with self.assertRaises(ValueError):
+                setup.repeat_parts(0, 0, 0, 5)
+            with self.assertRaises(ValueError):
+                feeds.interval_seconds("5m")
+
+    def test_channel_hash_reference_in_embed_description(self):
+        channel = NS(id=123456789012345678, name="apoyo", mention="<#123456789012345678>")
+        guild = NS(roles=[], text_channels=[], channels=[channel])
+        description = setup.resolve_inline_embed_names(
+            guild, "Pasa por #apoyo y usa /bump. También visita #desconocido.")
+        self.assertIn("<#123456789012345678>", description)
+        self.assertIn("#desconocido", description)
 
     def test_frequency_preset_and_time_fields(self):
         editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
