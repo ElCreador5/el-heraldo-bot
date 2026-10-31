@@ -15,9 +15,10 @@ import message_autofeeds as feeds
 
 LANG = {
     "es-419": {
-        "hub_title": "**Programaciones de mensajes**",
-        "hub_help": "Crea publicaciones como en AutoFeeds: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
-        "new": "Crear programación", "manage": "Gestionar programaciones", "permissions": "Permisos",
+        "hub_title": "**Anuncios**",
+        "hub_help": "Crea publicaciones como anuncios: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
+        "staff_only": "Solo los administradores y moderadores pueden programar mensajes.",
+        "new": "Crear Anuncio", "manage": "Gestionar Anuncios", "permissions": "Permisos",
         "new_title": "**Crear mensaje**", "edit_title": "**Editar mensaje**",
         "select_channel": "Canal donde publicar", "select_role": "Rol para mencionar (opcional)",
         "message": "Mensaje", "embed": "Editor de embed", "schedule": "Fecha y repetición",
@@ -88,8 +89,9 @@ LANG = {
         "clear_date_help": "Borra ambos campos para publicar inmediatamente.",
     },
     "en-US": {
-        "hub_title": "**Message schedules**", "hub_help": "Create posts like AutoFeeds: choose a channel, write a message or build an embed, set the date, mention, and repeat interval. Nothing is posted before confirmation.",
-        "new": "Create schedule", "manage": "Manage schedules", "permissions": "Permissions",
+        "hub_title": "**Announcements**", "hub_help": "Create announcements: choose a channel, write a message or build an embed, and set a date, mentions, and repetition. Nothing is posted before confirmation.",
+        "staff_only": "Only administrators and moderators can schedule messages.",
+        "new": "Create Announcement", "manage": "Manage Announcements", "permissions": "Permissions",
         "new_title": "**Create message**", "edit_title": "**Edit message**",
         "select_channel": "Destination channel", "select_role": "Role to mention (optional)",
         "message": "Message", "embed": "Embed builder", "schedule": "Date and repeat",
@@ -160,8 +162,9 @@ LANG = {
         "clear_date_help": "Clear both fields to publish immediately.",
     },
     "pt-BR": {
-        "hub_title": "**Programações de mensagens**", "hub_help": "Crie publicações como no AutoFeeds: escolha canal, texto ou embed, data, menção e repetição. Nada é publicado antes de confirmar.",
-        "new": "Criar programação", "manage": "Gerenciar programações", "permissions": "Permissões",
+        "hub_title": "**Anúncios**", "hub_help": "Crie anúncios: escolha o canal, escreva a mensagem ou monte um embed e defina data, menções e repetição. Nada é publicado antes da confirmação.",
+        "staff_only": "Somente administradores e moderadores podem agendar mensagens.",
+        "new": "Criar Anúncio", "manage": "Gerenciar Anúncios", "permissions": "Permissões",
         "new_title": "**Criar mensagem**", "edit_title": "**Editar mensagem**",
         "select_channel": "Canal de destino", "select_role": "Cargo a mencionar (opcional)",
         "message": "Mensagem", "embed": "Editor de embed", "schedule": "Data e repetição",
@@ -267,11 +270,10 @@ class AutoFeedsHomeView(discord.ui.View):
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
         self.create.label = t("new")
         self.manage.label = t("manage")
-        self.permissions.label = t("permissions")
         self.back.label = t("back")
 
     def summary(self):
-        return t("hub_title") + "\n\n" + t("hub_help")
+        return t("hub_title") + "\n\n" + t("hub_help") + "\n\n" + t("staff_only")
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -301,14 +303,6 @@ class AutoFeedsHomeView(discord.ui.View):
             self.host, self.guild_id, self.owner_id, jobs, from_setup=True)
         await interaction.response.edit_message(
             content=feeds.tr("choose"), embed=None, view=view)
-
-    @discord.ui.button(label=LANG["es-419"]["permissions"], style=discord.ButtonStyle.secondary, row=0)
-    @guild_context
-    async def permissions(self, interaction, button):
-        view = feeds.PolicyView(
-            self.host, self.guild_id, self.owner_id, return_to_setup=True)
-        await interaction.response.edit_message(
-            content=view.summary(), embed=None, view=view)
 
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
