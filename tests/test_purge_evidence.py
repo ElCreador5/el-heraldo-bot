@@ -64,6 +64,17 @@ class PurgeEvidenceTests(unittest.IsolatedAsyncioTestCase):
         manifest = await self.copies[101].attachments[0].read()
         self.assertIn(self.message.content.encode(), manifest)
 
+    async def test_previous_log_receipt_does_not_block_new_archive(self):
+        import hashlib
+        metadata = archive.snapshot(self.message)
+        old_key = (
+            f'{self.guild.id}:{self.source.id}:{self.message.id}:'
+            f'{hashlib.sha256(archive.encoded(metadata)).hexdigest()}'
+        )
+        archive.ledger(self.db, old_key, 'claim')
+        self.assertIsNotNone(await self.preserve())
+        self.channel.send.assert_awaited_once()
+
     async def test_restart_reuses_complete_copy_but_reverifies_bytes(self):
         reference = await self.preserve()
         self.assertEqual(await self.preserve(), reference)

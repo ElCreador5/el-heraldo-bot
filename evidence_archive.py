@@ -152,7 +152,9 @@ async def preserve(message, archive_channel, db_path):
         return None
     metadata = snapshot(message)
     fingerprint = hashlib.sha256(encoded(metadata)).hexdigest()
-    key = f'{guild.id}:{message.channel.id}:{message.id}:{fingerprint}'
+    # El destino forma parte de la clave: los recibos heredados del canal
+    # de logs no bloquean un nuevo archivado en el canal privado separado.
+    key = f'{guild.id}:{message.channel.id}:{message.id}:{fingerprint}:{archive_channel.id}'
     claimed, status, receipts = await asyncio.to_thread(ledger, db_path, key, 'claim')
     if not claimed:
         if status != 'complete' or not await verify(archive_channel, receipts):
