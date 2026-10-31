@@ -18,7 +18,7 @@ COPY = {
         "title":"Constructor de embed", "help":"Completa las secciones con el menú. La vista previa se actualiza sin publicar ni guardar.",
         "section":"Sección del embed", "main":"Contenido y color", "author":"Autor", "media":"Imágenes",
         "fields":"Campos adicionales", "date":"Fecha",
-        "edit":"Editar sección", "add":"Añadir campo", "timestamp":"Fecha automática",
+        "save_modal":"Guardar", "edit":"Editar sección", "add":"Añadir campo", "timestamp":"Fecha automática",
         "preview":"Vista previa", "clear":"Quitar embed", "back":"Volver",
         "role":"Insertar rol en la descripción", "channel":"Insertar canal en la descripción",
         "title_label":"Título", "description":"Descripción", "url":"Enlace del título (https://)",
@@ -44,7 +44,7 @@ COPY = {
         "title":"Embed builder", "help":"Complete each section using the menu. The preview updates without posting or saving.",
         "section":"Embed section", "main":"Content and color", "author":"Author", "media":"Images",
         "fields":"Additional fields", "date":"Date",
-        "edit":"Edit section", "add":"Add field", "timestamp":"Automatic date",
+        "save_modal":"Save", "edit":"Edit section", "add":"Add field", "timestamp":"Automatic date",
         "preview":"Preview", "clear":"Remove embed", "back":"Back",
         "role":"Insert role in description", "channel":"Insert channel in description",
         "title_label":"Title", "description":"Description", "url":"Title link (https://)",
@@ -70,7 +70,7 @@ COPY = {
         "title":"Construtor de embed", "help":"Preencha as seções pelo menu. A prévia é atualizada sem publicar ou salvar.",
         "section":"Seção do embed", "main":"Conteúdo e cor", "author":"Autor", "media":"Imagens",
         "fields":"Campos adicionais", "date":"Data",
-        "edit":"Editar seção", "add":"Adicionar campo", "timestamp":"Data automática",
+        "save_modal":"Salvar", "edit":"Editar seção", "add":"Adicionar campo", "timestamp":"Data automática",
         "preview":"Prévia", "clear":"Remover embed", "back":"Voltar",
         "role":"Inserir cargo na descrição", "channel":"Inserir canal na descrição",
         "title_label":"Título", "description":"Descrição", "url":"Link do título (https://)",
@@ -228,7 +228,7 @@ async def redraw(interaction, parent, section):
 
 class SectionModal(discord.ui.Modal):
     def __init__(self, parent, section):
-        super().__init__(title=("Guardar " + t(section))[:45] if section == "main" else t(section)[:45])
+        super().__init__(title=(t("save_modal") + " " + t(section))[:45] if section == "main" else t(section)[:45])
         self.parent, self.section = parent, section
         old = parent.embed or {}
         fields = {
