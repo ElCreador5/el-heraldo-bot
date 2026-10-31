@@ -457,7 +457,7 @@ class SuggestionsSetupPublishConfirmView(discord.ui.View):
             await h["suggestion_ensure_panel"](interaction.guild)
             message_id = h["suggestion_get_panel_message_id"](editor.guild_id)
             if not message_id:
-                raise RuntimeError("Panel not available after ensure")
+                raise RuntimeError
             await channel.fetch_message(message_id)
         except (discord.HTTPException, RuntimeError):
             await interaction.followup.send(editor.tr("publish_failed"), ephemeral=True)
