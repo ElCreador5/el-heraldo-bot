@@ -671,7 +671,7 @@ class MentionPickerView(discord.ui.View):
         self.destination = "text"
         self.target = discord.ui.Select(
             placeholder=t("mention_target"), row=0, options=[
-                discord.SelectOption(label=t("in_text"), value="text", default=True),
+                discord.SelectOption(label=t("in_text"), value="text"),
                 discord.SelectOption(label=t("in_embed"), value="embed")])
         self.target.callback = self.pick_target
         self.add_item(self.target)
