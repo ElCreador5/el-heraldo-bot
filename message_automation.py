@@ -74,7 +74,9 @@ def next_occurrence(job, now):
             raise ValueError('custom_schedule_invalid')
         seconds = days * 86400 + hours * 3600 + minutes * 60
         if months == 0:
-            if seconds < 3600:
+            from enzonic_test_host import is_test
+            minimum = 300 if is_test() else 3600
+            if seconds < minimum:
                 raise ValueError('custom_schedule_too_short')
             origin = datetime.fromisoformat(job['start']).astimezone(timezone.utc)
             steps = max(1, int((now - origin).total_seconds() // seconds) + 1)
