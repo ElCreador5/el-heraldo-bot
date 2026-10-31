@@ -854,10 +854,15 @@ class EmbedChannelSelectView(discord.ui.View):
 class AutofeedEditorView(discord.ui.View):
     def __init__(self, host, guild_id, owner_id, *, job=None):
         super().__init__(timeout=900)
-        # Las subclases históricas conservan sus controles propios;
-        # el editor principal usa un único constructor de embeds.
-        if type(self) is not AutofeedEditorView:
-            self.remove_item(self.publish_button)
+        # No duplicar controles de menciones/imagen en el editor principal.
+        # Conservar los atributos heredados para editores antiguos que aún
+        # se instancian fuera de /setup, sin exponer las acciones redundantes.
+        if type(self) is AutofeedEditorView:
+            for control in (self.images_button, self.embed_channel, self.mention):
+                self.remove_item(control)
+        else:
+            for control in (self.images_button, self.embed_channel, self.publish_button):
+                self.remove_item(control)
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
         self.original = job
         self.snapshot = host["guild_config_get"](guild_id, feeds.CONFIG_KEY)
@@ -889,8 +894,9 @@ class AutofeedEditorView(discord.ui.View):
         self.roles.callback = self.pick_role
         self.add_item(self.roles)
         for item, key in [(self.message, "message"), (self.embed_builder, "embed"),
+                          (self.images_button, "images_button"), (self.embed_channel, "embed_channel"),
                           (self.date_time, "date_picker"), (self.frequency, "repeat_picker"),
-                          (self.preview, "preview"),
+                          (self.preview, "preview"), (self.mention, "insert_mention"),
                           (self.silent, "silent"), (self.save, "save"),
                           (self.publish_button, "send"), (self.discard, "discard"),
                           (self.back, "back")]:
@@ -994,6 +1000,19 @@ class AutofeedEditorView(discord.ui.View):
         from autofeed_embed_builder import SectionModal
         await interaction.response.send_modal(SectionModal(self, "main"))
 
+    @discord.ui.button(label=LANG["es-419"]["images_button"], style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def images_button(self, interaction, button):
+        from autofeed_embed_builder import SectionModal
+        await interaction.response.send_modal(SectionModal(self, "media"))
+
+    @discord.ui.button(label=LANG["es-419"]["embed_channel"], style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def embed_channel(self, interaction, button):
+        chooser = EmbedChannelSelectView(self)
+        await interaction.response.edit_message(
+            content=t("embed_choose_channel"), embed=None, view=chooser)
+
     @discord.ui.button(label=LANG["es-419"]["start"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def date_time(self, interaction, button):
@@ -1015,6 +1034,13 @@ class AutofeedEditorView(discord.ui.View):
             content=self.summary() + "\n\n" + t("new_preview"),
             embed=embed, view=self,
             allowed_mentions=discord.AllowedMentions.none())
+
+    @discord.ui.button(label=LANG["es-419"]["insert_mention"], style=discord.ButtonStyle.secondary, row=2)
+    @guild_context
+    async def mention(self, interaction, button):
+        picker = MentionPickerView(self)
+        await interaction.response.edit_message(
+            content=t("mention_help"), embed=None, view=picker)
 
     @discord.ui.button(label=LANG["es-419"]["silent"], style=discord.ButtonStyle.secondary, row=3)
     @guild_context
