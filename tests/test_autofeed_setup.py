@@ -1,9 +1,9 @@
-"""Regresiones del acceso /setup -> Mensajes -> Programaciones (sin Discord real)."""
+"""Regresiones de /setup -> AutoFeeds independiente de Mensajes (sin Gateway)."""
 from datetime import datetime, timedelta, timezone
 import asyncio
 import unittest
 from types import SimpleNamespace as NS
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from test_safety_regressions import b
 import autofeed_setup as setup
@@ -50,18 +50,58 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(setup.FrequencyPickerView(editor), b.discord.ui.View)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
-    async def test_back_returns_exact_parent_from_setup(self):
-        content, editor = setup.setup_panel(b.__dict__, self.guild_id, self.owner_id)
-        interaction = NS(
+    def interaction(self):
+        return NS(
             guild=NS(id=self.guild_id),
-            user=NS(id=self.owner_id,
-                    guild_permissions=b.discord.Permissions(manage_guild=True)),
+            user=NS(id=self.owner_id, guild_permissions=b.discord.Permissions(manage_guild=True)),
             response=NS(edit_message=AsyncMock(), send_message=AsyncMock()),
+            data={"values": ["autofeeds"]},
         )
-        await editor.back.callback(interaction)
-        kwargs = interaction.response.edit_message.call_args.kwargs
-        self.assertIsInstance(kwargs["view"], b.HeraldoMessagesSetupView)
-        self.assertEqual(kwargs["content"], b.heraldo_messages_setup_content())
+
+    async def test_autofeeds_is_a_separate_setup_module(self):
+        root = b.HeraldoSetupView(self.guild_id, self.owner_id)
+        self.assertIn("autofeeds", {opt.value for opt in root.module_select.options})
+        messages = b.HeraldoMessagesSetupView(self.guild_id, self.owner_id)
+        self.assertNotIn("autofeeds", {opt.value for opt in messages.panel_select.options})
+        i = self.interaction()
+        await root.select_module(i)
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
+        self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
+
+    async def test_autofeeds_home_is_not_the_message_editor(self):
+        content, home = setup.setup_panel(b.__dict__, self.guild_id, self.owner_id)
+        self.assertIsInstance(home, setup.AutoFeedsHomeView)
+        self.assertIn(setup.t("hub_title"), content)
+        self.assertEqual([c.label for c in home.children],
+                         [setup.t(k) for k in ("new", "manage", "permissions", "back")])
+        i = self.interaction()
+        await home.create.callback(i)
+        editor = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(editor, setup.AutofeedEditorView)
+        i.response.edit_message.reset_mock()
+        await editor.back.callback(i)
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
+        i.response.edit_message.reset_mock()
+        await home.back.callback(i)
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], b.HeraldoSetupView)
+        self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
+
+    async def test_manage_and_permissions_return_to_autofeeds_without_writes(self):
+        content, home = setup.setup_panel(b.__dict__, self.guild_id, self.owner_id)
+        i = self.interaction()
+        with patch.object(feeds, "get_jobs", return_value=[]):
+            await home.manage.callback(i)
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
+        self.assertIn(feeds.tr("no_jobs"), i.response.edit_message.call_args.kwargs["content"])
+        i.response.edit_message.reset_mock()
+        await home.permissions.callback(i)
+        policy = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(policy, feeds.PolicyView)
+        self.assertTrue(policy.return_to_setup)
+        i.response.edit_message.reset_mock()
+        await policy.back.callback(i)
+        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
+        self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
 
     async def test_editor_draft_requires_confirmation_not_persistence(self):
