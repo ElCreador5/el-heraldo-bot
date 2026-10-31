@@ -73,7 +73,9 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(home, setup.AutoFeedsHomeView)
         self.assertIn(setup.t("hub_title"), content)
         self.assertEqual([c.label for c in home.children],
-                         [setup.t(k) for k in ("new", "manage", "permissions", "back")])
+                         [setup.t(k) for k in ("new", "manage", "back")])
+        self.assertIn(setup.t("staff_only"), content)
+        self.assertNotIn(setup.t("permissions"), [c.label for c in home.children])
         i = self.interaction()
         await home.create.callback(i)
         editor = i.response.edit_message.call_args.kwargs["view"]
@@ -86,27 +88,25 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], b.HeraldoSetupView)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
 
-    async def test_manage_and_permissions_return_to_autofeeds_without_writes(self):
+    async def test_manage_returns_to_announcements_without_writes(self):
         content, home = setup.setup_panel(b.__dict__, self.guild_id, self.owner_id)
         i = self.interaction()
         with patch.object(feeds, "get_jobs", return_value=[]):
             await home.manage.callback(i)
         self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
         self.assertIn(feeds.tr("no_jobs"), i.response.edit_message.call_args.kwargs["content"])
-        i.response.edit_message.reset_mock()
-        await home.permissions.callback(i)
-        policy = i.response.edit_message.call_args.kwargs["view"]
-        self.assertIsInstance(policy, feeds.PolicyView)
-        self.assertTrue(policy.return_to_setup)
-        i.response.edit_message.reset_mock()
-        await policy.back.callback(i)
-        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
-        # También /programar configurar conserva la independencia de Mensajes.
-        i.response.edit_message.reset_mock()
-        command_policy = feeds.PolicyView(b.__dict__, self.guild_id, self.owner_id)
-        await command_policy.back.callback(i)
-        self.assertIsInstance(i.response.edit_message.call_args.kwargs["view"], setup.AutoFeedsHomeView)
         self.assertEqual(b.guild_config_get(self.guild_id, feeds.CONFIG_KEY), self.original)
+
+    def test_announcements_labels_in_three_languages(self):
+        for locale, labels in (
+            ("es-419", ("**Anuncios**", "Crear Anuncio", "Gestionar Anuncios")),
+            ("en-US", ("**Announcements**", "Create Announcement", "Manage Announcements")),
+            ("pt-BR", ("**Anúncios**", "Criar Anúncio", "Gerenciar Anúncios")),
+        ):
+            with self.subTest(locale=locale):
+                self.assertEqual(tuple(setup.LANG[locale][key]
+                                       for key in ("hub_title", "new", "manage")), labels)
+                self.assertTrue(setup.LANG[locale]["staff_only"])
 
 
     async def test_editor_draft_requires_confirmation_not_persistence(self):
