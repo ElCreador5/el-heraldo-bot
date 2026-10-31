@@ -20,7 +20,7 @@ LANG = {
         "none": "Ninguno",
         "not_configured": "No configurado",
         "yes": "Sí",
-        "no": "No",
+        "negative": "No",
         "summary": "**Moderación → Sugerencias**\nCanal del panel: {channel}\nNotificar al propietario: {owner}\nRevisores: {reviewers}\nSelecciona un miembro para añadirlo como revisor o quitarlo con el botón correspondiente. Nada se guarda hasta confirmar.",
         "pending": "**Cambios sin guardar**",
         "choose_member": "Selecciona un miembro.",
@@ -46,7 +46,7 @@ LANG = {
         "none": "None",
         "not_configured": "Not configured",
         "yes": "Yes",
-        "no": "No",
+        "negative": "No",
         "summary": "**Moderation → Suggestions**\nPanel channel: {channel}\nNotify server owner: {owner}\nReviewers: {reviewers}\nSelect a member to add as a reviewer or remove with the corresponding button. Nothing is saved until confirmed.",
         "pending": "**Unsaved changes**",
         "choose_member": "Select a member.",
@@ -72,7 +72,7 @@ LANG = {
         "none": "Nenhum",
         "not_configured": "Não configurado",
         "yes": "Sim",
-        "no": "Não",
+        "negative": "Não",
         "summary": "**Moderação → Sugestões**\nCanal do painel: {channel}\nNotificar proprietário: {owner}\nRevisores: {reviewers}\nSelecione um membro para adicionar como revisor ou remover com o botão correspondente. Nada é salvo até confirmar.",
         "pending": "**Alterações não salvas**",
         "choose_member": "Selecione um membro.",
@@ -140,7 +140,7 @@ class SuggestionsSetupView(discord.ui.View):
         channel_id = self.host["suggestion_get_channel_id"](self.guild_id)
         channel = f"<#{channel_id}>" if channel_id else self.tr("not_configured")
         content = self.tr("summary", channel=channel,
-                          owner=self.tr("yes" if self.pending_owner else "no"),
+                          owner=self.tr("yes" if self.pending_owner else "negative"),
                           reviewers=reviewers)
         return content + ("\n\n" + self.tr("pending") if self._dirty() else "")
 
