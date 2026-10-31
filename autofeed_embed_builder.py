@@ -228,14 +228,13 @@ async def redraw(interaction, parent, section):
 
 class SectionModal(discord.ui.Modal):
     def __init__(self, parent, section):
-        super().__init__(title=t(section)[:45])
+        super().__init__(title=("Guardar " + t(section))[:45] if section == "main" else t(section)[:45])
         self.parent, self.section = parent, section
         old = parent.embed or {}
         fields = {
             "main": (
                 ("title", "title_label", 256, False, old.get("title")),
                 ("description", "description", 4000, True, old.get("description")),
-                ("url", "url", 2048, False, old.get("url")),
                 ("color_hex", "color", 7, False, old.get("color_hex", "5865F2")),
             ),
             "author": (
@@ -268,8 +267,8 @@ class SectionModal(discord.ui.Modal):
             from autofeed_setup import resolve_inline_embed_names
             values["description"] = resolve_inline_embed_names(
                 interaction.guild, values["description"])
-            # Discord does not render role/channel references inside embed titles.
-            # Keep the title literal; description supports Discord mention tokens.
+            # Escribir #canal en la descripción se convierte en <#id> por nombre
+            # único del servidor; los campos de formulario no autocompletan.
             data.update(values)
         elif self.section == "author":
             data["author"] = values
