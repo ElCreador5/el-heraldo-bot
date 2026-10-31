@@ -266,6 +266,7 @@ def editor_panel_kwargs(editor, guild):
 
 
 ANNOUNCEMENT_DRAFT_PREFIX = "announcement_draft:"
+ANNOUNCEMENT_REPEAT_NONE = "ninguna"  # Valor interno del esquema, no texto de interfaz.
 
 def _draft_key(owner_id):
     return f"{ANNOUNCEMENT_DRAFT_PREFIX}{int(owner_id)}"
@@ -898,7 +899,7 @@ class AutofeedEditorView(discord.ui.View):
             "version": 1, "channel": self.channel_id, "role": self.role_id,
             "text": self.text, "embed": copy.deepcopy(self.embed),
             "start": self.start.isoformat() if self.start else None,
-            "repeat": "custom" if self.parts else "ninguna",
+            "repeat": "custom" if self.parts else ANNOUNCEMENT_REPEAT_NONE,
             "repeat_parts": copy.deepcopy(self.parts),
         }
 
