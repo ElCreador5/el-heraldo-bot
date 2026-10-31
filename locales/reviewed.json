@@ -32,8 +32,8 @@
     "Semanal"
   ],
   "autofeed.command.config": [
-    "Configure allowed channels and roles.",
-    "Configurar canais e cargos permitidos."
+    "Check who can schedule announcements.",
+    "Consultar quem pode agendar anúncios."
   ],
   "autofeed.command.create": [
     "Schedule text or an existing template with a preview.",
