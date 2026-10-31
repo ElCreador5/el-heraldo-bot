@@ -9,6 +9,9 @@ SOURCE = (Path(__file__).resolve().parents[1] / "autofeed_setup.py").read_text(e
 TREE = ast.parse(SOURCE)
 FUNC = next(x for x in TREE.body if isinstance(x, ast.FunctionDef)
             and x.name == "announcement_access_issue")
+ROLES = ast.parse((Path(__file__).resolve().parents[1] / "message_autofeeds.py").read_text(encoding="utf-8"))
+MENTION_FN = next(x for x in ROLES.body if isinstance(x, ast.FunctionDef)
+                  and x.name == "can_mention_role")
 
 
 class FakeMember:
@@ -21,7 +24,8 @@ class FakeTextChannel:
         self.id = 100
         self.guild = NS(id=90)
         self.user_perms = NS(view_channel=True, send_messages=True)
-        self.bot_perms = NS(view_channel=True, send_messages=True, embed_links=True)
+        self.bot_perms = NS(view_channel=True, send_messages=True, embed_links=True,
+                            mention_everyone=False)
 
     def permissions_for(self, member):
         return self.bot_perms if member == "bot" else self.user_perms
@@ -37,6 +41,9 @@ class AccessTests(unittest.TestCase):
                 is_ready=lambda interaction, host, channel, role: True,
             ),
         }
+        mention_code = ast.fix_missing_locations(ast.Module(body=[MENTION_FN], type_ignores=[]))
+        exec(compile(mention_code, "message_autofeeds.py", "exec"), cls.ns)
+        cls.ns["feeds"].can_mention_role = cls.ns["can_mention_role"]
         code = ast.fix_missing_locations(ast.Module(body=[FUNC], type_ignores=[]))
         exec(compile(code, "autofeed_setup.py", "exec"), cls.ns)
         cls.validate = staticmethod(cls.ns["announcement_access_issue"])
@@ -81,6 +88,10 @@ class AccessTests(unittest.TestCase):
     def test_role_missing_or_unmentionable(self):
         self.assertEqual(self.check(role_id=999), "role_missing")
         self.role.mentionable = False
+        self.assertEqual(self.check(role_id=200), "role_unmentionable")
+        self.channel.bot_perms.mention_everyone = True
+        self.assertIsNone(self.check(role_id=200))
+        self.channel.bot_perms.mention_everyone = False
         self.assertEqual(self.check(role_id=200), "role_unmentionable")
 
     def test_final_guard_is_not_bypassed(self):
