@@ -16,6 +16,18 @@ import message_autofeeds as feeds
 
 LANG = {
     "es-419": {
+        "channel_missing": "El canal seleccionado ya no está disponible. Selecciónalo otra vez.",
+        "channel_type": "Elige un canal de texto del servidor.",
+        "moderator_required": "Necesitas permisos de moderación para publicar anuncios.",
+        "author_no_channel": "No tienes permisos para publicar en ese canal.",
+        "bot_member_missing": "No pude comprobar los permisos del bot en el canal.",
+        "bot_no_view": "El Heraldo necesita «Ver canal» en el destino.",
+        "bot_no_send": "El Heraldo necesita «Enviar mensajes» en el destino.",
+        "bot_no_embed": "El Heraldo necesita «Insertar enlaces» en el destino para su footer.",
+        "role_missing": "El rol elegido ya no existe.",
+        "role_unmentionable": "El rol elegido no es mencionable; cámbialo o quítalo.",
+        "embed_invalid": "El embed contiene datos inválidos; revisa campos, texto y enlaces.",
+        "references_invalid": "El mensaje menciona un canal o rol inexistente en este servidor.",
         "hub_title": "**Anuncios**",
         "hub_help": "Crea anuncios: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
         "staff_only": "Solo los administradores y moderadores pueden programar mensajes.",
@@ -93,6 +105,18 @@ LANG = {
         "clear_date_help": "Borra ambos campos para publicar inmediatamente.",
     },
     "en-US": {
+        "channel_missing": "The selected channel is unavailable. Select it again.",
+        "channel_type": "Choose a server text channel.",
+        "moderator_required": "Moderation permissions are required to post announcements.",
+        "author_no_channel": "You cannot send messages in that channel.",
+        "bot_member_missing": "Could not verify bot permissions in the channel.",
+        "bot_no_view": "El Heraldo needs View Channel permission there.",
+        "bot_no_send": "El Heraldo needs Send Messages permission there.",
+        "bot_no_embed": "El Heraldo needs Embed Links permission there for its footer.",
+        "role_missing": "The selected role no longer exists.",
+        "role_unmentionable": "The selected role cannot be mentioned; change or remove it.",
+        "embed_invalid": "The embed has invalid content; check fields, text and links.",
+        "references_invalid": "The message refers to a channel or role that does not exist on this server.",
         "hub_title": "**Announcements**", "hub_help": "Create announcements: choose a channel, write a message or build an embed, and set a date, mentions, and repetition. Nothing is posted before confirmation.",
         "staff_only": "Only administrators and moderators can schedule messages.",
         "new": "Create Announcement", "manage": "Manage Announcements", "permissions": "Permissions", "member_week": "Member of the Week",
@@ -169,6 +193,18 @@ LANG = {
         "clear_date_help": "Clear both fields to publish immediately.",
     },
     "pt-BR": {
+        "channel_missing": "O canal escolhido não está disponível. Selecione novamente.",
+        "channel_type": "Escolha um canal de texto do servidor.",
+        "moderator_required": "São necessárias permissões de moderação para publicar anúncios.",
+        "author_no_channel": "Você não pode enviar mensagens nesse canal.",
+        "bot_member_missing": "Não foi possível verificar as permissões do bot no canal.",
+        "bot_no_view": "O El Heraldo precisa da permissão Ver canal nesse destino.",
+        "bot_no_send": "O El Heraldo precisa da permissão Enviar mensagens nesse destino.",
+        "bot_no_embed": "O El Heraldo precisa da permissão Inserir links nesse destino para o rodapé.",
+        "role_missing": "O cargo selecionado não existe mais.",
+        "role_unmentionable": "O cargo selecionado não permite menções; altere ou remova.",
+        "embed_invalid": "O embed contém dados inválidos; verifique campos, texto e links.",
+        "references_invalid": "A mensagem menciona um canal ou cargo inexistente neste servidor.",
         "hub_title": "**Anúncios**", "hub_help": "Crie anúncios: escolha o canal, escreva a mensagem ou monte um embed e defina data, menções e repetição. Nada é publicado antes da confirmação.",
         "staff_only": "Somente administradores e moderadores podem agendar mensagens.",
         "new": "Criar Anúncio", "manage": "Gerenciar Anúncios", "permissions": "Permissões", "member_week": "Membro da semana",
@@ -263,6 +299,42 @@ def editor_panel_kwargs(editor, guild):
     if hasattr(editor, "panel_embed"):
         return {"content": None, "embed": editor.panel_embed(guild)}
     return {"content": editor.summary(), "embed": None}
+
+
+def announcement_access_issue(interaction, host, channel_id, role_id=None):
+    """Identifica el requisito no satisfecho; no omite verificaciones."""
+    guild = interaction.guild
+    if guild is None or not channel_id:
+        return "channel_missing"
+    channel = guild.get_channel(channel_id)
+    if channel is None:
+        return "channel_missing"
+    if not isinstance(channel, discord.TextChannel):
+        return "channel_type"
+    member = interaction.user
+    if not isinstance(member, discord.Member) or not feeds.can_schedule(member):
+        return "moderator_required"
+    user_perms = channel.permissions_for(member)
+    if not (user_perms.view_channel and user_perms.send_messages):
+        return "author_no_channel"
+    me = guild.me
+    if me is None:
+        return "bot_member_missing"
+    bot_perms = channel.permissions_for(me)
+    if not bot_perms.view_channel:
+        return "bot_no_view"
+    if not bot_perms.send_messages:
+        return "bot_no_send"
+    if not bot_perms.embed_links:
+        return "bot_no_embed"
+    role = guild.get_role(role_id) if role_id else None
+    if role_id and role is None:
+        return "role_missing"
+    if role and (role.guild.id != guild.id or not role.mentionable):
+        return "role_unmentionable"
+    if not feeds.is_ready(interaction, host, channel, role):
+        return "unavailable"
+    return None
 
 
 ANNOUNCEMENT_DRAFT_PREFIX = "announcement_draft:"
@@ -1090,18 +1162,16 @@ class AutofeedEditorView(discord.ui.View):
 
     def prepared(self, interaction):
         guild = interaction.guild
-        channel = guild.get_channel(self.channel_id) if self.channel_id else None
-        role = guild.get_role(self.role_id) if self.role_id else None
-        if not (isinstance(channel, discord.TextChannel)
-                and feeds.is_ready(interaction, self.host, channel, role)
-                and (self.role_id is None or role is not None)):
-            raise ValueError("unavailable")
+        issue = announcement_access_issue(
+            interaction, self.host, self.channel_id, self.role_id)
+        if issue:
+            raise ValueError(issue)
         from autofeed_embed_builder import has_content, validate_data
         if self.embed:
             try:
                 self.embed = validate_data(self.embed)
             except ValueError as exc:
-                raise ValueError("unavailable") from exc
+                raise ValueError("embed_invalid") from exc
         if not self.text and not has_content(self.embed):
             raise ValueError("warning")
         if self.start is None and self.parts:
@@ -1112,7 +1182,7 @@ class AutofeedEditorView(discord.ui.View):
             feeds.referenced_mentions(guild, {
                 "text": self.text, "embed": self.embed, "role": self.role_id})
         except ValueError as exc:
-            raise ValueError("unavailable") from exc
+            raise ValueError("references_invalid") from exc
         previous = self.original or {}
         return {
             "id": previous.get("id", uuid.uuid4().hex[:12]),
@@ -1148,7 +1218,7 @@ class AutofeedEditorView(discord.ui.View):
             prepared = self.prepared(interaction)
         except ValueError as exc:
             return await interaction.response.send_message(
-                t(str(exc)) if str(exc) in ("unavailable", "warning") else feeds.tr("invalid"),
+                t(str(exc)) if str(exc) in LANG["es-419"] else feeds.tr("invalid"),
                 ephemeral=True)
         confirm = SetupConfirmView(self.host, prepared, self.snapshot,
                                    editing=self.original is not None)
