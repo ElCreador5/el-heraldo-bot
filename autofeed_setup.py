@@ -25,7 +25,7 @@ LANG = {
         "bot_no_send": "El Heraldo necesita «Enviar mensajes» en el destino.",
         "bot_no_embed": "El Heraldo necesita «Insertar enlaces» en el destino para su footer.",
         "role_missing": "El rol elegido ya no existe.",
-        "role_unmentionable": "El rol elegido no es mencionable; cámbialo o quítalo.",
+        "role_unmentionable": "El Heraldo no tiene permiso para mencionar ese rol. Habilita sus menciones en Ajustes del servidor → Roles o concede al bot permiso para mencionar todos los roles en este canal.",
         "embed_invalid": "El embed contiene datos inválidos; revisa campos, texto y enlaces.",
         "references_invalid": "El mensaje menciona un canal o rol inexistente en este servidor.",
         "hub_title": "**Anuncios**",
@@ -330,7 +330,7 @@ def announcement_access_issue(interaction, host, channel_id, role_id=None):
     role = guild.get_role(role_id) if role_id else None
     if role_id and role is None:
         return "role_missing"
-    if role and (role.guild.id != guild.id or not role.mentionable):
+    if role and not feeds.can_mention_role(guild, role, channel):
         return "role_unmentionable"
     if not feeds.is_ready(interaction, host, channel, role):
         return "unavailable"
