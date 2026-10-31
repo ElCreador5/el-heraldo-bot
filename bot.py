@@ -11958,14 +11958,15 @@ class HeraldoMemberLogSetupView(discord.ui.View):
         self.event_key = "member_leave"
         self.pending_enabled = None
         self.pending_channel_id = None
-        select = discord.ui.Select(placeholder=_t('text.a8d498c452b340'), row=0, options=[
+        self.event_select = discord.ui.Select(placeholder=_t('text.a8d498c452b340'), row=0, options=[
             discord.SelectOption(label=label, value=key,
                 description=(_t('text.cb5a761240123d') if key == "member_leave"
-                             else _t('text.e88756a2ea549c')))
+                             else _t('text.e88756a2ea549c')),
+                default=key == self.event_key)
             for key, label in LOG_EVENT_CATALOG["members"]
         ])
-        select.callback = self.select_event
-        self.add_item(select)
+        self.event_select.callback = self.select_event
+        self.add_item(self.event_select)
         channel = discord.ui.ChannelSelect(placeholder=_t('text.3ce38675df574f'), row=1,
             channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
         channel.callback = self.select_channel
@@ -12015,6 +12016,8 @@ class HeraldoMemberLogSetupView(discord.ui.View):
             self.pending_enabled = None
             self.pending_channel_id = None
             self.exit_comments_button.disabled = self.event_key != "member_leave"
+            for option in self.event_select.options:
+                option.default = option.value == self.event_key
         await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
 
     @_i18n_context
