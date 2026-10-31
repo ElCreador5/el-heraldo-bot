@@ -58,6 +58,35 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
             data={"values": ["autofeeds"]},
         )
 
+    async def test_publish_label_and_embed_modal_open_without_extra_panel(self):
+        from autofeed_embed_builder import SectionModal
+        editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
+        self.assertEqual(editor.save.label, "Publicar")
+        before = b.guild_config_get(self.guild_id, feeds.CONFIG_KEY)
+        i = self.interaction()
+        i.response.send_modal = AsyncMock()
+        await editor.embed_builder.callback(i)
+        i.response.send_modal.assert_awaited_once()
+        modal = i.response.send_modal.call_args.args[0]
+        self.assertIsInstance(modal, SectionModal)
+        self.assertEqual(modal.section, "main")
+        self.assertEqual(len(modal.children), 4)
+        i.response.edit_message.assert_not_called()
+        self.assertEqual(before, b.guild_config_get(self.guild_id, feeds.CONFIG_KEY))
+
+    def test_custom_repeat_defaults_to_valid_one_hour(self):
+        editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
+        modal = setup.CustomRepeatModal(editor)
+        self.assertEqual([str(field.default) for field in modal.fields],
+                         ["0", "0", "1", "0"])
+        self.assertEqual(
+            setup.repeat_parts(*(int(str(field.default)) for field in modal.fields)),
+            {"months": 0, "days": 0, "hours": 1, "minutes": 0})
+        editor.parts = {"months": 0, "days": 0, "hours": 3, "minutes": 15}
+        reused = setup.CustomRepeatModal(editor)
+        self.assertEqual([str(field.default) for field in reused.fields],
+                         ["0", "0", "3", "15"])
+
     async def test_autofeeds_is_a_separate_setup_module(self):
         root = b.HeraldoSetupView(self.guild_id, self.owner_id)
         self.assertIn("autofeeds", {opt.value for opt in root.module_select.options})
