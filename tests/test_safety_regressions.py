@@ -68,25 +68,15 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         await modal.on_submit(i)
         self.assertNotIn('view', i.response.send_message.call_args.kwargs)
 
-    async def test_explicit_template_bypasses_global_embed_conversion(self):
-        guild = NS(id=901, name='Laboratorio')
-        payload = b.heraldo_template_payload({'content': 'Texto independiente'}, guild)
-        content, result = b._embedify(payload.pop('content'), payload, guild, None)
-        self.assertEqual(content, 'Texto independiente')
-        self.assertEqual(len(result['embeds']), 1)
-        self.assertEqual(result['embeds'][0].footer.text, b.LAB_FOOTER_TEXT)
-        self.assertIsNone(result['embeds'][0].description)
-        self.assertNotIn('embed', result)
-
-    async def test_template_near_limit_requires_room_for_automatic_server_footer(self):
-        guild = NS(id=901, name='Laboratorio')
-        item = {'embeds': [{'description': 'a' * 4000}, {'description': 'b' * 2000}]}
-        # Antes el hook omitía el pie y publicaba 6000 caracteres. Ahora no
-        # se envía una plantilla sin marca ni se recortan contenidos a escondidas.
-        with self.assertRaisesRegex(ValueError, "6000"):
-            b.heraldo_template_payload(item, guild)
-        self.assertNotIn('footer', item['embeds'][0])
-        self.assertNotIn('footer', item['embeds'][1])
+    async def test_custom_templates_are_not_exposed_as_active_commands(self):
+        self.assertFalse(hasattr(b, "HeraldoTemplateSetupView"))
+        self.assertFalse(hasattr(b, "heraldo_template_payload"))
+        for obsolete in ("editar_plantilla", "programar_mensaje", "webhook_mensaje", "componentes_mensaje"):
+            with self.subTest(command=obsolete):
+                self.assertIsNone(b.bot.tree.get_command(obsolete))
+        # Los Anuncios continúan funcionando con su motor de publicación.
+        self.assertIsNotNone(b.bot.tree.get_command("programar"))
+        self.assertIsInstance(b.message_automation_engine, b.message_automation.ScheduledMessages)
 
     async def test_setup_times_are_only_saved_after_confirmation(self):
         # Ambos editores tienen tiempos independientes y usan el mismo
