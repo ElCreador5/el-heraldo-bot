@@ -3885,7 +3885,7 @@ def _setup_has_unsaved_changes(view: discord.ui.View) -> bool:
             changed("pending_dm_template", guild_config_get(guild_id, "personality_recovery_dm_template")),
         ))
     if kind == "HeraldoMotwSetupView":
-        return changed("pending_channel_id", get_motw_channel_id(guild_id))
+        return view._has_pending_changes()
     if kind == "HeraldoHoneypotSetupView":
         return any((
             view.pending_trap_id is not None and view.pending_trap_id not in hp_traps(guild_id),
@@ -5600,136 +5600,117 @@ async def orientation_message_deleted(payload: discord.RawMessageDeleteEvent) ->
     await ensure_orientation_system(guild)
 
 
-class HeraldoMotwScheduleSelectView(discord.ui.View):
-    """Elegir día y hora mediante selectores, sin guardar antes de confirmar."""
-
-    @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int) -> None:
-        super().__init__(timeout=300)
-        self.guild_id = guild_id
-        self.owner_id = owner_id
-        self.original_weekday = get_motw_weekday(guild_id)
-        self.original_hour = get_motw_hour(guild_id)
-        self.weekday = self.original_weekday
-        self.hour = self.original_hour
-        self.review.disabled = True
-
-        days = discord.ui.Select(
-            placeholder=_t('text.52bf6193ff2a12'),
-            options=[
-                discord.SelectOption(label=name, value=str(index), default=index == self.weekday)
-                for index, name in enumerate(MOTW_WEEKDAY_NAMES)
-            ], row=0,
-        )
-        days.callback = self.select_day
-        self.day_select = days
-        self.add_item(days)
-        hours = discord.ui.Select(
-            placeholder=_t('text.2c9494f9b0f04a'),
-            options=[
-                discord.SelectOption(label=f"{hour:02d}:00", value=str(hour), default=hour == self.hour)
-                for hour in range(24)
-            ], row=1,
-        )
-        hours.callback = self.select_hour
-        self.hour_select = hours
-        self.add_item(hours)
-
-    @_i18n_context
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return await configuration_access(interaction, self.guild_id, self.owner_id)
-
-    @_i18n_context
-    def _summary(self) -> str:
-        return (
-            _t('text.4003145b252cdc', p0=f'{MOTW_WEEKDAY_NAMES[self.original_weekday]}', p1=f'{self.original_hour:02d}', p2=f'{MOTW_WEEKDAY_NAMES[self.weekday]}', p3=f'{self.hour:02d}')
-        )
-
-    @_i18n_context
-    async def select_day(self, interaction: discord.Interaction) -> None:
-        values = interaction.data.get("values", []) if interaction.data else []
-        if len(values) != 1 or values[0] not in {str(i) for i in range(7)}:
-            await interaction.response.send_message(_t('text.ac710a66363a35'), ephemeral=True)
-            return
-        self.weekday = int(values[0])
-        for option in self.day_select.options:
-            option.default = option.value == values[0]
-        if hasattr(self, "review"):
-            self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
-        await interaction.response.edit_message(content=self._summary(), view=self)
-
-    @_i18n_context
-    async def select_hour(self, interaction: discord.Interaction) -> None:
-        values = interaction.data.get("values", []) if interaction.data else []
-        if len(values) != 1 or values[0] not in {str(i) for i in range(24)}:
-            await interaction.response.send_message(_t('text.6e119a2a869b60'), ephemeral=True)
-            return
-        self.hour = int(values[0])
-        for option in self.hour_select.options:
-            option.default = option.value == values[0]
-        if hasattr(self, "review"):
-            self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
-        await interaction.response.edit_message(content=self._summary(), view=self)
-
-    @discord.ui.button(label=_t('text.afda27aac75a77'), style=discord.ButtonStyle.primary, row=2)
-    @_i18n_context
-    async def review(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if (get_motw_weekday(self.guild_id) != self.original_weekday
-                or get_motw_hour(self.guild_id) != self.original_hour):
-            await interaction.response.send_message(
-                _t('text.7c9c0a4e853d20'), ephemeral=True
-            )
-            return
-        await confirm_configuration(interaction, self.guild_id, {
-            "motw_weekday": str(self.weekday), "motw_hour": str(self.hour),
-        })
-
-    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger, row=2)
-    @_i18n_context
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.stop()
-        await interaction.response.edit_message(
-            content=_t('text.3b928d1dc1851b'), view=None
-        )
-
-
 class HeraldoMotwSetupView(_SetupDirtySaveView):
+    """Canal, día y hora en un solo panel, con guardado y confirmación únicos."""
+
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int, *, from_announcements: bool = False) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.from_announcements = from_announcements
-        self.pending_channel_id: int | None = None
         self.original_channel_id = get_motw_channel_id(guild_id)
+        self.original_weekday = get_motw_weekday(guild_id)
+        self.original_hour = get_motw_hour(guild_id)
+        self.pending_channel_id: int | None = None
+        self.weekday = self.original_weekday
+        self.hour = self.original_hour
+
         channel = discord.ui.ChannelSelect(
             placeholder=_t('text.03d9b6bacc172e'),
             channel_types=[discord.ChannelType.text],
-            min_values=1,
-            max_values=1,
-            row=0,
+            min_values=1, max_values=1, row=0,
         )
         channel.callback = self.select_channel
+        self.channel_select = channel
         self.add_item(channel)
+
+        days = discord.ui.Select(
+            placeholder=_t('text.52bf6193ff2a12'),
+            options=[
+                discord.SelectOption(
+                    label=name, value=str(index), default=index == self.weekday)
+                for index, name in enumerate(MOTW_WEEKDAY_NAMES)
+            ],
+            row=1,
+        )
+        days.callback = self.select_day
+        self.day_select = days
+        self.add_item(days)
+
+        hours = discord.ui.Select(
+            placeholder=_t('text.2c9494f9b0f04a'),
+            options=[
+                discord.SelectOption(
+                    label=f"{hour:02d}:00", value=str(hour), default=hour == self.hour)
+                for hour in range(24)
+            ],
+            row=2,
+        )
+        hours.callback = self.select_hour
+        self.hour_select = hours
+        self.add_item(hours)
+        self._sync_controls()
+
+    def _has_pending_changes(self) -> bool:
+        return (
+            self.pending_channel_id is not None
+            or self.weekday != self.original_weekday
+            or self.hour != self.original_hour
+        )
+
+    def _sync_controls(self) -> None:
+        channel_id = self.pending_channel_id or self.original_channel_id
+        self.channel_select.default_values = (
+            [discord.SelectDefaultValue(
+                id=channel_id, type=discord.SelectDefaultValueType.channel)]
+            if channel_id else []
+        )
+        for option in self.day_select.options:
+            option.default = option.value == str(self.weekday)
+        for option in self.hour_select.options:
+            option.default = option.value == str(self.hour)
+        dirty = self._has_pending_changes()
+        self.save_changes.disabled = not dirty
+        self.discard_changes.disabled = not dirty
+        self.test.disabled = dirty or not self.original_channel_id
+
+    def to_components(self):
+        self._sync_controls()
+        return super().to_components()
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+        if not await configuration_access(
+                interaction, getattr(self, "guild_id", None),
+                getattr(self, "owner_id", None)):
             return False
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.62876186654ca2'), ephemeral=True)
+            await interaction.response.send_message(
+                _t('text.62876186654ca2'), ephemeral=True)
             return False
         return True
 
     @_i18n_context
     def _content(self, guild: discord.Guild) -> str:
-        current = guild.get_channel(get_motw_channel_id(self.guild_id))
+        current = guild.get_channel(self.original_channel_id)
         items = []
         if self.pending_channel_id is not None:
             pending = guild.get_channel(self.pending_channel_id)
-            items.append(_t('text.2639edffb76eb3', p0=f'{(pending.mention if pending else self.pending_channel_id)}'))
+            items.append(_t(
+                'text.2639edffb76eb3',
+                p0=f'{(pending.mention if pending else self.pending_channel_id)}',
+            ))
+        if (self.weekday, self.hour) != (self.original_weekday, self.original_hour):
+            items.append(
+                f"{_t('text.c9405caaf9687a')} → "
+                f"{MOTW_WEEKDAY_NAMES[self.weekday]} {self.hour:02d}:00"
+            )
         return (
-            _t('text.40a3e81f6086b6', p0=f"{(current.mention if current else _t('text.1372367d605704'))}", p1=f'{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]}', p2=f'{get_motw_hour(self.guild_id)}')
+            _t('text.40a3e81f6086b6',
+               p0=f"{(current.mention if current else _t('text.1372367d605704'))}",
+               p1=f'{MOTW_WEEKDAY_NAMES[self.original_weekday]}',
+               p2=f'{self.original_hour}')
             + _pending_config_text(items)
         )
 
@@ -5738,66 +5719,90 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
         values = interaction.data.get("values") if interaction.data else []
         channel = interaction.guild.get_channel(int(values[0])) if interaction.guild and values else None
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message(_t('text.ebf7fffd23a15f'), ephemeral=True)
+            await interaction.response.send_message(
+                _t('text.ebf7fffd23a15f'), ephemeral=True)
             return
-        perms = channel.permissions_for(interaction.guild.me)
-        if not (perms.view_channel and perms.send_messages and perms.embed_links):
-            await interaction.response.send_message(_t('text.24ae300c87fb48'), ephemeral=True)
+        me = interaction.guild.me
+        perms = channel.permissions_for(me) if me else None
+        if perms is None or not (perms.view_channel and perms.send_messages and perms.embed_links):
+            await interaction.response.send_message(
+                _t('text.24ae300c87fb48'), ephemeral=True)
             return
-        self.pending_channel_id = channel.id if channel.id != get_motw_channel_id(self.guild_id) else None
-        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
-
-    @discord.ui.button(label=_t('text.c9405caaf9687a'), style=discord.ButtonStyle.primary, row=1)
-    @_i18n_context
-    async def schedule(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        schedule_view = HeraldoMotwScheduleSelectView(self.guild_id, self.owner_id)
-        await interaction.response.send_message(
-            content=schedule_view._summary(), view=schedule_view, ephemeral=True,
+        self.pending_channel_id = (
+            channel.id if channel.id != self.original_channel_id else None
         )
+        self._sync_controls()
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label=_t('text.4fe0a93ea1c59f'), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
+    async def select_day(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {str(i) for i in range(7)}:
+            await interaction.response.send_message(
+                _t('text.ac710a66363a35'), ephemeral=True)
+            return
+        self.weekday = int(values[0])
+        self._sync_controls()
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild), view=self)
+
+    @_i18n_context
+    async def select_hour(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        if len(values) != 1 or values[0] not in {str(i) for i in range(24)}:
+            await interaction.response.send_message(
+                _t('text.6e119a2a869b60'), ephemeral=True)
+            return
+        self.hour = int(values[0])
+        self._sync_controls()
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label=_t('text.4fe0a93ea1c59f'), style=discord.ButtonStyle.secondary, row=3)
     @_i18n_context
     async def test(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_channel_id is not None:
-            await interaction.response.send_message(_t('text.1b7a432fce1c79'), ephemeral=True)
+        if self._has_pending_changes():
+            await interaction.response.send_message(
+                _t('text.1b7a432fce1c79'), ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
         error = await announce_member_of_the_week(self.guild_id, reset=False)
-        await interaction.followup.send(_t('text.28816644e2bd31') if not error else _t('text.5e410cf97ba23c', p0=f'{error}'), ephemeral=True)
+        await interaction.followup.send(
+            _t('text.28816644e2bd31') if not error else
+            _t('text.5e410cf97ba23c', p0=f'{error}'),
+            ephemeral=True,
+        )
 
-    @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=4)
     @_i18n_context
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_channel_id is None:
-            await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
-            return
-        if get_motw_channel_id(self.guild_id) != self.original_channel_id:
+        if not self._has_pending_changes():
             await interaction.response.send_message(
-                _t('text.52fdf753b9f8ad'), ephemeral=True
-            )
+                _t('text.ed5c91affb2e42'), ephemeral=True)
             return
-        channel = interaction.guild.get_channel(self.pending_channel_id)
-        me = interaction.guild.me
-        perms = channel.permissions_for(me) if channel and me else None
-        if not isinstance(channel, discord.TextChannel) or perms is None or not (
-            perms.view_channel and perms.send_messages and perms.embed_links
-        ):
+        if (get_motw_channel_id(self.guild_id) != self.original_channel_id
+                or get_motw_weekday(self.guild_id) != self.original_weekday
+                or get_motw_hour(self.guild_id) != self.original_hour):
             await interaction.response.send_message(
-                _t('text.7cd84b585f26b6'), ephemeral=True
-            )
+                _t('text.52fdf753b9f8ad'), ephemeral=True)
             return
-        set_motw_channel_id(self.guild_id, self.pending_channel_id)
-        self.original_channel_id = self.pending_channel_id
-        self.pending_channel_id = None
-        await interaction.response.edit_message(content=self._content(interaction.guild) + _t('text.f1c5938f74bc84'), view=self)
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild),
+            view=HeraldoMotwConfirmView(self),
+        )
 
-    @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=4)
     @_i18n_context
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.pending_channel_id = None
-        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+        self.weekday = self.original_weekday
+        self.hour = self.original_hour
+        self._sync_controls()
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=4)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.from_announcements:
@@ -5805,9 +5810,70 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
             content, view = setup_panel(globals(), self.guild_id, self.owner_id)
             await interaction.response.edit_message(content=content, embed=None, view=view)
         else:
-            await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+            await heraldo_setup_go_home(
+                interaction, self.guild_id, self.owner_id)
 
 
+class HeraldoMotwConfirmView(discord.ui.View):
+    """Confirmación secundaria; al confirmar restaura el panel principal actualizado."""
+
+    @_i18n_context
+    def __init__(self, editor: HeraldoMotwSetupView) -> None:
+        super().__init__(timeout=300)
+        self.editor = editor
+        self.finished = False
+        self.channel_id = editor.pending_channel_id or editor.original_channel_id
+        self.weekday = editor.weekday
+        self.hour = editor.hour
+
+    @_i18n_context
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return not self.finished and await self.editor.interaction_check(interaction)
+
+    @discord.ui.button(label=_t('text.b8985d29362c0b'), style=discord.ButtonStyle.success)
+    @_i18n_context
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        editor = self.editor
+        guild_id = editor.guild_id
+        if (get_motw_channel_id(guild_id) != editor.original_channel_id
+                or get_motw_weekday(guild_id) != editor.original_weekday
+                or get_motw_hour(guild_id) != editor.original_hour):
+            await interaction.response.send_message(
+                _t('text.52fdf753b9f8ad'), ephemeral=True)
+            return
+        if self.channel_id != editor.original_channel_id:
+            channel = interaction.guild.get_channel(self.channel_id)
+            me = interaction.guild.me
+            perms = channel.permissions_for(me) if channel and me else None
+            if not isinstance(channel, discord.TextChannel) or perms is None or not (
+                    perms.view_channel and perms.send_messages and perms.embed_links):
+                await interaction.response.send_message(
+                    _t('text.7cd84b585f26b6'), ephemeral=True)
+                return
+            set_motw_channel_id(guild_id, self.channel_id)
+        if (self.weekday, self.hour) != (editor.original_weekday, editor.original_hour):
+            set_motw_schedule(guild_id, self.weekday, self.hour)
+        editor.original_channel_id = self.channel_id
+        editor.original_weekday = self.weekday
+        editor.original_hour = self.hour
+        editor.pending_channel_id = None
+        editor.weekday = self.weekday
+        editor.hour = self.hour
+        editor._sync_controls()
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content=editor._content(interaction.guild) + _t('text.f1c5938f74bc84'),
+            view=editor,
+        )
+
+    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.secondary)
+    @_i18n_context
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(
+            content=self.editor._content(interaction.guild), view=self.editor)
 
 class HeraldoHoneypotSetupView(_SetupDirtySaveView):
     """Selectores en borrador; Activar, Pausar y Reanudar guardan solo su estado."""
