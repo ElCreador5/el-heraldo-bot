@@ -80,6 +80,14 @@ class SetupNoOverlaps(unittest.TestCase):
                     labels = [label for _, label in decorated_buttons(find_class(module, name))]
                     self.assertEqual(len(labels), len(set(labels)))
 
+    def test_verification_texts_are_edited_only_in_messages(self):
+        # Mensajes -> Verificación ofrece el editor de texto y vista previa.
+        age = find_class(BOT, "HeraldoVerificationSetupView")
+        self.assertNotIn("texts", {name for name, _ in decorated_buttons(age)})
+        studio = find_class(BOT, "DefaultMessageStudioView")
+        edit = ast.unparse(find_method(studio, "edit_verification"))
+        self.assertIn("VerifyTextsModal", edit)
+
     def test_announcement_main_panel_has_no_duplicate_embed_controls(self):
         editor = find_class(ANNOUNCEMENTS, "AutofeedEditorView")
         methods = {method for method, _ in decorated_buttons(editor)}
