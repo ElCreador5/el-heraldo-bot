@@ -9802,7 +9802,6 @@ class HeraldoMessagesSetupView(discord.ui.View):
                 discord.SelectOption(label=_t('text.70cf296fe178d5'), value="suggestions", description=_t('text.c20ea5ffe49319')),
                 discord.SelectOption(label="Honeypot", value="honeypot", description=_t('text.9799c0b54380f6')),
                 discord.SelectOption(label="Logs", value="logs", description=_t('text.bcd7436a95303e')),
-                discord.SelectOption(label=_t('text.f4ea025e8c2221'), value="templates", description=_t('text.685b989ce71932')),
                 discord.SelectOption(label=_t('text.e737a4c8b2906d'), value="autoresponses", description=_t('text.92f32ae5db8fd6')),
                 discord.SelectOption(label=_t('text.8747176853dbc2'), value="sticky", description=_t('text.cb3465ca4819e5')),
                 discord.SelectOption(label=_t('text.45808d75bf8911'), value="webhooks", description=_t('text.df564bfe3231e6')),
@@ -9845,13 +9844,6 @@ class HeraldoMessagesSetupView(discord.ui.View):
             await interaction.response.send_message(
                 _t('text.1438403c6cd256'),
                 ephemeral=True)
-            return
-
-        if selected == "templates":
-            await interaction.response.edit_message(
-                content=_t('text.038abcdd85c82f'),
-                embed=None, view=HeraldoTemplateSetupView(self.guild_id, self.owner_id),
-            )
             return
 
         if selected == "verification":
@@ -9917,7 +9909,6 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
         ("HeraldoRaidSetupView", lambda: HeraldoRaidSetupView(guild_id, 0)),
         ("HeraldoMessagesSetupView", lambda: HeraldoMessagesSetupView(guild_id, 0)),
         ("AutoFeedsHomeView", lambda: __import__("autofeed_setup").AutoFeedsHomeView(globals(), guild_id, 0)),
-        ("HeraldoTemplateSetupView", lambda: HeraldoTemplateSetupView(guild_id, 0)),
         ("HeraldoJoinRolesSetupView", lambda: HeraldoJoinRolesSetupView(guild_id, 0)),
         ("HeraldoJoinRolesBasicView", lambda: HeraldoJoinRolesBasicView(guild_id, 0)),
         ("HeraldoJoinRolesUsersView", lambda: HeraldoJoinRolesUsersView(guild_id, 0)),
@@ -13395,48 +13386,6 @@ class HeraldoSetupView(discord.ui.View):
 
 
 
-@bot.tree.command(name="sendtemplate", description="Publica una plantilla de mensajes del servidor.")
-@app_commands.default_permissions(manage_messages=True)
-@app_commands.guild_only()
-@_i18n_context
-async def heraldo_sendtemplate(interaction: discord.Interaction, canal: discord.TextChannel, plantilla: str):
-    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
-        await interaction.response.send_message(_t('text.ab2723a89c8812'), ephemeral=True)
-        return
-    user_perms = canal.permissions_for(interaction.user)
-    if canal.guild.id != interaction.guild.id or not user_perms.view_channel or not user_perms.send_messages or not user_perms.manage_messages:
-        await interaction.response.send_message(_t('text.02cf0de92e1865'), ephemeral=True)
-        return
-    item = next((t for t in heraldo_template_list(interaction.guild.id)
-                 if t["name"].casefold() == plantilla.strip().casefold()), None)
-    if not item:
-        await interaction.response.send_message(_t('text.820f82328d9fda'), ephemeral=True)
-        return
-    me = interaction.guild.me
-    perms = canal.permissions_for(me) if me else None
-    if not perms or not perms.send_messages or not perms.embed_links:
-        await interaction.response.send_message(_t('text.95a0d3d19b581b'), ephemeral=True)
-        return
-    await interaction.response.defer(ephemeral=True)
-    try:
-        sent = await canal.send(**heraldo_template_payload(item, interaction.guild, interaction.user, canal))
-    except (discord.HTTPException, ValueError):
-        await interaction.followup.send(_t('text.daba35af704a31'), ephemeral=True)
-        return
-    await interaction.followup.send(_t('text.aeb54e3e486f12', p0=f'{canal.mention}', p1=f'{sent.jump_url}'), ephemeral=True)
-
-
-@heraldo_sendtemplate.autocomplete("plantilla")
-@_i18n_context
-async def heraldo_sendtemplate_autocomplete(interaction: discord.Interaction, current: str):
-    if not interaction.guild_id:
-        return []
-    return [app_commands.Choice(name=t["name"][:100], value=t["name"][:100])
-            for t in heraldo_template_list(interaction.guild_id)
-            if current.casefold() in t["name"].casefold()][:25]
-
-
-
 class HeraldoEditTemplateConfirmView(discord.ui.View):
     """Edición manual de un mensaje del bot; no se ejecuta al seleccionar la plantilla."""
     @_i18n_context
@@ -13494,64 +13443,6 @@ class HeraldoEditTemplateConfirmView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
         await interaction.response.edit_message(content=_t('text.008f4c63411272'), view=None)
-
-
-@bot.tree.command(name="edittemplate", description="Edita un mensaje del Heraldo con una plantilla, previa confirmación.")
-@app_commands.default_permissions(manage_messages=True)
-@app_commands.guild_only()
-@_i18n_context
-async def heraldo_edittemplate(interaction: discord.Interaction, enlace: str, plantilla: str):
-    if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_messages:
-        await interaction.response.send_message(_t('text.1939fc49c7807c'), ephemeral=True)
-        return
-    match = re.fullmatch(r"https://(?:discord(?:app)?\.com)/channels/(\d+)/(\d+)/(\d+)", enlace.strip())
-    if not match or int(match.group(1)) != interaction.guild.id:
-        await interaction.response.send_message(_t('text.0c3ed8f329b9f3'), ephemeral=True)
-        return
-    channel_id, message_id = int(match.group(2)), int(match.group(3))
-    channel = interaction.guild.get_channel(channel_id)
-    item = next((x for x in heraldo_template_list(interaction.guild.id)
-                 if x["name"].casefold() == plantilla.strip().casefold()), None)
-    if not isinstance(channel, discord.TextChannel) or item is None:
-        await interaction.response.send_message(_t('text.06cadc5447390f'), ephemeral=True)
-        return
-    user_perms = channel.permissions_for(interaction.user)
-    if not user_perms.view_channel or not user_perms.manage_messages or not user_perms.read_message_history:
-        await interaction.response.send_message(_t('text.02cf0de92e1865'), ephemeral=True)
-        return
-    me = interaction.guild.me
-    perms = channel.permissions_for(me) if me else None
-    if not perms or not perms.view_channel or not perms.read_message_history:
-        await interaction.response.send_message(_t('text.43d8372c1698e6'), ephemeral=True)
-        return
-    await interaction.response.defer(ephemeral=True)
-    try:
-        message = await channel.fetch_message(message_id)
-    except discord.HTTPException:
-        await interaction.followup.send(_t('text.880affde540b9f'), ephemeral=True)
-        return
-    if not me or message.author.id != me.id:
-        await interaction.followup.send(_t('text.17d46e45d1bb29'), ephemeral=True)
-        return
-    await interaction.followup.send(
-        _t('text.4f34815dc79ce7')
-        + _t('text.5d777e5a2f0697', p0=f"{discord.utils.escape_markdown(item['name'])}")
-        + _t('text.b887911e779df7', p0=f'{message.jump_url}')
-        + _t('text.7c7cd1aa92b98a'),
-        view=HeraldoEditTemplateConfirmView(interaction.guild.id, interaction.user.id,
-                                             channel_id, message_id, item["name"]),
-        ephemeral=True, allowed_mentions=discord.AllowedMentions.none(),
-    )
-
-
-@heraldo_edittemplate.autocomplete("plantilla")
-@_i18n_context
-async def heraldo_edittemplate_autocomplete(interaction: discord.Interaction, current: str):
-    if not interaction.guild_id:
-        return []
-    return [app_commands.Choice(name=t["name"][:100], value=t["name"][:100])
-            for t in heraldo_template_list(interaction.guild_id)
-            if current.casefold() in t["name"].casefold()][:25]
 
 
 @bot.tree.command(name="language", description="Configura el idioma de El Heraldo en este servidor.")
