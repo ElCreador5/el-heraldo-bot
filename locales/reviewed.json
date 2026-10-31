@@ -36,8 +36,8 @@
     "Consultar quem pode agendar anúncios."
   ],
   "autofeed.command.create": [
-    "Schedule text or an existing template with a preview.",
-    "Programar texto ou um modelo existente com prévia."
+    "Schedule an announcement with a preview.",
+    "Programar um anúncio com prévia."
   ],
   "autofeed.command.delete": [
     "Delete a schedule after confirmation.",
