@@ -854,6 +854,12 @@ class EmbedChannelSelectView(discord.ui.View):
 class AutofeedEditorView(discord.ui.View):
     def __init__(self, host, guild_id, owner_id, *, job=None):
         super().__init__(timeout=900)
+        # Los controles nuevos pertenecen solo al editor de Anuncios.
+        # Subclases históricas tienen su propio panel en 5 filas y necesitan
+        # conservar espacio para su selector sin reactivar Plantillas.
+        if type(self) is not AutofeedEditorView:
+            for control in (self.images_button, self.embed_channel, self.publish_button):
+                self.remove_item(control)
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
         self.original = job
         self.snapshot = host["guild_config_get"](guild_id, feeds.CONFIG_KEY)
