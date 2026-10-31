@@ -258,13 +258,13 @@ class SuggestionsSetupView(discord.ui.View):
         self._sync()
         await interaction.response.edit_message(content=self.summary(interaction.guild), view=self)
 
-    @discord.ui.button(label=LANG["es-419"]["owner_include"], style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=LANG["es-419"]["owner_include"], style=discord.ButtonStyle.secondary, row=2)
     async def toggle_owner(self, interaction, button):
         self.pending_owner = not self.pending_owner
         self._sync()
         await interaction.response.edit_message(content=self.summary(interaction.guild), view=self)
 
-    @discord.ui.button(label=LANG["es-419"]["remove_reviewer"], style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=LANG["es-419"]["remove_reviewer"], style=discord.ButtonStyle.secondary, row=2)
     async def remove_reviewer(self, interaction, button):
         if self.selected_id not in self.pending_reviewers:
             await interaction.response.send_message(self.tr("choose_existing"), ephemeral=True)
