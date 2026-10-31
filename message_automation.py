@@ -237,8 +237,9 @@ class ScheduledMessages:
                 if stamped is None:
                     # The required global footer remains even for a text-only post.
                     stamped = self.host['stamp_embed'](discord.Embed(), guild)
+                from channel_mentions import channel_mentions
                 payload = {
-                    'content': job.get('text') or None,
+                    'content': channel_mentions(job.get('text') or None, guild),
                     'embeds': message_payload.TemplateEmbeds([stamped]),
                     'allowed_mentions': discord.AllowedMentions.none(),
                 }
