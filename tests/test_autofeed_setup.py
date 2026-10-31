@@ -40,11 +40,12 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
         labels = [getattr(item, "label", "") for item in editor.children]
         for key in ("message", "show_embed", "date_picker", "repeat_picker",
-                    "insert_mention", "silent", "save", "send", "back",
-                    "images_button", "embed_channel"):
+                    "silent", "save", "send", "back"):
             self.assertIn(setup.t(key), labels)
+        for key in ("insert_mention", "images_button", "embed_channel"):
+            self.assertNotIn(setup.t(key), labels)
         self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
-        self.assertEqual(len(editor.children), 15)
+        self.assertEqual(len(editor.children), 12)
         self.assertIn(setup.t("discard"), labels)
         self.assertTrue(editor.save.disabled)
         self.assertTrue(editor.discard.disabled)
@@ -125,21 +126,23 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(setup.t("draft_first"),
                       i.response.send_message.call_args.args[0])
 
-    async def test_images_and_channel_chooser_are_reachable_from_main_panel(self):
-        from autofeed_embed_builder import SectionModal
+    async def test_embed_builder_concentrates_mentions_and_images(self):
+        from autofeed_embed_builder import SectionModal, EmbedBuilderView
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
         i = self.interaction()
         i.response.send_modal = AsyncMock()
-        await editor.images_button.callback(i)
+        await editor.embed_builder.callback(i)
         modal = i.response.send_modal.call_args.args[0]
         self.assertIsInstance(modal, SectionModal)
-        self.assertEqual(modal.section, "media")
-        self.assertEqual(set(modal.inputs), {"image_url", "thumbnail_url"})
-        i.response.edit_message.reset_mock()
-        await editor.embed_channel.callback(i)
-        chooser = i.response.edit_message.call_args.kwargs["view"]
-        self.assertIsInstance(chooser, setup.EmbedChannelSelectView)
-        self.assertIsInstance(chooser.channels, b.discord.ui.ChannelSelect)
+        self.assertEqual(modal.section, "main")
+        builder = EmbedBuilderView(editor)
+        self.assertEqual(
+            {opt.value for opt in builder.section_select.options},
+            {"main", "author", "media", "fields", "date"})
+        self.assertIsInstance(builder.roles, b.discord.ui.RoleSelect)
+        self.assertIsInstance(builder.channels, b.discord.ui.ChannelSelect)
+        media = SectionModal(editor, "media")
+        self.assertEqual(set(media.inputs), {"image_url", "thumbnail_url"})
 
     async def test_autofeeds_is_a_separate_setup_module(self):
         root = b.HeraldoSetupView(self.guild_id, self.owner_id)
@@ -251,28 +254,24 @@ class CarlStyleFieldsTests(unittest.TestCase):
         next_time = next_occurrence(job, datetime(2027, 1, 31, 11, tzinfo=timezone.utc))
         self.assertEqual(next_time, "2027-02-01T12:30:00+00:00")
 
-    def test_mention_picker_inserts_guild_mention_in_correct_field(self):
+    def test_mention_controls_are_not_duplicated_in_main_editor(self):
         editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
-        picker = setup.MentionPickerView(editor)
-        picker.insert("<#123456789012345678>")
-        self.assertEqual(editor.text, "<#123456789012345678>")
-        picker.destination = "embed"
-        picker.insert("<@&987654321012345678>")
-        self.assertIn("<@&987654321012345678>", editor.embed["description"])
-        self.assertNotIn("<@&987654321012345678>", editor.text)
-        self.assertTrue(editor.dirty)
+        controls = [x.label for x in editor.children if getattr(x, "label", None)]
+        for key in ("insert_mention", "embed_channel", "images_button"):
+            self.assertNotIn(setup.t(key), controls)
+        self.assertEqual(sum(label == setup.t("show_embed") for label in controls), 1)
+        self.assertFalse(editor.dirty)
 
-    def test_embed_editor_includes_direct_role_and_channel_selectors(self):
+    def test_embed_builder_is_the_only_active_role_and_channel_embed_editor(self):
+        from autofeed_embed_builder import EmbedBuilderView
         editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
-        view = setup.EmbedEditorView(editor)
+        view = EmbedBuilderView(editor)
         self.assertEqual(len([
             v for v in view.children if isinstance(v, b.discord.ui.RoleSelect)]), 1)
         self.assertEqual(len([
             v for v in view.children if isinstance(v, b.discord.ui.ChannelSelect)]), 1)
-        self.assertEqual(view.roles.row, 0)
-        self.assertEqual(view.channels.row, 1)
-        self.assertIn(setup.t("embed_text_design"),
-                      [x.label for x in view.children if hasattr(x, "label")])
+        self.assertEqual(view.roles.row, 1)
+        self.assertEqual(view.channels.row, 2)
         self.assertEqual(b.guild_config_get(901, feeds.CONFIG_KEY), self.original_config())
 
     def original_config(self):
