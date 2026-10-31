@@ -19,7 +19,7 @@ LANG = {
         "hub_title": "**Anuncios**",
         "hub_help": "Crea anuncios: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
         "staff_only": "Solo los administradores y moderadores pueden programar mensajes.",
-        "new": "Crear Anuncio", "manage": "Gestionar Anuncios", "permissions": "Permisos",
+        "new": "Crear Anuncio", "manage": "Gestionar Anuncios", "permissions": "Permisos", "member_week": "Miembro de la semana",
         "new_title": "**Crear mensaje**", "edit_title": "**Editar mensaje**",
         "select_channel": "Canal donde publicar", "select_role": "Rol para mencionar (opcional)",
         "message": "Mensaje", "embed": "Editor de embed", "schedule": "Fecha y repetición",
@@ -95,7 +95,7 @@ LANG = {
     "en-US": {
         "hub_title": "**Announcements**", "hub_help": "Create announcements: choose a channel, write a message or build an embed, and set a date, mentions, and repetition. Nothing is posted before confirmation.",
         "staff_only": "Only administrators and moderators can schedule messages.",
-        "new": "Create Announcement", "manage": "Manage Announcements", "permissions": "Permissions",
+        "new": "Create Announcement", "manage": "Manage Announcements", "permissions": "Permissions", "member_week": "Member of the Week",
         "new_title": "**Create message**", "edit_title": "**Edit message**",
         "select_channel": "Destination channel", "select_role": "Role to mention (optional)",
         "message": "Message", "embed": "Embed builder", "schedule": "Date and repeat",
@@ -171,7 +171,7 @@ LANG = {
     "pt-BR": {
         "hub_title": "**Anúncios**", "hub_help": "Crie anúncios: escolha o canal, escreva a mensagem ou monte um embed e defina data, menções e repetição. Nada é publicado antes da confirmação.",
         "staff_only": "Somente administradores e moderadores podem agendar mensagens.",
-        "new": "Criar Anúncio", "manage": "Gerenciar Anúncios", "permissions": "Permissões",
+        "new": "Criar Anúncio", "manage": "Gerenciar Anúncios", "permissions": "Permissões", "member_week": "Membro da semana",
         "new_title": "**Criar mensagem**", "edit_title": "**Editar mensagem**",
         "select_channel": "Canal de destino", "select_role": "Cargo a mencionar (opcional)",
         "message": "Mensagem", "embed": "Editor de embed", "schedule": "Data e repetição",
@@ -297,6 +297,7 @@ class AutoFeedsHomeView(discord.ui.View):
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
         self.create.label = t("new")
         self.manage.label = t("manage")
+        self.member_of_week.label = t("member_week")
         self.back.label = t("back")
 
     def summary(self):
@@ -331,7 +332,7 @@ class AutoFeedsHomeView(discord.ui.View):
         await interaction.response.edit_message(
             content=feeds.tr("choose"), embed=None, view=view)
 
-    @discord.ui.button(label="Miembro de la semana", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=LANG["es-419"]["member_week"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
     async def member_of_week(self, interaction, button):
         """Abrir la configuración existente, sin crear un editor duplicado."""
