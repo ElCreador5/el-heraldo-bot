@@ -331,6 +331,15 @@ class AutoFeedsHomeView(discord.ui.View):
         await interaction.response.edit_message(
             content=feeds.tr("choose"), embed=None, view=view)
 
+    @discord.ui.button(label="Miembro de la semana", style=discord.ButtonStyle.secondary, row=1)
+    @guild_context
+    async def member_of_week(self, interaction, button):
+        """Abrir la configuración existente, sin crear un editor duplicado."""
+        view = self.host["HeraldoMotwSetupView"](
+            self.guild_id, self.owner_id, from_announcements=True)
+        await interaction.response.edit_message(
+            content=view._content(interaction.guild), embed=None, view=view)
+
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
     async def back(self, interaction, button):
