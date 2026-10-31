@@ -1,12 +1,4 @@
 {
-  "sendtemplate.description": {
-    "key": "command.3994ad55e30586a4",
-    "source": "Publica una plantilla de mensajes del servidor."
-  },
-  "edittemplate.description": {
-    "key": "command.80ec9e4ac4fb7be6",
-    "source": "Edita un mensaje del Heraldo con una plantilla, previa confirmación."
-  },
   "language.description": {
     "key": "command.df4861a870b2c227",
     "source": "Configura el idioma de El Heraldo en este servidor."
