@@ -5654,7 +5654,8 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
         self.weekday = int(values[0])
         for option in self.day_select.options:
             option.default = option.value == values[0]
-        self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
+        if hasattr(self, "review"):
+            self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
         await interaction.response.edit_message(content=self._summary(), view=self)
 
     @_i18n_context
@@ -5666,7 +5667,8 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
         self.hour = int(values[0])
         for option in self.hour_select.options:
             option.default = option.value == values[0]
-        self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
+        if hasattr(self, "review"):
+            self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
         await interaction.response.edit_message(content=self._summary(), view=self)
 
     @discord.ui.button(label=_t('text.afda27aac75a77'), style=discord.ButtonStyle.primary, row=2)
