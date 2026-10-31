@@ -232,7 +232,7 @@ async def redraw(interaction, parent, section):
 
 class SectionModal(discord.ui.Modal):
     def __init__(self, parent, section):
-        super().__init__(title=(t("save_modal") + " " + t(section))[:45] if section == "main" else t(section)[:45])
+        super().__init__(title=(t("save_modal") + " " + t(section))[:45], timeout=900)
         self.parent, self.section = parent, section
         old = parent.embed or {}
         fields = {
