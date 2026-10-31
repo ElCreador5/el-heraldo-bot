@@ -818,3 +818,9 @@ Comprobaciones automatizadas agregadas: `tests/test_custodio_rule_actions.py` y 
 - Implementación en `setup_save_controls.py` y enlace con el renderizado de vistas en `setup_interactions.py`. No se alteran sanciones, persistencia ni producción.
 - Regresión añadida: `tests/test_setup_save_controls.py`, con escenarios de borrador vacío, modificación, reversión, guardar plantilla vs. ajustes de publicación, editor de programaciones y confirmaciones independientes.
 - CI GitHub Actions: comprobar último commit de `Pruebas` antes de cerrar la verificación. Prueba manual Discord/Enzonic: **pendiente**; no se ha declarado validación real del servidor.
+
+
+## 2026-10-30 — Regresión: checkout Enzonic superpuesto tras despliegue GitHub
+- Incidente real: `enzonic_test_host.revision()` abortó en `git diff --quiet HEAD --` con `enzonic_checkout_unverified` tras el arranque desde Enzonic; memoria no agotada.
+- Pruebas de código agregadas: checkout limpio, árbol remoto exacto sobre HEAD antiguo, contenido no autorizado, archivo faltante, manifiesto truncado o manipulado, rama errónea. Se simula Git y el metadato remoto; no se leen credenciales ni se accede a la SQLite real.
+- La comprobación de despliegue y arranque en Enzonic/Discord sigue **pendiente de evidencia real posterior al commit**; no registrar como éxito hasta contar con logs de conexión y ejecución de `/setup`.

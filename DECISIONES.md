@@ -507,3 +507,9 @@ La petición del propietario autoriza implementación y pruebas de respaldo/recu
 - Decisión del propietario: en `Pruebas`, `Guardar cambios` debe estar deshabilitado mientras el borrador sea igual al valor guardado. Se habilita únicamente al introducir modificaciones pendientes, y vuelve a deshabilitarse al guardar, descartar o revertir la edición.
 - Aplica transversalmente a `/setup` y sus subpaneles; no cambia el significado ni la persistencia exclusiva de `Guardar cambios`. `Confirmar cambios`, `Activar`, `Pausar`, `Reanudar` y operaciones de publicación siguen sus reglas individuales.
 - Implementación: `setup_save_controls.py` más adaptación de respuestas de `setup_interactions.py`; solo `Pruebas`. Mantener este criterio en nuevos módulos con pruebas de estado inicial, edición, reversión y posterior guardado.
+
+
+## 2026-10-30 — Verificar superposición de archivos de GitHub en Enzonic Test
+- Para el despliegue automático Enzonic de `Pruebas`, el commit `HEAD` local puede permanecer antiguo aunque los archivos se actualicen. No asumir que `git diff --quiet HEAD` equivale a modificación maliciosa.
+- Una diferencia en el checkout solo se acepta si se valida íntegramente el contenido de los archivos publicados en la rama remota `Pruebas` mediante el manifiesto público de blobs Git y HTTPS. La comprobación no altera el índice Git ni archivos persistentes. Si la validación falla se debe bloquear el inicio, sin permitir una excepción general de árbol sucio.
+- Mantener el alcance en el bot de pruebas; sin cambios en `main` ni relajación de la protección de copia de seguridad, restauración o identificación de la cuenta Discord.

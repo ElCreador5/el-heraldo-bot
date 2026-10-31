@@ -824,3 +824,11 @@ Validación pendiente de cierre: resultado final del CI Heraldo Lab para el SHA 
 - Cobertura: paneles de canales, roles, roles de ingreso, personalidad, verificación, miembro de la semana, Honeypot, Raid, reportes, embeds, plantillas, programación y permisos de Mensajes. Los subpaneles de Custodio y detección de Raid mantienen su control de cambios ya implementado.
 - Al no existir diferencia efectiva frente a lo guardado, el botón queda deshabilitado; se habilita para borradores distintos y se deshabilita al guardar, descartar o revertir. Confirmar cambios, Activar/Pausar y Publicar no se desactivan con esta regla.
 - Solo rama `Pruebas`; sin cambios en `main` ni base de datos. Regresiones añadidas en `tests/test_setup_save_controls.py`; verificar resultados CI y prueba Discord del laboratorio antes de declarar validación operativa.
+
+
+## 2026-10-30 — Incidente de arranque Enzonic tras deploy de GitHub
+- Enzonic Test se detuvo antes de conectar con Discord con `backup_job.BackupJobError: enzonic_checkout_unverified`, concretamente al evaluar `git diff --quiet HEAD --` en `enzonic_test_host.revision()`. El contenedor informó `Out of memory: false`.
+- Causa deducida del log: existe un checkout Git válido en rama `Pruebas`, pero al menos un archivo rastreado no coincide con su `HEAD` local. Compatible con despliegue de Enzonic que copia archivos desde GitHub sin actualizar el commit local.
+- Corrección solamente en `Pruebas`: si el checkout es limpio se mantiene la verificación anterior; si está modificado, la alternativa verifica por HTTPS los metadatos del commit y cada blob del árbol publicado en la rama remota `Pruebas` (sin operaciones de escritura). Una discrepancia, archivo ausente, ruta insegura, respuesta incompleta o fallo de red bloquean el arranque. El SHA devuelto debe corresponder al commit remoto verificado.
+- No se modifica SQLite, el estado H-03, los recibos privados, las variables, la producción ni `main`.
+- Regresiones añadidas a `tests/test_enzonic_migration.py`; observar las ejecuciones CI para el último commit y confirmar posteriormente con el registro real de Enzonic el regreso de Discord Gateway.
