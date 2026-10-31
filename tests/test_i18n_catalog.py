@@ -27,19 +27,23 @@ class I18nCatalogTests(unittest.TestCase):
             }[locale])
 
 
-    def test_custom_messages_section_has_templates_name_in_every_language(self):
+    def test_messages_menu_no_longer_exposes_legacy_templates_in_any_language(self):
         names = {"es-419": ("Plantillas", "Mensajes personalizados"),
                  "en-US": ("Templates", "Custom messages"),
                  "pt-BR": ("Modelos", "Mensagens personalizadas")}
-        for locale, (current, previous) in names.items():
+        for locale, hidden in names.items():
             with self.subTest(locale=locale):
-                self.assertEqual(translate(locale, "text.f4ea025e8c2221"), current)
-                description = translate(locale, "text.685b989ce71932")
                 panel = translate(locale, "text.6902f6b5d77eb7")
-                self.assertIn(current.casefold(), description.casefold())
-                self.assertIn(current, panel)
-                self.assertNotIn(previous, panel)
-                self.assertNotIn(previous.casefold(), description.casefold())
+                description = translate(locale, "setup.module.messages.description")
+                for old in hidden:
+                    self.assertNotIn(old.casefold(), panel.casefold())
+                    self.assertNotIn(old.casefold(), description.casefold())
+        bot_tree = ast.parse(BOT.read_text(encoding="utf-8"))
+        view = next(node for node in bot_tree.body if isinstance(node, ast.ClassDef)
+                    and node.name == "HeraldoMessagesSetupView")
+        source = ast.get_source_segment(BOT.read_text(encoding="utf-8"), view)
+        self.assertNotIn('value="templates"', source)
+        self.assertNotIn('selected == "templates"', source)
 
 
     def test_templates_panel_explains_its_controls_without_external_commands(self):
