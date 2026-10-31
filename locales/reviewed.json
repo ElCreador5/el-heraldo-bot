@@ -659,6 +659,14 @@
     "**El Heraldo · Settings**\n\nSelect a section to open it directly. Save changes only when you are satisfied.\nYou can return to this menu from each module's navigation options.",
     "**El Heraldo · Configurações**\n\nSelecione uma seção para abri-la diretamente. Salve as alterações somente quando estiver satisfeito.\nVocê pode voltar a este menu pelas opções de navegação de cada módulo."
   ],
+  "setup.module.autofeeds.description": [
+    "Automatic and scheduled posts",
+    "Publicações automáticas e programadas"
+  ],
+  "setup.module.autofeeds.label": [
+    "AutoFeeds",
+    "AutoFeeds"
+  ],
   "setup.module.automod.description": [
     "Automatic server protections",
     "Proteções automáticas do servidor"
