@@ -40,7 +40,7 @@ STRINGS = {
         "policy_needs": "Configura primero al menos un canal autorizado.",
         "role": "El rol seleccionado debe poder mencionarse.", "role_unavailable": "Rol de mención no disponible.",
         "quota": "Se alcanzó el límite de programaciones.",
-        "content": "Escribe un mensaje o selecciona una plantilla existente.",
+        "content": "Escribe el contenido del anuncio.",
         "past": "Selecciona una fecha futura.",
         "legacy": "Esta programación se administra con el comando anterior /programar_mensaje.",
         "channels": "Canales permitidos para miembros",
@@ -91,7 +91,7 @@ STRINGS = {
         "policy_needs": "Configure at least one permitted channel first.",
         "role": "The selected role must be mentionable.", "role_unavailable": "Mention role unavailable.",
         "quota": "The scheduling limit has been reached.",
-        "content": "Enter a message or select an existing template.",
+        "content": "Enter the announcement content.",
         "past": "Select a future date.",
         "legacy": "Manage this legacy schedule using /programar_mensaje.",
         "channels": "Channels members may post in",
@@ -391,8 +391,7 @@ def show_job(job, *, detail=True):
              f"{tr('frequency_label')}: {frequency}", f"{tr('start_label')}: {when}",
              f"{tr('mention_label')}: {('<@&' + str(rid) + '>') if rid else tr('no_role')}"]
     if detail:
-        message = job.get("text") or ((job.get("embed") or {}).get("description") if job.get("embed") else None) or (
-            tr("template_label") + ": " + str(job.get("template") or ""))
+        message = job.get("text") or ((job.get("embed") or {}).get("description") if job.get("embed") else None) or ""
         lines.append(tr("content_label") + ": " + message[:700])
     return "\n".join(lines)
 
@@ -451,9 +450,7 @@ class DraftConfirm(discord.ui.View):
             referenced_mentions(guild, job)
         except ValueError:
             return await respond_error(interaction, "role")
-        if not job.get("text") and not job.get("embed") and not any(
-            item["name"] == job.get("template") for item in self.host["heraldo_template_list"](guild.id)
-        ):
+        if not job.get("text") and not job.get("embed"):
             return await respond_error(interaction, "content")
         try:
             persist_schedule(self.host, guild.id, interaction.user, job,
@@ -478,10 +475,10 @@ class FeedModal(discord.ui.Modal, title=STRINGS["es-419"]["modal"]):
         self.title = tr("modal")
         self.host, self.guild_id, self.author = host, guild_id, author
         self.channel_id, self.repeat, self.role_id = channel_id, repeat, role_id
-        self.template, self.job = template, job
+        self.template, self.job = None, job
         self.snapshot = host["guild_config_get"](guild_id, CONFIG_KEY) if job else None
         self.message = discord.ui.TextInput(label=STRINGS["es-419"]["msg"], style=discord.TextStyle.paragraph,
-                                            required=not bool(template or (job or {}).get("embed")), max_length=1900,
+                                            required=not bool((job or {}).get("embed")), max_length=1900,
                                             default=(job or {}).get("text", ""))
         self.date = discord.ui.TextInput(label=STRINGS["es-419"]["date"],
                                          placeholder="2026-10-30 18:00", max_length=24,
@@ -505,14 +502,14 @@ class FeedModal(discord.ui.Modal, title=STRINGS["es-419"]["modal"]):
                 if self.repeat == "intervalo":
                     interval_seconds(str(self.interval))
                 text = str(self.message).strip()
-                if not text and not self.template and not (self.job or {}).get("embed"):
+                if not text and not (self.job or {}).get("embed"):
                     raise ValueError("content")
                 job = {
                     "id": self.job["id"] if self.job else uuid.uuid4().hex[:12],
                     "guild": self.guild_id, "channel": self.channel_id,
                     "author": self.author, "start": start.isoformat(), "zone": zone,
                     "repeat": self.repeat, "interval": str(self.interval).strip() if self.repeat == "intervalo" else "",
-                    "text": text, "template": self.template, "role": self.role_id,
+                    "text": text, "role": self.role_id,
                     "autofeed": True, "paused": (self.job or {}).get("paused", False),
                     "embed": (self.job or {}).get("embed"),
                     "repeat_parts": (self.job or {}).get("repeat_parts") if self.repeat == "custom" else None,
@@ -674,7 +671,7 @@ class ManageView(discord.ui.View):
         else:
             await interaction.response.send_modal(FeedModal(
                 self.host, self.guild_id, job["author"], job["channel"],
-                job["repeat"], job.get("role"), job.get("template"), job))
+                job["repeat"], job.get("role"), None, job))
 
     @discord.ui.button(label=STRINGS["es-419"]["pause"] + " / " + STRINGS["es-419"]["resume"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
@@ -820,7 +817,7 @@ def install(host):
     group = app_commands.Group(name="programar", description="Programar y administrar publicaciones.",
                                guild_only=True)
 
-    @group.command(name="crear", description="Programar texto o una plantilla con vista previa.")
+    @group.command(name="crear", description="Programar un anuncio con vista previa.")
     @app_commands.choices(frecuencia=[
         app_commands.Choice(name="Una vez", value="ninguna"),
         app_commands.Choice(name="Diaria", value="diaria"),
@@ -829,15 +826,12 @@ def install(host):
         app_commands.Choice(name="Por intervalo", value="intervalo")])
     @guild_context
     async def crear(interaction: discord.Interaction, canal: discord.TextChannel,
-                    frecuencia: app_commands.Choice[str], rol: discord.Role = None,
-                    plantilla: str = None):
+                    frecuencia: app_commands.Choice[str], rol: discord.Role = None):
         if not is_ready(interaction, host, canal, rol):
             return await respond_error(interaction, "denied")
-        if plantilla and not any(x["name"].casefold() == plantilla.casefold() for x in host["heraldo_template_list"](interaction.guild.id)):
-            return await respond_error(interaction, "content")
         await interaction.response.send_modal(
             FeedModal(host, interaction.guild.id, interaction.user.id, canal.id, frecuencia.value,
-                      rol.id if rol else None, plantilla))
+                      rol.id if rol else None))
 
     @group.command(name="listar", description="Consultar y administrar las publicaciones programadas.")
     @guild_context
@@ -858,7 +852,7 @@ def install(host):
         job = next((j for j in get_jobs(host, interaction.guild.id) if j.get("id") == identificador and j.get("autofeed") and can_manage(interaction.user, j)), None)
         if job is None:
             return await respond_error(interaction, "missing")
-        await interaction.response.send_modal(FeedModal(host, interaction.guild.id, job["author"], job["channel"], job["repeat"], job.get("role"), job.get("template"), job))
+        await interaction.response.send_modal(FeedModal(host, interaction.guild.id, job["author"], job["channel"], job["repeat"], job.get("role"), None, job))
 
     @group.command(name="pausar", description="Detener temporalmente una programación.")
     @guild_context
