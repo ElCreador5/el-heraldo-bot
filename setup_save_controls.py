@@ -35,6 +35,19 @@ def _different_saved(view, values, getter_name):
     return any(getter(view.guild_id, key) != value for key, value in values.items())
 
 
+def _changed_vs_getters(view, pairs):
+    """No cuenta como cambio volver a seleccionar el valor ya guardado."""
+    module = sys.modules.get(type(view).__module__)
+    for field, getter_name in pairs:
+        pending = getattr(view, field, None)
+        if pending is None:
+            continue
+        getter = getattr(module, getter_name, None) if module else None
+        if getter is None or getter(view.guild_id) != pending:
+            return True
+    return False
+
+
 def has_unsaved_changes(view):
     """Devuelve None para controles desconocidos: nunca bloquear por suposición."""
     if view is None:
@@ -52,19 +65,35 @@ def has_unsaved_changes(view):
         return any(getter(view.guild_id, "role", key) != value
                    for key, value in view.pending_roles.items())
     if name == "HeraldoJoinRolesBasicView":
-        return _any_pending(view, "pending_role_ids", "pending_screening",
-                            "pending_enabled", "pending_delay")
+        return _changed_vs_getters(view, (
+            ("pending_role_ids", "get_join_role_ids"),
+            ("pending_screening", "join_roles_wait_screening"),
+            ("pending_enabled", "join_roles_enabled"),
+            ("pending_delay", "get_join_roles_delay"),
+        ))
     if name == "HeraldoJoinRolesUsersView":
-        return _any_pending(view, "pending_remove_after")
+        return _changed_vs_getters(view, (
+            ("pending_remove_after", "join_roles_remove_specific_after_join"),
+        ))
     if name == "HeraldoJoinRolesBotsView":
-        return _any_pending(view, "pending_role_ids", "pending_enabled",
-                            "pending_delay", "pending_different")
+        return _changed_vs_getters(view, (
+            ("pending_role_ids", "get_join_bot_role_ids"),
+            ("pending_enabled", "join_roles_bot_enabled"),
+            ("pending_delay", "join_roles_bot_apply_delay"),
+            ("pending_different", "join_roles_bot_use_different"),
+        ))
     if name == "HeraldoJoinRolesSyncView":
-        return _any_pending(view, "pending_excluded")
+        return _changed_vs_getters(view, (
+            ("pending_excluded", "get_join_sync_excluded_role_ids"),
+        ))
     if name == "HeraldoOrientationSetupView":
-        return _any_pending(view, "pending_channel_id", "pending_bindings",
-                            "pending_enabled", "pending_required",
-                            "pending_allow_change", "pending_dm_template")
+        return (_changed_vs_getters(view, (
+            ("pending_channel_id", "get_orientation_channel_id"),
+            ("pending_bindings", "get_orientation_bindings"),
+            ("pending_enabled", "orientation_enabled"),
+            ("pending_required", "personality_required"),
+            ("pending_allow_change", "personality_allow_change"),
+        )) or _any_pending(view, "pending_dm_template"))
     if name == "HeraldoMotwSetupView":
         return (getattr(view, "pending_channel_id", None) is not None
                 and view.pending_channel_id != getattr(view, "original_channel_id", None))
@@ -78,8 +107,13 @@ def has_unsaved_changes(view):
         return _any_pending(view, "pending_role_id", "pending_sin_role_id",
                             "pending_channel_id", "pending_enabled")
     if name == "HeraldoRaidSetupView":
-        return _any_pending(view, "pending_action", "pending_role_id",
-                            "pending_enabled", "pending_invites", "pending_purge")
+        return _changed_vs_getters(view, (
+            ("pending_action", "raid_action"),
+            ("pending_role_id", "raid_ping_role_id"),
+            ("pending_enabled", "raid_enabled"),
+            ("pending_invites", "raid_lock_invites_enabled"),
+            ("pending_purge", "raid_purge_enabled"),
+        ))
     if name in {"HeraldoUserReportsSetupView", "ReportReminderSetupView"}:
         return bool(view._has_pending_changes())
     if name == "EmbedEditorView":
