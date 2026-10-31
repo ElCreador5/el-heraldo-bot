@@ -10186,7 +10186,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
             select = discord.ui.Select(
                 placeholder=placeholders[field], row=row,
                 options=[discord.SelectOption(label=label, value=value,
-                           default=value == self.pending[field]) for value, label in options],
+                           default=(self.original_raw.get(field) is not None and value == self.pending[field])) for value, label in options],
             )
 
             @_i18n_context
@@ -10231,7 +10231,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
     def _refresh_controls(self):
         for field, select in self.selectors.items():
             for option in select.options:
-                option.default = option.value == self.pending[field]
+                option.default = (self.original_raw.get(field) is not None and option.value == self.pending[field])
         # El selector de día únicamente se utiliza en el modo semanal.
         day_select = self.selectors["report_reminder_day"]
         if self.pending["report_reminder_frequency"] == "weekly":
