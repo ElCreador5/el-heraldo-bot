@@ -42,7 +42,6 @@ STRINGS = {
         "quota": "Se alcanzó el límite de programaciones.",
         "content": "Escribe el contenido del anuncio.",
         "past": "Selecciona una fecha futura.",
-        "legacy": "Esta programación se administra con el comando anterior /programar_mensaje.",
         "channels": "Canales permitidos para miembros",
         "roles_ui": "Roles que pueden programar",
         "edit": "Editar",
@@ -60,7 +59,6 @@ STRINGS = {
         "mention_label": "Mención",
         "content_label": "Contenido",
         "no_role": "Sin rol",
-        "template_label": "Plantilla",
         "status_label": "Estado",
         "activate": "Activar",
         "enabled_label": "Activo",
@@ -93,7 +91,6 @@ STRINGS = {
         "quota": "The scheduling limit has been reached.",
         "content": "Enter the announcement content.",
         "past": "Select a future date.",
-        "legacy": "Manage this legacy schedule using /programar_mensaje.",
         "channels": "Channels members may post in",
         "roles_ui": "Roles allowed to schedule",
         "edit": "Edit",
@@ -111,7 +108,6 @@ STRINGS = {
         "mention_label": "Mention",
         "content_label": "Content",
         "no_role": "No role",
-        "template_label": "Template",
         "status_label": "Status",
         "activate": "Enable",
         "enabled_label": "Enabled",
@@ -142,9 +138,8 @@ STRINGS = {
         "policy_needs": "Configure pelo menos um canal permitido primeiro.",
         "role": "O cargo selecionado deve permitir menções.", "role_unavailable": "Cargo de menção indisponível.",
         "quota": "O limite de programações foi atingido.",
-        "content": "Digite uma mensagem ou selecione um modelo existente.",
+        "content": "Digite o conteúdo do anúncio.",
         "past": "Selecione uma data futura.",
-        "legacy": "Gerencie esta programação antiga usando /programar_mensaje.",
         "channels": "Canais permitidos aos membros",
         "roles_ui": "Cargos autorizados a programar",
         "edit": "Editar",
@@ -162,7 +157,6 @@ STRINGS = {
         "mention_label": "Menção",
         "content_label": "Conteúdo",
         "no_role": "Sem cargo",
-        "template_label": "Modelo",
         "status_label": "Estado",
         "activate": "Ativar",
         "enabled_label": "Ativo",
@@ -470,12 +464,12 @@ class DraftConfirm(discord.ui.View):
 
 
 class FeedModal(discord.ui.Modal, title=STRINGS["es-419"]["modal"]):
-    def __init__(self, host, guild_id, author, channel_id, repeat, role_id, template=None, job=None):
+    def __init__(self, host, guild_id, author, channel_id, repeat, role_id, job=None):
         super().__init__()
         self.title = tr("modal")
         self.host, self.guild_id, self.author = host, guild_id, author
         self.channel_id, self.repeat, self.role_id = channel_id, repeat, role_id
-        self.template, self.job = None, job
+        self.job = job
         self.snapshot = host["guild_config_get"](guild_id, CONFIG_KEY) if job else None
         self.message = discord.ui.TextInput(label=STRINGS["es-419"]["msg"], style=discord.TextStyle.paragraph,
                                             required=not bool((job or {}).get("embed")), max_length=1900,
@@ -632,7 +626,7 @@ class ManageView(discord.ui.View):
         self.edit.label, self.silence.label, self.delete.label = tr("edit"), tr("silence"), tr("delete")
         self.toggle.label = tr("pause") + " / " + tr("resume")
         select = discord.ui.Select(placeholder=tr("choose"), row=0, options=[
-            discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or j.get("template") or tr("msg"))[:60])[:100],
+            discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or (j.get("embed") or {}).get("description") or tr("msg"))[:60])[:100],
                                  value=j["id"]) for j in jobs[:25]])
         select.callback = self.select_job
         self.add_item(select)
@@ -671,7 +665,7 @@ class ManageView(discord.ui.View):
         else:
             await interaction.response.send_modal(FeedModal(
                 self.host, self.guild_id, job["author"], job["channel"],
-                job["repeat"], job.get("role"), None, job))
+                job["repeat"], job.get("role"), job))
 
     @discord.ui.button(label=STRINGS["es-419"]["pause"] + " / " + STRINGS["es-419"]["resume"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
@@ -852,7 +846,7 @@ def install(host):
         job = next((j for j in get_jobs(host, interaction.guild.id) if j.get("id") == identificador and j.get("autofeed") and can_manage(interaction.user, j)), None)
         if job is None:
             return await respond_error(interaction, "missing")
-        await interaction.response.send_modal(FeedModal(host, interaction.guild.id, job["author"], job["channel"], job["repeat"], job.get("role"), None, job))
+        await interaction.response.send_modal(FeedModal(host, interaction.guild.id, job["author"], job["channel"], job["repeat"], job.get("role"), job))
 
     @group.command(name="pausar", description="Detener temporalmente una programación.")
     @guild_context
