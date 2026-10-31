@@ -467,17 +467,19 @@ class EmbedBuilderView(discord.ui.View):
         self.date_manual.disabled = section != "date"
 
     def summary(self):
+        # Controles compactos: el contenido visual está en la vista previa real.
+        # Evita repetir una guía larga después del formulario de título/descripción.
         data = self.parent.embed or {}
-        parts = [f"**{t('title')}**", t("help"), t("info"), "",
-                 f"**{t('section')}:** {t(self.section)}",
-                 f"**{t('title_label')}:** {str(data.get('title') or t('empty'))[:140]}",
-                 f"**{t('description')}:** {str(data.get('description') or t('empty'))[:200]}",
-                 f"**{t('author')}:** {str((data.get('author') or {}).get('name') or t('empty'))[:100]}",
-                 f"**{t('fields')}:** {len(data.get('fields') or [])}",
-                 f"**{t('timestamp')}:** {str(data.get('timestamp_value') or t('timestamp_on')) if data.get('timestamp') else t('timestamp_off')}"]
-        if self.section in ("main", "fields"):
-            parts += ["", t("write_hint")]
-        parts += ["", t("locked"), t("safe")]
+        parts = [
+            f"**{t('title')}**",
+            t("help"),
+            f"**{t('section')}:** {t(self.section)}",
+            f"**{t('title_label')}:** {str(data.get('title') or t('empty'))[:100]}",
+            f"**{t('fields')}:** {len(data.get('fields') or [])}",
+        ]
+        if self.section == "fields":
+            parts.append(t("write_hint"))
+        parts.extend(("", t("locked")))
         return "\n".join(parts)
 
     def preview_embed(self, guild):
