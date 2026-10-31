@@ -7,7 +7,7 @@
   "autofeed.choice.monthly": "Mensal",
   "autofeed.choice.once": "Uma vez",
   "autofeed.choice.weekly": "Semanal",
-  "autofeed.command.config": "Configurar canais e cargos permitidos.",
+  "autofeed.command.config": "Consultar quem pode agendar anúncios.",
   "autofeed.command.create": "Programar texto ou um modelo existente com prévia.",
   "autofeed.command.delete": "Excluir uma programação após confirmação.",
   "autofeed.command.edit": "Editar o conteúdo e horário de uma programação.",
