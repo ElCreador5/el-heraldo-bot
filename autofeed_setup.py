@@ -1050,7 +1050,7 @@ class AutofeedEditorView(discord.ui.View):
     async def date_time(self, interaction, button):
         await interaction.response.send_modal(DateTimeModal(self))
 
-    @discord.ui.button(label=LANG["es-419"]["repeat_picker"], style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["repeat_picker"], style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def frequency(self, interaction, button):
         picker = FrequencyPickerView(self)
@@ -1125,7 +1125,7 @@ class AutofeedEditorView(discord.ui.View):
             "paused": previous.get("paused", False), "template": None,
         }
 
-    @discord.ui.button(label=LANG["es-419"]["save"], style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label=LANG["es-419"]["save"], style=discord.ButtonStyle.success, row=3)
     @guild_context
     async def save(self, interaction, button):
         from autofeed_embed_builder import validate_data
