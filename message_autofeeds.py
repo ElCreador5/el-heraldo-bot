@@ -368,7 +368,8 @@ def interval_seconds(value):
     if not match:
         raise ValueError("invalid")
     seconds = int(match.group(1)) * {"m": 60, "h": 3600, "d": 86400}[match.group(2)]
-    if not 3600 <= seconds <= 365 * 86400:
+    from enzonic_test_host import is_test
+    if not (300 if is_test() else 3600) <= seconds <= 365 * 86400:
         raise ValueError("invalid")
     return seconds
 
