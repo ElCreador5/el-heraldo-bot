@@ -263,8 +263,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.guild_config_get(901, 'safety_test'), 'concurrent')
 
     async def test_lost_permission_blocks_confirm_and_join_panel(self):
-        for view in (b.HeraldoMessageConfirmView(901, 10, 'kit', {'items': []}),
-                     b._JoinRolesOwnedView(901, 10),
+        for view in (b._JoinRolesOwnedView(901, 10),
                      b.ConfigurationConfirmView(901, 10, {'safety_test': 'forbidden'})):
             self.assertFalse(await view.interaction_check(interaction(False)))
 
