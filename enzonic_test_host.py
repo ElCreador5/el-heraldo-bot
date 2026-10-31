@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+from urllib.request import Request, urlopen
 
 ROOT = Path("/home/container")
 DATABASE = ROOT / "heraldo.db"
@@ -79,24 +80,105 @@ def check_test_secrets():
     _key()
 
 
-def revision():
-    """Identidad del checkout real; nunca toma el SHA antiguo de Railway."""
-    def git(*args):
-        result = subprocess.run(["git", "-C", str(ROOT), *args],
-                                capture_output=True, timeout=8, check=False)
-        if result.returncode:
+def _github_metadata(path):
+    """Lee solo metadatos públicos de la rama Test, con tamaño y tiempo acotados."""
+    url = "https://api.github.com/repos/ElCreador5/el-heraldo-bot/" + path
+    try:
+        request = Request(url, headers={"Accept": "application/vnd.github+json",
+                                        "User-Agent": "ElHeraldo-Enzonic-Test/1.0"})
+        with urlopen(request, timeout=10) as response:
+            payload = response.read(512 * 1024 + 1)
+        if len(payload) > 512 * 1024:
             blocked("enzonic_checkout_unverified")
-        return result.stdout.decode("ascii").strip()
-    if git("rev-parse", "--show-toplevel") != str(ROOT):
+        return json.loads(payload)
+    except (OSError, ValueError, TimeoutError):
         blocked("enzonic_checkout_unverified")
-    if git("symbolic-ref", "--short", "HEAD") != "Pruebas":
+
+
+def _git_blob_sha(path, size):
+    """Huella de los bytes en disco, equivalente al SHA de blob Git."""
+    if (not path.is_file() or path.is_symlink() or path.resolve() != path
+            or size < 0 or size > 32 * 1024 * 1024 or path.stat().st_size != size):
+        blocked("enzonic_checkout_unverified")
+    digest = hashlib.sha1()
+    digest.update(f"blob {size}\\0".encode("ascii"))
+    try:
+        with path.open("rb") as stream:
+            while chunk := stream.read(128 * 1024):
+                digest.update(chunk)
+    except OSError:
+        blocked("enzonic_checkout_unverified")
+    return digest.hexdigest()
+
+
+def _verified_github_deployment():
+    """Enzonic puede copiar archivos sin mover HEAD: verificar TODOS los blobs.
+
+    No hace reset, pull ni modificaciones de Git/SQLite. Si un solo archivo
+    difiere del árbol publicado en Pruebas, el arranque sigue bloqueado.
+    """
+    info = _github_metadata("commits/Pruebas")
+    commit_sha = info.get("sha") if isinstance(info, dict) else None
+    tree = (info.get("commit") or {}).get("tree") if isinstance(info, dict) else None
+    tree_sha = tree.get("sha") if isinstance(tree, dict) else None
+    if not (isinstance(commit_sha, str) and re.fullmatch(r"[0-9a-f]{40}", commit_sha)
+            and isinstance(tree_sha, str) and re.fullmatch(r"[0-9a-f]{40}", tree_sha)):
+        blocked("enzonic_checkout_unverified")
+    listing = _github_metadata("git/trees/" + tree_sha + "?recursive=1")
+    if (not isinstance(listing, dict) or listing.get("sha") != tree_sha
+            or listing.get("truncated") is not False
+            or not isinstance(listing.get("tree"), list)):
+        blocked("enzonic_checkout_unverified")
+    tracked = set()
+    total_size = 0
+    for item in listing["tree"]:
+        if not isinstance(item, dict):
+            blocked("enzonic_checkout_unverified")
+        if item.get("type") == "tree":
+            continue
+        name, sha, size = item.get("path"), item.get("sha"), item.get("size")
+        if (item.get("type") != "blob" or item.get("mode") not in ("100644", "100755")
+                or not isinstance(name, str) or not name or name.startswith("/")
+                or "\\\\" in name or ".." in Path(name).parts or name == ".git"
+                or name.startswith(".git/") or name in tracked
+                or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha)
+                or type(size) is not int or size < 0):
+            blocked("enzonic_checkout_unverified")
+        tracked.add(name)
+        total_size += size
+        if len(tracked) > 10000 or total_size > 64 * 1024 * 1024:
+            blocked("enzonic_checkout_unverified")
+        if _git_blob_sha(ROOT / name, size) != sha:
+            blocked("enzonic_checkout_unverified")
+    if not tracked or "bot.py" not in tracked or "enzonic_test_host.py" not in tracked:
+        blocked("enzonic_checkout_unverified")
+    return commit_sha
+
+
+def revision():
+    """Solo acepta Pruebas limpio o archivos íntegros del despliegue GitHub."""
+    def git(*args, allowed=(0,)):
+        try:
+            result = subprocess.run(["git", "-C", str(ROOT), *args],
+                                    capture_output=True, timeout=8, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            blocked("enzonic_checkout_unverified")
+        if result.returncode not in allowed:
+            blocked("enzonic_checkout_unverified")
+        return result
+    if git("rev-parse", "--show-toplevel").stdout.decode("ascii").strip() != str(ROOT):
+        blocked("enzonic_checkout_unverified")
+    if git("symbolic-ref", "--short", "HEAD").stdout.decode("ascii").strip() != "Pruebas":
         blocked("enzonic_wrong_branch")
-    value = git("rev-parse", "HEAD")
+    value = git("rev-parse", "HEAD").stdout.decode("ascii").strip()
     if not re.fullmatch(r"[0-9a-f]{40}", value):
         blocked("enzonic_checkout_unverified")
-    git("diff", "--quiet", "HEAD", "--")
-    return value
-
+    dirty = git("diff", "--quiet", "HEAD", "--", allowed=(0, 1)).returncode
+    if not dirty:
+        return value
+    # GitHub Deploy superpone archivos y puede dejar HEAD apuntando al
+    # commit antiguo. No aceptar el árbol sucio sin contrastarlo con GitHub.
+    return _verified_github_deployment()
 
 def private_state():
     from backup_job import _private_root
