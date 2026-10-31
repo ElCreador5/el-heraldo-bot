@@ -5612,6 +5612,7 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
         self.original_hour = get_motw_hour(guild_id)
         self.weekday = self.original_weekday
         self.hour = self.original_hour
+        self.review.disabled = True
 
         days = discord.ui.Select(
             placeholder=_t('text.52bf6193ff2a12'),
@@ -5653,6 +5654,7 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
         self.weekday = int(values[0])
         for option in self.day_select.options:
             option.default = option.value == values[0]
+        self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
         await interaction.response.edit_message(content=self._summary(), view=self)
 
     @_i18n_context
@@ -5664,6 +5666,7 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
         self.hour = int(values[0])
         for option in self.hour_select.options:
             option.default = option.value == values[0]
+        self.review.disabled = (self.weekday, self.hour) == (self.original_weekday, self.original_hour)
         await interaction.response.edit_message(content=self._summary(), view=self)
 
     @discord.ui.button(label=_t('text.afda27aac75a77'), style=discord.ButtonStyle.primary, row=2)
@@ -5690,10 +5693,11 @@ class HeraldoMotwScheduleSelectView(discord.ui.View):
 
 class HeraldoMotwSetupView(_SetupDirtySaveView):
     @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int) -> None:
+    def __init__(self, guild_id: int, owner_id: int, *, from_announcements: bool = False) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.from_announcements = from_announcements
         self.pending_channel_id: int | None = None
         self.original_channel_id = get_motw_channel_id(guild_id)
         channel = discord.ui.ChannelSelect(
@@ -5794,7 +5798,12 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        if self.from_announcements:
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(globals(), self.guild_id, self.owner_id)
+            await interaction.response.edit_message(content=content, embed=None, view=view)
+        else:
+            await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 
