@@ -24254,8 +24254,9 @@ def variable_suggestions(guild: discord.Guild | None, current: str) -> list:
     ):
         query = typed[1:] if typed[:1] == "#" else rest
         prefix = "#" if typed[:1] == "#" else f"{kind}:"
-        pick([c for c in guild.channels if not isinstance(c, discord.CategoryChannel)], lambda c: c.name, query,
-             lambda c: add(_t('text.ecfe4bf362a762', p0=f'{c.name}'), f"{prefix}{c.name}"))
+        pick([c for c in guild.channels if not isinstance(c, discord.CategoryChannel)],
+             lambda c: f"{c.name} {c.id}", query,
+             lambda c: add(_t('text.ecfe4bf362a762', p0=f'{c.name}'), f"{prefix}{c.id}"))
     elif guild is not None and (
         typed[:1] == "@" or kind_key in (
             "rol", "role", "r", "mencionrol", "rolmencion",
