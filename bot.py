@@ -5867,7 +5867,7 @@ class HeraldoMotwConfirmView(discord.ui.View):
             view=editor,
         )
 
-    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger)
     @_i18n_context
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.finished = True
