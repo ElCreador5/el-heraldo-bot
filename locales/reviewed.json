@@ -5668,8 +5668,8 @@
     "Canal mesclado com #{p0} por {p1}"
   ],
   "text.6902f6b5d77eb7": [
-    "**El Heraldo · Messages**\n\nChoose a message to edit. System messages have fixed names; optional named templates are under Templates. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
-    "**El Heraldo · Mensagens**\n\nEscolha a mensagem a editar. Mensagens do sistema têm nomes fixos; modelos opcionais com nomes próprios ficam em Modelos. As alterações são isoladas por servidor e painéis publicados são sincronizados quando aplicável.\n\n**Editáveis:** Verificação, mensagem privada de verificação, Sugestões, Honeypot, Condenações e Registros.\n**Excluídos intencionalmente:** Variáveis, comandos, listas, estados, perfis, históricos, rankings e qualquer painel que mostre dados reais ou gerados em tempo real."
+    "**El Heraldo · Messages**\n\nChoose a system message to edit. Changes are isolated per server and published panels synchronize when applicable.\n\n**Editable:** Verification, verification DM, Suggestions, Honeypot, Condemnations, and Logs.\n**Intentionally excluded:** Variables, commands, lists, states, profiles, histories, rankings, and any panel displaying actual or real-time data.",
+    "**El Heraldo · Mensagens**\n\nEscolha a mensagem do sistema que deseja editar. As alterações são isoladas por servidor e painéis publicados são sincronizados quando aplicável.\n\n**Editáveis:** Verificação, mensagem privada de verificação, Sugestões, Honeypot, Condenações e Registros.\n**Excluídos intencionalmente:** Variáveis, comandos, listas, estados, perfis, históricos, rankings e qualquer painel que mostre dados reais ou gerados em tempo real."
   ],
   "text.690539f1e42528": [
     "Error: The URL should start with https:// or http://.",
