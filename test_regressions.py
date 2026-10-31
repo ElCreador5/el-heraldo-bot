@@ -54,50 +54,12 @@ class Regressions(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.patch.stop()
 
-    async def test_message_template_requires_explicit_save(self):
-        b.heraldo_template_save(777, [])
-        item = {"name": "Reglas", "title": "Reglas", "description": "Contenido",
-                "image": "", "button_label": "", "button_url": "",
-                "role_component": "", "role_component_mode": "ninguno"}
-        view = b.HeraldoMessageConfirmView(
-            777, 99, "template", {"old_name": None, "item": item})
-        self.assertEqual(b.heraldo_template_list(777), [])
-        i = interaction(self.guild)
-        i.guild_id = 777
-        await view.commit.callback(i)
-        self.assertEqual(len(b.heraldo_template_list(777)), 1)
-        self.assertEqual(b.heraldo_template_list(777)[0]["name"], "Reglas")
-
-    async def test_message_confirmation_cancel_keeps_configuration(self):
-        b.heraldo_template_save(777, [])
-        view = b.HeraldoMessageConfirmView(777, 99, "template",
-                 {"old_name": None, "item": {"name": "Sin guardar"}})
-        i = interaction(self.guild)
-        i.guild_id = 777
-        await view.cancel.callback(i)
-        self.assertEqual(b.heraldo_template_list(777), [])
-        i.response.edit_message.assert_awaited_once()
-
-    async def test_message_kit_conflict_does_not_overwrite_existing(self):
-        old = {"name": "Reglas", "title": "Original", "description": "Texto"}
-        b.heraldo_template_save(777, [old])
-        view = b.HeraldoMessageConfirmView(777, 99, "kit",
-            {"items": [{"name": "Reglas", "title": "Reemplazo"}]})
-        i = interaction(self.guild)
-        i.guild_id = 777
-        await view.commit.callback(i)
-        self.assertEqual(b.heraldo_template_list(777)[0]["title"], "Original")
-        i.response.send_message.assert_awaited_once()
-
-    async def test_message_confirm_rejects_other_admin_session(self):
-        b.heraldo_template_save(777, [])
-        view = b.HeraldoMessageConfirmView(777, 99, "template",
-            {"old_name": None, "item": {"name": "Ajeno"}})
-        i = interaction(self.guild)
-        i.guild_id = 777
-        i.user.id = 100
-        self.assertFalse(await view.interaction_check(i))
-        self.assertEqual(b.heraldo_template_list(777), [])
+    async def test_template_module_no_longer_registered(self):
+        self.assertFalse(hasattr(b, "HeraldoTemplateSetupView"))
+        self.assertFalse(hasattr(b, "HeraldoMessageConfirmView"))
+        self.assertFalse(hasattr(b, "heraldo_template_save"))
+        self.assertFalse(hasattr(b, "heraldo_template_list"))
+        self.assertIsInstance(b.message_automation_engine, b.message_automation.ScheduledMessages)
 
     async def test_preference_verification_logs_its_own_event(self):
         role = SimpleNamespace(id=321)
