@@ -104,8 +104,8 @@ def install(discord):
     original_send = discord.InteractionResponse.send_message
     original_edit = discord.InteractionResponse.edit_message
     original_defer = discord.InteractionResponse.defer
-    original_original_edit = discord.Interaction.edit_original_response
-    original_message_edit = discord.Message.edit
+    original_original_edit = getattr(getattr(discord, "Interaction", None), "edit_original_response", None)
+    original_message_edit = getattr(getattr(discord, "Message", None), "edit", None)
     original_error = discord.ui.View.on_error
 
     @wraps(original_send)
@@ -227,8 +227,10 @@ def install(discord):
     discord.InteractionResponse.send_message = send
     discord.InteractionResponse.edit_message = edit
     discord.InteractionResponse.defer = defer
-    discord.Interaction.edit_original_response = edit_original
-    discord.Message.edit = message_edit
+    if original_original_edit is not None:
+        discord.Interaction.edit_original_response = edit_original
+    if original_message_edit is not None:
+        discord.Message.edit = message_edit
     discord.ui.View._scheduled_task = contextual_scheduled
     discord.ui.Modal._scheduled_task = modal_scheduled
     discord.ui.View.on_error = on_error
