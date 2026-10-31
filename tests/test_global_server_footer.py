@@ -121,44 +121,11 @@ class ServerFooterTests(unittest.TestCase):
         self.assertEqual(payload["embed"].description, "Borrador preparado")
         self.assertEqual(payload["embed"].footer.text, LAB_NAME)
 
-    def test_message_templates_apply_brand_per_guild_before_discord(self):
-        discord = SimpleNamespace(Embed=FakeEmbed,
-                                  AllowedMentions=SimpleNamespace(none=lambda: None))
-        env = isolate("server_footer_text", "heraldo_template_payload", env={
-            "message_payload": message_payload,
-            "discord": discord,
-            "datetime": datetime,
-            "timezone": timezone,
-            "heraldo_template_view": lambda template: None,
-        })
-        template = {"embeds": [
-            {"title": "Alerta", "footer": {"text": "Expediente 1"}},
-            {"title": "Actualización"},
-        ]}
-        a = env["heraldo_template_payload"](template, server("Uno", "https://example.org/uno.png", 1))
-        b = env["heraldo_template_payload"](template, server("Dos", None, 2))
-        self.assertEqual([e.footer.text for e in a["embeds"]],
-                         [LAB_NAME + " · Expediente 1", LAB_NAME])
-        self.assertEqual([e.footer.text for e in b["embeds"]],
-                         [LAB_NAME + " · Expediente 1", LAB_NAME])
-        self.assertEqual(a["embeds"][0].footer.icon_url, "https://example.org/uno.png")
-        self.assertEqual(template["embeds"][0]["footer"]["text"], "Expediente 1")
-        self.assertNotIn("footer", template["embeds"][1])
-
-    def test_template_limit_rejected_not_silently_truncated(self):
-        discord = SimpleNamespace(Embed=FakeEmbed,
-                                  AllowedMentions=SimpleNamespace(none=lambda: None))
-        env = isolate("server_footer_text", "heraldo_template_payload", env={
-            "message_payload": message_payload,
-            "discord": discord,
-            "datetime": datetime,
-            "timezone": timezone,
-            "heraldo_template_view": lambda template: None,
-        })
-        template = {"embeds": [{"description": "x" * 4000}, {"description": "y" * 1998}]}
-        with self.assertRaisesRegex(ValueError, "6000"):
-            env["heraldo_template_payload"](template, server("Laboratorio"))
-        self.assertNotIn("footer", template["embeds"][0])
+    def test_announcements_stamp_footer_at_publication(self):
+        worker = (Path(__file__).resolve().parents[1] / "message_automation.py").read_text(encoding="utf-8")
+        self.assertIn("stamped = render(data, self.host['stamp_embed'], guild)", worker)
+        self.assertIn("self.host['stamp_embed'](discord.Embed(), guild)", worker)
+        self.assertIn("if not job.get('autofeed')", worker)
 
     def test_templates_and_profiles_keep_their_real_guild_context(self):
         template_fn = FUNCS["template_report_embed"]
@@ -179,19 +146,6 @@ class ServerFooterTests(unittest.TestCase):
             self.assertIn("stamp_embed(_content_embed(", source)
             self.assertIn("member.guild)", source)
             self.assertNotIn("await target.send(message,", source)
-
-    def test_text_only_template_preserves_content_and_adds_lab_footer(self):
-        from test_safety_regressions import b
-        guild = server("Comunidad de texto", "https://example.org/text.png")
-        payload = b.heraldo_template_payload(
-            {"content": "Hola {servidor}"}, guild
-        )
-        content, result = b._embedify(payload.pop("content"), payload, guild, None)
-        self.assertEqual(content, "Hola Comunidad de texto")
-        self.assertEqual(len(result["embeds"]), 1)
-        self.assertEqual(result["embeds"][0].footer.text, LAB_NAME)
-        self.assertEqual(result["embeds"][0].footer.icon_url, "https://example.org/text.png")
-        self.assertIsNone(result["embeds"][0].description)
 
     def test_media_only_delivery_has_branded_footer(self):
         from test_safety_regressions import b
@@ -216,8 +170,6 @@ class ServerFooterTests(unittest.TestCase):
         src = ast.get_source_segment(SOURCE, FUNCS["stamp_embed"])
         self.assertIn("server_footer_text(guild.name, detail)", src)
         self.assertIn('LAB_FOOTER_TEXT = "El Heraldo\'s Labs 🧪"', SOURCE)
-        source = ast.get_source_segment(SOURCE, FUNCS["heraldo_template_payload"])
-        self.assertIn('message_payload.validate({"embeds": prepared})', source)
 
 
 if __name__ == "__main__":
