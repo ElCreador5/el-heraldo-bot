@@ -20,7 +20,7 @@ LANG = {
         "hub_help": "Crea anuncios: elige canal, escribe el mensaje o diseña un embed, establece fecha, mención y repetición. Nada se publica antes de confirmar.",
         "staff_only": "Solo los administradores y moderadores pueden programar mensajes.",
         "new": "Crear Anuncio", "manage": "Gestionar Anuncios", "permissions": "Permisos", "member_week": "Miembro de la semana",
-        "new_title": "**Crear mensaje**", "edit_title": "**Editar mensaje**",
+        "new_title": "**Crear anuncio**", "edit_title": "**Editar anuncio**",
         "select_channel": "Canal donde publicar", "select_role": "Rol para mencionar (opcional)",
         "message": "Mensaje", "embed": "Editor de embed", "schedule": "Fecha y repetición",
         "preview": "Vista previa", "silent": "Sin rol", "save": "Guardar cambios",
@@ -87,7 +87,7 @@ LANG = {
         "draft_confirm": "¿Guardar cambios en el borrador? No se publicará nada.",
         "draft_first": "Guarda y confirma los cambios antes de publicar.",
         "images_button": "Imágenes (HTTPS)", "embed_channel": "Mencionar canal",
-        "show_embed": "Mostrar editor de embed",
+        "show_embed": "Crear embed",
         "none_date": "Sin fecha (publicar ahora)",
         "date_clear": "Quitar fecha",
         "clear_date_help": "Borra ambos campos para publicar inmediatamente.",
@@ -96,7 +96,7 @@ LANG = {
         "hub_title": "**Announcements**", "hub_help": "Create announcements: choose a channel, write a message or build an embed, and set a date, mentions, and repetition. Nothing is posted before confirmation.",
         "staff_only": "Only administrators and moderators can schedule messages.",
         "new": "Create Announcement", "manage": "Manage Announcements", "permissions": "Permissions", "member_week": "Member of the Week",
-        "new_title": "**Create message**", "edit_title": "**Edit message**",
+        "new_title": "**Create announcement**", "edit_title": "**Edit announcement**",
         "select_channel": "Destination channel", "select_role": "Role to mention (optional)",
         "message": "Message", "embed": "Embed builder", "schedule": "Date and repeat",
         "preview": "Preview", "silent": "No role", "save": "Save changes",
@@ -163,7 +163,7 @@ LANG = {
         "draft_confirm": "Save changes to the draft? Nothing will be published.",
         "draft_first": "Save and confirm changes before publishing.",
         "images_button": "Images (HTTPS)", "embed_channel": "Mention channel",
-        "show_embed": "Show embed builder",
+        "show_embed": "Create embed",
         "none_date": "No date (publish now)",
         "date_clear": "Remove date",
         "clear_date_help": "Clear both fields to publish immediately.",
@@ -172,7 +172,7 @@ LANG = {
         "hub_title": "**Anúncios**", "hub_help": "Crie anúncios: escolha o canal, escreva a mensagem ou monte um embed e defina data, menções e repetição. Nada é publicado antes da confirmação.",
         "staff_only": "Somente administradores e moderadores podem agendar mensagens.",
         "new": "Criar Anúncio", "manage": "Gerenciar Anúncios", "permissions": "Permissões", "member_week": "Membro da semana",
-        "new_title": "**Criar mensagem**", "edit_title": "**Editar mensagem**",
+        "new_title": "**Criar anúncio**", "edit_title": "**Editar anúncio**",
         "select_channel": "Canal de destino", "select_role": "Cargo a mencionar (opcional)",
         "message": "Mensagem", "embed": "Editor de embed", "schedule": "Data e repetição",
         "preview": "Prévia", "silent": "Sem cargo", "save": "Salvar alterações",
@@ -239,7 +239,7 @@ LANG = {
         "draft_confirm": "Salvar as alterações do rascunho? Nada será publicado.",
         "draft_first": "Salve e confirme antes de publicar.",
         "images_button": "Imagens (HTTPS)", "embed_channel": "Mencionar canal",
-        "show_embed": "Mostrar editor de embed",
+        "show_embed": "Criar embed",
         "none_date": "Sem data (publicar agora)",
         "date_clear": "Remover data",
         "clear_date_help": "Limpe ambos os campos para publicar imediatamente.",
@@ -313,7 +313,7 @@ class AutoFeedsHomeView(discord.ui.View):
     async def create(self, interaction, button):
         editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(
-            content=editor.summary(), embed=None, view=editor)
+            **editor_panel_kwargs(editor, interaction.guild), view=editor)
 
     @discord.ui.button(label=LANG["es-419"]["manage"], style=discord.ButtonStyle.secondary, row=0)
     @guild_context
