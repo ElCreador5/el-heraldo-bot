@@ -45,6 +45,41 @@ class SuggestionsSetupRegressionTests(unittest.TestCase):
                        "save_changes", "discard_changes", "back"):
             self.assertIn(action, actions)
 
+    def test_discord_five_width_limit_per_row(self):
+        """ChannelSelect/UserSelect ocupan toda la fila; botones solo ancho 1."""
+        view = klass("SuggestionsSetupView")
+        occupation = {row: 0 for row in range(5)}
+        initial = method(view, "__init__")
+        selectors = []
+        for node in ast.walk(initial):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in {"ChannelSelect", "UserSelect"}):
+                selected_row = next(
+                    ast.literal_eval(kw.value) for kw in node.keywords
+                    if kw.arg == "row")
+                selectors.append((node.func.attr, selected_row))
+                occupation[selected_row] += 5
+        self.assertEqual(selectors,
+                         [("ChannelSelect", 0), ("UserSelect", 1)])
+        for func in view.body:
+            if not isinstance(func, ast.AsyncFunctionDef):
+                continue
+            for deco in func.decorator_list:
+                if not (isinstance(deco, ast.Call)
+                        and isinstance(deco.func, ast.Attribute)
+                        and deco.func.attr == "button"):
+                    continue
+                button_row = next(
+                    ast.literal_eval(kw.value) for kw in deco.keywords
+                    if kw.arg == "row")
+                self.assertIn(button_row, occupation)
+                occupation[button_row] += 1
+        self.assertEqual(occupation, {0: 5, 1: 5, 2: 2, 3: 2, 4: 3})
+        for row, width in occupation.items():
+            with self.subTest(row=row):
+                self.assertLessEqual(width, 5)
+
     def test_draft_comparison_covers_channel_owner_and_reviewers(self):
         method_node = method(klass("SuggestionsSetupView"), "_dirty")
         module = ast.fix_missing_locations(ast.Module(body=[method_node], type_ignores=[]))
