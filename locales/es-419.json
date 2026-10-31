@@ -150,6 +150,8 @@
   "raid.profile.moderate": "Moderada",
   "raid.profile.strict": "Estricta",
   "reaction.access_mode": "Modo de acceso",
+  "setup.module.autofeeds.description": "Publicaciones automáticas y programadas",
+  "setup.module.autofeeds.label": "AutoFeeds",
   "setup.module.automod.description": "Protecciones automáticas del servidor",
   "setup.module.automod.label": "AutoMod",
   "setup.module.date_format.description": "Fechas y horas en los mensajes del bot",
