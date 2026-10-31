@@ -6988,11 +6988,6 @@ class HeraldoVerificationSetupView(discord.ui.View):
             view=self,
         )
 
-    @discord.ui.button(label=_t('text.835dc419f06c32'), style=discord.ButtonStyle.secondary, row=3)
-    @_i18n_context
-    async def texts(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(VerifyTextsModal(self.guild_id))
-
     @discord.ui.button(label=_t('text.dda3bf5e92fb07'), style=discord.ButtonStyle.success, row=3)
     @_i18n_context
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
