@@ -988,9 +988,10 @@ class AutofeedEditorView(discord.ui.View):
 
     def panel_embed(self, guild):
         """Mismo embed del panel y pie oficial del servidor/Lab."""
+        from channel_mentions import channel_mentions
         embed = discord.Embed(
             title=(t("edit_title") if self.original else t("new_title")).strip("*"),
-            description=self.summary()[:4096],
+            description=channel_mentions(self.summary()[:4096], guild),
             color=0xE7CF7F,
         )
         stamp = self.host.get("stamp_embed")
