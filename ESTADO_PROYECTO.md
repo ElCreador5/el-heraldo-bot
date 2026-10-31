@@ -1,3 +1,7 @@
+## 2026-10-31 — Separación de AutoFeeds y Mensajes en /setup
+
+En `Pruebas`, `/setup → AutoFeeds` es un módulo propio con botones para crear, gestionar, configurar permisos y volver. `/setup → Mensajes` conserva los editores de mensajes operativos y Plantillas y no sirve de padre de AutoFeeds. Los accesos `/programar` y datos guardados continúan sin modificación; las ediciones solo persisten mediante confirmación, salvo Activar/Pausar. El flujo de AutoFeeds regresa a su propio panel y, desde allí, a `/setup`. La nueva opción se tradujo a es-419, en-US y pt-BR; pruebas en `tests/test_autofeed_setup.py` y matriz general. `main` permanece intacta.
+
 ## 2026-10-31 — Retirados Componentes y Kits como módulos de Mensajes
 
 En `Pruebas` se elimina la navegación autónoma **Componentes** y **Kits**, junto a sus vistas y el comando `/importkit`. No se borra SQLite, plantillas ni botones ya publicados. El motor de componentes de Plantillas conserva compatibilidad con mensajes existentes. `main` ya carece de estas entradas: sin modificación productiva. Añadida regresión estructural `tests/test_retired_message_modules.py`. Comprobar compilación/tests y clics reales en Discord para aceptación final. Los apartados anteriores se conservan como historial.

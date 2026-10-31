@@ -95,6 +95,7 @@ class SetupInteractionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         view = b.HeraldoMessagesSetupView(901, 10)
         options = {option.value for option in view.panel_select.options}
         self.assertNotIn("create_message", options)
+        self.assertNotIn("autofeeds", options)
         self.assertTrue({
             "verification", "verify_dm", "suggestions", "honeypot",
             "condemnation", "logs", "templates",

@@ -1,3 +1,7 @@
+## 2026-10-31 — AutoFeeds independiente de Mensajes en Pruebas
+
+El menú principal de `/setup` dispone ahora de dos módulos independientes: **Mensajes** (plantillas y personalización de textos del sistema) y **AutoFeeds** (crear publicaciones, gestionar trabajos y configurar permisos). AutoFeeds abre un panel propio con Crear programación, Gestionar programaciones, Permisos y Volver. Volver desde su editor y paneles internos regresa a AutoFeeds; desde el panel AutoFeeds regresa al menú principal. Se mantiene el grupo `/programar`, el motor existente de programación, las plantillas compartidas como fuente de contenido y todas las claves SQLite. No se realiza migración de datos ni cambio de main. Las pruebas estructurales y de comportamiento comprueban la separación y ausencia de guardado al navegar.
+
 ## 2026-10-31 — Retirar Componentes y Kits, preservar Plantillas
 
 El propietario solicita suprimir los módulos independientes **Componentes** y **Kits** de `Pruebas`, y de `main` únicamente si existen. La inspección confirma que `main` no ofrece dichos módulos. En `Pruebas` se retiran menú, vistas, confirmaciones exclusivas y `/importkit`. No borrar ni migrar configuraciones guardadas ni invalidar componentes de roles incluidos en plantillas y mensajes ya publicados; esa compatibilidad pertenece al editor/motor de Plantillas, no a un módulo autónomo. La retirada requiere regresión del menú y revisión de comandos.
