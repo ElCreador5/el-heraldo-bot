@@ -708,8 +708,8 @@
     "Registros"
   ],
   "setup.module.messages.description": [
-    "Templates and default messages",
-    "Modelos e mensagens padrão"
+    "System messages and notifications",
+    "Mensagens do sistema e avisos"
   ],
   "setup.module.messages.label": [
     "Messages",
@@ -2464,8 +2464,8 @@
     "Moderar Membros"
   ],
   "text.24c5574feda7ed": [
-    "**El Heraldo · Logs · Members**\n\nEvent: **{p0}**\nStatus: **{p1}**\nChannel: {p2}\n\nChanges apply only on Save changes. Edit templates in Messages → Logs.",
-    "**El Heraldo · Registros · Membros**\n\nEvento: **{p0}**\nEstado: **{p1}**\nCanal: {p2}\n\nAs alterações só são aplicadas em Salvar alterações. Edite modelos em Mensagens → Registros."
+    "**El Heraldo · Logs · Members**\n\nEvent: **{p0}**\nStatus: **{p1}**\nChannel: {p2}\n\nChanges apply only on Save changes. Edit the log message layout in Messages → Logs.",
+    "**El Heraldo · Registros · Membros**\n\nEvento: **{p0}**\nEstado: **{p1}**\nCanal: {p2}\n\nAs alterações só são aplicadas em Salvar alterações. Edite o visual do registro em Mensagens → Registros."
   ],
   "text.24f5b7f715f618": [
     "Suggestions panel",
@@ -3388,8 +3388,8 @@
     "Não se aplica limpeza adicional ao banimento."
   ],
   "text.382de606e84361": [
-    "**El Heraldo · Logging**\n\nCurrent channel: {p0}\nConfigure log events and channels here. Edit visual templates from Messages.",
-    "**El Heraldo · Registros**\n\nCanal atual: {p0}\nConfigure aqui os eventos e canais de registro. Edite os modelos visuais em Mensagens."
+    "**El Heraldo · Logging**\n\nCurrent channel: {p0}\nConfigure log events and channels here. Edit their message layouts from Messages.",
+    "**El Heraldo · Registros**\n\nCanal atual: {p0}\nConfigure aqui os eventos e canais de registro. Edite o visual dessas mensagens em Mensagens."
   ],
   "text.38368cd246f348": [
     "Warning: Corrupted reference; publish it again with /verify",
