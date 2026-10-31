@@ -24909,7 +24909,7 @@ class EmbedScheduleView(discord.ui.View):
                 _t('text.2eb03796ac8a31', p0=f'{review}')
             )
         return (
-            _t('text.eb1bb265181682', p0=f'{title}', p1=f'{self.name}', p2=f'{channel}', p3=f'{dict(self.MODES)[self.mode]}', p4=f'{embed_schedule_human_details(self.mode, self.config)}', p5=f"{(_t('text.69d17ca1683468') if self.active else _t('text.987d904d7afee2'))}", p6=f'{instruction}')
+            _t('text.eb1bb265181682', p0=f'{title}', p1=f'{self.name}', p2=f'{channel}', p3=f'{(dict(self.MODES)[self.mode] if self.mode_selected else "Sin seleccionar")}', p4=f'{embed_schedule_human_details(self.mode, self.config)}', p5=f"{(_t('text.69d17ca1683468') if self.active else _t('text.987d904d7afee2'))}", p6=f'{instruction}')
         )
 
     @_i18n_context
@@ -24944,6 +24944,9 @@ class EmbedScheduleView(discord.ui.View):
     @discord.ui.button(label=_t('text.57e646488f60b1'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
     async def configure(self, interaction, button):
+        if not self.mode_selected:
+            await interaction.response.send_message("Selecciona primero una frecuencia.", ephemeral=True)
+            return
         await interaction.response.send_modal(EmbedScheduleOptionsModal(self))
 
     @discord.ui.button(label=_t('text.254052ea94561f'), style=discord.ButtonStyle.success, row=2)
