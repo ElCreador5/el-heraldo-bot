@@ -501,3 +501,9 @@ La petición del propietario autoriza implementación y pruebas de respaldo/recu
 - Los informes y evidencias deben mostrar fechas mediante marcas de tiempo nativas de Discord (`<t:UNIX:F>`), para que cada moderador vea la hora en su zona horaria.
 - Mantener el instante real con fecha/hora conscientes de zona horaria; UTC es válido para cálculos internos, no como único formato visible.
 - Primer componente actualizado en `Pruebas`: `heraldo_evidence.py`; la adopción en otros módulos y las pruebas interactivas de Discord siguen pendientes.
+
+
+## 2026-10-30 — Disponibilidad de «Guardar cambios» en todos los settings
+- Decisión del propietario: en `Pruebas`, `Guardar cambios` debe estar deshabilitado mientras el borrador sea igual al valor guardado. Se habilita únicamente al introducir modificaciones pendientes, y vuelve a deshabilitarse al guardar, descartar o revertir la edición.
+- Aplica transversalmente a `/setup` y sus subpaneles; no cambia el significado ni la persistencia exclusiva de `Guardar cambios`. `Confirmar cambios`, `Activar`, `Pausar`, `Reanudar` y operaciones de publicación siguen sus reglas individuales.
+- Implementación: `setup_save_controls.py` más adaptación de respuestas de `setup_interactions.py`; solo `Pruebas`. Mantener este criterio en nuevos módulos con pruebas de estado inicial, edición, reversión y posterior guardado.
