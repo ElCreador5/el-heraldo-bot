@@ -82,7 +82,7 @@ LANG = {
         "schedule_now": "Programar envío",
         "created": "Mensaje publicado.",
         "uncertain": "No se pudo confirmar el envío. Revisa el canal antes de volver a intentarlo.",
-        "send": "Crear mensaje",
+        "send": "Publicar",
         "show_embed": "Mostrar editor de embed",
         "none_date": "Sin fecha (publicar ahora)",
         "date_clear": "Quitar fecha",
@@ -155,7 +155,7 @@ LANG = {
         "schedule_now": "Schedule message",
         "created": "Message published.",
         "uncertain": "Delivery could not be confirmed. Check the channel before trying again.",
-        "send": "Create message",
+        "send": "Publish",
         "show_embed": "Show embed builder",
         "none_date": "No date (publish now)",
         "date_clear": "Remove date",
@@ -228,7 +228,7 @@ LANG = {
         "schedule_now": "Programar envio",
         "created": "Mensagem publicada.",
         "uncertain": "Não foi possível confirmar o envio. Confira o canal antes de tentar novamente.",
-        "send": "Criar mensagem",
+        "send": "Publicar",
         "show_embed": "Mostrar editor de embed",
         "none_date": "Sem data (publicar agora)",
         "date_clear": "Remover data",
@@ -458,7 +458,11 @@ class CustomRepeatModal(discord.ui.Modal):
     def __init__(self, editor):
         super().__init__(title=t("repeat_picker"))
         self.editor = editor
-        parts = editor.parts or {}
+        # Una frecuencia personalizada nueva empieza en 1 hora, no en cero.
+        # Mantener los valores previos al editar y evitar el falso error al
+        # confirmar el formulario con los valores iniciales.
+        parts = editor.parts if editor.parts is not None else PRESETS["once"]
+        parts = parts or {"months": 0, "days": 0, "hours": 1, "minutes": 0}
         self.fields = [discord.ui.TextInput(
             label=t(key), default=str(parts.get(key, 0)), max_length=4)
             for key in ("months", "days", "hours", "minutes")]
@@ -860,12 +864,11 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label=LANG["es-419"]["show_embed"], style=discord.ButtonStyle.primary, row=2)
     @guild_context
     async def embed_builder(self, interaction, button):
-        from autofeed_embed_builder import EmbedBuilderView
-        view = EmbedBuilderView(self)
-        await interaction.response.edit_message(
-            content=view.summary(),
-            embed=view.preview_embed(interaction.guild), view=view,
-            allowed_mentions=discord.AllowedMentions.none())
+        # Editar directamente título, descripción, enlace y color.
+        # Al confirmar se abre el constructor completo (autor, imágenes,
+        # campos, fecha) sin introducir un panel intermedio innecesario.
+        from autofeed_embed_builder import SectionModal
+        await interaction.response.send_modal(SectionModal(self, "main"))
 
     @discord.ui.button(label=LANG["es-419"]["start"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
