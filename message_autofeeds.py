@@ -203,6 +203,28 @@ def can_manage(member, job):
     return can_schedule(member)
 
 
+def can_mention_role(guild, role, channel=None):
+    """Permiso efectivo para mencionar un rol, sin cambiar su configuración.
+
+    Discord permite mencionar roles no públicos cuando el bot tiene
+    el permiso mention_everyone en el canal de publicación.
+    """
+    if role is None:
+        return False
+    role_guild = getattr(role, "guild", None)
+    if role_guild is not None and getattr(role_guild, "id", None) != getattr(guild, "id", None):
+        return False
+    if role.mentionable:
+        return True
+    if channel is None:
+        return False
+    bot_member = getattr(guild, "me", None)
+    if bot_member is None:
+        return False
+    perms = channel.permissions_for(bot_member)
+    return bool(getattr(perms, "mention_everyone", False))
+
+
 def referenced_mentions(guild, job):
     """Resolve only roles/channels belonging to this guild, with a hard ping limit.
 
@@ -244,8 +266,9 @@ def referenced_mentions(guild, job):
     ping_ids = {int(value) for value in re.findall(r"<@&(\d{1,20})>", body)}
     if explicit:
         ping_ids.add(int(explicit))
+    output_channel = guild.get_channel(job.get("channel")) if job.get("channel") and hasattr(guild, "get_channel") else None
     return [roles[role_id] for role_id in sorted(ping_ids)
-            if roles[role_id].mentionable]
+            if can_mention_role(guild, roles[role_id], output_channel)]
 
 
 def can_deliver(host, guild, job, member, channel):
@@ -404,7 +427,7 @@ def is_ready(interaction, host, channel, role=None):
         return False
     if not (bot_perms.view_channel and bot_perms.send_messages and bot_perms.embed_links):
         return False
-    if role and (role.guild.id != interaction.guild.id or not role.mentionable):
+    if role and not can_mention_role(interaction.guild, role, channel):
         return False
     return True
 
