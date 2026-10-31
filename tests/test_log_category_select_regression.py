@@ -44,5 +44,22 @@ class LogCategorySelectTests(unittest.TestCase):
         self.assertEqual(label.value.id, "label")
 
 
+    def test_member_log_selection_stays_marked_in_dropdown(self):
+        source = _source_text(Path(__file__).resolve().parents[1].joinpath('bot.py'), encoding='utf-8')
+        module = ast.parse(source)
+        view = next(node for node in module.body
+                    if isinstance(node, ast.ClassDef) and node.name == "HeraldoMemberLogSetupView")
+        initializer = next(node for node in view.body
+                           if isinstance(node, ast.FunctionDef) and node.name == "__init__")
+        callback = next(node for node in view.body
+                        if isinstance(node, ast.AsyncFunctionDef) and node.name == "select_event")
+        init_code = ast.unparse(initializer)
+        callback_code = ast.unparse(callback)
+        self.assertIn("self.event_select = discord.ui.Select(", init_code)
+        self.assertIn("default=key == self.event_key", init_code)
+        self.assertIn("option.default = option.value == self.event_key", callback_code)
+        self.assertIn("view=self", callback_code)
+
+
 if __name__ == "__main__":
     unittest.main()
