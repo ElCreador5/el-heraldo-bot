@@ -40,10 +40,11 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
         labels = [getattr(item, "label", "") for item in editor.children]
         for key in ("message", "show_embed", "date_picker", "repeat_picker",
-                    "insert_mention", "silent", "send", "back"):
+                    "insert_mention", "silent", "save", "send", "back",
+                    "images_button", "embed_channel"):
             self.assertIn(setup.t(key), labels)
         self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
-        self.assertEqual(len(editor.children), 11)
+        self.assertEqual(len(editor.children), 14)
         self.assertNotIn(setup.t("discard"), labels)
         self.assertIsNone(editor.start)
         self.assertIn(setup.t("notice"), editor.summary())
@@ -62,7 +63,8 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
     async def test_publish_label_and_embed_modal_open_without_extra_panel(self):
         from autofeed_embed_builder import SectionModal
         editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
-        self.assertEqual(editor.save.label, "Publicar")
+        self.assertEqual(editor.save.label, "Guardar cambios")
+        self.assertEqual(editor.publish_button.label, "Publicar")
         before = b.guild_config_get(self.guild_id, feeds.CONFIG_KEY)
         i = self.interaction()
         i.response.send_modal = AsyncMock()
@@ -89,6 +91,53 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
         reused = setup.CustomRepeatModal(editor)
         self.assertEqual([str(field.default) for field in reused.fields],
                          ["0", "0", "3", "15"])
+
+    async def test_save_is_a_confirmed_persistent_draft_separate_from_publish(self):
+        from unittest.mock import Mock
+        writes = Mock()
+        host = dict(b.__dict__)
+        host["guild_config_get"] = lambda guild, key: None
+        host["guild_config_set"] = writes
+        editor = setup.AutofeedEditorView(host, self.guild_id, self.owner_id)
+        editor.text = "Anuncio de prueba"
+        editor.dirty = True
+        i = self.interaction()
+        i.response.defer = AsyncMock()
+        i.edit_original_response = AsyncMock()
+        await editor.save.callback(i)
+        writes.assert_not_called()
+        confirm = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(confirm, setup.AnnouncementDraftConfirmView)
+        i.response.edit_message.reset_mock()
+        await confirm.confirm.callback(i)
+        writes.assert_called_once()
+        self.assertEqual(writes.call_args.args[1],
+                         setup._draft_key(self.owner_id))
+        self.assertEqual(editor.saved_draft["text"], "Anuncio de prueba")
+        self.assertFalse(editor.dirty)
+        i.response.send_message.reset_mock()
+        editor.text = "Cambió después de guardar"
+        editor.dirty = True
+        await editor.publish_button.callback(i)
+        i.response.send_message.assert_awaited_once()
+        self.assertIn(setup.t("draft_first"),
+                      i.response.send_message.call_args.args[0])
+
+    async def test_images_and_channel_chooser_are_reachable_from_main_panel(self):
+        from autofeed_embed_builder import SectionModal
+        editor = setup.AutofeedEditorView(b.__dict__, self.guild_id, self.owner_id)
+        i = self.interaction()
+        i.response.send_modal = AsyncMock()
+        await editor.images_button.callback(i)
+        modal = i.response.send_modal.call_args.args[0]
+        self.assertIsInstance(modal, SectionModal)
+        self.assertEqual(modal.section, "media")
+        self.assertEqual(set(modal.inputs), {"image_url", "thumbnail_url"})
+        i.response.edit_message.reset_mock()
+        await editor.embed_channel.callback(i)
+        chooser = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(chooser, setup.EmbedChannelSelectView)
+        self.assertIsInstance(chooser.channels, b.discord.ui.ChannelSelect)
 
     async def test_autofeeds_is_a_separate_setup_module(self):
         root = b.HeraldoSetupView(self.guild_id, self.owner_id)
