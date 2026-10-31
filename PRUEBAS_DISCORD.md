@@ -1,3 +1,11 @@
+## 2026-10-31 — Recuperación de arranque Enzonic ante HTTP 403 de GitHub
+
+**Incidencia observada:** el bot Lab cae en `before_discord → revision → _verified_github_deployment` con `HTTP Error 403: rate limit exceeded`, y termina en `BackupJobError: enzonic_checkout_unverified`. La protección falla de forma segura pero impide iniciar el servicio, sin evidencia de problemas de RAM ni de SQLite.
+
+**Corrección en `Pruebas`:** cuando el deploy deja `HEAD` antiguo con archivos superpuestos, verificar primero por transporte Git (origen oficial, `git fetch --depth=1`, `git ls-tree` y huellas de TODOS los blobs locales). Solo actualiza objetos internos de Git, nunca hace `reset`, `checkout`, `pull` ni toca SQLite. Si no hay remoto Git válido, mantiene la ruta API original y el bloqueo seguro si tampoco puede verificarse. El checkout limpio sigue usando validación local. Agregar prueba aislada con repositorio Git local y árbol alterado.
+
+**Aceptación pendiente:** confirmar las suites de CI del SHA exacto y verificar un arranque real Enzonic, especialmente si el alojamiento conserva un `origin` utilizable. Si no hay remoto Git, el mecanismo sigue bloqueado por la cuota REST y requerirá adecuar el despliegue; no omitir controles de seguridad. Producción `main` fuera del alcance.
+
 ## 2026-10-31 — Evidencias técnicas fuera de los registros (Pruebas)
 
 Por instrucción del propietario, los archivos `*-evidence.json` dejan de enviarse al canal configurado para logs. Las rutas de purga moderativa y condenas pasan a emplear el canal separado `archivo-evidencias`, exclusivo, privado y restringido por edad, creado de forma idempotente cuando hay permisos. Los canales de registros mantienen los embeds de sucesos. Si no puede preservarse evidencia verificable, se bloquea el borrado normal. Honeypot sigue sin archivo. Los archivos anteriores no se borran ni migran automáticamente. Pendiente confirmar CI y aceptación en Discord Test/Enzonic.

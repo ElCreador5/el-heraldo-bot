@@ -155,6 +155,72 @@ def _verified_github_deployment():
     return commit_sha
 
 
+def _trusted_origin_url(remote):
+    """Evita verificar un árbol obtenido de un repositorio distinto."""
+    return bool(re.fullmatch(
+        r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+        r"ElCreador5/el-heraldo-bot(?:\.git)?/?",
+        remote, flags=re.IGNORECASE,
+    ))
+
+
+def _verified_git_deployment():
+    """Verifica la superposición de Enzonic usando Git, sin API REST ni reset.
+
+    Git valida criptográficamente los objetos descargados. La operación fetch
+    solo actualiza FETCH_HEAD y objetos internos, no los archivos ni SQLite.
+    """
+    def git(*args, timeout=30):
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(ROOT), *args],
+                capture_output=True, timeout=timeout, check=False,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            blocked("enzonic_checkout_unverified")
+        if result.returncode != 0:
+            blocked("enzonic_checkout_unverified")
+        return result.stdout.decode("utf-8", errors="strict").strip()
+
+    origin = git("remote", "get-url", "origin", timeout=8)
+    if not _trusted_origin_url(origin):
+        blocked("enzonic_checkout_unverified")
+    git("fetch", "--no-tags", "--depth=1", "origin", "refs/heads/Pruebas", timeout=45)
+    commit_sha = git("rev-parse", "--verify", "FETCH_HEAD^{commit}", timeout=8)
+    if not re.fullmatch(r"[0-9a-f]{40}", commit_sha):
+        blocked("enzonic_checkout_unverified")
+    listing = git("ls-tree", "-r", "-l", "-z", commit_sha, timeout=10)
+    if not listing:
+        blocked("enzonic_checkout_unverified")
+    tracked = set()
+    total_size = 0
+    for item in listing.split("\x00"):
+        if not item:
+            continue
+        try:
+            metadata, name = item.split("\t", 1)
+        except ValueError:
+            blocked("enzonic_checkout_unverified")
+        match = re.fullmatch(r"(100644|100755) blob ([0-9a-f]{40}) ([0-9]+)", metadata)
+        if match is None:
+            blocked("enzonic_checkout_unverified")
+        sha, size = match.group(2), int(match.group(3))
+        if (not name or name.startswith("/") or "\\" in name
+                or ".." in Path(name).parts or name == ".git"
+                or name.startswith(".git/") or name in tracked):
+            blocked("enzonic_checkout_unverified")
+        tracked.add(name)
+        total_size += size
+        if len(tracked) > 10000 or total_size > 64 * 1024 * 1024:
+            blocked("enzonic_checkout_unverified")
+        if _git_blob_sha(ROOT / name, size) != sha:
+            blocked("enzonic_checkout_unverified")
+    if not tracked or "bot.py" not in tracked or "enzonic_test_host.py" not in tracked:
+        blocked("enzonic_checkout_unverified")
+    return commit_sha
+
+
 def revision():
     """Solo acepta Pruebas limpio o archivos íntegros del despliegue GitHub."""
     def git(*args, allowed=(0,)):
@@ -176,9 +242,16 @@ def revision():
     dirty = git("diff", "--quiet", "HEAD", "--", allowed=(0, 1)).returncode
     if not dirty:
         return value
-    # GitHub Deploy superpone archivos y puede dejar HEAD apuntando al
-    # commit antiguo. No aceptar el árbol sucio sin contrastarlo con GitHub.
-    return _verified_github_deployment()
+    # GitHub Deploy puede superponer archivos con HEAD antiguo. Preferir Git
+    # para no depender de la cuota REST de api.github.com en cada reinicio.
+    try:
+        return _verified_git_deployment()
+    except Exception as exc:
+        from backup_job import BackupJobError
+        if not isinstance(exc, BackupJobError):
+            raise
+        # Compatibilidad con instalaciones que carecen de remote Git.
+        return _verified_github_deployment()
 
 def private_state():
     from backup_job import _private_root
