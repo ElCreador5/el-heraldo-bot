@@ -112,6 +112,23 @@ class SaveControlsTests(unittest.TestCase):
         view.role_id = None
         self.assert_state(view, False)
 
+    def test_announcement_save_and_discard_match_real_pending_state(self):
+        view = panel("AutofeedEditorView", original=None)
+        view.discard = NS(label="Descartar cambios", disabled=False)
+        view.children.append(view.discard)
+        view._has_pending_changes = lambda: False
+        self.assert_state(view, False)
+        self.assertTrue(view.discard.disabled)
+
+        view._has_pending_changes = lambda: True
+        self.assert_state(view, True)
+        self.assertFalse(view.discard.disabled)
+
+        # Al volver al borrador confirmado, ambos quedan inactivos.
+        view._has_pending_changes = lambda: False
+        self.assert_state(view, False)
+        self.assertTrue(view.discard.disabled)
+
     def test_unknown_and_confirmations_are_never_disabled(self):
         unknown = panel("DraftConfirm")
         self.assertIsNone(refresh_save_button(unknown))
