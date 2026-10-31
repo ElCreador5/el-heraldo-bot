@@ -1077,7 +1077,7 @@ class AutofeedEditorView(discord.ui.View):
         except ValueError:
             return await feeds.respond_error(interaction, "invalid")
         await interaction.response.edit_message(
-            content=t("draft_confirm") + "\\n\\n" + self.summary(),
+            content=t("draft_confirm") + "\n\n" + self.summary(),
             embed=None, view=AnnouncementDraftConfirmView(self))
 
     @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=4)
@@ -1146,7 +1146,7 @@ class AnnouncementDraftConfirmView(discord.ui.View):
         self.editor.saved_draft = copy.deepcopy(self.pending)
         self.editor.dirty = False
         await interaction.edit_original_response(
-            content=t("draft_saved") + "\\n\\n" + self.editor.summary(),
+            content=t("draft_saved") + "\n\n" + self.editor.summary(),
             embed=None, view=self.editor)
 
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary)
