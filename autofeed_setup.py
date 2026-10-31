@@ -559,6 +559,7 @@ class FrequencyPickerView(discord.ui.View):
         self.select.callback = self.pick
         self.add_item(self.select)
         self.back.label = t("back")
+        self.set_date_time.label = t("date_picker")
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -577,6 +578,11 @@ class FrequencyPickerView(discord.ui.View):
         self.editor.dirty = True
         await interaction.response.edit_message(
             **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
+
+    @discord.ui.button(label=LANG["es-419"]["date_picker"], style=discord.ButtonStyle.primary, row=1)
+    @guild_context
+    async def set_date_time(self, interaction, button):
+        await interaction.response.send_modal(DateTimeModal(self.editor))
 
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
@@ -868,7 +874,8 @@ class AutofeedEditorView(discord.ui.View):
         # Conservar los atributos heredados para editores antiguos que aún
         # se instancian fuera de /setup, sin exponer las acciones redundantes.
         if type(self) is AutofeedEditorView:
-            for control in (self.images_button, self.embed_channel, self.mention):
+            for control in (self.images_button, self.embed_channel, self.mention,
+                            self.date_time, self.preview, self.silent):
                 self.remove_item(control)
         else:
             for control in (self.images_button, self.embed_channel, self.publish_button):
@@ -953,29 +960,44 @@ class AutofeedEditorView(discord.ui.View):
                 self.remove_item(self.discard)
 
     def summary(self):
+        """Resumen compacto de un solo panel; no mostrar Mensaje si está vacío."""
         channel = f"<#{self.channel_id}>" if self.channel_id else t("empty")
         role = f"<@&{self.role_id}>" if self.role_id else t("none")
         date = f"<t:{int(self.start.timestamp())}:F>" if self.start else t("none_date")
         period = (", ".join(f"{v} {t(k)}" for k, v in self.parts.items() if v)
                   if self.parts else t("no_repeat"))
-        text = (self.text[:450] + ("…" if len(self.text) > 450 else "")) or t("empty")
+        lines = [f"**{t('select_channel')}:** {channel}"]
+        if self.text.strip():
+            lines.append(f"**{t('message')}:** {discord.utils.escape_mentions(self.text[:350])}")
         if self.embed:
-            description = self.embed.get("description") or ""
-            title = self.embed.get("title") or ""
-            references = re.findall(r"<@&\d+>|<#\d+>", description)
-            # Show the description too, even when the embed has a title.
-            embed = (title[:65] + (" · " if title and description else "")
-                     + description[:155] + (f" ({len(references)} refs)" if references else ""))
+            title = str(self.embed.get("title") or "").strip()
+            description = str(self.embed.get("description") or "").strip()
+            label = " · ".join(part for part in (title[:110], description[:180]) if part)
+            lines.append(f"**{t('embed')}:** {discord.utils.escape_mentions(label) or t('empty')}")
         else:
-            embed = t("empty")
-        return (f"{t('edit_title') if self.original else t('new_title')}\n\n"
-                f"**{t('select_channel')}:** {channel}\n"
-                f"**{t('message')}:** {discord.utils.escape_mentions(text)}\n"
-                f"**{t('embed')}:** {discord.utils.escape_mentions(embed)}\n"
-                f"**{t('start_label')}:** {date}\n"
-                f"**{t('members')}:** {role}\n"
-                f"**{t('repeat')}:** {period}\n\n"
-                f"{t('notice')}\n{t('saved_tip')}")
+            lines.append(f"**{t('embed')}:** {t('empty')}")
+        lines.extend((
+            f"**{t('start_label')}:** {date}",
+            f"**{t('members')}:** {role}",
+            f"**{t('repeat')}:** {period}",
+        ))
+        if self.embed and self.embed.get("description"):
+            lines.extend(("", str(self.embed["description"])[:550]))
+        lines.extend(("", t("notice"), t("saved_tip")))
+        return "\n".join(lines)
+
+    def panel_embed(self, guild):
+        """Mismo embed del panel y pie oficial del servidor/Lab."""
+        embed = discord.Embed(
+            title=(t("edit_title") if self.original else t("new_title")).strip("*"),
+            description=self.summary()[:4096],
+            color=0xE7CF7F,
+        )
+        stamp = self.host.get("stamp_embed")
+        if stamp is not None and guild is not None and getattr(guild, "name", None):
+            return stamp(embed, guild)
+        return embed
+
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -1008,7 +1030,7 @@ class AutofeedEditorView(discord.ui.View):
         # Al confirmar se abre el constructor completo (autor, imágenes,
         # campos, fecha) sin introducir un panel intermedio innecesario.
         from autofeed_embed_builder import SectionModal
-        await interaction.response.send_modal(SectionModal(self, "main"))
+        await interaction.response.send_modal(SectionModal(self, "main", return_to_editor=True))
 
     @discord.ui.button(label=LANG["es-419"]["images_button"], style=discord.ButtonStyle.secondary, row=2)
     @guild_context
@@ -1103,7 +1125,7 @@ class AutofeedEditorView(discord.ui.View):
             "paused": previous.get("paused", False), "template": None,
         }
 
-    @discord.ui.button(label=LANG["es-419"]["save"], style=discord.ButtonStyle.primary, row=4)
+    @discord.ui.button(label=LANG["es-419"]["save"], style=discord.ButtonStyle.primary, row=3)
     @guild_context
     async def save(self, interaction, button):
         from autofeed_embed_builder import validate_data
@@ -1116,7 +1138,7 @@ class AutofeedEditorView(discord.ui.View):
             content=t("draft_confirm") + "\n\n" + self.summary(),
             embed=None, view=AnnouncementDraftConfirmView(self))
 
-    @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=4)
+    @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=3)
     @guild_context
     async def publish_button(self, interaction, button):
         if self.saved_draft is None or self.saved_draft != self.draft_data():
@@ -1136,7 +1158,7 @@ class AutofeedEditorView(discord.ui.View):
             content=summary + "\\n\\n" + self.summary() + "\\n\\n" + t("saved_tip"),
             embed=preview, view=confirm, allowed_mentions=discord.AllowedMentions.none())
 
-    @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger, row=4)
+    @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger, row=3)
     @guild_context
     async def discard(self, interaction, button):
         parent, view = setup_panel(self.host, self.guild_id, self.owner_id)
