@@ -44,8 +44,10 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
                     "images_button", "embed_channel"):
             self.assertIn(setup.t(key), labels)
         self.assertEqual([x.row for x in editor.children if isinstance(x, (b.discord.ui.ChannelSelect, b.discord.ui.RoleSelect))], [0, 1])
-        self.assertEqual(len(editor.children), 14)
-        self.assertNotIn(setup.t("discard"), labels)
+        self.assertEqual(len(editor.children), 15)
+        self.assertIn(setup.t("discard"), labels)
+        self.assertTrue(editor.save.disabled)
+        self.assertTrue(editor.discard.disabled)
         self.assertIsNone(editor.start)
         self.assertIn(setup.t("notice"), editor.summary())
         self.assertIsInstance(setup.DateTimeModal(editor), b.discord.ui.Modal)
@@ -193,14 +195,39 @@ class SetupNavigationTests(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_editor_draft_requires_confirmation_not_persistence(self):
-        editor = setup.AutofeedEditorView(b.__dict__, 901, 10)
-        prior = b.guild_config_get(901, feeds.CONFIG_KEY)
+        host = dict(b.__dict__)
+        host["guild_config_get"] = lambda guild, key: None
+        editor = setup.AutofeedEditorView(host, 901, 10)
+        self.assertIn(editor.discard, editor.children)
+        self.assertTrue(editor.discard.disabled)
+        self.assertTrue(editor.save.disabled)
+
         editor.text = "Ejemplo"
         editor.dirty = True
-        self.assertIn(editor.discard, editor.children)
-        self.assertEqual(b.guild_config_get(901, feeds.CONFIG_KEY), prior)
+        self.assertFalse(editor.discard.disabled)
+        self.assertFalse(editor.save.disabled)
+
+        editor.text = ""
+        editor.dirty = True
+        self.assertTrue(editor.discard.disabled)
+        self.assertTrue(editor.save.disabled)
+
+        # Una vez confirmado el borrador, no quedan cambios que descartar.
+        editor.text = "Aviso guardado"
+        editor.dirty = True
+        editor.saved_draft = editor.draft_data()
         editor.dirty = False
-        self.assertNotIn(editor.discard, editor.children)
+        self.assertTrue(editor.discard.disabled)
+        self.assertTrue(editor.save.disabled)
+
+        editor.role_id = 99
+        editor.dirty = True
+        self.assertFalse(editor.discard.disabled)
+        self.assertFalse(editor.save.disabled)
+        editor.role_id = None
+        editor.dirty = True
+        self.assertTrue(editor.discard.disabled)
+        self.assertTrue(editor.save.disabled)
 
 class CarlStyleFieldsTests(unittest.TestCase):
     def test_repeat_fields_and_limit(self):
