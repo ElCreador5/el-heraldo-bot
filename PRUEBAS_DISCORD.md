@@ -812,3 +812,9 @@ Nunca inventar pruebas ejecutadas. Si una interacción no pudo comprobarse, cons
 ### 2026-10-24 — Custodio, acciones por tipo (Pruebas; pendiente prueba interactiva)
 Comprobaciones automatizadas agregadas: `tests/test_custodio_rule_actions.py` y `tests/test_custodio_rule_actions_setup.py`; contrato previo actualizado en `tests/test_custodio_preferences_setup.py`. Casos esperados: configuración inactiva por defecto, propuestas por categoría, JSON inválido fail-closed, aislamiento entre servidores, no guardar al abrir/cambiar selectores/descartar, guardado CAS y conflicto concurrente, navegación Volver, comprobación de permisos y ninguna ejecución de kick/ban.
 **No declarar VERIFICADO EN DISCORD todavía.** En Heraldo's Lab comprobar `/setup → AutoMod → Modo Custodio → Acciones por tipo`, seleccionar categorías, `Usar sugerencia`, guardar, reabrir, descartar, volver y confirmar que el servidor no recibe sanciones ni mensajes extras. Comprobar que las reglas propias del servidor no se sustituyen por plantillas. Los botones deben reconocer interacciones sin `Interaction failed`.
+
+
+## 2026-10-30 — Controles de Guardar cambios (rama Pruebas)
+- Implementación en `setup_save_controls.py` y enlace con el renderizado de vistas en `setup_interactions.py`. No se alteran sanciones, persistencia ni producción.
+- Regresión añadida: `tests/test_setup_save_controls.py`, con escenarios de borrador vacío, modificación, reversión, guardar plantilla vs. ajustes de publicación, editor de programaciones y confirmaciones independientes.
+- CI GitHub Actions: comprobar último commit de `Pruebas` antes de cerrar la verificación. Prueba manual Discord/Enzonic: **pendiente**; no se ha declarado validación real del servidor.
