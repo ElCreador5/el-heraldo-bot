@@ -250,10 +250,10 @@ class ScheduledMessages:
                 payload = self.host['heraldo_template_payload'](template, guild, context_member or member, channel)
             if job.get('autofeed'):
                 role = guild.get_role(job['role']) if job.get('role') else None
-                if job.get('role') and (role is None or not role.mentionable):
+                from message_autofeeds import referenced_mentions, can_mention_role
+                if job.get('role') and not can_mention_role(guild, role, channel):
                     from message_autofeeds import tr as autofeed_message
                     raise ValueError(autofeed_message('role_unavailable'))
-                from message_autofeeds import referenced_mentions
                 allowed_roles = referenced_mentions(guild, job)
                 if role:
                     payload = {**payload,
