@@ -41,6 +41,7 @@ LANG = {
         "discard": "Descartar cambios", "confirm": "Confirmar cambios", "back": "Volver",
         "empty": "Sin definir", "no_repeat": "No se repite", "start": "Fecha y hora",
         "repeat": "Repetir cada", "members": "Rol mencionado", "none": "Ninguno",
+        "existing_content_missing": "Este anuncio guardado no tiene texto ni contenido de embed. Abre Mensaje o Editar embed y añade el contenido antes de confirmar.",
         "warning": "Selecciona el canal y escribe un mensaje o configura un embed.",
         "invalid_interval": "En pruebas, la repetición mínima es de 5 minutos; fuera de pruebas, una hora (o un mes).",
         "time_format": "AAAA-MM-DD HH:MM", "months": "Meses", "days": "Días",
@@ -132,6 +133,7 @@ LANG = {
         "discard": "Discard changes", "confirm": "Confirm changes", "back": "Back",
         "empty": "Not set", "no_repeat": "No repeat", "start": "Date and time",
         "repeat": "Repeat every", "members": "Mentioned role", "none": "None",
+        "existing_content_missing": "This saved announcement has no message text or embed content. Open Message or Edit embed and add content before confirming.",
         "warning": "Choose a channel and enter a message or create an embed.",
         "invalid_interval": "The repeat interval must be at least one hour (or one month).",
         "time_format": "YYYY-MM-DD HH:MM", "months": "Months", "days": "Days",
@@ -223,6 +225,7 @@ LANG = {
         "discard": "Descartar alterações", "confirm": "Confirmar alterações", "back": "Voltar",
         "empty": "Não definido", "no_repeat": "Não repetir", "start": "Data e hora",
         "repeat": "Repetir a cada", "members": "Cargo mencionado", "none": "Nenhum",
+        "existing_content_missing": "Este anúncio salvo não tem texto nem conteúdo no embed. Abra Mensagem ou Editar embed e adicione conteúdo antes de confirmar.",
         "warning": "Escolha um canal e digite a mensagem ou crie um embed.",
         "invalid_interval": "O intervalo deve ser de pelo menos uma hora (ou um mês).",
         "time_format": "AAAA-MM-DD HH:MM", "months": "Meses", "days": "Dias",
@@ -999,6 +1002,15 @@ class AutofeedEditorView(discord.ui.View):
         # La creación no recupera borradores de otra sesión; editar sí carga lo guardado.
         self.restored_draft = None
         restored = job or {}
+        if job is not None:
+            print(
+                "ANUNCIOS_EDIT_LOAD"
+                f" guild={guild_id} id={job.get('id')}"
+                f" text_length={len(str(job.get('text') or ''))}"
+                f" embed_type={type(job.get('embed')).__name__}"
+                f" embed_keys={list(job['embed']) if isinstance(job.get('embed'), dict) else []}",
+                flush=True,
+            )
         self.channel_id = restored.get("channel")
         self.role_id = restored.get("role")
         self.name = restored.get("name") or ""
@@ -1245,8 +1257,8 @@ class AutofeedEditorView(discord.ui.View):
                 self.embed = validate_data(self.embed)
             except ValueError as exc:
                 raise ValueError("embed_invalid") from exc
-        if not self.text and not has_content(self.embed):
-            raise ValueError("warning")
+        if not self.text.strip() and not has_content(self.embed):
+            raise ValueError("existing_content_missing" if self.original else "warning")
         # Una frecuencia por intervalo no exige introducir fecha y hora.
         # Iniciar en el próximo intervalo al confirmar; la fecha manual sigue
         # disponible como excepción opcional.
