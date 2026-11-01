@@ -644,6 +644,15 @@ def set_paused(host, guild_id, job_id, actor, pause):
     return atomic_change(host, guild_id, apply)
 
 
+def _announcement_select_label(job):
+    """Mostrar nombre interno, o descripción heredada, sin alterar el ID."""
+    embed = job.get("embed") or {}
+    raw = (job.get("name") or "").strip()
+    fallback = job.get("text") or embed.get("title") or embed.get("description") or tr("msg")
+    name = str(raw or fallback).replace("\\n", " ").strip()
+    return (name[:75] + " · " + str(job["id"])[-6:])[:100]
+
+
 class ManageView(discord.ui.View):
     def __init__(self, host, guild_id, viewer_id, jobs, *, from_setup=False):
         super().__init__(timeout=900)
@@ -653,9 +662,16 @@ class ManageView(discord.ui.View):
         self.selected = None
         self.edit.label, self.silence.label, self.delete.label = tr("edit"), tr("silence"), tr("delete")
         self.toggle.label = tr("pause") + " / " + tr("resume")
-        select = discord.ui.Select(placeholder=tr("choose"), row=0, options=[
-            discord.SelectOption(label=(((j.get("name") or "").strip() or (j.get("text") or (j.get("embed") or {}).get("title") or (j.get("embed") or {}).get("description") or tr("msg")).replace("\\n", " ")[:75] + " · " + j["id"][-6:])[:100],
-                                 value=j["id"]) for j in jobs[:25]] )
+        select = discord.ui.Select(
+            placeholder=tr("choose"), row=0,
+            options=[
+                discord.SelectOption(
+                    label=_announcement_select_label(job),
+                    value=job["id"],
+                )
+                for job in jobs[:25]
+            ],
+        )
         select.callback = self.select_job
         self.job_select = select
         self.add_item(select)
