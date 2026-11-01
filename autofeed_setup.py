@@ -949,6 +949,7 @@ class AutofeedEditorView(discord.ui.View):
             for control in (self.images_button, self.embed_channel, self.mention,
                             self.date_time, self.preview, self.silent):
                 self.remove_item(control)
+            self.remove_item(self.publish_button)
         else:
             for control in (self.images_button, self.embed_channel, self.publish_button):
                 self.remove_item(control)
@@ -991,7 +992,7 @@ class AutofeedEditorView(discord.ui.View):
                           (self.back, "back")]:
             item.label = t(key)
         self.embed_builder.label = t("show_embed")
-        self.save.label = t("save")
+        self.save.label = "Guardar y publicar"
         self.dirty = False
 
     def draft_data(self):
@@ -1199,35 +1200,23 @@ class AutofeedEditorView(discord.ui.View):
     @discord.ui.button(label=LANG["es-419"]["save"], style=discord.ButtonStyle.success, row=3)
     @guild_context
     async def save(self, interaction, button):
-        from autofeed_embed_builder import validate_data
-        try:
-            if self.embed:
-                validate_data(self.embed)
-        except ValueError:
-            return await feeds.respond_error(interaction, "invalid")
-        await interaction.response.edit_message(
-            content=t("draft_confirm") + "\n\n" + self.summary(),
-            embed=None, view=AnnouncementDraftConfirmView(self))
-
-    @discord.ui.button(label=LANG["es-419"]["send"], style=discord.ButtonStyle.success, row=3)
-    @guild_context
-    async def publish_button(self, interaction, button):
-        if self.saved_draft is None or self.saved_draft != self.draft_data():
-            return await interaction.response.send_message(t("draft_first"), ephemeral=True)
+        """Un único flujo: validar, revisar y confirmar publicación o programación."""
         try:
             prepared = self.prepared(interaction)
         except ValueError as exc:
             return await interaction.response.send_message(
                 t(str(exc)) if str(exc) in LANG["es-419"] else feeds.tr("invalid"),
                 ephemeral=True)
-        confirm = SetupConfirmView(self.host, prepared, self.snapshot,
-                                   editing=self.original is not None)
+        confirm = SetupConfirmView(
+            self.host, prepared, self.snapshot,
+            editing=self.original is not None, editor=self)
         from autofeed_embed_builder import render
         preview = render(prepared.get("embed"), self.host["stamp_embed"], interaction.guild)
         summary = t("schedule_now") if prepared["start"] else t("now")
         await interaction.response.edit_message(
-            content=summary + "\\n\\n" + self.summary() + "\\n\\n" + t("saved_tip"),
-            embed=preview, view=confirm, allowed_mentions=discord.AllowedMentions.none())
+            content=summary + "\\n\\n" + self.summary(),
+            embed=preview, view=confirm,
+            allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger, row=3)
     @guild_context
@@ -1287,12 +1276,14 @@ class AnnouncementDraftConfirmView(discord.ui.View):
 
 
 class SetupConfirmView(discord.ui.View):
-    def __init__(self, host, job, snapshot, *, editing=False, result_panel=None):
+    def __init__(self, host, job, snapshot, *, editing=False, result_panel=None, editor=None):
         super().__init__(timeout=300)
         self.host, self.job, self.snapshot, self.editing = host, job, snapshot, editing
         self.result_panel = result_panel or setup_panel
+        self.editor = editor
         self.guild_id, self.owner_id = job["guild"], job["requester"]
-        self.confirm.label, self.cancel.label = t("confirm"), t("discard")
+        self.confirm.label, self.cancel.label = t("confirm"), t("back")
+        self.cancel.style = discord.ButtonStyle.secondary
         self.finished = False
 
     @guild_context
@@ -1345,10 +1336,14 @@ class SetupConfirmView(discord.ui.View):
         await interaction.response.edit_message(
             content=t("saved") + "\n\n" + parent, embed=None, view=view)
 
-    @discord.ui.button(label=LANG["es-419"]["discard"], style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary)
     @guild_context
     async def cancel(self, interaction, button):
         self.finished = True
         self.stop()
+        if self.editor is not None:
+            await interaction.response.edit_message(
+                **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
+            return
         parent, view = self.result_panel(self.host, self.guild_id, self.owner_id)
         await interaction.response.edit_message(content=parent, embed=None, view=view)
