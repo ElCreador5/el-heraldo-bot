@@ -652,6 +652,9 @@ class CustomRepeatModal(discord.ui.Modal):
             return await interaction.response.send_message(
                 t("invalid_interval"), ephemeral=True)
         self.editor.parts = parts
+        self.editor.frequency_mode = "custom"
+        if self.editor.original and self.editor.original.get("repeat_parts") != parts:
+            self.editor.start = None
         self.editor.dirty = True
         await interaction.response.edit_message(
             **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
@@ -679,10 +682,7 @@ class FrequencyPickerView(discord.ui.View):
 
     def to_components(self):
         # La frecuencia elegida sigue marcada al volver a este submenú.
-        selected = next((key for key, value in PRESETS.items()
-                         if value is not None and self.editor.parts == value), None)
-        if self.editor.parts and selected is None:
-            selected = "custom"
+        selected = self.editor.frequency_mode
         for option in self.select.options:
             option.default = option.value == selected
         return super().to_components()
@@ -701,12 +701,15 @@ class FrequencyPickerView(discord.ui.View):
             return await interaction.response.send_modal(CustomRepeatModal(self.editor))
         value = PRESETS[mode]
         self.editor.parts = dict(value) if value else None
+        self.editor.frequency_mode = mode
+        if self.editor.original and self.editor.original.get("repeat_parts") != self.editor.parts:
+            self.editor.start = None
         self.editor.dirty = True
         # La fecha de inicio se calcula automáticamente al confirmar.
         for option in self.select.options:
             option.default = option.value == mode
         await interaction.response.edit_message(
-            content=t("choose_frequency"), embed=None, view=self)
+            content=t("choose_frequency") + ": **" + t(mode) + "**", embed=None, view=self)
 
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
@@ -1018,11 +1021,14 @@ class AutofeedEditorView(discord.ui.View):
         self.embed = copy.deepcopy(restored.get("embed"))
         self.start = datetime.fromisoformat(restored["start"]) if restored.get("start") else None
         self.timezone = __import__("zoneinfo").ZoneInfo("America/Santo_Domingo")
+        self.frequency_mode = None
         self.parts = (copy.deepcopy(restored.get("repeat_parts"))
                       if restored.get("repeat") == "custom" else
                       dict(PRESETS["daily"]) if restored.get("repeat") == "diaria" else
                       dict(PRESETS["weekly"]) if restored.get("repeat") == "semanal" else
                       dict(PRESETS["monthly"]) if restored.get("repeat") == "mensual" else None)
+        self.frequency_mode = ("custom" if self.parts and self.parts not in PRESETS.values() else
+                               next((key for key, val in PRESETS.items() if val is not None and val == self.parts), None))
         self.saved_draft = self.draft_data() if job else None
         self._initial_draft = copy.deepcopy(self.draft_data())
 
@@ -1264,9 +1270,12 @@ class AutofeedEditorView(discord.ui.View):
         # disponible como excepción opcional.
         automatic_start = self.start is None and bool(self.parts)
         if self.start and self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
-            raise ValueError("warning")
+            if not self.original or self.start != datetime.fromisoformat(self.original["start"]):
+                raise ValueError("warning")
         start = (datetime.now(timezone.utc) + timedelta(minutes=2)
                  if automatic_start else self.start)
+        if self.original and self.parts and start and start <= datetime.now(timezone.utc):
+            start = datetime.now(timezone.utc) + timedelta(minutes=2)
         try:
             feeds.referenced_mentions(guild, {
                 "text": self.text, "embed": self.embed, "role": self.role_id})
