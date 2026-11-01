@@ -644,7 +644,6 @@ class FrequencyPickerView(discord.ui.View):
         self.select.callback = self.pick
         self.add_item(self.select)
         self.back.label = t("back")
-        self.set_date_time.label = t("date_picker")
 
     @guild_context
     async def interaction_check(self, interaction):
@@ -661,19 +660,11 @@ class FrequencyPickerView(discord.ui.View):
         value = PRESETS[mode]
         self.editor.parts = dict(value) if value else None
         self.editor.dirty = True
-        # Mantener abierto Frecuencia: elegir periodicidad no equivale a
-        # configurar la fecha. El usuario puede completar ambas sin perder
-        # los valores del editor ni regresar prematuramente.
+        # La fecha de inicio se calcula automáticamente al confirmar.
         for option in self.select.options:
             option.default = option.value == mode
         await interaction.response.edit_message(
-            content=t("choose_frequency") + "\n\n" + t("date_help"),
-            embed=None, view=self)
-
-    @discord.ui.button(label=LANG["es-419"]["date_picker"], style=discord.ButtonStyle.primary, row=1)
-    @guild_context
-    async def set_date_time(self, interaction, button):
-        await interaction.response.send_modal(DateTimeModal(self.editor))
+            content=t("choose_frequency"), embed=None, view=self)
 
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
