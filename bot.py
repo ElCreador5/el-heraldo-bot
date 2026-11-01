@@ -13073,7 +13073,7 @@ class HeraldoSetupView(discord.ui.View):
         await self.configure(interaction, None)
 
     @_i18n_context
-    async def configure(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def configure(self, interaction: discord.Interaction, button: discord.ui.Button, *, direct: bool = False) -> None:
         selected = self.selected_module
         if selected is None:
             await interaction.response.send_message(
@@ -13122,7 +13122,10 @@ class HeraldoSetupView(discord.ui.View):
             return
 
         # Una sola respuesta de actualización, sin defer + segunda llamada HTTP.
-        await interaction.response.edit_message(content=content, embed=None, view=view)
+        if direct:
+            await interaction.response.send_message(content=content, embed=None, view=view, ephemeral=True)
+        else:
+            await interaction.response.edit_message(content=content, embed=None, view=view)
 
     @_i18n_context
     async def on_error(
@@ -13156,6 +13159,142 @@ class HeraldoSetupView(discord.ui.View):
 
 
 
+
+# Accesos directos: reutilizan las mismas vistas y permisos de /setup.
+async def _heraldo_setup_shortcut(interaction: discord.Interaction, module: str) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("Disponible solo en servidores.", ephemeral=True)
+        return
+    if not await configuration_access(interaction):
+        return
+    panel = HeraldoSetupView(interaction.guild.id, interaction.user.id)
+    panel.selected_module = module
+    await panel.configure(interaction, None, direct=True)
+
+
+# El cierre se añade a las vistas de configuración existentes; no guarda borradores.
+class _HeraldoPanelClose(discord.ui.Button):
+    def __init__(self, guild_id: int):
+        locale = guild_language(guild_id)
+        label = {"es-419": "Cerrar", "en-US": "Close", "pt-BR": "Fechar"}.get(locale, "Cerrar")
+        super().__init__(label=label, style=discord.ButtonStyle.danger)
+        self._guild_id = guild_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        panel = self.view
+        if not await configuration_access(
+            interaction, getattr(panel, "guild_id", None), getattr(panel, "owner_id", None)
+        ):
+            return
+        if _setup_has_unsaved_changes(panel):
+            lang = guild_language(self._guild_id)
+            warning = {
+                "es-419": "Hay cambios sin guardar. Guárdalos o descártalos antes de cerrar.",
+                "en-US": "There are unsaved changes. Save or discard them before closing.",
+                "pt-BR": "Há alterações não salvas. Salve ou descarte antes de fechar.",
+            }.get(lang, "Hay cambios sin guardar. Guárdalos o descártalos antes de cerrar.")
+            await interaction.response.send_message(warning, ephemeral=True)
+            return
+        panel.stop()
+        await interaction.response.edit_message(content={
+            "es-419": "Panel cerrado.", "en-US": "Panel closed.", "pt-BR": "Painel fechado."
+        }.get(guild_language(self._guild_id), "Panel cerrado."), embed=None, view=None)
+
+
+def _heraldo_install_close_buttons() -> None:
+    """Adjunta Cerrar a todos los paneles de configuración con espacio disponible."""
+    for name, cls in tuple(globals().items()):
+        if not isinstance(cls, type) or not issubclass(cls, discord.ui.View):
+            continue
+        if cls is HeraldoSetupView or not (
+            name.endswith("SetupView") or name in {
+                "HeraldoVerificationHubView", "HeraldoLanguageView"
+            }
+        ):
+            continue
+        original_init = cls.__init__
+
+        def _wrapped(self, *args, _original=original_init, **kwargs):
+            _original(self, *args, **kwargs)
+            gid = getattr(self, "guild_id", None)
+            if gid is None or any(isinstance(item, _HeraldoPanelClose) for item in self.children):
+                return
+            button = _HeraldoPanelClose(gid)
+            for row in range(4, -1, -1):
+                button.row = row
+                try:
+                    self.add_item(button)
+                    break
+                except ValueError:
+                    continue
+
+        cls.__init__ = _wrapped
+
+
+_heraldo_install_close_buttons()
+
+@bot.tree.command(name="automod", description="Abre la configuración de AutoMod.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_automod(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "automod")
+
+@bot.tree.command(name="moderacion", description="Abre el panel de Moderación.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_moderacion(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "moderation")
+
+@bot.tree.command(name="roles_ingreso", description="Configura los roles de ingreso.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_roles_ingreso(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "join_roles")
+
+@bot.tree.command(name="roles_reaccion", description="Configura los roles por reacción.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_roles_reaccion(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "reaction_roles")
+
+@bot.tree.command(name="registros", description="Abre la configuración de Registros.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_registros(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "logging")
+
+@bot.tree.command(name="mensajes", description="Abre la configuración de Mensajes.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_mensajes(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "messages")
+
+@bot.tree.command(name="anuncios", description="Abre la configuración de Anuncios.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_anuncios(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "autofeeds")
+
+@bot.tree.command(name="verificacion", description="Abre la configuración de Verificación.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_verificacion(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "verification")
+
+@bot.tree.command(name="formato_fecha", description="Configura el formato de fecha.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_formato_fecha(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "date_format")
 
 @bot.tree.command(name="language", description="Configura el idioma de El Heraldo en este servidor.")
 @app_commands.default_permissions(manage_guild=True)
