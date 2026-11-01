@@ -100,6 +100,7 @@ LANG = {
         "draft_first": "Guarda y confirma los cambios antes de publicar.",
         "images_button": "Imágenes (HTTPS)", "embed_channel": "Mencionar canal",
         "show_embed": "Crear embed",
+        "edit_embed": "Editar embed",
         "none_date": "Sin fecha (publicar ahora)",
         "date_clear": "Quitar fecha",
         "clear_date_help": "Borra ambos campos para publicar inmediatamente.",
@@ -188,6 +189,7 @@ LANG = {
         "draft_first": "Save and confirm changes before publishing.",
         "images_button": "Images (HTTPS)", "embed_channel": "Mention channel",
         "show_embed": "Create embed",
+        "edit_embed": "Edit embed",
         "none_date": "No date (publish now)",
         "date_clear": "Remove date",
         "clear_date_help": "Clear both fields to publish immediately.",
@@ -276,6 +278,7 @@ LANG = {
         "draft_first": "Salve e confirme antes de publicar.",
         "images_button": "Imagens (HTTPS)", "embed_channel": "Mencionar canal",
         "show_embed": "Criar embed",
+        "edit_embed": "Editar embed",
         "none_date": "Sem data (publicar agora)",
         "date_clear": "Remover data",
         "clear_date_help": "Limpe ambos os campos para publicar imediatamente.",
@@ -987,7 +990,7 @@ class AutofeedEditorView(discord.ui.View):
         # Botones decorados, nuevamente añadidos con filas explícitas.
         visible = (
             (self.message, "message", 2),
-            (self.embed_builder, "show_embed", 2),
+            (self.embed_builder, "edit_embed", 2),
             (self.frequency, "repeat_picker", 2),
             (self.save, None, 3),
             (self.discard, "discard", 3),
