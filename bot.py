@@ -13268,13 +13268,6 @@ async def shortcut_roles_reaccion(interaction: discord.Interaction) -> None:
 async def shortcut_registros(interaction: discord.Interaction) -> None:
     await _heraldo_setup_shortcut(interaction, "logging")
 
-@bot.tree.command(name="mensajes", description="Abre la configuración de Mensajes.")
-@app_commands.default_permissions(administrator=True)
-@app_commands.guild_only()
-@_i18n_context
-async def shortcut_mensajes(interaction: discord.Interaction) -> None:
-    await _heraldo_setup_shortcut(interaction, "messages")
-
 @bot.tree.command(name="anuncios", description="Abre la configuración de Anuncios.")
 @app_commands.default_permissions(administrator=True)
 @app_commands.guild_only()
