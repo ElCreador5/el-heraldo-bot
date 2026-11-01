@@ -657,7 +657,15 @@ class ManageView(discord.ui.View):
             discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or (j.get("embed") or {}).get("description") or tr("msg"))[:60])[:100],
                                  value=j["id"]) for j in jobs[:25]])
         select.callback = self.select_job
+        self.job_select = select
         self.add_item(select)
+
+    def to_components(self):
+        # Conservar visualmente el anuncio elegido mientras se administran
+        # sus acciones; sin preseleccionar nada al abrir este panel.
+        for option in self.job_select.options:
+            option.default = self.selected is not None and option.value == self.selected
+        return super().to_components()
 
     @guild_context
     async def interaction_check(self, interaction):
