@@ -661,8 +661,14 @@ class FrequencyPickerView(discord.ui.View):
         value = PRESETS[mode]
         self.editor.parts = dict(value) if value else None
         self.editor.dirty = True
+        # Mantener abierto Frecuencia: elegir periodicidad no equivale a
+        # configurar la fecha. El usuario puede completar ambas sin perder
+        # los valores del editor ni regresar prematuramente.
+        for option in self.select.options:
+            option.default = option.value == mode
         await interaction.response.edit_message(
-            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
+            content=t("choose_frequency") + "\n\n" + t("date_help"),
+            embed=None, view=self)
 
     @discord.ui.button(label=LANG["es-419"]["date_picker"], style=discord.ButtonStyle.primary, row=1)
     @guild_context
