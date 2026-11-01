@@ -1207,10 +1207,14 @@ class AutofeedEditorView(discord.ui.View):
                 raise ValueError("embed_invalid") from exc
         if not self.text and not has_content(self.embed):
             raise ValueError("warning")
-        if self.start is None and self.parts:
-            raise ValueError("date_help")
+        # Una frecuencia por intervalo no exige introducir fecha y hora.
+        # Iniciar en el próximo intervalo al confirmar; la fecha manual sigue
+        # disponible como excepción opcional.
+        automatic_start = self.start is None and bool(self.parts)
         if self.start and self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("warning")
+        start = (datetime.now(timezone.utc) + timedelta(minutes=2)
+                 if automatic_start else self.start)
         try:
             feeds.referenced_mentions(guild, {
                 "text": self.text, "embed": self.embed, "role": self.role_id})
@@ -1222,7 +1226,7 @@ class AutofeedEditorView(discord.ui.View):
             "guild": self.guild_id, "author": previous.get("author", self.owner_id),
             "requester": self.owner_id, "channel": self.channel_id,
             "role": self.role_id, "text": self.text, "embed": self.embed,
-            "start": self.start.isoformat() if self.start else None,
+            "start": start.isoformat() if start else None,
             "zone": "America/Santo_Domingo",
             "repeat": "custom" if self.parts else "ninguna",
             "repeat_parts": self.parts, "autofeed": True,
