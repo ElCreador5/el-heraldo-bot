@@ -390,7 +390,7 @@ class AutoFeedsHomeView(discord.ui.View):
         except Exception as exc:
             import traceback
             traceback.print_exc()
-            print(f"AUTOFEEEDS_CREATE_EDITOR_ERROR guild={self.guild_id} "
+            print(f"ANUNCIOS_CREATE_EDITOR_ERROR guild={self.guild_id} "
                   f"type={type(exc).__name__} message={exc!s}", flush=True)
             if not interaction.response.is_done():
                 await interaction.response.send_message(
