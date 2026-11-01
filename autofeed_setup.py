@@ -395,9 +395,11 @@ class AutoFeedsHomeView(discord.ui.View):
             if not interaction.response.is_done():
                 await interaction.response.send_message(
                     f"No se pudo abrir el editor de anuncios ({type(exc).__name__}). "
-                    "El error detallado quedó registrado en la consola del bot.",
+                    "Consulta ANUNCIOS_CREATE_EDITOR_ERROR en la consola del bot.",
                     ephemeral=True)
-            raise
+            # La excepción ya está registrada: no propagarla una segunda vez,
+            # pues el manejador general sustituye el diagnóstico útil.
+            return
 
     @discord.ui.button(label=LANG["es-419"]["manage"], style=discord.ButtonStyle.secondary, row=0)
     @guild_context
