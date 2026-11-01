@@ -775,6 +775,24 @@ class PolicyView(discord.ui.View):
         self.channels.placeholder, self.roles.placeholder = tr("channels"), tr("roles_ui")
         self.activate.style = discord.ButtonStyle.danger if self.current["enabled"] else discord.ButtonStyle.success
 
+    def to_components(self):
+        # Restaurar visualmente selecciones existentes, sin guardado automático.
+        self.channels.default_values = [
+            discord.SelectDefaultValue(id=int(cid), type=discord.SelectDefaultValueType.channel)
+            for cid in self.current.get("channels", [])[:10]
+        ]
+        self.roles.default_values = [
+            discord.SelectDefaultValue(id=int(rid), type=discord.SelectDefaultValueType.role)
+            for rid in self.current.get("roles", [])[:10]
+        ]
+        stored = policy(self.host, self.guild_id)
+        changed = (self.current.get("channels", []) != stored.get("channels", [])
+                   or self.current.get("roles", []) != stored.get("roles", [])
+                   or self.current.get("max_per_member") != stored.get("max_per_member"))
+        self.save.disabled = not changed
+        self.discard.disabled = not changed
+        return super().to_components()
+
     def summary(self):
         return (tr("settings") + "\n" + tr("status_label") + ": " + (tr("enabled_label") if self.current["enabled"] else tr("disabled_label"))
                 + "\n" + tr("channels") + ": " + (", ".join(f"<#{c}>" for c in self.current["channels"]) or "—")
