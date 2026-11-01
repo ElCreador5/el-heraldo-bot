@@ -654,7 +654,7 @@ class ManageView(discord.ui.View):
         self.edit.label, self.silence.label, self.delete.label = tr("edit"), tr("silence"), tr("delete")
         self.toggle.label = tr("pause") + " / " + tr("resume")
         select = discord.ui.Select(placeholder=tr("choose"), row=0, options=[
-            discord.SelectOption(label=(j["id"] + " · " + (j.get("text") or (j.get("embed") or {}).get("description") or tr("msg"))[:60])[:100],
+            discord.SelectOption(label=(((j.get("name") or "").strip() or (j.get("text") or (j.get("embed") or {}).get("title") or (j.get("embed") or {}).get("description") or tr("msg")).replace("\\n", " ")[:75] + " · " + j["id"][-6:])[:100],
                                  value=j["id"]) for j in jobs[:25]])
         select.callback = self.select_job
         self.job_select = select
