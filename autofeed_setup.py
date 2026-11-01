@@ -36,6 +36,7 @@ LANG = {
         "select_channel": "Canal donde publicar", "select_role": "Rol para mencionar (opcional)",
         "message": "Mensaje", "embed": "Editor de embed", "schedule": "Fecha y repetición",
         "preview": "Vista previa", "silent": "Sin rol", "save": "Guardar cambios",
+        "name_button": "Nombre del anuncio", "name_hint": "Nombre para identificar este anuncio (máximo 80 caracteres)",
         "save_publish": "Guardar y publicar",
         "discard": "Descartar cambios", "confirm": "Confirmar cambios", "back": "Volver",
         "empty": "Sin definir", "no_repeat": "No se repite", "start": "Fecha y hora",
@@ -126,6 +127,7 @@ LANG = {
         "select_channel": "Destination channel", "select_role": "Role to mention (optional)",
         "message": "Message", "embed": "Embed builder", "schedule": "Date and repeat",
         "preview": "Preview", "silent": "No role", "save": "Save changes",
+        "name_button": "Announcement name", "name_hint": "Name to identify this announcement (up to 80 characters)",
         "save_publish": "Save and publish",
         "discard": "Discard changes", "confirm": "Confirm changes", "back": "Back",
         "empty": "Not set", "no_repeat": "No repeat", "start": "Date and time",
@@ -216,6 +218,7 @@ LANG = {
         "select_channel": "Canal de destino", "select_role": "Cargo a mencionar (opcional)",
         "message": "Mensagem", "embed": "Editor de embed", "schedule": "Data e repetição",
         "preview": "Prévia", "silent": "Sem cargo", "save": "Salvar alterações",
+        "name_button": "Nome do anúncio", "name_hint": "Nome para identificar este anúncio (até 80 caracteres)",
         "save_publish": "Salvar e publicar",
         "discard": "Descartar alterações", "confirm": "Confirmar alterações", "back": "Voltar",
         "empty": "Não definido", "no_repeat": "Não repetir", "start": "Data e hora",
@@ -440,6 +443,26 @@ class AutoFeedsHomeView(discord.ui.View):
             embed=None,
             view=self.host["HeraldoSetupView"](self.guild_id, self.owner_id))
 
+
+
+class AnnouncementNameModal(discord.ui.Modal):
+    """Nombre interno para distinguir anuncios, nunca se envía al canal."""
+    def __init__(self, editor):
+        super().__init__(title=t("name_button"))
+        self.editor = editor
+        self.name = discord.ui.TextInput(
+            label=t("name_button"), placeholder=t("name_hint"),
+            required=False, max_length=80, default=editor.name)
+        self.add_item(self.name)
+
+    @guild_context
+    async def on_submit(self, interaction):
+        if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            return await feeds.respond_error(interaction, "denied")
+        self.editor.name = str(self.name).strip()
+        self.editor.dirty = True
+        await interaction.response.edit_message(
+            **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
 
 
 class MessageModal(discord.ui.Modal):
@@ -978,6 +1001,7 @@ class AutofeedEditorView(discord.ui.View):
         restored = job or {}
         self.channel_id = restored.get("channel")
         self.role_id = restored.get("role")
+        self.name = restored.get("name") or ""
         self.text = restored.get("text") or ""
         self.embed = copy.deepcopy(restored.get("embed"))
         self.start = datetime.fromisoformat(restored["start"]) if restored.get("start") else None
@@ -1007,6 +1031,7 @@ class AutofeedEditorView(discord.ui.View):
             (self.message, "message", 2),
             (self.embed_builder, "edit_embed", 2),
             (self.frequency, "repeat_picker", 2),
+            (self.name_button, "name_button", 3),
             (self.save, None, 3),
             (self.discard, "discard", 3),
             (self.back, "back", 4),
@@ -1039,7 +1064,7 @@ class AutofeedEditorView(discord.ui.View):
     def draft_data(self):
         return {
             "version": 1, "channel": self.channel_id, "role": self.role_id,
-            "text": self.text, "embed": copy.deepcopy(self.embed),
+            "name": self.name, "text": self.text, "embed": copy.deepcopy(self.embed),
             "start": self.start.isoformat() if self.start else None,
             "repeat": "custom" if self.parts else ANNOUNCEMENT_REPEAT_NONE,
             "repeat_parts": copy.deepcopy(self.parts),
@@ -1080,7 +1105,8 @@ class AutofeedEditorView(discord.ui.View):
         date = f"<t:{int(self.start.timestamp())}:F>" if self.start else t("none_date")
         period = (", ".join(f"{v} {t(k)}" for k, v in self.parts.items() if v)
                   if self.parts else t("no_repeat"))
-        lines = [f"**{t('select_channel')}:** {channel}"]
+        lines = [f"**{t('name_button')}:** {discord.utils.escape_markdown(self.name) if self.name else t('empty')}",
+                 f"**{t('select_channel')}:** {channel}"]
         if self.text.strip():
             lines.append(f"**{t('message')}:** {discord.utils.escape_mentions(self.text[:350])}")
         if self.embed:
@@ -1132,6 +1158,11 @@ class AutofeedEditorView(discord.ui.View):
         self.role_id = self.roles.values[0].id if self.roles.values else None
         self.dirty = True
         await interaction.response.edit_message(**editor_panel_kwargs(self, interaction.guild), view=self)
+
+    @discord.ui.button(label=LANG["es-419"]["name_button"], style=discord.ButtonStyle.secondary, row=3)
+    @guild_context
+    async def name_button(self, interaction, button):
+        await interaction.response.send_modal(AnnouncementNameModal(self))
 
     @discord.ui.button(label=LANG["es-419"]["message"], style=discord.ButtonStyle.primary, row=2)
     @guild_context
@@ -1234,7 +1265,7 @@ class AutofeedEditorView(discord.ui.View):
             "id": previous.get("id", uuid.uuid4().hex[:12]),
             "guild": self.guild_id, "author": previous.get("author", self.owner_id),
             "requester": self.owner_id, "channel": self.channel_id,
-            "role": self.role_id, "text": self.text, "embed": self.embed,
+            "role": self.role_id, "name": self.name, "text": self.text, "embed": self.embed,
             "start": start.isoformat() if start else None,
             "zone": "America/Santo_Domingo",
             "repeat": "custom" if self.parts else "ninguna",
