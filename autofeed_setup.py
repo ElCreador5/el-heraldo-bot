@@ -383,10 +383,12 @@ class AutoFeedsHomeView(discord.ui.View):
     @discord.ui.button(label=LANG["es-419"]["new"], style=discord.ButtonStyle.primary, row=0)
     @guild_context
     async def create(self, interaction, button):
+        """Crear anuncio siempre inicia una sesión nueva; no reutiliza UI ni borradores."""
         try:
-            editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id)
-            payload = editor_panel_kwargs(editor, interaction.guild)
-            await interaction.response.edit_message(**payload, view=editor)
+            editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id,
+                                        job=None, fresh=True)
+            await interaction.response.edit_message(
+                content=None, embed=editor.panel_embed(interaction.guild), view=editor)
         except Exception as exc:
             import traceback
             traceback.print_exc()
@@ -394,12 +396,9 @@ class AutoFeedsHomeView(discord.ui.View):
                   f"type={type(exc).__name__} message={exc!s}", flush=True)
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    f"No se pudo abrir el editor de anuncios ({type(exc).__name__}). "
-                    "Consulta ANUNCIOS_CREATE_EDITOR_ERROR en la consola del bot.",
+                    f"Error al crear el anuncio: {type(exc).__name__}. "
+                    "Consulta ANUNCIOS_CREATE_EDITOR_ERROR en la consola.",
                     ephemeral=True)
-            # La excepción ya está registrada: no propagarla una segunda vez,
-            # pues el manejador general sustituye el diagnóstico útil.
-            return
 
     @discord.ui.button(label=LANG["es-419"]["manage"], style=discord.ButtonStyle.secondary, row=0)
     @guild_context
@@ -954,60 +953,56 @@ class EmbedChannelSelectView(discord.ui.View):
 
 
 class AutofeedEditorView(discord.ui.View):
-    def __init__(self, host, guild_id, owner_id, *, job=None):
+    def __init__(self, host, guild_id, owner_id, *, job=None, fresh=False):
         super().__init__(timeout=900)
-        # No duplicar controles de menciones/imagen en el editor principal.
-        # Conservar los atributos heredados para editores antiguos que aún
-        # se instancian fuera de /setup, sin exponer las acciones redundantes.
-        if type(self) is AutofeedEditorView:
-            for control in (self.images_button, self.embed_channel, self.mention,
-                            self.date_time, self.preview, self.silent):
-                self.remove_item(control)
-            self.remove_item(self.publish_button)
-        else:
-            for control in (self.images_button, self.embed_channel, self.publish_button):
-                self.remove_item(control)
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
         self.original = job
         self.snapshot = host["guild_config_get"](guild_id, feeds.CONFIG_KEY)
-        self.restored_draft = None if job else load_announcement_draft(host, guild_id, owner_id)
-        restored = job or self.restored_draft or {}
+        # La creación no recupera borradores de otra sesión; editar sí carga lo guardado.
+        self.restored_draft = None
+        restored = job or {}
         self.channel_id = restored.get("channel")
         self.role_id = restored.get("role")
         self.text = restored.get("text") or ""
         self.embed = copy.deepcopy(restored.get("embed"))
         self.start = datetime.fromisoformat(restored["start"]) if restored.get("start") else None
         self.timezone = __import__("zoneinfo").ZoneInfo("America/Santo_Domingo")
-        self.parts = (copy.deepcopy(restored.get("repeat_parts")) if restored.get("repeat") == "custom" else
+        self.parts = (copy.deepcopy(restored.get("repeat_parts"))
+                      if restored.get("repeat") == "custom" else
                       dict(PRESETS["daily"]) if restored.get("repeat") == "diaria" else
                       dict(PRESETS["weekly"]) if restored.get("repeat") == "semanal" else
                       dict(PRESETS["monthly"]) if restored.get("repeat") == "mensual" else None)
-        self.saved_draft = self.draft_data() if self.restored_draft else None
-        # Estado de referencia: anuncio recién abierto o último borrador confirmado.
+        self.saved_draft = self.draft_data() if job else None
         self._initial_draft = copy.deepcopy(self.draft_data())
-        self.dirty = False
 
+        # Distribución nativa ya aprobada: dos selects, tres controles y acciones.
+        for item in tuple(self.children):
+            self.remove_item(item)
         self.channels = discord.ui.ChannelSelect(
             placeholder=t("select_channel"), row=0, min_values=1, max_values=1,
             channel_types=[discord.ChannelType.text])
         self.channels.callback = self.pick_channel
         self.add_item(self.channels)
-
-        self.roles = discord.ui.RoleSelect(placeholder=t("select_role"), row=1,
-                                           min_values=0, max_values=1)
+        self.roles = discord.ui.RoleSelect(
+            placeholder=t("select_role"), row=1, min_values=0, max_values=1)
         self.roles.callback = self.pick_role
         self.add_item(self.roles)
-        for item, key in [(self.message, "message"), (self.embed_builder, "embed"),
-                          (self.images_button, "images_button"), (self.embed_channel, "embed_channel"),
-                          (self.date_time, "date_picker"), (self.frequency, "repeat_picker"),
-                          (self.preview, "preview"), (self.mention, "insert_mention"),
-                          (self.silent, "silent"), (self.save, "save"),
-                          (self.publish_button, "send"), (self.discard, "discard"),
-                          (self.back, "back")]:
-            item.label = t(key)
-        self.embed_builder.label = t("show_embed")
-        self.save.label = "Guardar y publicar"
-        self.dirty = False
+        # Botones decorados, nuevamente añadidos con filas explícitas.
+        visible = (
+            (self.message, "message", 2),
+            (self.embed_builder, "show_embed", 2),
+            (self.frequency, "repeat_picker", 2),
+            (self.save, None, 3),
+            (self.discard, "discard", 3),
+            (self.back, "back", 4),
+        )
+        for button, key, row in visible:
+            button.row = row
+            button.label = t(key) if key else "Guardar y publicar"
+            self.add_item(button)
+        self._dirty = False
+        self.save.disabled = not self._has_pending_changes()
+        self.discard.disabled = not self._has_pending_changes()
 
     def draft_data(self):
         return {
