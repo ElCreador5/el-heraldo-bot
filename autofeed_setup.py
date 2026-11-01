@@ -383,9 +383,21 @@ class AutoFeedsHomeView(discord.ui.View):
     @discord.ui.button(label=LANG["es-419"]["new"], style=discord.ButtonStyle.primary, row=0)
     @guild_context
     async def create(self, interaction, button):
-        editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id)
-        await interaction.response.edit_message(
-            **editor_panel_kwargs(editor, interaction.guild), view=editor)
+        try:
+            editor = AutofeedEditorView(self.host, self.guild_id, self.owner_id)
+            payload = editor_panel_kwargs(editor, interaction.guild)
+            await interaction.response.edit_message(**payload, view=editor)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            print(f"AUTOFEEEDS_CREATE_EDITOR_ERROR guild={self.guild_id} "
+                  f"type={type(exc).__name__} message={exc!s}", flush=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"No se pudo abrir el editor de anuncios ({type(exc).__name__}). "
+                    "El error detallado quedó registrado en la consola del bot.",
+                    ephemeral=True)
+            raise
 
     @discord.ui.button(label=LANG["es-419"]["manage"], style=discord.ButtonStyle.secondary, row=0)
     @guild_context
