@@ -36,6 +36,7 @@ LANG = {
         "select_channel": "Canal donde publicar", "select_role": "Rol para mencionar (opcional)",
         "message": "Mensaje", "embed": "Editor de embed", "schedule": "Fecha y repetición",
         "preview": "Vista previa", "silent": "Sin rol", "save": "Guardar cambios",
+        "save_publish": "Guardar y publicar",
         "discard": "Descartar cambios", "confirm": "Confirmar cambios", "back": "Volver",
         "empty": "Sin definir", "no_repeat": "No se repite", "start": "Fecha y hora",
         "repeat": "Repetir cada", "members": "Rol mencionado", "none": "Ninguno",
@@ -125,6 +126,7 @@ LANG = {
         "select_channel": "Destination channel", "select_role": "Role to mention (optional)",
         "message": "Message", "embed": "Embed builder", "schedule": "Date and repeat",
         "preview": "Preview", "silent": "No role", "save": "Save changes",
+        "save_publish": "Save and publish",
         "discard": "Discard changes", "confirm": "Confirm changes", "back": "Back",
         "empty": "Not set", "no_repeat": "No repeat", "start": "Date and time",
         "repeat": "Repeat every", "members": "Mentioned role", "none": "None",
@@ -214,6 +216,7 @@ LANG = {
         "select_channel": "Canal de destino", "select_role": "Cargo a mencionar (opcional)",
         "message": "Mensagem", "embed": "Editor de embed", "schedule": "Data e repetição",
         "preview": "Prévia", "silent": "Sem cargo", "save": "Salvar alterações",
+        "save_publish": "Salvar e publicar",
         "discard": "Descartar alterações", "confirm": "Confirmar alterações", "back": "Voltar",
         "empty": "Não definido", "no_repeat": "Não repetir", "start": "Data e hora",
         "repeat": "Repetir a cada", "members": "Cargo mencionado", "none": "Nenhum",
@@ -648,6 +651,16 @@ class FrequencyPickerView(discord.ui.View):
         self.add_item(self.select)
         self.back.label = t("back")
 
+    def to_components(self):
+        # La frecuencia elegida sigue marcada al volver a este submenú.
+        selected = next((key for key, value in PRESETS.items()
+                         if value is not None and self.editor.parts == value), None)
+        if self.editor.parts and selected is None:
+            selected = "custom"
+        for option in self.select.options:
+            option.default = option.value == selected
+        return super().to_components()
+
     @guild_context
     async def interaction_check(self, interaction):
         if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
@@ -709,6 +722,8 @@ class MentionPickerView(discord.ui.View):
     @guild_context
     async def pick_target(self, interaction):
         self.destination = self.target.values[0]
+        for option in self.target.options:
+            option.default = option.value == self.destination
         await interaction.response.edit_message(content=t("mention_help"), embed=None, view=self)
 
     def insert(self, token):
@@ -998,7 +1013,7 @@ class AutofeedEditorView(discord.ui.View):
         )
         for button, key, row in visible:
             button.row = row
-            button.label = t(key) if key else "Guardar y publicar"
+            button.label = t(key) if key else t("save_publish")
             self.add_item(button)
         self._dirty = False
         self.save.disabled = not self._has_pending_changes()
