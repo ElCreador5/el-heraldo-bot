@@ -1004,6 +1004,23 @@ class AutofeedEditorView(discord.ui.View):
         self.save.disabled = not self._has_pending_changes()
         self.discard.disabled = not self._has_pending_changes()
 
+    def to_components(self):
+        """Mostrar la selección del borrador vigente sin persistirla en SQLite."""
+        self.channels.default_values = (
+            [discord.SelectDefaultValue(
+                id=int(self.channel_id), type=discord.SelectDefaultValueType.channel)]
+            if self.channel_id else []
+        )
+        self.roles.default_values = (
+            [discord.SelectDefaultValue(
+                id=int(self.role_id), type=discord.SelectDefaultValueType.role)]
+            if self.role_id else []
+        )
+        changed = self._has_pending_changes()
+        self.save.disabled = not changed
+        self.discard.disabled = not changed
+        return super().to_components()
+
     def draft_data(self):
         return {
             "version": 1, "channel": self.channel_id, "role": self.role_id,
@@ -1185,7 +1202,7 @@ class AutofeedEditorView(discord.ui.View):
         if not self.text and not has_content(self.embed):
             raise ValueError("warning")
         if self.start is None and self.parts:
-            raise ValueError("warning")
+            raise ValueError("date_help")
         if self.start and self.start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("warning")
         try:
@@ -1223,7 +1240,7 @@ class AutofeedEditorView(discord.ui.View):
         preview = render(prepared.get("embed"), self.host["stamp_embed"], interaction.guild)
         summary = t("schedule_now") if prepared["start"] else t("now")
         await interaction.response.edit_message(
-            content=summary + "\\n\\n" + self.summary(),
+            content=summary + "\n\n" + self.summary(),
             embed=preview, view=confirm,
             allowed_mentions=discord.AllowedMentions.none())
 
