@@ -67,6 +67,9 @@ LANG = {
         "date_only": "Fecha (AAAA-MM-DD)",
         "time_only": "Hora (HH:MM)",
         "repeat_picker": "Frecuencia",
+        "edit_frequency": "Editar frecuencia", "week_day": "Día de la semana (1=lun, 7=dom)",
+        "month_day": "Día del mes (1-31)", "clock_field": "Hora (HH:MM)",
+        "schedule_invalid": "Revisa el día y la hora.",
         "choose_frequency": "Elegir frecuencia",
         "once": "Una vez",
         "daily": "Diaria",
@@ -159,6 +162,9 @@ LANG = {
         "date_only": "Date (YYYY-MM-DD)",
         "time_only": "Time (HH:MM)",
         "repeat_picker": "Frequency",
+        "edit_frequency": "Edit frequency", "week_day": "Weekday (1=Mon, 7=Sun)",
+        "month_day": "Day of month (1-31)", "clock_field": "Time (HH:MM)",
+        "schedule_invalid": "Check the day and time.",
         "choose_frequency": "Choose frequency",
         "once": "Once",
         "daily": "Daily",
@@ -251,6 +257,9 @@ LANG = {
         "date_only": "Data (AAAA-MM-DD)",
         "time_only": "Hora (HH:MM)",
         "repeat_picker": "Frequência",
+        "edit_frequency": "Editar frequência", "week_day": "Dia da semana (1=seg, 7=dom)",
+        "month_day": "Dia do mês (1-31)", "clock_field": "Hora (HH:MM)",
+        "schedule_invalid": "Confira o dia e a hora.",
         "choose_frequency": "Escolher frequência",
         "once": "Uma vez",
         "daily": "Diária",
@@ -668,6 +677,74 @@ PRESETS = {
 }
 
 
+class CalendarFrequencyModal(discord.ui.Modal):
+    """Configurar la primera ocurrencia local; repetir desde ella."""
+    def __init__(self, editor, mode):
+        super().__init__(title=t(mode))
+        self.editor, self.mode = editor, mode
+        local = (editor.start.astimezone(editor.timezone)
+                 if editor.start and editor.frequency_mode == mode
+                 else datetime.now(editor.timezone))
+        self.day = None
+        if mode in ("weekly", "monthly"):
+            key = "week_day" if mode == "weekly" else "month_day"
+            initial = local.isoweekday() if mode == "weekly" else local.day
+            self.day = discord.ui.TextInput(label=t(key), max_length=2,
+                                            default=str(initial), required=True)
+            self.add_item(self.day)
+        self.clock = discord.ui.TextInput(label=t("clock_field"), max_length=5,
+                                           default=local.strftime("%H:%M"), required=True)
+        self.add_item(self.clock)
+
+    @guild_context
+    async def on_submit(self, interaction):
+        if not _owner(interaction, self.editor.guild_id, self.editor.owner_id):
+            return await feeds.respond_error(interaction, "denied")
+        try:
+            import calendar
+            hour, minute = map(int, str(self.clock).strip().split(":"))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError("clock")
+            now = datetime.now(self.editor.timezone)
+            base = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if self.mode == "daily":
+                if base <= now + timedelta(minutes=1):
+                    base += timedelta(days=1)
+            elif self.mode == "weekly":
+                weekday = int(str(self.day))
+                if not 1 <= weekday <= 7:
+                    raise ValueError("weekday")
+                base += timedelta(days=(weekday - base.isoweekday()) % 7)
+                if base <= now + timedelta(minutes=1):
+                    base += timedelta(days=7)
+            else:
+                day = int(str(self.day))
+                if not 1 <= day <= 31:
+                    raise ValueError("day")
+                year, month = base.year, base.month
+                for _ in range(14):
+                    adjusted = min(day, calendar.monthrange(year, month)[1])
+                    candidate = base.replace(year=year, month=month, day=adjusted)
+                    if candidate > now + timedelta(minutes=1):
+                        base = candidate
+                        break
+                    month += 1
+                    if month == 13:
+                        year, month = year + 1, 1
+                else:
+                    raise ValueError("future")
+            parts = dict(PRESETS[self.mode])
+            self.editor.parts = parts
+            self.editor.frequency_mode = self.mode
+            self.editor.start = base.astimezone(timezone.utc)
+            self.editor.dirty = True
+        except (ValueError, TypeError, OverflowError):
+            return await interaction.response.send_message(t("schedule_invalid"), ephemeral=True)
+        panel = FrequencyPickerView(self.editor)
+        await interaction.response.edit_message(content=t("choose_frequency") + ": **" + t(self.mode) + "**",
+                                                embed=None, view=panel)
+
+
 class FrequencyPickerView(discord.ui.View):
     def __init__(self, editor):
         super().__init__(timeout=600)
@@ -679,8 +756,11 @@ class FrequencyPickerView(discord.ui.View):
         self.select.callback = self.pick
         self.add_item(self.select)
         self.back.label = t("back")
+        self.edit_frequency.label = t("edit_frequency")
+        self.edit_frequency.disabled = editor.frequency_mode in (None, "once")
 
     def to_components(self):
+        self.edit_frequency.disabled = self.editor.frequency_mode in (None, "once")
         # La frecuencia elegida sigue marcada al volver a este submenú.
         selected = self.editor.frequency_mode
         for option in self.select.options:
@@ -699,6 +779,8 @@ class FrequencyPickerView(discord.ui.View):
         mode = self.select.values[0]
         if mode == "custom":
             return await interaction.response.send_modal(CustomRepeatModal(self.editor))
+        if mode in ("daily", "weekly", "monthly"):
+            return await interaction.response.send_modal(CalendarFrequencyModal(self.editor, mode))
         value = PRESETS[mode]
         self.editor.parts = dict(value) if value else None
         self.editor.frequency_mode = mode
@@ -710,6 +792,16 @@ class FrequencyPickerView(discord.ui.View):
             option.default = option.value == mode
         await interaction.response.edit_message(
             content=t("choose_frequency") + ": **" + t(mode) + "**", embed=None, view=self)
+
+    @discord.ui.button(label=LANG["es-419"]["edit_frequency"], style=discord.ButtonStyle.primary, row=1)
+    @guild_context
+    async def edit_frequency(self, interaction, button):
+        mode = self.editor.frequency_mode
+        if mode == "custom":
+            return await interaction.response.send_modal(CustomRepeatModal(self.editor))
+        if mode in ("daily", "weekly", "monthly"):
+            return await interaction.response.send_modal(CalendarFrequencyModal(self.editor, mode))
+        return await interaction.response.send_message(t("choose_frequency"), ephemeral=True)
 
     @discord.ui.button(label=LANG["es-419"]["back"], style=discord.ButtonStyle.secondary, row=1)
     @guild_context
