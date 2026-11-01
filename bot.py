@@ -24019,19 +24019,143 @@ def _list_command_lines() -> list[str]:
     return lines
 
 
-@list_group.command(name="comandos", description="Ver todos los comandos disponibles del Heraldo.")
+# Catálogo dinámico: muestra los comandos realmente registrados, no una lista obsoleta.
+# Se conserva /list comandos para no introducir otro comando redundante.
+def _heraldo_command_category(path: str) -> str:
+    root = path.split()[0].lower()
+    if root in {"setup", "automod", "moderacion", "roles_ingreso", "roles_reaccion",
+                "registros", "anuncios", "verificacion", "formato_fecha", "language",
+                "mensajes", "heraldo_log_channel", "verify_setup", "verify_texts",
+                "verify_dm_texts", "condenar_setup", "condenar_template",
+                "server_template_setup", "motw_set_schedule", "motw_set_channel"}:
+        return "configuration"
+    if root in {"honeypot", "joinroles", "raid", "suggestions", "embed"}:
+        if len(path.split()) > 1 and path.split()[1] in {
+            "setup", "status", "lista", "history", "programaciones",
+        }:
+            return "consultation" if path.split()[1] != "setup" else "configuration"
+        return "action" if root in {"raid", "honeypot"} else "administration"
+    if root in {"list", "profile", "advertencias", "caseinfo", "caselist"}:
+        return "consultation"
+    if root in {"warn", "mute", "kick", "ban", "purge", "condenar", "liberar",
+                "heraldo_check", "heraldo_check_all", "verify", "motw_test"}:
+        return "action"
+    return "administration"
+
+
+def _heraldo_registered_commands() -> list[tuple[str, str, str]]:
+    result: list[tuple[str, str, str]] = []
+
+    def walk(commands_list, prefix=""):
+        for command in sorted(commands_list, key=lambda entry: entry.name):
+            path = f"{prefix} {command.name}".strip()
+            children = getattr(command, "commands", None)
+            if children:
+                walk(children, path)
+            else:
+                description = (getattr(command, "description", "") or "").strip()
+                result.append((_heraldo_command_category(path), path, description))
+
+    walk(bot.tree.get_commands())
+    return result
+
+
+class HeraldoCommandsCatalog(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=600)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.locale = guild_language(guild_id)
+        self.category = "configuration"
+        self.page = 0
+        self.commands = _heraldo_registered_commands()
+        captions = {
+            "es-419": ("Configuración", "Acciones", "Consultas", "Administración"),
+            "en-US": ("Configuration", "Actions", "Queries", "Administration"),
+            "pt-BR": ("Configuração", "Ações", "Consultas", "Administração"),
+        }
+        labels = captions.get(self.locale, captions["es-419"])
+        self.labels = dict(zip(("configuration", "action", "consultation", "administration"), labels))
+        chooser = discord.ui.Select(
+            placeholder={"es-419": "Categoría de comandos", "en-US": "Command category",
+                         "pt-BR": "Categoria de comandos"}.get(self.locale, "Categoría"),
+            options=[discord.SelectOption(label=self.labels[key], value=key)
+                     for key in self.labels],
+            row=0,
+        )
+        chooser.callback = self.choose
+        self.add_item(chooser)
+        self._refresh()
+
+    def _rows(self):
+        return [(path, description) for category, path, description in self.commands
+                if category == self.category]
+
+    def _refresh(self):
+        rows = self._rows()
+        self.page = max(0, min(self.page, (len(rows) - 1) // 8 if rows else 0))
+        self.previous.disabled = self.page == 0
+        self.following.disabled = (self.page + 1) * 8 >= len(rows)
+        for item in self.children:
+            if isinstance(item, discord.ui.Select):
+                for option in item.options:
+                    option.default = option.value == self.category
+
+    def embed(self):
+        rows = self._rows()
+        start = self.page * 8
+        entries = rows[start:start + 8]
+        body = "\n\n".join(f"**/{path}**\n{description}" for path, description in entries)
+        if not body:
+            body = {"es-419": "No hay comandos en esta categoría.",
+                    "en-US": "No commands in this category.",
+                    "pt-BR": "Não há comandos nesta categoria."}.get(self.locale, "Sin comandos.")
+        embed = discord.Embed(title=f"El Heraldo · {self.labels[self.category]}",
+                              description=body, color=discord.Color.blurple())
+        total_pages = max(1, (len(rows) + 7) // 8)
+        embed.set_footer(text=f"{self.page + 1}/{total_pages} · {len(rows)} / {len(self.commands)}")
+        return embed
+
+    async def interaction_check(self, interaction):
+        if interaction.user.id != self.owner_id or interaction.guild_id != self.guild_id:
+            await interaction.response.send_message(
+                {"es-419": "Abre tu propio catálogo con /list comandos.",
+                 "en-US": "Open your own catalog with /list comandos.",
+                 "pt-BR": "Abra seu próprio catálogo com /list comandos."}
+                .get(self.locale, "Acceso denegado."), ephemeral=True)
+            return False
+        return True
+
+    async def choose(self, interaction):
+        selection = next(item for item in self.children if isinstance(item, discord.ui.Select))
+        self.category, self.page = selection.values[0], 0
+        self._refresh()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, row=1)
+    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page -= 1
+        self._refresh()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, row=1)
+    async def following(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        self._refresh()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(view=None)
+
+
+@list_group.command(name="comandos", description="Ver comandos agrupados por categoría y tipo.")
 @_i18n_context
 async def list_commands_command(interaction: discord.Interaction) -> None:
     if not await _list_require_server_owner(interaction):
         return
-    lines = _list_command_lines()
-    embeds = _list_text_embeds(
-        _t('text.44e3531a6d762d'),
-        lines,
-        empty_text=_t('text.a5d57d5a5aae44'),
-    )
-    embeds[0].description = _t('text.5df7562911ce9f', p0=f'{len(lines)}') + (embeds[0].description or "")
-    await interaction.response.send_message(embeds=embeds, ephemeral=True)
+    catalog = HeraldoCommandsCatalog(interaction.guild.id, interaction.user.id)
+    await interaction.response.send_message(embed=catalog.embed(), view=catalog, ephemeral=True)
 
 
 @list_group.command(name="variables", description="Ver todas las variables disponibles para textos y embeds.")
