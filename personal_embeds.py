@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import sqlite3
+from urllib.parse import urlsplit
 import discord
 from discord import app_commands
 from autofeed_embed_builder import EmbedBuilderView, validate_data, has_content, render
@@ -27,12 +28,31 @@ def get_entry(user_id, name):
     return json.loads(row[0]) if row else None
 
 
+def valid_personal(payload):
+    if isinstance(payload, dict) and payload.get("kind") == "text":
+        text = str(payload.get("text") or "").strip()
+        image = str(payload.get("image_url") or "").strip()
+        if len(text) > 2000 or (image and (len(image) > 1900 or urlsplit(image).scheme != "https" or not urlsplit(image).netloc)):
+            raise ValueError("Texto o enlace de imagen inválido.")
+        if not text and not image:
+            raise ValueError("Escribe texto o proporciona una foto.")
+        return {"kind": "text", "text": text, "image_url": image}
+    valid = validate_data(payload)
+    if not has_content(valid):
+        raise ValueError("El embed está vacío.")
+    return valid
+
+
+def personal_has_content(payload):
+    if isinstance(payload, dict) and payload.get("kind") == "text":
+        return bool(payload.get("text") or payload.get("image_url"))
+    return bool(payload) and has_content(payload)
+
+
 def store(user_id, name, payload):
     if not 1 <= len(name.strip()) <= 70:
         raise ValueError("El nombre debe tener entre 1 y 70 caracteres.")
-    valid = validate_data(payload)
-    if not has_content(valid):
-        raise ValueError("Completa el embed antes de guardarlo.")
+    valid = valid_personal(payload)
     with _db() as db:
         db.execute("INSERT INTO personal_embeds(user_id,name,payload) VALUES(?,?,?) ON CONFLICT(user_id,name) DO UPDATE SET payload=excluded.payload", (user_id, name.strip(), json.dumps(valid, ensure_ascii=False)))
 
@@ -106,6 +126,33 @@ class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
 
+class EditTextModal(discord.ui.Modal, title="Editar texto"):
+    name = discord.ui.TextInput(label="Nombre del mensaje", max_length=70, min_length=1)
+    message = discord.ui.TextInput(label="Texto", style=discord.TextStyle.paragraph, max_length=2000, required=False)
+    image_url = discord.ui.TextInput(label="Foto (enlace HTTPS)", max_length=1900, required=False)
+
+    def __init__(self, panel):
+        super().__init__()
+        self.panel = panel
+        payload = panel.embed or {}
+        self.name.default = panel.name or ""
+        if payload.get("kind") == "text":
+            self.message.default = payload.get("text", "")
+            self.image_url.default = payload.get("image_url", "")
+
+    async def on_submit(self, interaction):
+        if not await self.panel.interaction_check(interaction):
+            return
+        try:
+            payload = valid_personal({"kind": "text", "text": str(self.message), "image_url": str(self.image_url)})
+        except ValueError as exc:
+            return await interaction.response.send_message(str(exc), ephemeral=True)
+        self.panel.name = str(self.name).strip()
+        self.panel.embed = payload
+        self.panel.dirty = True
+        await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
+
+
 class PersonalPanel(discord.ui.View):
     def __init__(self, user_id, guild_id, host, name="", embed=None):
         super().__init__(timeout=900)
@@ -129,7 +176,7 @@ class PersonalPanel(discord.ui.View):
         self.pick.options = [discord.SelectOption(label=name[:100], value=name, default=name.casefold() == self.name.casefold()) for name in names[:25]] or [discord.SelectOption(label="No tienes mensajes guardados", value="_empty")]
         self.pick.disabled = not names
         changed = self.dirty or self.embed != self.initial or bool(self.embed and not self.name)
-        self.save.disabled = not changed or not has_content(self.embed)
+        self.save.disabled = not changed or not personal_has_content(self.embed)
         self.discard.disabled = not changed
 
     def summary(self):
@@ -142,7 +189,15 @@ class PersonalPanel(discord.ui.View):
 
     def kwargs(self, guild):
         self.refresh()
-        return dict(content=self.summary(), embed=render(self.embed, self.host["stamp_embed"], guild) if self.embed else None, view=self, allowed_mentions=discord.AllowedMentions.none())
+        is_text = isinstance(self.embed, dict) and self.embed.get("kind") == "text"
+        preview = ""
+        if is_text:
+            preview = "\\n\\n**Vista previa del texto:**\\n" + (self.embed.get("text") or "")
+            if self.embed.get("image_url"):
+                preview += "\\n" + self.embed["image_url"]
+        return dict(content=self.summary() + preview,
+                    embed=render(self.embed, self.host["stamp_embed"], guild) if self.embed and not is_text else None,
+                    view=self, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.select(placeholder="Mis mensajes", options=[discord.SelectOption(label="Sin mensajes", value="_empty")], row=0)
     async def pick(self, interaction, select):
@@ -161,6 +216,10 @@ class PersonalPanel(discord.ui.View):
     async def edit(self, interaction, button):
         await interaction.response.send_modal(EditMessageModal(self))
 
+    @discord.ui.button(label="Editar texto", style=discord.ButtonStyle.primary, row=1)
+    async def edit_text(self, interaction, button):
+        await interaction.response.send_modal(EditTextModal(self))
+
     @discord.ui.button(label="Nombre", style=discord.ButtonStyle.secondary, row=1)
     async def rename(self, interaction, button):
         await interaction.response.send_modal(NameModal(self))
@@ -170,9 +229,7 @@ class PersonalPanel(discord.ui.View):
         if not self.name:
             return await interaction.response.send_message("Asigna primero un nombre al mensaje.", ephemeral=True)
         try:
-            validate_data(self.embed)
-            if not has_content(self.embed):
-                raise ValueError("El embed está vacío.")
+            valid_personal(self.embed)
         except ValueError:
             return await interaction.response.send_message("Completa correctamente el embed antes de guardar.", ephemeral=True)
         await interaction.response.send_message("¿Confirmas guardar este mensaje personal?", view=ConfirmSave(self), ephemeral=True)
@@ -184,8 +241,8 @@ class PersonalPanel(discord.ui.View):
 
     @discord.ui.button(label="Enviar", style=discord.ButtonStyle.primary, row=2)
     async def send(self, interaction, button):
-        if not has_content(self.embed):
-            return await interaction.response.send_message("Primero crea o selecciona un embed.", ephemeral=True)
+        if not personal_has_content(self.embed):
+            return await interaction.response.send_message("Primero edita o selecciona un mensaje.", ephemeral=True)
         await interaction.response.send_message(
             "Selecciona el canal de destino. No se enviará nada hasta confirmar.",
             view=PublishChannelView(self), ephemeral=True,
@@ -260,7 +317,8 @@ class PublishChannelView(discord.ui.View):
         self.confirm.disabled = False
         await interaction.response.edit_message(
             content=f"Destino: {channel.mention}. Revisa la vista previa y confirma el envío.",
-            embed=render(self.panel.embed, self.panel.host["stamp_embed"], interaction.guild),
+            embed=(render(self.panel.embed, self.panel.host["stamp_embed"], interaction.guild)
+                   if self.panel.embed.get("kind") != "text" else None),
             view=self, allowed_mentions=discord.AllowedMentions.none(),
         )
 
@@ -272,12 +330,17 @@ class PublishChannelView(discord.ui.View):
                 "No se puede publicar: revisa los permisos actuales del canal.", ephemeral=True)
         try:
             payload = copy.deepcopy(self.panel.embed)
-            if not has_content(payload):
-                raise ValueError("El embed está vacío.")
-            embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
-            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+            valid_personal(payload)
             await interaction.response.defer(ephemeral=True)
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            if payload.get("kind") == "text":
+                content = payload.get("text", "")
+                if payload.get("image_url"):
+                    content += ("\\n" if content else "") + payload["image_url"]
+                await channel.send(content=content, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
+                embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+                await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         except (ValueError, discord.HTTPException):
             return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
         self.stop()
