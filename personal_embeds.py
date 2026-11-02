@@ -275,6 +275,7 @@ class PublishChannelView(discord.ui.View):
             if not has_content(payload):
                 raise ValueError("El embed está vacío.")
             embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
+            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
             await interaction.response.defer(ephemeral=True)
             await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         except (ValueError, discord.HTTPException):
