@@ -113,21 +113,14 @@ class PersonalPanel(discord.ui.View):
         self.name, self.embed, self.initial, self.dirty = name, loaded, copy.deepcopy(loaded), False
         await interaction.response.edit_message(**self.kwargs(interaction.guild))
 
-    @discord.ui.button(label="Crear mensaje", style=discord.ButtonStyle.primary, row=1)
-    async def new(self, interaction, button):
-        if self.dirty or self.embed != self.initial:
-            return await interaction.response.send_message("Guarda o descarta los cambios pendientes.", ephemeral=True)
-        self.name, self.embed, self.initial, self.dirty = "", None, None, False
-        await interaction.response.edit_message(**self.kwargs(interaction.guild))
+    @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.primary, row=1)
+    async def edit(self, interaction, button):
+        view = EmbedBuilderView(self)
+        await interaction.response.edit_message(content=view.summary(), embed=view.preview_embed(interaction.guild), view=view, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label="Nombre", style=discord.ButtonStyle.secondary, row=1)
     async def rename(self, interaction, button):
         await interaction.response.send_modal(NameModal(self))
-
-    @discord.ui.button(label="Editar embed", style=discord.ButtonStyle.primary, row=1)
-    async def edit(self, interaction, button):
-        view = EmbedBuilderView(self)
-        await interaction.response.edit_message(content=view.summary(), embed=view.preview_embed(interaction.guild), view=view, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=2)
     async def save(self, interaction, button):
