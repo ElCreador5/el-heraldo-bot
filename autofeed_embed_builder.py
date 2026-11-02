@@ -204,6 +204,8 @@ def render(data, stamp, guild):
 
 
 def owner(interaction, parent):
+    if getattr(parent, "personal", False):
+        return (interaction.user.id == parent.owner_id and interaction.guild is not None and interaction.guild.id == parent.guild_id)
     return (interaction.guild is not None
             and interaction.guild.id == parent.guild_id
             and interaction.user.id == parent.owner_id
@@ -584,6 +586,8 @@ class EmbedBuilderView(discord.ui.View):
     @discord.ui.button(label=COPY["es-419"]["back"], style=discord.ButtonStyle.secondary, row=4)
     @guild_context
     async def back(self, interaction, button):
+        if getattr(self.parent, "personal", False):
+            return await interaction.response.edit_message(**self.parent.kwargs(interaction.guild))
         from autofeed_setup import editor_panel_kwargs
         await interaction.response.edit_message(
             **editor_panel_kwargs(self.parent, interaction.guild),
