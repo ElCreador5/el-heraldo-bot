@@ -1,3 +1,7 @@
+## 2026-11-02 — Constructor personal /embed: pruebas pendientes
+
+CAMBIO DE CÓDIGO: publicación manual ahora exige elegir canal y confirmar, revalidando permisos de miembro/bot. `AllowedMentions.none()` evita notificaciones. TESTS AÑADIDOS (NO EJECUTADOS AQUÍ): aislamiento SQLite entre dos IDs, eliminación propia, autorización de canal y confirmación inicial deshabilitada, ausencia de planificador personal. PENDIENTE: CI en SHA definitivo; Gateway y clics de usuario normal; acceso a borradores ajenos; permiso denegado después de elegir canal; cancelación; reconexión/reinicio y persistencia real de Enzonic; registro único `/embed`; restricciones de `/setup`. No declarar aceptación en Discord.
+
 ## 2026-11-02 — Embeds manuales y corrección de view=None
 
 El propietario ordenó retirar Programaciones del constructor de embeds y pasar esa corrección junto con los comandos consolidados a `main` mediante una adaptación selectiva. Se elimina el botón Programaciones de `/embed` y el acceso Programar del editor; el trabajador de embeds deja de arrancar y el contador de mensajes deja de registrarse. Se conservan los registros históricos y el motor independiente de Anuncios. La respuesta diferida omite `view=None` al convertirse en follow-up; editar con `view=None` sigue retirando los controles.
