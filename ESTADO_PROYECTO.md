@@ -1,3 +1,7 @@
+## 2026-11-02 — Visibilidad y acceso al constructor personal
+
+Corrección en `Pruebas`: se añade `_heraldo_apply_command_visibility()` al final del registro, se reemplaza `/embed` administrativo por el constructor personal y se asignan permisos predeterminados `manage_guild` a los demás comandos excepto `/profile`. Tests estructurales añadidos. Pendiente ejecutar CI y aceptación con usuario normal/administrador en Discord tras sincronizar; no se desplegó ni se modificó `main`.
+
 ## 2026-11-02 — Constructor personal de embeds: avance parcial
 
 En `Pruebas`, `personal_embeds.py` dispone de un flujo de publicación con selección de canal, vista previa, confirmación, revalidación de permisos del miembro y del bot, y bloqueo de menciones. Conserva los borradores por propietario en SQLite (`DB_PATH`) y el editor compartido. Añadida suite `tests/test_personal_embeds_public.py` (sin ejecución local confirmada). Quedan sin verificar conexión real de `/embed` al bot, checks globales, unicidad del registro, idioma y recorridos en Discord; no afirmar que un miembro común pueda usar el comando hasta comprobarlo. No se modificó main ni se reactivó Railway.
