@@ -2284,9 +2284,29 @@ async def on_ready() -> None:
             # arranquen la verificación, el Miembro de la Semana ni la copia de la plantilla.
             try:
                 bot.tree.copy_global_to(guild=guild)
-                await bot.tree.sync(guild=guild)  # sync por guild: propagación instantánea
-            except Exception:
-                print(f"Advertencia: No se pudieron sincronizar los comandos en {guild.name}:")
+                import hashlib
+                from pathlib import Path
+                # La huella distingue el código realmente cargado de un HEAD desactualizado.
+                code_hash = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:12]
+                local_commands = bot.tree.get_commands(guild=guild)
+                local_names = sorted(command.name for command in local_commands)
+                personal = next((cmd for cmd in local_commands if cmd.name == "embed"), None)
+                print(f"COMMAND_SYNC status=START guild={guild.id} code_sha256={code_hash} "
+                      f"local_count={len(local_names)} embed_present={personal is not None} "
+                      f"names={','.join(local_names)}", flush=True)
+                synced = await bot.tree.sync(guild=guild)
+                remote_names = sorted(cmd.name for cmd in synced)
+                if remote_names != local_names:
+                    print(f"COMMAND_SYNC status=MISMATCH guild={guild.id} "
+                          f"code_sha256={code_hash} local={','.join(local_names)} "
+                          f"remote={','.join(remote_names)}", flush=True)
+                else:
+                    print(f"COMMAND_SYNC status=SUCCESS guild={guild.id} "
+                          f"code_sha256={code_hash} count={len(synced)} "
+                          f"embed_present={'embed' in remote_names}", flush=True)
+            except Exception as exc:
+                print(f"COMMAND_SYNC status=FAILED guild={guild.id} "
+                      f"error_type={type(exc).__name__}", flush=True)
                 traceback.print_exc()
     # Los comandos se publican solo por guild: cualquier comando global es un
     # huérfano de versiones anteriores (aparece duplicado en el selector). Se borra.
