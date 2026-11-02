@@ -62,6 +62,44 @@ class NameModal(discord.ui.Modal, title="Nombre del mensaje"):
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
 
+class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
+    """Formulario personal: nombre guardable y contenido básico del embed."""
+    name = discord.ui.TextInput(label="Nombre del mensaje", max_length=70, min_length=1)
+    embed_title = discord.ui.TextInput(label="Título del embed", max_length=256, required=False)
+    description = discord.ui.TextInput(
+        label="Descripción del embed", style=discord.TextStyle.paragraph,
+        max_length=4000, required=False,
+    )
+
+    def __init__(self, panel):
+        super().__init__()
+        self.panel = panel
+        payload = panel.embed or {}
+        self.name.default = panel.name or ""
+        self.embed_title.default = str(payload.get("title") or "")
+        self.description.default = str(payload.get("description") or "")
+
+    async def on_submit(self, interaction):
+        if not await self.panel.interaction_check(interaction):
+            return
+        name = str(self.name).strip()
+        payload = copy.deepcopy(self.panel.embed or {})
+        payload["title"] = str(self.embed_title).strip()
+        payload["description"] = str(self.description).strip()
+        try:
+            payload = validate_data(payload)
+            if not has_content(payload):
+                raise ValueError("empty")
+        except ValueError:
+            return await interaction.response.send_message(
+                "Escribe al menos un título o una descripción válida.", ephemeral=True)
+        # No persiste todavía: Guardar cambios -> Confirmar cambios.
+        self.panel.name = name
+        self.panel.embed = payload
+        self.panel.dirty = True
+        await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
+
+
 class PersonalPanel(discord.ui.View):
     def __init__(self, user_id, guild_id, host, name="", embed=None):
         super().__init__(timeout=900)
@@ -115,8 +153,7 @@ class PersonalPanel(discord.ui.View):
 
     @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.primary, row=1)
     async def edit(self, interaction, button):
-        view = EmbedBuilderView(self)
-        await interaction.response.edit_message(content=view.summary(), embed=view.preview_embed(interaction.guild), view=view, allowed_mentions=discord.AllowedMentions.none())
+        await interaction.response.send_modal(EditMessageModal(self))
 
     @discord.ui.button(label="Nombre", style=discord.ButtonStyle.secondary, row=1)
     async def rename(self, interaction, button):
