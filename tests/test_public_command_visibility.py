@@ -19,7 +19,11 @@ class PublicCommandsPolicyTests(unittest.TestCase):
     def test_private_commands_not_public_in_policy(self):
         source = self.code
         self.assertIn('public = {"embed", "profile"}', source)
-        self.assertIn('discord.Permissions(manage_guild=True)', source)
+        self.assertIn('discord.Permissions(**{permission: True})', source)
+        self.assertIn('"ban": "ban_members"', source)
+        self.assertIn('"kick": "kick_members"', source)
+        self.assertIn('"purge": "manage_messages"', source)
+        self.assertIn('"fusionar_canales": "manage_channels"', source)
         self.assertIn('_heraldo_apply_command_visibility()', source)
         self.assertLess(source.index('def _heraldo_apply_command_visibility'), source.index('# El trabajador de mensajes'))
 
