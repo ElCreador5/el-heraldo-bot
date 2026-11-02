@@ -284,6 +284,8 @@ class VisualEditor(discord.ui.View):
 
 
 def install(host):
+    from personal_embeds import install as install_personal_embeds
+    install_personal_embeds(host)
     @host['bot'].tree.command(name='editar_plantilla', description='Abre el editor visual de texto, embeds, campos e imágenes.')
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.guild_only()
