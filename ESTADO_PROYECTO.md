@@ -1,3 +1,7 @@
+## 2026-11-02 — Constructor personal de embeds: avance parcial
+
+En `Pruebas`, `personal_embeds.py` dispone de un flujo de publicación con selección de canal, vista previa, confirmación, revalidación de permisos del miembro y del bot, y bloqueo de menciones. Conserva los borradores por propietario en SQLite (`DB_PATH`) y el editor compartido. Añadida suite `tests/test_personal_embeds_public.py` (sin ejecución local confirmada). Quedan sin verificar conexión real de `/embed` al bot, checks globales, unicidad del registro, idioma y recorridos en Discord; no afirmar que un miembro común pueda usar el comando hasta comprobarlo. No se modificó main ni se reactivó Railway.
+
 ## 2026-11-02 — Embeds manuales y corrección de view=None
 
 El propietario ordenó retirar Programaciones del constructor de embeds y pasar esa corrección junto con los comandos consolidados a `main` mediante una adaptación selectiva. Se elimina el botón Programaciones de `/embed` y el acceso Programar del editor; el trabajador de embeds deja de arrancar y el contador de mensajes deja de registrarse. Se conservan los registros históricos y el motor independiente de Anuncios. La respuesta diferida omite `view=None` al convertirse en follow-up; editar con `view=None` sigue retirando los controles.
