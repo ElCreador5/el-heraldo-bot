@@ -27205,12 +27205,38 @@ def _heraldo_apply_command_visibility():
 
     bot.tree.remove_command("embed")
     personal_embeds.install({"bot": bot, "stamp_embed": stamp_embed})
+    # Cada operación se anuncia según el permiso de Discord que necesita.
+    # No basta con el filtro visual: los checks internos siguen obligatorios.
     public = {"embed", "profile"}
+    action_permissions = {
+        "ban": "ban_members",
+        "kick": "kick_members",
+        "mute": "moderate_members",
+        "warn": "moderate_members",
+        "advertencias": "moderate_members",
+        "purge": "manage_messages",
+        "caseinfo": "moderate_members",
+        "caselist": "moderate_members",
+        "caseupdate": "moderate_members",
+        "caseclose": "moderate_members",
+        "casedelete": "moderate_members",
+        "setproof": "moderate_members",
+        "condenar": "manage_roles",
+        "liberar": "manage_roles",
+        "restaurar_roles_pendientes": "manage_roles",
+        "fusionar_canales": "manage_channels",
+        "heraldo_check": "manage_roles",
+        "heraldo_check_all": "manage_roles",
+        "verify": "manage_roles",
+        "verify_dm_preview": "manage_guild",
+        "motw_test": "manage_guild",
+    }
     for command in bot.tree.get_commands():
-        command.default_permissions = (
-            None if command.name in public
-            else discord.Permissions(manage_guild=True)
-        )
+        if command.name in public:
+            command.default_permissions = None
+        else:
+            permission = action_permissions.get(command.name, "manage_guild")
+            command.default_permissions = discord.Permissions(**{permission: True})
     if sum(command.name == "embed" for command in bot.tree.get_commands()) != 1:
         raise RuntimeError("personal_embed_registration_not_unique")
 
