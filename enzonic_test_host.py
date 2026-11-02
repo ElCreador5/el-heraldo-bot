@@ -367,16 +367,20 @@ def verify_test_token():
                 headers={"Authorization": "Bot " + token,
                          "User-Agent": "ElHeraldo-EnzonicMigration/1.0"}, limit=8192)
     value = json.loads(raw)
-    tag = str(value.get("username")) + "#" + str(value.get("discriminator"))
-    if (value.get("bot") is not True or tag != TEST_BOT_TAG
-            or not re.fullmatch(r"[0-9]{17,20}", value.get("id", ""))):
+    # El nombre visible del bot puede cambiar. La identidad fijada durante
+    # la migración permanece en el volumen persistente verificado.
+    if (value.get("bot") is not True
+            or not isinstance(value.get("id"), str)
+            or not re.fullmatch(r"[0-9]{17,20}", value["id"])):
         blocked("enzonic_wrong_discord_bot")
     record_path = STATE / "discord-identity.json"
-    if record_path.exists() or record_path.is_symlink():
-        if read_receipt(record_path.name).get("bot_id") != value["id"]:
-            blocked("enzonic_discord_identity_changed")
-    else:
-        write_receipt(record_path.name, {"status": "verified", "bot_id": value["id"]})
+    if not record_path.is_file() or record_path.is_symlink():
+        # Nunca confiar por primera vez en un token arbitrario.
+        blocked("enzonic_discord_identity_receipt_missing")
+    record = read_receipt(record_path.name)
+    if (record.get("status") != "verified"
+            or record.get("bot_id") != value["id"]):
+        blocked("enzonic_discord_identity_changed")
 
 
 def before_discord():
