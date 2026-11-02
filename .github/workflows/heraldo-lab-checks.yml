@@ -36,7 +36,7 @@ jobs:
       - name: Registro único de comandos y navegación de paneles sin Gateway
         env:
           PYTHONPATH: "tests:."
-        run: python -m unittest -v test_command_consolidation test_server_structure_setup
+        run: python -m unittest -v test_command_consolidation test_server_structure_setup test_embed_manual_only test_setup_interaction_runtime
       - name: Internacionalización por servidor y detección de textos sin catálogo
         env:
           PYTHONPATH: "tests:."

@@ -48,7 +48,7 @@ class ScheduledEmbedTests(unittest.TestCase):
     def test_editor_and_deletion_are_confirmed_and_version_checked(self):
         from pathlib import Path
         source = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', encoding='utf-8')
-        editor = source[source.index("class EmbedScheduleEditView"):source.index("@embed_group.command(name=\"programaciones\"")]
+        editor = source[source.index("class EmbedScheduleEditView"):source.index("async def embed_schedules_command")]
         self.assertIn("if not self.reviewed:", editor)
         self.assertIn("UPDATE scheduled_embeds SET", editor)
         self.assertIn("DELETE FROM scheduled_embeds WHERE", editor)

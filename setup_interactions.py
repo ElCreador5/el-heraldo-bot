@@ -111,6 +111,8 @@ def install(discord):
 
     @wraps(original_send)
     async def send(response, *args, **kwargs):
+        if kwargs.get("view", False) is None:
+            kwargs.pop("view")
         ensure_close_control(kwargs.get("view"))
         refresh_save_button(kwargs.get("view"))
         interaction = response._parent

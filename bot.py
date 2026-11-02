@@ -2298,8 +2298,7 @@ async def on_ready() -> None:
         print(f"No se pudo limpiar comandos globales: {e}")
     if not report_reminders_loop.is_running():
         report_reminders_loop.start()
-    if not scheduled_embeds_loop.is_running():
-        scheduled_embeds_loop.start()
+    # La programación del constructor de embeds está retirada; Anuncios usa su propio trabajador.
     if not moderation_case_expiry_loop.is_running():
         moderation_case_expiry_loop.start()
     if not condemnation_expiry_loop.is_running():
@@ -25276,7 +25275,6 @@ async def scheduled_embeds_before_loop():
     await bot.wait_until_ready()
 
 
-@bot.listen("on_message")
 @_i18n_context
 async def scheduled_embeds_message_counter(message):
     if message.guild is None or message.author.bot or message.webhook_id is not None:
@@ -25641,15 +25639,6 @@ class EmbedEditorView(discord.ui.View):
         self.pending_remove_index = None
         await embed_refresh(interaction, self.name)
 
-    @discord.ui.button(label=_t('text.d15c15cb964f5c'), style=discord.ButtonStyle.primary, row=3)
-    @_i18n_context
-    async def schedule_embed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_timestamp is not None or self.pending_remove_index is not None:
-            await interaction.response.send_message(_t('text.0150fb7ffc8e1d'), ephemeral=True)
-            return
-        await interaction.response.send_message(
-            content=_t('text.3799c393778b6e'),
-            view=EmbedScheduleView(interaction.user.id, self.guild_id, self.name), ephemeral=True)
 
     @discord.ui.button(label=_t('text.e1d12d1a29a77b'), style=discord.ButtonStyle.success, row=3)
     @_i18n_context
@@ -26001,7 +25990,6 @@ class EmbedSchedulesManageView(discord.ui.View):
             content=_t('text.77e25587cb74b6', p0=f'{self.selected_id}', p1=f"{(_t('text.adfcbfc83b5cc5') if activate else _t('text.189dced1c43601'))}"), view=self)
 
 
-@embed_group.command(name="programaciones", description="Consultar, editar, eliminar y pausar embeds programados.")
 @_i18n_context
 async def embed_schedules_command(interaction: discord.Interaction) -> None:
     conn = scheduled_embed_db()
@@ -26175,22 +26163,6 @@ class EmbedHubView(discord.ui.View):
             ephemeral=True,
         )
 
-    @discord.ui.button(label=_t("setup.command_panels.9cc531084c405177"), style=discord.ButtonStyle.secondary, row=1)
-    @_i18n_context
-    async def schedules(self, interaction: discord.Interaction, button: discord.ui.Button):
-        conn = scheduled_embed_db()
-        try:
-            rows = conn.execute(
-                "SELECT id FROM scheduled_embeds WHERE guild_id=? LIMIT 1",
-                (self.guild_id,),
-            ).fetchall()
-        finally:
-            conn.close()
-        await interaction.response.send_message(
-            _t("setup.command_panels.6cf95328a52c703b"),
-            view=EmbedSchedulesManageView(self.owner_id, self.guild_id) if rows else None,
-            ephemeral=True,
-        )
 
     @discord.ui.button(label=_t("setup.command_panels.c9894cf002f90bd0"), style=discord.ButtonStyle.danger, row=2)
     @_i18n_context

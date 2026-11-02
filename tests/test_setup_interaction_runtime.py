@@ -90,6 +90,21 @@ def item(callback):
 
 
 class SetupInteractionRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_none_view_is_omitted_when_a_deferred_response_becomes_a_followup(self):
+        i = interaction()
+        i.extras[runtime.ACK_KEY] = True
+        i.response.done = True
+        i.followup.send = AsyncMock()
+        await i.response.send_message("Sin programaciones", view=None, ephemeral=True)
+        self.assertNotIn("view", i.followup.send.call_args.kwargs)
+
+    async def test_none_view_is_preserved_when_editing_removes_the_controls(self):
+        i = interaction()
+        i.extras[runtime.ACK_KEY] = True
+        i.response.done = True
+        await i.response.edit_message(view=None)
+        self.assertIsNone(i.events[-1][1]["view"])
+
     async def test_messages_menu_keeps_editors_without_create_message(self):
         from test_safety_regressions import b
         view = b.HeraldoMessagesSetupView(901, 10)

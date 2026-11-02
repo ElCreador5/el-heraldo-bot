@@ -1,3 +1,11 @@
+## 2026-11-02 — Embeds manuales y corrección de view=None
+
+El propietario ordenó retirar Programaciones del constructor de embeds y pasar esa corrección junto con los comandos consolidados a `main` mediante una adaptación selectiva. Se elimina el botón Programaciones de `/embed` y el acceso Programar del editor; el trabajador de embeds deja de arrancar y el contador de mensajes deja de registrarse. Se conservan los registros históricos y el motor independiente de Anuncios. La respuesta diferida omite `view=None` al convertirse en follow-up; editar con `view=None` sigue retirando los controles.
+
+El log aportado por el propietario acredita arranque real del Lab, Gateway, dos sincronizaciones de 42 comandos, autoprueba Setup y programador H-03 en Enzonic. El mismo log demuestra TypeError por el antiguo botón Programaciones; se añade reproducción automatizada de esa ruta. Verificación de los cambios de este corte: 41 pruebas específicas correctas y comprobaciones adicionales de Anuncios/programación existente. Producción se adapta sobre su propia base; no se fusiona toda Pruebas ni se altera la identidad del footer.
+
+Railway queda pausado durante 14 días por indicación del propietario. No reactivar, reiniciar ni forzar despliegues; la aprobación recibida autoriza el código en main y sus checks, conservando esa pausa. La verificación real del nuevo constructor tras este commit sigue pendiente.
+
 **Validación remota del código `bb6aefad` (02/11/2026):** GitHub Actions confirmó el paso nuevo de 21 pruebas de registro/navegación, compilación en Python 3.11/3.12/3.13, el workflow Mensajes y AutoFeeds en los tres runtimes. El job general Python 3.12 reprodujo exactamente las diez incidencias heredadas (1 247 pruebas; siete fallos, tres errores, dos omisiones). La auditoría UX de literales se detuvo por textos anteriores de `autofeed_setup.py` y `personal_embeds.py`; no falló el registro de comandos. Ejecuciones: [Lab](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/41458874494), [Mensajes](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/41458874386), [AutoFeeds](https://github.com/ElCreador5/el-heraldo-bot/actions/runs/41458874429). Enzonic/Gateway y clics reales siguen sin verificar.
 
 ## 2026-11-02 — Consolidación general de comandos en Pruebas
