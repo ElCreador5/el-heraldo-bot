@@ -23735,7 +23735,75 @@ async def raid_group_error(interaction: discord.Interaction, error: discord.app_
     await verify_command_error(interaction, error)
 
 
-bot.tree.add_command(raid_group)
+class RaidCommandPanel(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Configuración", style=discord.ButtonStyle.primary, row=0)
+    async def setup(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = HeraldoRaidSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=None, embed=None, view=view)
+
+    @discord.ui.button(label="Estado", style=discord.ButtonStyle.secondary, row=0)
+    async def status(self, interaction: discord.Interaction, button: discord.ui.Button):
+        text = raid_config_summary(interaction.guild)
+        await interaction.response.edit_message(content=text, embed=None, view=self)
+
+    @discord.ui.button(label="Iniciar raid", style=discord.ButtonStyle.danger, row=1)
+    async def start(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if raid_is_active(self.guild_id):
+            await interaction.response.send_message("El modo raid ya está activo.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        await raid_start(interaction.guild, trigger=f"Activación manual por {interaction.user}",
+                         suspects=[], started_by=interaction.user)
+        await interaction.followup.send("Modo raid activado.", ephemeral=True)
+
+    @discord.ui.button(label="Terminar raid", style=discord.ButtonStyle.success, row=1)
+    async def end(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if raid_until(self.guild_id) is None:
+            await interaction.response.send_message("No hay un raid activo.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        summary = await raid_end(interaction.guild, automatic=False,
+                                 ended_by=interaction.user, release=False)
+        await interaction.followup.send(summary, ephemeral=True)
+
+    @discord.ui.button(label="Terminar y liberar", style=discord.ButtonStyle.secondary, row=2)
+    async def end_release(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if raid_until(self.guild_id) is None:
+            await interaction.response.send_message("No hay un raid activo.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        summary = await raid_end(interaction.guild, automatic=False,
+                                 ended_by=interaction.user, release=True)
+        await interaction.followup.send(summary, ephemeral=True)
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="Panel cerrado.", embed=None, view=None)
+
+
+@bot.tree.command(name="raid", description="Abrir el panel de protección anti-raid.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def raid_panel_command(interaction: discord.Interaction):
+    if not await configuration_access(interaction):
+        return
+    await interaction.response.send_message(
+        "Protección anti-raid: configuración, estado y control manual.",
+        view=RaidCommandPanel(interaction.guild.id, interaction.user.id),
+        ephemeral=True,
+    )
+
+raid_panel_command.error(verify_command_error)
+
 
 
 # ---------------------------------------------------------------------------
