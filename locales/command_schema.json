@@ -113,7 +113,7 @@
   },
   "embed.description": {
     "key": "command.49209b5614c167fd",
-    "source": "Administrar embeds desde un panel único."
+    "source": "Crear, guardar y enviar mensajes embed personales."
   },
   "estructura_servidor.description": {
     "key": "command.a14bac4581550fb1",
