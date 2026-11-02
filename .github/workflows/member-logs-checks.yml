@@ -19,6 +19,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Validar dependencias
         run: pip check
+      - name: Registro de comandos y editor de embeds sin programación
+        run: python -m unittest test_command_panels_main test_structure_panels_main -v
       - name: Comprobar rutas Volver y filas NH UX-03B
         run: python -m unittest discover -s tests -p 'test_ux_main_release.py' -v
       - name: Comprobar texto y compatibilidad de personalidad
