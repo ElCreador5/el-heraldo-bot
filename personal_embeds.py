@@ -157,6 +157,47 @@ class EditTextModal(discord.ui.Modal, title="Editar texto"):
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
 
+class EditImagesModal(discord.ui.Modal, title="Imágenes del embed"):
+    image_url = discord.ui.TextInput(
+        label="Imagen grande (URL)", placeholder="https://ejemplo.com/imagen.jpg",
+        max_length=2048, required=False,
+    )
+    thumbnail_url = discord.ui.TextInput(
+        label="Miniatura (URL)", placeholder="https://ejemplo.com/miniatura.png",
+        max_length=2048, required=False,
+    )
+
+    def __init__(self, panel):
+        super().__init__()
+        self.panel = panel
+        payload = panel.embed or {}
+        if payload.get("kind") == "text":
+            payload = {}
+        self.image_url.default = str(payload.get("image_url") or "")
+        self.thumbnail_url.default = str(payload.get("thumbnail_url") or "")
+
+    async def on_submit(self, interaction):
+        if not await self.panel.interaction_check(interaction):
+            return
+        if isinstance(self.panel.embed, dict) and self.panel.embed.get("kind") == "text":
+            return await interaction.response.send_message(
+                "Selecciona un embed para editar sus imágenes. Los mensajes de texto tienen su propio campo de foto.",
+                ephemeral=True,
+            )
+        payload = copy.deepcopy(self.panel.embed or {})
+        payload["image_url"] = str(self.image_url).strip()
+        payload["thumbnail_url"] = str(self.thumbnail_url).strip()
+        try:
+            payload = validate_data(payload)
+        except ValueError:
+            return await interaction.response.send_message(
+                "Introduce enlaces HTTPS válidos para las imágenes.", ephemeral=True,
+            )
+        self.panel.embed = payload
+        self.panel.dirty = True
+        await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
+
+
 class PersonalPanel(discord.ui.View):
     def __init__(self, user_id, guild_id, host, name="", embed=None):
         super().__init__(timeout=900)
@@ -223,6 +264,14 @@ class PersonalPanel(discord.ui.View):
     @discord.ui.button(label="Editar texto", style=discord.ButtonStyle.primary, row=1)
     async def edit_text(self, interaction, button):
         await interaction.response.send_modal(EditTextModal(self))
+
+    @discord.ui.button(label="Imágenes", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_images(self, interaction, button):
+        if isinstance(self.embed, dict) and self.embed.get("kind") == "text":
+            return await interaction.response.send_message(
+                "Para una foto en un mensaje de texto, utiliza «Editar texto».", ephemeral=True,
+            )
+        await interaction.response.send_modal(EditImagesModal(self))
 
     @discord.ui.button(label="Nombre", style=discord.ButtonStyle.secondary, row=1)
     async def rename(self, interaction, button):
