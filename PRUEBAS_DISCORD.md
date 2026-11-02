@@ -1,3 +1,7 @@
+## 2026-11-02 — Corrección de sincronización /embed
+
+Log real recibido del propietario el 02/11/2026 a las 17:13 UTC aproximadas: `COMMAND_SYNC status=START local_count=42 embed_present=True` seguido de `FAILED error_type=TranslationUnavailable` por `command_schema_changed:embed.description` en ambos servidores. Se corrigieron esquema y tres catálogos; prueba regresiva añadida, aún no ejecutada en esta sesión. Pendiente nuevo arranque y prueba manual de visibilidad con cuenta común.
+
 ## 2026-11-02 — Visibilidad y acceso al constructor personal
 
 Evidencia real del propietario: cuenta de miembro normal podía visualizar `/ban`, `/kick`, `/caselist`, `/template_sync`, etc., pero no `/embed`; las ejecuciones mostraban «la aplicación no ha respondido». Se corrigió el árbol local de `Pruebas` y se añadió `tests/test_public_command_visibility.py`; esta prueba NO se ha ejecutado en la sesión. PENDIENTE: CI, sincronización efectiva de comandos, inspección de permisos sobrescritos desde Integraciones de Discord y prueba real de visibilidad y rechazo de ejecución con miembro sin permisos y moderador autorizado. La corrección no implica despliegue.
