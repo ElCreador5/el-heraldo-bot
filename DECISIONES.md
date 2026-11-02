@@ -1,3 +1,7 @@
+## 2026-11-02 — Visibilidad y acceso al constructor personal
+
+Política nueva: `/embed` se conecta a `personal_embeds.install` y se retira la entrada administrativa del árbol; la gestión de embeds del servidor permanece bajo `/mensajes`. `/profile` continúa público. El resto de comandos raíz recibe visibilidad por defecto `manage_guild`, sin retirar sus comprobaciones internas. Esta máscara de permisos no equivale a una comprobación interna universal ni sustituye los permisos de comando configurados manualmente en Discord. Se mantiene `main` fuera del alcance.
+
 ## 2026-11-02 — Constructor personal de embeds (avance parcial en Pruebas)
 
 Se conserva `personal_embeds.py` y el editor `autofeed_embed_builder.py`; el envío personal deja de publicar directamente. Requiere elegir un canal, revisar vista previa y pulsar Confirmar envío. Se validan permisos de usuario y bot tanto al elegir como al confirmar, y se deshabilitan todas las menciones en el envío. Guardar y eliminar siguen siendo operaciones separadas con confirmación; SQLite conserva clave `(user_id, name)` y usa `DB_PATH`. Esta revisión no demuestra que `/embed` sea accesible por usuarios comunes: quedan pendientes inspección del arranque/registro y comprobaciones globales, así como aceptación real en Discord. `main` y Railway fuera del alcance.
