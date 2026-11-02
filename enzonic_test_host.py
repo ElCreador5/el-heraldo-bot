@@ -341,7 +341,36 @@ def require_restored_database():
         blocked("enzonic_database_not_private")
     actual = inspect_database(DATABASE)
     if actual["schema_sha256"] != record.get("schema_sha256"):
-        blocked("enzonic_restored_schema_mismatch")
+        # La biblioteca personal de /embed añade una tabla propia después de
+        # restaurar la SQLite. El recibo antiguo sigue siendo válido SOLO si
+        # todo el esquema original permanece idéntico al excluir esa tabla.
+        # inspect_database ya ejecutó integrity_check y foreign_key_check.
+        from contextlib import closing
+        from sqlite_recovery import readonly
+        with closing(readonly(DATABASE)) as conn:
+            personal_table = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='personal_embeds'"
+            ).fetchone()
+            expected_personal = (
+                "CREATE TABLE personal_embeds (user_id INTEGER NOT NULL, "
+                "name TEXT NOT NULL COLLATE NOCASE, payload TEXT NOT NULL, "
+                "PRIMARY KEY(user_id, name))"
+            )
+            original_schema = conn.execute(
+                "SELECT type,name,tbl_name,sql FROM sqlite_master "
+                "WHERE sql IS NOT NULL AND name != 'personal_embeds' "
+                "ORDER BY type,name"
+            ).fetchall()
+        baseline_sha = hashlib.sha256(json.dumps(original_schema).encode()).hexdigest()
+        if (personal_table is None or personal_table[0] != expected_personal
+                or baseline_sha != record.get("schema_sha256")):
+            print("ENZONIC_DATABASE status=BLOCKED reason=schema_diff_not_expected "
+                  f"personal_table={personal_table is not None} "
+                  f"baseline_matches={baseline_sha == record.get('schema_sha256')}",
+                  flush=True)
+            blocked("enzonic_restored_schema_mismatch")
+        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds "
+              "baseline_schema=UNCHANGED integrity=OK", flush=True)
 
 
 def guard(source, state_root):
