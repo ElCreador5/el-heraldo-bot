@@ -75,7 +75,11 @@ class SuggestionsSetupRegressionTests(unittest.TestCase):
                     if kw.arg == "row")
                 self.assertIn(button_row, occupation)
                 occupation[button_row] += 1
-        self.assertEqual(occupation, {0: 5, 1: 5, 2: 2, 3: 2, 4: 3})
+        self.assertEqual(occupation, {0: 5, 1: 5, 2: 2, 3: 2, 4: 4})
+        close = next(node for node in view.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "close")
+        decorator = next(node for node in close.decorator_list if isinstance(node, ast.Call))
+        self.assertEqual(ast.unparse(next(kw.value for kw in decorator.keywords if kw.arg == "style")),
+                         "discord.ButtonStyle.danger")
         for row, width in occupation.items():
             with self.subTest(row=row):
                 self.assertLessEqual(width, 5)

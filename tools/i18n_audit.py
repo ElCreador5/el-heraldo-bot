@@ -133,7 +133,8 @@ def audit(root=ROOT):
                     and isinstance(node.args[0].value, str)):
                 used.add(node.args[0].value)
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                if node.value.startswith(('text.', 'setup.', 'language.', 'common.', 'access.', 'personality.', 'suggestion.', 'input.', 'footer.')):
+                if (node.value.startswith(('text.', 'setup.', 'language.', 'common.', 'access.', 'personality.', 'suggestion.', 'input.', 'footer.'))
+                        and not node.value.endswith('.')):
                     used.add(node.value)
     schema = root / 'locales' / 'command_schema.json'
     if schema.exists():

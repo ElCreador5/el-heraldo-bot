@@ -59,7 +59,9 @@ class RetiredMessageModulesTests(unittest.TestCase):
         self.assertNotIn("message_automation.install(globals())", SOURCE)
         self.assertNotIn('value="templates"', SOURCE)
         self.assertNotIn('@bot.tree.command(name="sendtemplate"', SOURCE)
-        self.assertIn("message_autofeeds.install(globals())", SOURCE)
+        self.assertIn("import message_autofeeds", SOURCE)
+        self.assertNotIn("message_autofeeds.install(globals())", SOURCE)
+        self.assertIn('@bot.tree.command(name="anuncios"', SOURCE)
 
     def test_motor_de_anuncios_no_ejecuta_trabajos_de_plantillas(self):
         worker = (ROOT / "message_automation.py").read_text(encoding="utf-8")

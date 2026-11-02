@@ -1,3 +1,9 @@
+## 2026-11-02 — Consolidación general de comandos en Pruebas
+
+IMPLEMENTADO Y VERIFICADO AUTOMÁTICAMENTE: 42 accesos raíz / 45 invocables, frente a 51 / 71 de la base d3984074. Retirados del registro joinroles, suggestions, programar y nueve configuraciones sueltas; sustituidos por paneles existentes y el editor de respaldo de estructura. `/mensajes` reutiliza Setup. `/list comandos` filtra tipo y módulo y traduce descripciones según el servidor. Corregido el esquema nativo que impedía sincronizar nuevos accesos y el constructor del selector de exenciones Honeypot. Cierre en sesiones administrativas renderizadas; confirmaciones en acciones sensibles de Raid y creación/envío de embeds. Detalle exacto: `docs/COMANDOS_CONSOLIDADOS_2026-11-02.md`.
+
+**main y producción no modificados.**
+
 ## 2026-10-31 — Separación de AutoFeeds y Mensajes en /setup
 
 En `Pruebas`, `/setup → AutoFeeds` es un módulo propio con botones para crear, gestionar, configurar permisos y volver. `/setup → Mensajes` conserva los editores de mensajes operativos y Plantillas y no sirve de padre de AutoFeeds. Los accesos `/programar` y datos guardados continúan sin modificación; las ediciones solo persisten mediante confirmación, salvo Activar/Pausar. El flujo de AutoFeeds regresa a su propio panel y, desde allí, a `/setup`. La nueva opción se tradujo a es-419, en-US y pt-BR; pruebas en `tests/test_autofeed_setup.py` y matriz general. `main` permanece intacta.

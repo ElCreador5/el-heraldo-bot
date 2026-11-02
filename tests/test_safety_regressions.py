@@ -75,7 +75,8 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(command=obsolete):
                 self.assertIsNone(b.bot.tree.get_command(obsolete))
         # Los Anuncios continúan funcionando con su motor de publicación.
-        self.assertIsNotNone(b.bot.tree.get_command("programar"))
+        self.assertIsNone(b.bot.tree.get_command("programar"))
+        self.assertIsNotNone(b.bot.tree.get_command("anuncios"))
         self.assertIsInstance(b.message_automation_engine, b.message_automation.ScheduledMessages)
 
     async def test_setup_times_are_only_saved_after_confirmation(self):

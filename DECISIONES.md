@@ -1,3 +1,9 @@
+## 2026-11-02 — Una entrada de configuración por módulo
+
+Continúa la autorización expresa del propietario para consolidar TODOS los módulos en Pruebas, conservando Setup y las acciones/consultas útiles. Los alias redundantes se retiran del árbol enviado a Discord; sus funciones siguen en paneles, no se mantienen como accesos slash paralelos. Accesos canónicos: roles_ingreso, sugerencias, anuncios, registros, verificacion, mensajes, miembro_semana y estructura_servidor. `/mensajes` abre la vista real de Setup; `/list comandos` separa Configuración, Acciones, Consultas y Administración y filtra por módulo. Se conserva el planificador, las claves y los datos históricos. No autoriza main, una fusión completa ni la aceptación de la herramienta personal de embeds.
+
+**main y producción no modificados.**
+
 ## 2026-10-31 — AutoFeeds independiente de Mensajes en Pruebas
 
 El menú principal de `/setup` dispone ahora de dos módulos independientes: **Mensajes** (plantillas y personalización de textos del sistema) y **AutoFeeds** (crear publicaciones, gestionar trabajos y configurar permisos). AutoFeeds abre un panel propio con Crear programación, Gestionar programaciones, Permisos y Volver. Volver desde su editor y paneles internos regresa a AutoFeeds; desde el panel AutoFeeds regresa al menú principal. Se mantiene el grupo `/programar`, el motor existente de programación, las plantillas compartidas como fuente de contenido y todas las claves SQLite. No se realiza migración de datos ni cambio de main. Las pruebas estructurales y de comportamiento comprueban la separación y ausencia de guardado al navegar.

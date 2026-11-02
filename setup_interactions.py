@@ -14,6 +14,7 @@ import inspect
 import time
 
 from setup_save_controls import refresh_save_button
+from panel_navigation import ensure_close_control
 
 
 ACK_KEY = "heraldo_setup_deferred"
@@ -110,6 +111,7 @@ def install(discord):
 
     @wraps(original_send)
     async def send(response, *args, **kwargs):
+        ensure_close_control(kwargs.get("view"))
         refresh_save_button(kwargs.get("view"))
         interaction = response._parent
         if interaction.extras.get(ACK_KEY) and response.is_done():
@@ -118,6 +120,7 @@ def install(discord):
 
     @wraps(original_edit)
     async def edit(response, **kwargs):
+        ensure_close_control(kwargs.get("view"))
         refresh_save_button(kwargs.get("view"))
         interaction = response._parent
         if interaction.extras.get(ACK_KEY) and response.is_done():
@@ -126,11 +129,13 @@ def install(discord):
 
     @wraps(original_original_edit)
     async def edit_original(interaction, **kwargs):
+        ensure_close_control(kwargs.get("view"))
         refresh_save_button(kwargs.get("view"))
         return await original_original_edit(interaction, **kwargs)
 
     @wraps(original_message_edit)
     async def message_edit(message, **kwargs):
+        ensure_close_control(kwargs.get("view"))
         refresh_save_button(kwargs.get("view"))
         return await original_message_edit(message, **kwargs)
 

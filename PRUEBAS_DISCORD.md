@@ -1,3 +1,11 @@
+## 2026-11-02 — Comandos consolidados: pruebas aisladas y recorrido real pendiente
+
+AUTOMÁTICO: 122 comprobaciones específicas aprobadas, tres de paneles/idiomas adicionales y 36 regresiones de raíz/logs aprobadas; compilación y pip check correctos. Importación nueva ejecuta el registro real de discord.py sin token/Gateway y sin CommandAlreadyRegistered. Simulación del payload de sincronización: 42 raíces, 102 campos de presentación, es-419/en-US/pt-BR; NO es una respuesta real de Discord. Batería de componentes: 1 247, con diez incidencias heredadas y dos omisiones. Detalle y cobertura en `docs/COMANDOS_CONSOLIDADOS_2026-11-02.md`.
+
+DISCORD/ENZONIC REAL: NO REALIZADO. No se dispone de contexto del navegador conectado ni consola autenticada. Recorrido pendiente: verificar SHA y COMMAND_SYNC real; abrir `/roles_ingreso`, `/sugerencias`, `/anuncios`, `/mensajes`, `/miembro_semana`, `/estructura_servidor`, `/honeypot`, `/raid`, `/embed` y `/list comandos`; confirmar ausencia de derivados, selección persistente, Volver inmediato, Cerrar, cancelación sin guardar, permisos revocados y ausencia de cambios en próximas publicaciones al navegar. No probar sanciones sobre miembros ni afirmar aceptación productiva.
+
+**main y producción no modificados.**
+
 ## 2026-10-31 — Recuperación de arranque Enzonic ante HTTP 403 de GitHub
 
 **Incidencia observada:** el bot Lab cae en `before_discord → revision → _verified_github_deployment` con `HTTP Error 403: rate limit exceeded`, y termina en `BackupJobError: enzonic_checkout_unverified`. La protección falla de forma segura pero impide iniciar el servicio, sin evidencia de problemas de RAM ni de SQLite.

@@ -6,6 +6,7 @@ Guardar cambios -> Confirmar cambios. Mantiene la base de datos existente.
 import discord
 
 from heraldo_i18n import DEFAULT_LOCALE
+from heraldo_i18n import text as _t
 
 LANG = {
     "es-419": {
@@ -192,6 +193,7 @@ class SuggestionsSetupView(discord.ui.View):
         self.save_changes.label = self.tr("save")
         self.discard_changes.label = self.tr("discard")
         self.back.label = self.tr("back")
+        self.close.label = self.host["i18n"].translate(self.host["guild_language"](self.guild_id), "text.aeccae342e4bd0")
         self.channel_select.placeholder = self.tr("channel_select")
         self.edit_panel.label = self.tr("edit_panel")
         self.publish_panel.label = self.tr("publish_panel")
@@ -319,6 +321,13 @@ class SuggestionsSetupView(discord.ui.View):
         view = self.host["HeraldoModerationSetupView"](self.guild_id, self.owner_id)
         await interaction.response.edit_message(
             content=self.host["_t"]('text.da10e9d8927c80'), embed=None, view=view)
+
+
+    @discord.ui.button(label=_t("text.aeccae342e4bd0"), style=discord.ButtonStyle.danger, row=4)
+    async def close(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content=self.host["i18n"].translate(
+            self.host["guild_language"](self.guild_id), "setup.structure.closed"), embed=None, view=None)
 
 
 class SuggestionsSetupConfirmView(discord.ui.View):

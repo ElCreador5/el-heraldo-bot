@@ -1272,5 +1272,23 @@
     "scope": "",
     "text": "ninguna",
     "reason": "Identificador interno estable del esquema de recurrencia sin repetición; no se muestra al usuario ni se traduce."
+  },
+  "3497b4e7f52673da52db": {
+    "file": "bot.py",
+    "scope": "_heraldo_command_module",
+    "text": "general",
+    "reason": "Identificador interno de módulo o comando; no se muestra como etiqueta ni se traduce."
+  },
+  "b9a9a6988d7a8603b664": {
+    "file": "bot.py",
+    "scope": "_heraldo_command_category",
+    "text": "verificacion",
+    "reason": "Identificador interno de módulo o comando; no se muestra como etiqueta ni se traduce."
+  },
+  "170e391c97b67aca8c5f": {
+    "file": "bot.py",
+    "scope": "_heraldo_command_module",
+    "text": "verificacion",
+    "reason": "Identificador interno de módulo o comando; no se muestra como etiqueta ni se traduce."
   }
 }

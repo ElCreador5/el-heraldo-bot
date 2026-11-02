@@ -6324,6 +6324,12 @@ class HeraldoHoneypotSetupView(_SetupDirtySaveView):
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
+        if getattr(self, "command_parent", None) is not None:
+            if _setup_has_unsaved_changes(self):
+                await interaction.followup.send(_t("setup.structure.unsaved"), ephemeral=True)
+                return
+            await interaction.edit_original_response(content=_t("setup.command_panels.honeypot"), embed=None, view=self.command_parent)
+            return
         if self._pending_lines(interaction.guild):
             await interaction.followup.send(
                 _t('text.9c55100ed2253c'), ephemeral=True,
@@ -7869,6 +7875,12 @@ class HeraldoRaidSetupView(_SetupDirtySaveView):
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=4)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if getattr(self, "command_parent", None) is not None:
+            if _setup_has_unsaved_changes(self):
+                await interaction.response.send_message(_t("setup.structure.unsaved"), ephemeral=True)
+                return
+            await interaction.response.edit_message(content=raid_config_summary(interaction.guild), embed=None, view=self.command_parent)
+            return
         await interaction.response.edit_message(
             content=_t('text.fb957b65618b1a'),
             embed=None,
@@ -13018,6 +13030,7 @@ class HeraldoSetupView(discord.ui.View):
         ("verification", "setup.module.verification.label", "setup.module.verification.description"),
         ("language", "setup.module.language.label", "setup.module.language.description"),
         ("date_format", "setup.module.date_format.label", "setup.module.date_format.description"),
+        ("server_structure", "setup.module.server_structure.label", "setup.module.server_structure.description"),
     )
 
     @_i18n_context
@@ -13114,6 +13127,10 @@ class HeraldoSetupView(discord.ui.View):
         elif selected == "verification":
             content = verification_hub_content(self.guild_id)
             view = HeraldoVerificationHubView(self.guild_id, self.owner_id)
+        elif selected == "server_structure":
+            from server_structure_setup import ServerStructureSetupView
+            view = ServerStructureSetupView(globals(), self.guild_id, self.owner_id)
+            content = view.summary()
         elif selected == "language":
             content = language_panel_text(self.guild_id)
             view = HeraldoLanguageView(self.guild_id, self.owner_id, from_setup=True)
@@ -13163,7 +13180,7 @@ class HeraldoSetupView(discord.ui.View):
 # Accesos directos: reutilizan las mismas vistas y permisos de /setup.
 async def _heraldo_setup_shortcut(interaction: discord.Interaction, module: str) -> None:
     if interaction.guild is None:
-        await interaction.response.send_message("Disponible solo en servidores.", ephemeral=True)
+        await interaction.response.send_message(_t("setup.command_panels.b3714638af061456"), ephemeral=True)
         return
     if not await configuration_access(interaction):
         return
@@ -13175,30 +13192,20 @@ async def _heraldo_setup_shortcut(interaction: discord.Interaction, module: str)
 # El cierre se añade a las vistas de configuración existentes; no guarda borradores.
 class _HeraldoPanelClose(discord.ui.Button):
     def __init__(self, guild_id: int):
-        locale = guild_language(guild_id)
-        label = {"es-419": "Cerrar", "en-US": "Close", "pt-BR": "Fechar"}.get(locale, "Cerrar")
-        super().__init__(label=label, style=discord.ButtonStyle.danger)
-        self._guild_id = guild_id
+        self.guild_id = guild_id
+        super().__init__(label=i18n.translate(guild_language(guild_id), "text.aeccae342e4bd0"),
+                         style=discord.ButtonStyle.danger)
 
+    @_i18n_context
     async def callback(self, interaction: discord.Interaction) -> None:
         panel = self.view
-        if not await configuration_access(
-            interaction, getattr(panel, "guild_id", None), getattr(panel, "owner_id", None)
-        ):
+        if not await configuration_access(interaction, getattr(panel, "guild_id", None), getattr(panel, "owner_id", None)):
             return
         if _setup_has_unsaved_changes(panel):
-            lang = guild_language(self._guild_id)
-            warning = {
-                "es-419": "Hay cambios sin guardar. Guárdalos o descártalos antes de cerrar.",
-                "en-US": "There are unsaved changes. Save or discard them before closing.",
-                "pt-BR": "Há alterações não salvas. Salve ou descarte antes de fechar.",
-            }.get(lang, "Hay cambios sin guardar. Guárdalos o descártalos antes de cerrar.")
-            await interaction.response.send_message(warning, ephemeral=True)
+            await interaction.response.send_message(_t("setup.structure.unsaved"), ephemeral=True)
             return
         panel.stop()
-        await interaction.response.edit_message(content={
-            "es-419": "Panel cerrado.", "en-US": "Panel closed.", "pt-BR": "Painel fechado."
-        }.get(guild_language(self._guild_id), "Panel cerrado."), embed=None, view=None)
+        await interaction.response.edit_message(content=_t("setup.structure.closed"), embed=None, view=None)
 
 
 def _heraldo_install_close_buttons() -> None:
@@ -13288,6 +13295,37 @@ async def shortcut_verificacion(interaction: discord.Interaction) -> None:
 @_i18n_context
 async def shortcut_formato_fecha(interaction: discord.Interaction) -> None:
     await _heraldo_setup_shortcut(interaction, "date_format")
+
+@bot.tree.command(name="sugerencias", description="Abre la configuración de Sugerencias.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_sugerencias(interaction: discord.Interaction) -> None:
+    if not await configuration_access(interaction):
+        return
+    from suggestions_setup import SuggestionsSetupView
+    view = SuggestionsSetupView(globals(), interaction.guild.id, interaction.user.id)
+    await interaction.response.send_message(content=view.summary(interaction.guild), view=view, ephemeral=True)
+
+
+@bot.tree.command(name="miembro_semana", description="Configura el anuncio de Miembro de la Semana.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_miembro_semana(interaction: discord.Interaction) -> None:
+    if not await configuration_access(interaction):
+        return
+    view = HeraldoMotwSetupView(interaction.guild.id, interaction.user.id, from_announcements=True)
+    await interaction.response.send_message(content=view._content(interaction.guild), view=view, ephemeral=True)
+
+
+@bot.tree.command(name="estructura_servidor", description="Configura el respaldo de la estructura del servidor.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_estructura_servidor(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "server_structure")
+
 
 @bot.tree.command(name="language", description="Configura el idioma de El Heraldo en este servidor.")
 @app_commands.default_permissions(manage_guild=True)
@@ -13508,7 +13546,7 @@ class HeraldoLogChannelConfirmView(discord.ui.View):
         await interaction.response.edit_message(content=_t('text.38f8449200ecb6'), view=None)
 
 
-@bot.tree.command(name="heraldo_log_channel", description="Cambiar el canal donde El Heraldo reporta su actividad (logs).")
+@app_commands.command(name="heraldo_log_channel", description="Cambiar el canal donde El Heraldo reporta su actividad (logs).")
 @discord.app_commands.describe(canal=_t('text.56ab7c45f6f2f6'))
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
@@ -13976,7 +14014,7 @@ async def verify(interaction: discord.Interaction, canal: Optional[discord.TextC
     )
 
 
-@bot.tree.command(
+@app_commands.command(
     name="verify_dm_texts",
     description="Editar el DM de bienvenida; el pie identifica automáticamente al servidor.",
 )
@@ -14076,7 +14114,7 @@ async def verify_dm_preview(interaction: discord.Interaction) -> None:
     )
 
 
-@bot.tree.command(name="verify_texts", description="Editar el mensaje del panel, el texto del botón y el mensaje tras verificarse.")
+@app_commands.command(name="verify_texts", description="Editar el mensaje del panel, el texto del botón y el mensaje tras verificarse.")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
 @_i18n_context
@@ -14084,7 +14122,7 @@ async def verify_texts(interaction: discord.Interaction) -> None:
     await interaction.response.send_modal(VerifyTextsModal(interaction.guild.id))
 
 
-@bot.tree.command(name="verify_setup", description="Ver o cambiar la configuración de la verificación por botón.")
+@app_commands.command(name="verify_setup", description="Ver o cambiar la configuración de la verificación por botón.")
 @discord.app_commands.describe(
     rol=_t('text.c9234aa160f7a2'),
     timeout=_t('text.a540dceed895e4'),
@@ -14374,7 +14412,7 @@ async def joinroles_group_error(
     await verify_command_error(interaction, error)
 
 
-bot.tree.add_command(joinroles_group)
+# Legacy callbacks remain testable; /roles_ingreso is the only registered entry.
 
 
 # ---------------------------------------------------------------------------
@@ -14643,7 +14681,7 @@ def template_config_summary(guild_id: int, now_utc: datetime) -> str:
     )
 
 
-@bot.tree.command(name="server_template_setup", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
+@app_commands.command(name="server_template_setup", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
 @discord.app_commands.describe(
     frecuencia=_t('text.a3ef8ae0b265eb'),
     hora=_t('text.9bb8d070f80cc5'),
@@ -14985,7 +15023,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
     return None
 
 
-@bot.tree.command(name="motw_set_schedule", description="Cambiar el día/hora del anuncio de Miembro de la Semana.")
+@app_commands.command(name="motw_set_schedule", description="Cambiar el día/hora del anuncio de Miembro de la Semana.")
 @discord.app_commands.describe(dia=_t('text.ac75c2babdd40e'), hora=_t('text.9bb8d070f80cc5'))
 @discord.app_commands.choices(dia=[
     discord.app_commands.Choice(name=name, value=i) for i, name in enumerate(MOTW_WEEKDAY_NAMES)
@@ -15011,7 +15049,7 @@ async def motw_set_schedule_error(interaction: discord.Interaction, error: disco
         await interaction.response.send_message(_t('text.8904a29c5dcf0c', p0=f'{error}'), ephemeral=True)
 
 
-@bot.tree.command(name="motw_set_channel", description="Cambiar el canal donde se anuncia el Miembro de la Semana.")
+@app_commands.command(name="motw_set_channel", description="Cambiar el canal donde se anuncia el Miembro de la Semana.")
 @discord.app_commands.describe(canal=_t('text.8e2975c51be08f'))
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
@@ -19954,7 +19992,7 @@ async def liberar_error(interaction: discord.Interaction, error: discord.app_com
         await interaction.response.send_message(_t('text.8904a29c5dcf0c', p0=f'{error}'), ephemeral=True)
 
 
-@bot.tree.command(name="condenar_setup", description="Configurar el canal donde se anuncian las nuevas condenas.")
+@app_commands.command(name="condenar_setup", description="Configurar el canal donde se anuncian las nuevas condenas.")
 @discord.app_commands.describe(canal=_t('text.a0b75404effab2'))
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.guild_only()
@@ -20668,7 +20706,7 @@ class CondemnationTemplateEditorView(discord.ui.View):
         await heraldo_setup_go_home(interaction, interaction.guild.id, self.owner_id)
 
 
-@bot.tree.command(
+@app_commands.command(
     name="condenar_template",
     description="Abrir el formulario profesional de la tarjeta de condenados.",
 )
@@ -21519,10 +21557,11 @@ async def honeypot_warning_text_cmd(interaction: discord.Interaction) -> None:
 class HoneypotExemptionConfirmView(discord.ui.View):
     """Confirmación personal para exenciones de usuario o rol."""
     @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int, kind: str, target_id: int, add: bool):
+    def __init__(self, guild_id: int, owner_id: int, kind: str, target_id: int, add: bool, parent=None):
         super().__init__(timeout=300)
         self.guild_id, self.owner_id, self.kind = guild_id, owner_id, kind
         self.target_id, self.add, self.finished = target_id, add, False
+        self.parent = parent
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -21552,7 +21591,8 @@ class HoneypotExemptionConfirmView(discord.ui.View):
         else:
             hp_exempt_remove(self.guild_id, self.kind, self.target_id)
         await interaction.response.edit_message(
-            content=_t('text.d767fd87be203e') if self.add else _t('text.c090afeb021325'), view=None,
+            content=_t('text.d767fd87be203e') if self.add else _t('text.c090afeb021325'),
+            view=HoneypotCommandPanel(self.guild_id, self.owner_id) if self.parent else None,
         )
 
     @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger)
@@ -21566,7 +21606,7 @@ class HoneypotExemptionConfirmView(discord.ui.View):
         self.finished = True
         self.stop()
         await interaction.response.edit_message(
-            content=_t('text.58dfe5d6f9dce5'), view=None,
+            content=_t('text.58dfe5d6f9dce5'), view=self.parent,
         )
 
 
@@ -21669,88 +21709,110 @@ async def honeypot_group_error(interaction: discord.Interaction, error: discord.
 
 
 class HoneypotExemptSelector(discord.ui.View):
+    @_i18n_context
     def __init__(self, guild_id: int, owner_id: int, adding: bool):
         super().__init__(timeout=900)
-        self.guild_id, self.owner_id, self.adding = guild_id, owner_id
-        roles = discord.ui.RoleSelect(placeholder="Seleccionar rol", row=0)
+        self.guild_id, self.owner_id, self.adding = guild_id, owner_id, adding
+        roles = discord.ui.RoleSelect(placeholder=_t("setup.command_panels.734a0ccc7e94c08c"), row=0)
         roles.callback = self.select_role
         self.roles = roles
         self.add_item(roles)
-        users = discord.ui.UserSelect(placeholder="Seleccionar miembro", row=1)
+        users = discord.ui.UserSelect(placeholder=_t("setup.command_panels.309d6636fc507d9c"), row=1)
         users.callback = self.select_user
         self.users = users
         self.add_item(users)
 
+    @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
+    @_i18n_context
     async def select_role(self, interaction: discord.Interaction):
         role = self.roles.values[0]
+        self.roles.default_values = [discord.SelectDefaultValue(id=role.id, type=discord.SelectDefaultValueType.role)]
         await interaction.response.edit_message(
-            content=f"Confirmar {'exención' if self.adding else 'retiro de exención'} de {role.mention}",
-            view=HoneypotExemptionConfirmView(self.guild_id, self.owner_id, "role", role.id, self.adding),
+            content=_t("setup.command_panels.d92c888e6c513411" if self.adding else 'setup.command_panels.514552f5e299dc08', target=role.mention),
+            view=HoneypotExemptionConfirmView(self.guild_id, self.owner_id, "role", role.id, self.adding, parent=self),
         )
 
+    @_i18n_context
     async def select_user(self, interaction: discord.Interaction):
         user = self.users.values[0]
+        self.users.default_values = [discord.SelectDefaultValue(id=user.id, type=discord.SelectDefaultValueType.user)]
         await interaction.response.edit_message(
-            content=f"Confirmar {'exención' if self.adding else 'retiro de exención'} de {user.mention}",
-            view=HoneypotExemptionConfirmView(self.guild_id, self.owner_id, "member", user.id, self.adding),
+            content=_t("setup.command_panels.d92c888e6c513411" if self.adding else 'setup.command_panels.514552f5e299dc08', target=user.mention),
+            view=HoneypotExemptionConfirmView(self.guild_id, self.owner_id, "member", user.id, self.adding, parent=self),
         )
+
+
+    @discord.ui.button(label=_t("text.ab26ae7bca3621"), style=discord.ButtonStyle.secondary, row=2)
+    @_i18n_context
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content=_t("setup.command_panels.honeypot"), embed=None,
+            view=HoneypotCommandPanel(self.guild_id, self.owner_id))
 
 
 class HoneypotCommandPanel(discord.ui.View):
+    @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id = guild_id, owner_id
 
+    @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
-    @discord.ui.button(label="Configuración", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label=_t("setup.command_panels.bb507137e3631379"), style=discord.ButtonStyle.primary, row=0)
+    @_i18n_context
     async def settings(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = HeraldoHoneypotSetupView(self.guild_id, self.owner_id)
+        view.command_parent = self
         await interaction.response.edit_message(content=None, embed=view._embed(interaction.guild), view=view)
 
-    @discord.ui.button(label="Historial", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label=_t("setup.command_panels.995c071dfaee74ce"), style=discord.ButtonStyle.secondary, row=0)
+    @_i18n_context
     async def history(self, interaction: discord.Interaction, button: discord.ui.Button):
         rows = hp_recent_triggers(self.guild_id, 10)
-        embed = discord.Embed(title="Historial de Honeypot",
-                              description=f"Activaciones totales: {hp_total_triggers(self.guild_id)}",
+        embed = discord.Embed(title=_t("setup.command_panels.58ce15cf794ffeec"),
+                              description=_t("setup.command_panels.b853e5d5c8434dd8", count=hp_total_triggers(self.guild_id)),
                               color=discord.Color.orange())
         for item in rows:
             embed.add_field(
                 name=f"{item['username']} · {'Aplicada' if item['success'] else 'Fallida'}",
-                value=f"Canal: <#{item['channel_id']}> · Acción: {HONEYPOT_ACTION_LABELS.get(item['action'], item['action'])}",
+                value=_t("setup.command_panels.921330c4fc13d798", channel=item['channel_id'], action=HONEYPOT_ACTION_LABELS.get(item['action'], item['action'])),
                 inline=False,
             )
         if not rows:
-            embed.description = "Todavía no hay activaciones registradas."
+            embed.description = _t("setup.command_panels.34fa2f8a42f7faba")
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
-    @discord.ui.button(label="Añadir exento", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.b1bfce419aba730f"), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
     async def add_exempt(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="Selecciona un rol o miembro para eximir.",
+        await interaction.response.edit_message(content=_t("setup.command_panels.16b4767d4dab390d"),
                                                  embed=None,
                                                  view=HoneypotExemptSelector(self.guild_id, self.owner_id, True))
 
-    @discord.ui.button(label="Retirar exento", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.6e5af853ff2b7184"), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
     async def remove_exempt(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(content="Selecciona un rol o miembro.",
+        await interaction.response.edit_message(content=_t("setup.command_panels.2d8f7575782917c1"),
                                                  embed=None,
                                                  view=HoneypotExemptSelector(self.guild_id, self.owner_id, False))
 
-    @discord.ui.button(label="Reanudar", style=discord.ButtonStyle.success, row=2)
+    @discord.ui.button(label=_t("setup.command_panels.5685e1faf0b38db2"), style=discord.ButtonStyle.success, row=2)
+    @_i18n_context
     async def resume(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not honeypot_paused(self.guild_id):
-            await interaction.response.send_message("Honeypot no está pausado.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.34aea5df170fb68e"), ephemeral=True)
             return
         await confirm_configuration(interaction, self.guild_id, {"honeypot_paused": "0"})
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=_t("text.aeccae342e4bd0"), style=discord.ButtonStyle.danger, row=2)
+    @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content="Panel cerrado.", embed=None, view=None)
+        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), embed=None, view=None)
 
 
 @bot.tree.command(name="honeypot", description="Abrir el panel de Honeypot.")
@@ -21761,7 +21823,7 @@ async def honeypot_panel_command(interaction: discord.Interaction):
     if not await configuration_access(interaction):
         return
     await interaction.response.send_message(
-        "Panel de Honeypot: configuración, historial y exenciones.",
+        _t("setup.command_panels.a0fa1571a0f31a07"),
         view=HoneypotCommandPanel(interaction.guild.id, interaction.user.id),
         ephemeral=True,
     )
@@ -23736,57 +23798,63 @@ async def raid_group_error(interaction: discord.Interaction, error: discord.app_
 
 
 class RaidCommandPanel(discord.ui.View):
+    @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id = guild_id, owner_id
 
+    @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await configuration_access(interaction, self.guild_id, self.owner_id)
 
-    @discord.ui.button(label="Configuración", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label=_t("setup.command_panels.bb507137e3631379"), style=discord.ButtonStyle.primary, row=0)
+    @_i18n_context
     async def setup(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = HeraldoRaidSetupView(self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=None, embed=None, view=view)
+        view.command_parent = self
+        await interaction.response.edit_message(content=raid_config_summary(interaction.guild), embed=None, view=view)
 
-    @discord.ui.button(label="Estado", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label=_t("setup.command_panels.98e5acddb6c46a24"), style=discord.ButtonStyle.secondary, row=0)
+    @_i18n_context
     async def status(self, interaction: discord.Interaction, button: discord.ui.Button):
         text = raid_config_summary(interaction.guild)
         await interaction.response.edit_message(content=text, embed=None, view=self)
 
-    @discord.ui.button(label="Iniciar raid", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.f2cdbbed31f9c0bc"), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
     async def start(self, interaction: discord.Interaction, button: discord.ui.Button):
         if raid_is_active(self.guild_id):
-            await interaction.response.send_message("El modo raid ya está activo.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.raid_unavailable"), ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        await raid_start(interaction.guild, trigger=f"Activación manual por {interaction.user}",
-                         suspects=[], started_by=interaction.user)
-        await interaction.followup.send("Modo raid activado.", ephemeral=True)
+        from command_panel_actions import RaidActionConfirm
+        await interaction.response.edit_message(content=_t("setup.command_panels.raid_confirm_start"),
+            embed=None, view=RaidActionConfirm(globals(), self, "start"))
 
-    @discord.ui.button(label="Terminar raid", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.d2502f6a21b56077"), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
     async def end(self, interaction: discord.Interaction, button: discord.ui.Button):
         if raid_until(self.guild_id) is None:
-            await interaction.response.send_message("No hay un raid activo.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.raid_unavailable"), ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        summary = await raid_end(interaction.guild, automatic=False,
-                                 ended_by=interaction.user, release=False)
-        await interaction.followup.send(summary, ephemeral=True)
+        from command_panel_actions import RaidActionConfirm
+        await interaction.response.edit_message(content=_t("setup.command_panels.raid_confirm_end"),
+            embed=None, view=RaidActionConfirm(globals(), self, "end"))
 
-    @discord.ui.button(label="Terminar y liberar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=_t("setup.command_panels.c1c85b2e96cd397e"), style=discord.ButtonStyle.primary, row=2)
+    @_i18n_context
     async def end_release(self, interaction: discord.Interaction, button: discord.ui.Button):
         if raid_until(self.guild_id) is None:
-            await interaction.response.send_message("No hay un raid activo.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.raid_unavailable"), ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        summary = await raid_end(interaction.guild, automatic=False,
-                                 ended_by=interaction.user, release=True)
-        await interaction.followup.send(summary, ephemeral=True)
+        from command_panel_actions import RaidActionConfirm
+        await interaction.response.edit_message(content=_t("setup.command_panels.raid_confirm_release"),
+            embed=None, view=RaidActionConfirm(globals(), self, "release"))
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=_t("text.aeccae342e4bd0"), style=discord.ButtonStyle.danger, row=2)
+    @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content="Panel cerrado.", embed=None, view=None)
+        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), embed=None, view=None)
 
 
 @bot.tree.command(name="raid", description="Abrir el panel de protección anti-raid.")
@@ -23797,7 +23865,7 @@ async def raid_panel_command(interaction: discord.Interaction):
     if not await configuration_access(interaction):
         return
     await interaction.response.send_message(
-        "Protección anti-raid: configuración, estado y control manual.",
+        _t("setup.command_panels.eda23027fb8ea533"),
         view=RaidCommandPanel(interaction.guild.id, interaction.user.id),
         ephemeral=True,
     )
@@ -24192,39 +24260,49 @@ def _heraldo_command_category(path: str) -> str:
     root = path.split()[0].lower()
     if root in {"setup", "automod", "moderacion", "roles_ingreso", "roles_reaccion",
                 "registros", "anuncios", "verificacion", "formato_fecha", "language",
-                "mensajes", "heraldo_log_channel", "verify_setup", "verify_texts",
-                "verify_dm_texts", "condenar_setup", "condenar_template",
-                "server_template_setup", "motw_set_schedule", "motw_set_channel"}:
+                "mensajes", "honeypot", "raid", "embed", "sugerencias", "miembro_semana",
+                "estructura_servidor"}:
         return "configuration"
-    if root in {"honeypot", "joinroles", "raid", "suggestions", "embed"}:
-        if len(path.split()) > 1 and path.split()[1] in {
-            "setup", "status", "lista", "history", "programaciones",
-        }:
-            return "consultation" if path.split()[1] != "setup" else "configuration"
-        return "action" if root in {"raid", "honeypot"} else "administration"
-    if root in {"list", "profile", "advertencias", "caseinfo", "caselist"}:
+    if root in {"list", "profile", "advertencias", "caseinfo", "caselist", "variables"}:
         return "consultation"
-    if root in {"warn", "mute", "kick", "ban", "purge", "condenar", "liberar",
-                "heraldo_check", "heraldo_check_all", "verify", "motw_test"}:
-        return "action"
-    return "administration"
+    if root in {"template_sync", "restaurar_roles_pendientes"}:
+        return "administration"
+    return "action"
 
 
-def _heraldo_registered_commands() -> list[tuple[str, str, str]]:
-    result: list[tuple[str, str, str]] = []
-
-    def walk(commands_list, prefix=""):
-        for command in sorted(commands_list, key=lambda entry: entry.name):
-            path = f"{prefix} {command.name}".strip()
-            children = getattr(command, "commands", None)
-            if children:
-                walk(children, path)
+def _heraldo_registered_commands(locale: str | None = None) -> list[tuple[str, str, str]]:
+    payload = [command.to_dict(bot.tree) for command in bot.tree.get_commands()]
+    if locale is not None:
+        payload = heraldo_command_i18n.localize_schema(payload, locale)
+    result = []
+    def walk(nodes, prefix=""):
+        for node in sorted(nodes, key=lambda entry: entry["name"]):
+            path = f"{prefix} {node['name']}".strip()
+            if node.get("options") and node["options"][0].get("type") in (1, 2):
+                walk(node["options"], path)
             else:
-                description = (getattr(command, "description", "") or "").strip()
-                result.append((_heraldo_command_category(path), path, description))
-
-    walk(bot.tree.get_commands())
+                result.append((_heraldo_command_category(path), path, node.get("description", "")))
+    walk(payload)
     return result
+
+
+def _heraldo_command_module(path: str) -> str:
+    root = path.split()[0]
+    groups = {
+        "verification": {"verificacion", "verify", "verify_dm_preview", "heraldo_check", "heraldo_check_all"},
+        "roles": {"roles_ingreso", "roles_reaccion"},
+        "automod": {"automod", "honeypot", "raid"},
+        "announcements": {"anuncios", "miembro_semana", "motw_test"},
+        "messages": {"mensajes", "embed", "variables"},
+        "logging": {"registros"},
+        "structure": {"estructura_servidor", "template_sync", "fusionar_canales"},
+        "moderation": {"moderacion", "sugerencias", "condenar", "liberar", "restaurar_roles_pendientes",
+                       "warn", "advertencias", "mute", "kick", "ban", "purge", "caseinfo", "caselist",
+                       "caseupdate", "setproof", "caseclose", "casedelete"},
+    }
+    if root == "list":
+        return {"embeds": "messages", "variables": "messages", "condenados": "moderation"}.get(path.split()[-1], "general")
+    return next((key for key, roots in groups.items() if root in roots), "general")
 
 
 class HeraldoCommandsCatalog(discord.ui.View):
@@ -24232,85 +24310,86 @@ class HeraldoCommandsCatalog(discord.ui.View):
         super().__init__(timeout=600)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.locale = guild_language(guild_id)
-        self.category = "configuration"
-        self.page = 0
-        self.commands = _heraldo_registered_commands()
-        captions = {
-            "es-419": ("Configuración", "Acciones", "Consultas", "Administración"),
-            "en-US": ("Configuration", "Actions", "Queries", "Administration"),
-            "pt-BR": ("Configuração", "Ações", "Consultas", "Administração"),
-        }
-        labels = captions.get(self.locale, captions["es-419"])
-        self.labels = dict(zip(("configuration", "action", "consultation", "administration"), labels))
-        chooser = discord.ui.Select(
-            placeholder={"es-419": "Categoría de comandos", "en-US": "Command category",
-                         "pt-BR": "Categoria de comandos"}.get(self.locale, "Categoría"),
-            options=[discord.SelectOption(label=self.labels[key], value=key)
-                     for key in self.labels],
-            row=0,
-        )
-        chooser.callback = self.choose
-        self.add_item(chooser)
+        self.category, self.module, self.page = "configuration", "all", 0
+        self.commands = _heraldo_registered_commands(self.locale)
+        types = ("configuration", "action", "consultation", "administration")
+        self.labels = {key: self.tr("type." + key) for key in types}
+        self.type_select = discord.ui.Select(
+            placeholder=self.tr("choose_type"), row=0,
+            options=[discord.SelectOption(label=self.labels[key], value=key,
+                                          description=self.tr("help." + key)) for key in types])
+        self.type_select.callback = self.choose
+        self.add_item(self.type_select)
+        modules = sorted({_heraldo_command_module(path) for _, path, _ in self.commands})
+        self.module_select = discord.ui.Select(
+            placeholder=self.tr("choose_module"), row=1,
+            options=[discord.SelectOption(label=self.tr("module." + key), value=key)
+                     for key in ["all", *modules]])
+        self.module_select.callback = self.choose_module
+        self.add_item(self.module_select)
+        self.close.label = self.tr("close")
         self._refresh()
 
+    def tr(self, key, **values):
+        return i18n.translate(self.locale, "setup.commands." + key, **values)
+
     def _rows(self):
-        return [(path, description) for category, path, description in self.commands
-                if category == self.category]
+        return sorted([(path, description) for category, path, description in self.commands
+                       if category == self.category and (self.module == "all" or
+                           _heraldo_command_module(path) == self.module)],
+                      key=lambda row: (_heraldo_command_module(row[0]), row[0]))
 
     def _refresh(self):
         rows = self._rows()
-        self.page = max(0, min(self.page, (len(rows) - 1) // 8 if rows else 0))
+        self.page = max(0, min(self.page, max(0, (len(rows) - 1) // 8)))
         self.previous.disabled = self.page == 0
         self.following.disabled = (self.page + 1) * 8 >= len(rows)
-        for item in self.children:
-            if isinstance(item, discord.ui.Select):
-                for option in item.options:
-                    option.default = option.value == self.category
+        for control, selected in ((self.type_select, self.category), (self.module_select, self.module)):
+            for option in control.options:
+                option.default = option.value == selected
 
     def embed(self):
         rows = self._rows()
-        start = self.page * 8
-        entries = rows[start:start + 8]
-        body = "\n\n".join(f"**/{path}**\n{description}" for path, description in entries)
-        if not body:
-            body = {"es-419": "No hay comandos en esta categoría.",
-                    "en-US": "No commands in this category.",
-                    "pt-BR": "Não há comandos nesta categoria."}.get(self.locale, "Sin comandos.")
-        embed = discord.Embed(title=f"El Heraldo · {self.labels[self.category]}",
-                              description=body, color=discord.Color.blurple())
-        total_pages = max(1, (len(rows) + 7) // 8)
-        embed.set_footer(text=f"{self.page + 1}/{total_pages} · {len(rows)} / {len(self.commands)}")
-        return embed
+        entries = rows[self.page * 8:self.page * 8 + 8]
+        body = "\n\n".join(f"**{self.tr('module.' + _heraldo_command_module(path))} · /{path}**\n{description}"
+                             for path, description in entries) or self.tr("empty")
+        result = discord.Embed(title=self.tr("title", category=self.labels[self.category]),
+                               description=body, color=discord.Color.blurple())
+        result.set_footer(text=f"{self.page + 1}/{max(1, (len(rows) + 7) // 8)} · {len(rows)} / {len(self.commands)}")
+        return result
 
     async def interaction_check(self, interaction):
-        if interaction.user.id != self.owner_id or interaction.guild_id != self.guild_id:
-            await interaction.response.send_message(
-                {"es-419": "Abre tu propio catálogo con /list comandos.",
-                 "en-US": "Open your own catalog with /list comandos.",
-                 "pt-BR": "Abra seu próprio catálogo com /list comandos."}
-                .get(self.locale, "Acceso denegado."), ephemeral=True)
-            return False
-        return True
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
 
     async def choose(self, interaction):
-        selection = next(item for item in self.children if isinstance(item, discord.ui.Select))
-        self.category, self.page = selection.values[0], 0
+        selected = (interaction.data or {}).get("values", [None])[0]
+        if selected not in self.labels:
+            return await interaction.response.send_message(self.tr("invalid"), ephemeral=True)
+        self.category, self.page = selected, 0
         self._refresh()
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
-    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, row=1)
+    async def choose_module(self, interaction):
+        selected = (interaction.data or {}).get("values", [None])[0]
+        if selected not in {option.value for option in self.module_select.options}:
+            return await interaction.response.send_message(self.tr("invalid"), ephemeral=True)
+        self.module, self.page = selected, 0
+        self._refresh()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, row=2)
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page -= 1
         self._refresh()
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, row=2)
     async def following(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page += 1
         self._refresh()
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label=_t("text.aeccae342e4bd0"), style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
         await interaction.response.edit_message(view=None)
@@ -25075,36 +25154,63 @@ class EmbedFieldModal(discord.ui.Modal):
 
 
 class EmbedChannelPicker(discord.ui.View):
-    """Elegir el canal al que enviar el embed desde el panel."""
-
     @_i18n_context
-    def __init__(self, owner_id: int, name: str) -> None:
+    def __init__(self, owner_id: int, name: str, guild_id: int) -> None:
         super().__init__(timeout=300)
-        self.owner_id, self.name = owner_id, name
-        select = discord.ui.ChannelSelect(
-            placeholder=_t('text.50e5928d81367b'),
-            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
-        )
-        select.callback = self.picked
-        self.select = select
-        self.add_item(select)
+        self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
+        self.channel_id, self.snapshot, self.finished = None, None, False
+        self.select = discord.ui.ChannelSelect(placeholder=_t("text.50e5928d81367b"),
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news], row=0)
+        self.select.callback = self.picked
+        self.add_item(self.select)
+        self.publish.disabled = True
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.dcc8081ba1f7bf'), ephemeral=True)
-            return False
-        return True
+        return not self.finished and await configuration_access(interaction, self.guild_id, self.owner_id)
 
     @_i18n_context
     async def picked(self, interaction: discord.Interaction) -> None:
-        channel = interaction.guild.get_channel(self.select.values[0].id)
-        if channel is None:
-            await interaction.response.edit_message(content=_t('text.27a254b7d1a5b1'), view=None)
+        values = (interaction.data or {}).get("values", [])
+        ident = int(values[0]) if values else (self.select.values[0].id if self.select.values else None)
+        channel = interaction.guild.get_channel(ident) if ident else None
+        record = embed_get(self.guild_id, self.name)
+        if not isinstance(channel, discord.TextChannel) or record is None:
+            return await interaction.response.send_message(_t("text.27a254b7d1a5b1"), ephemeral=True)
+        self.channel_id, self.snapshot = channel.id, copy.deepcopy(record[0])
+        self.select.default_values = [discord.SelectDefaultValue(id=channel.id, type=discord.SelectDefaultValueType.channel)]
+        self.publish.disabled = False
+        preview, _, _ = build_custom_embed(self.snapshot, VarContext(interaction.guild, None, channel))
+        await interaction.response.edit_message(content=_t("setup.command_panels.send_review", channel=channel.mention),
+                                                 embed=preview, view=self)
+
+    @discord.ui.button(label=_t("setup.command_panels.confirm_send"), style=discord.ButtonStyle.success, row=1)
+    @_i18n_context
+    async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
             return
+        channel = interaction.guild.get_channel(self.channel_id) if self.channel_id else None
+        record = embed_get(self.guild_id, self.name)
+        if record is None or record[0] != self.snapshot:
+            return await interaction.response.send_message(_t("setup.structure.conflict"), ephemeral=True)
+        if not isinstance(channel, discord.TextChannel) or interaction.guild.me is None:
+            return await interaction.response.send_message(_t("text.27a254b7d1a5b1"), ephemeral=True)
+        for actor in (interaction.guild.me, interaction.user):
+            perms = channel.permissions_for(actor)
+            if not (perms.view_channel and perms.send_messages and perms.embed_links):
+                return await interaction.response.send_message(_t("setup.access_denied"), ephemeral=True)
+        self.finished = True
+        self.stop()
         await interaction.response.defer()
         result = await embed_send(interaction.guild, self.name, channel)
-        await interaction.edit_original_response(content=result, view=None)
+        await interaction.edit_original_response(content=result, embed=None,
+            view=EmbedHubView(self.owner_id, self.guild_id, self.name))
+
+    @discord.ui.button(label=_t("text.ab26ae7bca3621"), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content=_t("setup.command_panels.embeds_hub"), embed=None,
+            view=EmbedHubView(self.owner_id, self.guild_id, self.name))
 
 
 
@@ -25332,7 +25438,7 @@ class EmbedScheduleView(discord.ui.View):
                 _t('text.2eb03796ac8a31', p0=f'{review}')
             )
         return (
-            _t('text.eb1bb265181682', p0=f'{title}', p1=f'{self.name}', p2=f'{channel}', p3=f'{(dict(self.MODES)[self.mode] if self.mode_selected else "Sin seleccionar")}', p4=f'{embed_schedule_human_details(self.mode, self.config)}', p5=f"{(_t('text.69d17ca1683468') if self.active else _t('text.987d904d7afee2'))}", p6=f'{instruction}')
+            _t('text.eb1bb265181682', p0=f'{title}', p1=f'{self.name}', p2=f'{channel}', p3=f'{(dict(self.MODES)[self.mode] if self.mode_selected else _t("setup.command_panels.4865f7e3ff28d74f"))}', p4=f'{embed_schedule_human_details(self.mode, self.config)}', p5=f"{(_t('text.69d17ca1683468') if self.active else _t('text.987d904d7afee2'))}", p6=f'{instruction}')
         )
 
     @_i18n_context
@@ -25368,7 +25474,7 @@ class EmbedScheduleView(discord.ui.View):
     @_i18n_context
     async def configure(self, interaction, button):
         if not self.mode_selected:
-            await interaction.response.send_message("Selecciona primero una frecuencia.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.708a42b858ed7ab5"), ephemeral=True)
             return
         await interaction.response.send_modal(EmbedScheduleOptionsModal(self))
 
@@ -25448,10 +25554,7 @@ class EmbedEditorView(discord.ui.View):
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.f86866a282e2a2'), ephemeral=True)
-            return False
-        return True
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
 
     @_i18n_context
     def _data(self) -> dict | None:
@@ -25554,7 +25657,17 @@ class EmbedEditorView(discord.ui.View):
         if self.pending_timestamp is not None or self.pending_remove_index is not None:
             await interaction.response.send_message(_t('text.f30a5d23d6e7dd'), ephemeral=True)
             return
-        await interaction.response.send_message(_t('text.ba18d6eb4ecef1'), view=EmbedChannelPicker(interaction.user.id, self.name), ephemeral=True)
+        await interaction.response.send_message(_t('text.ba18d6eb4ecef1'), view=EmbedChannelPicker(interaction.user.id, self.name, self.guild_id), ephemeral=True)
+
+
+    @discord.ui.button(label=_t("text.ab26ae7bca3621"), style=discord.ButtonStyle.secondary, row=3)
+    @_i18n_context
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_timestamp is not None or self.pending_remove_index is not None:
+            await interaction.response.send_message(_t("setup.structure.unsaved"), ephemeral=True)
+            return
+        await interaction.response.edit_message(content=_t("setup.command_panels.embeds_hub"), embed=None,
+            view=EmbedHubView(self.owner_id, self.guild_id, self.name))
 
 
 @_i18n_context
@@ -25926,37 +26039,47 @@ async def embed_group_error(interaction: discord.Interaction, error: discord.app
 
 # Panel único de administración de embeds. Los manejadores heredados permanecen
 # disponibles internamente, pero no se publican como subcomandos de Discord.
-class EmbedHubCreateModal(discord.ui.Modal, title="Crear embed"):
-    nombre = discord.ui.TextInput(label="Nombre del embed", max_length=100)
-    titulo = discord.ui.TextInput(label="Título", required=False, max_length=256)
-    descripcion = discord.ui.TextInput(label="Descripción", style=discord.TextStyle.paragraph,
+class EmbedHubCreateModal(discord.ui.Modal, title=_t("setup.command_panels.c2331660ed48ae57")):
+    nombre = discord.ui.TextInput(label=_t("setup.command_panels.1f79528b4202efaf"), max_length=100)
+    titulo = discord.ui.TextInput(label=_t("setup.command_panels.4c08a5d5feb22ce2"), required=False, max_length=256)
+    descripcion = discord.ui.TextInput(label=_t("setup.command_panels.ee00b96fff266fe2"), style=discord.TextStyle.paragraph,
                                         required=False, max_length=4000)
 
-    def __init__(self, guild_id: int):
+    @_i18n_context
+    def __init__(self, guild_id: int, owner_id: int, parent):
         super().__init__()
-        self.guild_id = guild_id
+        self.guild_id, self.owner_id, self.parent = guild_id, owner_id, parent
 
     @_i18n_context
     async def on_submit(self, interaction: discord.Interaction):
+        if self.parent.is_finished():
+            await interaction.response.send_message(_t("setup.structure.expired"), ephemeral=True)
+            return
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return
         name = embed_normalize_name(str(self.nombre))
         if not embed_name_is_valid(name):
-            await interaction.response.send_message("Nombre no válido.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.ade1d68cb1da4a40"), ephemeral=True)
             return
         if embed_get(self.guild_id, name) is not None:
-            await interaction.response.send_message("Ya existe un embed con ese nombre.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.bfd4d4976e84d705"), ephemeral=True)
             return
-        embed_save(self.guild_id, name, {
-            "title": _clean(str(self.titulo)),
-            "description": _clean(str(self.descripcion)),
-        })
-        await embed_refresh(interaction, name, new=True)
+        from command_panel_actions import EmbedCreateReview
+        data = {"title": _clean(str(self.titulo)), "description": _clean(str(self.descripcion))}
+        preview, _, _ = build_custom_embed(data, VarContext(interaction.guild, None, interaction.channel))
+        if embed_is_empty(preview):
+            preview.description = _t("text.3682162eb7d367")
+        await interaction.response.edit_message(content=_t("setup.command_panels.create_review", name=name),
+            embed=preview, view=EmbedCreateReview(globals(), self.parent, name, data))
 
 
 class EmbedHubDeleteConfirm(discord.ui.View):
+    @_i18n_context
     def __init__(self, owner_id: int, guild_id: int, name: str):
         super().__init__(timeout=180)
         self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
 
+    @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction):
         allowed = (interaction.guild is not None
                    and interaction.guild.id == self.guild_id
@@ -25964,24 +26087,27 @@ class EmbedHubDeleteConfirm(discord.ui.View):
                    and await configuration_access(interaction))
         return bool(allowed)
 
-    @discord.ui.button(label="Confirmar eliminación", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=_t("setup.command_panels.b4bb6c6db58f7c78"), style=discord.ButtonStyle.danger)
+    @_i18n_context
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         deleted = embed_delete(self.guild_id, self.name)
         self.stop()
         await interaction.response.edit_message(
-            content=("Embed eliminado." if deleted else "Ese embed ya no existe."),
+            content=(_t("setup.command_panels.f8251e3c1e21a29b") if deleted else _t("setup.command_panels.7200d89ca4e980bc")),
             view=None,
         )
 
-    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label=_t("setup.command_panels.ab26ae7bca362195"), style=discord.ButtonStyle.secondary)
+    @_i18n_context
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
         await interaction.response.edit_message(
-            content="Eliminación cancelada.", view=None
+            content=_t("setup.command_panels.b5cfc01de602841d"), view=None
         )
 
 
 class EmbedHubView(discord.ui.View):
+    @_i18n_context
     def __init__(self, owner_id: int, guild_id: int, selected: str | None = None):
         super().__init__(timeout=900)
         self.owner_id, self.guild_id, self.selected = owner_id, guild_id, selected
@@ -25991,7 +26117,7 @@ class EmbedHubView(discord.ui.View):
             if selected not in available:
                 self.selected = None
             selector = discord.ui.Select(
-                placeholder="Selecciona un embed guardado",
+                placeholder=_t("setup.command_panels.4f9fc6fa30d68389"),
                 options=[
                     discord.SelectOption(
                         label=name[:100], value=name,
@@ -26003,48 +26129,54 @@ class EmbedHubView(discord.ui.View):
             selector.callback = self.pick
             self.add_item(selector)
 
+    @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.guild is None or interaction.guild.id != self.guild_id:
-            await interaction.response.send_message("Servidor no válido.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.2d0559112e6cc3e6"), ephemeral=True)
             return False
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Este panel pertenece a otra persona.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.89368b9efc84fd80"), ephemeral=True)
             return False
         return await configuration_access(interaction)
 
+    @_i18n_context
     async def pick(self, interaction: discord.Interaction):
         chosen = interaction.data["values"][0]
         await interaction.response.edit_message(
-            content=f"Embeds guardados · Seleccionado: **{chosen}**",
+            content=_t("setup.command_panels.0431b91d103e553b", name=chosen),
             view=EmbedHubView(self.owner_id, self.guild_id, chosen),
         )
 
-    @discord.ui.button(label="Crear", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.3fe5ff266fc3ceac"), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
     async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(EmbedHubCreateModal(self.guild_id))
+        await interaction.response.send_modal(EmbedHubCreateModal(self.guild_id, self.owner_id, self))
 
-    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.2eba946b2e1ee4b6"), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected:
-            await interaction.response.send_message("Selecciona un embed primero.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.07bc1bb22be369da"), ephemeral=True)
             return
         if embed_get(self.guild_id, self.selected) is None:
-            await interaction.response.send_message("Ese embed ya no existe.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.7200d89ca4e980bc"), ephemeral=True)
             return
         await embed_refresh(interaction, self.selected, new=True)
 
-    @discord.ui.button(label="Enviar", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.e1d12d1a29a77b00"), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
     async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected:
-            await interaction.response.send_message("Selecciona un embed primero.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.07bc1bb22be369da"), ephemeral=True)
             return
         await interaction.response.send_message(
-            "Selecciona el canal para publicar el embed.",
-            view=EmbedChannelPicker(self.owner_id, self.selected),
+            _t("setup.command_panels.55310704fe331dd9"),
+            view=EmbedChannelPicker(self.owner_id, self.selected, self.guild_id),
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Programaciones", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=_t("setup.command_panels.9cc531084c405177"), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
     async def schedules(self, interaction: discord.Interaction, button: discord.ui.Button):
         conn = scheduled_embed_db()
         try:
@@ -26055,26 +26187,28 @@ class EmbedHubView(discord.ui.View):
         finally:
             conn.close()
         await interaction.response.send_message(
-            "Gestionar programaciones de embeds.",
+            _t("setup.command_panels.6cf95328a52c703b"),
             view=EmbedSchedulesManageView(self.owner_id, self.guild_id) if rows else None,
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
+    @discord.ui.button(label=_t("setup.command_panels.c9894cf002f90bd0"), style=discord.ButtonStyle.danger, row=2)
+    @_i18n_context
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected:
-            await interaction.response.send_message("Selecciona un embed primero.", ephemeral=True)
+            await interaction.response.send_message(_t("setup.command_panels.07bc1bb22be369da"), ephemeral=True)
             return
         await interaction.response.send_message(
-            f"¿Eliminar el embed **{self.selected}**?",
+            _t("setup.command_panels.30fa2af415be15d8", name=self.selected),
             view=EmbedHubDeleteConfirm(self.owner_id, self.guild_id, self.selected),
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label=_t("text.aeccae342e4bd0"), style=discord.ButtonStyle.danger, row=2)
+    @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), view=None)
 
 
 @bot.tree.command(name="embed", description="Administrar embeds desde un panel único.")
@@ -26085,7 +26219,7 @@ async def embed_hub_command(interaction: discord.Interaction):
     if not await configuration_access(interaction):
         return
     await interaction.response.send_message(
-        "Administrador de embeds. Crea, selecciona, edita, envía o programa desde aquí.",
+        _t("setup.command_panels.ac95cb30997bf12e"),
         view=EmbedHubView(interaction.user.id, interaction.guild.id),
         ephemeral=True,
     )
@@ -26930,7 +27064,7 @@ async def suggestions_group_error(interaction: discord.Interaction, error: disco
     await verify_command_error(interaction, error)
 
 
-bot.tree.add_command(suggestions_group)
+# Legacy callbacks remain testable; /sugerencias opens the existing Setup panel.
 
 
 # ---------------------------------------------------------------------------
@@ -27086,11 +27220,7 @@ class HeraldoMessagesView(discord.ui.View):
 @app_commands.guild_only()
 @_i18n_context
 async def mensajes_command(interaction: discord.Interaction) -> None:
-    await interaction.response.send_message(
-        heraldo_messages_command_content(),
-        view=HeraldoMessagesView(interaction.guild.id, interaction.user.id),
-        ephemeral=True,
-    )
+    await _heraldo_setup_shortcut(interaction, "messages")
 
 
 mensajes_command.error(verify_command_error)
@@ -27100,7 +27230,7 @@ mensajes_command.error(verify_command_error)
 import message_automation
 message_automation_engine = message_automation.ScheduledMessages(globals())
 import message_autofeeds
-message_autofeeds.install(globals())
+# /anuncios uses the same scheduler; legacy /programar commands are not registered.
 import activity_server
 activity_server.install(globals())
 
