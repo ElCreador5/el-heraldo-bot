@@ -55,8 +55,9 @@ class NameModal(discord.ui.Modal, title="Nombre del mensaje"):
         name = str(self.name).strip()
         if not name:
             return await interaction.response.send_message("Escribe un nombre.", ephemeral=True)
+        changed = name != self.panel.name
         self.panel.name = name
-        self.panel.dirty = True
+        self.panel.dirty = changed or self.panel.dirty
         self.panel.refresh()
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
@@ -140,28 +141,19 @@ class PersonalPanel(discord.ui.View):
             return await interaction.response.send_message("Completa correctamente el embed antes de guardar.", ephemeral=True)
         await interaction.response.send_message("¿Confirmas guardar este mensaje personal?", view=ConfirmSave(self), ephemeral=True)
 
-    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.danger, row=2)
     async def discard(self, interaction, button):
         self.embed, self.dirty = copy.deepcopy(self.initial), False
         await interaction.response.edit_message(**self.kwargs(interaction.guild))
 
     @discord.ui.button(label="Enviar", style=discord.ButtonStyle.primary, row=2)
     async def send(self, interaction, button):
-        guild = interaction.guild
-        if guild is None or not isinstance(interaction.channel, discord.TextChannel):
-            return await interaction.response.send_message("Usa este botón en un canal de texto del servidor.", ephemeral=True)
-        permissions = interaction.channel.permissions_for(interaction.user)
-        bot_permissions = interaction.channel.permissions_for(guild.me)
-        if not permissions.send_messages or not bot_permissions.send_messages or not bot_permissions.embed_links:
-            return await interaction.response.send_message("No hay permisos suficientes para enviar embeds en este canal.", ephemeral=True)
         if not has_content(self.embed):
             return await interaction.response.send_message("Primero crea o selecciona un embed.", ephemeral=True)
-        try:
-            embed = render(self.embed, self.host["stamp_embed"], guild)
-            await interaction.channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-        except (ValueError, discord.HTTPException):
-            return await interaction.response.send_message("No fue posible publicar el embed.", ephemeral=True)
-        await interaction.response.send_message("Mensaje enviado al canal.", ephemeral=True)
+        await interaction.response.send_message(
+            "Selecciona el canal de destino. No se enviará nada hasta confirmar.",
+            view=PublishChannelView(self), ephemeral=True,
+        )
 
     @discord.ui.button(label="Eliminar mensaje", style=discord.ButtonStyle.danger, row=3)
     async def delete(self, interaction, button):
@@ -169,12 +161,81 @@ class PersonalPanel(discord.ui.View):
             return await interaction.response.send_message("Selecciona un mensaje guardado.", ephemeral=True)
         await interaction.response.send_message("¿Eliminar este mensaje de Mis mensajes?", view=ConfirmDelete(self), ephemeral=True)
 
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=3)
     async def close(self, interaction, button):
         if self.dirty or self.embed != self.initial:
             return await interaction.response.send_message("Hay cambios pendientes. Guárdalos o descártalos antes de cerrar.", ephemeral=True)
         self.stop()
         await interaction.response.edit_message(content="Panel personal cerrado.", embed=None, view=None)
+
+
+def can_publish(interaction, channel):
+    if not isinstance(channel, discord.TextChannel) or interaction.guild is None:
+        return False
+    if channel.guild.id != interaction.guild.id:
+        return False
+    member = interaction.guild.get_member(interaction.user.id)
+    bot_member = interaction.guild.me
+    if member is None or bot_member is None:
+        return False
+    user_perms = channel.permissions_for(member)
+    bot_perms = channel.permissions_for(bot_member)
+    return (user_perms.view_channel and user_perms.send_messages
+            and user_perms.embed_links and bot_perms.view_channel
+            and bot_perms.send_messages and bot_perms.embed_links)
+
+
+class PublishChannelView(discord.ui.View):
+    def __init__(self, panel):
+        super().__init__(timeout=180)
+        self.panel = panel
+        self.channel_id = None
+        self.channel_select = discord.ui.ChannelSelect(
+            placeholder="Selecciona un canal donde puedas publicar",
+            channel_types=[discord.ChannelType.text], row=0,
+        )
+        self.channel_select.callback = self.choose
+        self.add_item(self.channel_select)
+        self.confirm.disabled = True
+
+    async def interaction_check(self, interaction):
+        return await self.panel.interaction_check(interaction)
+
+    async def choose(self, interaction):
+        channel = self.channel_select.values[0]
+        if not can_publish(interaction, channel):
+            return await interaction.response.send_message(
+                "No tienes permisos para publicar embeds en ese canal.", ephemeral=True)
+        self.channel_id = channel.id
+        self.confirm.disabled = False
+        await interaction.response.edit_message(
+            content=f"Destino: {channel.mention}. Revisa la vista previa y confirma el envío.",
+            embed=render(self.panel.embed, self.panel.host["stamp_embed"], interaction.guild),
+            view=self, allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @discord.ui.button(label="Confirmar envío", style=discord.ButtonStyle.success, row=1)
+    async def confirm(self, interaction, button):
+        channel = interaction.guild.get_channel(self.channel_id) if self.channel_id else None
+        if not can_publish(interaction, channel):
+            return await interaction.response.send_message(
+                "No se puede publicar: revisa los permisos actuales del canal.", ephemeral=True)
+        try:
+            payload = copy.deepcopy(self.panel.embed)
+            if not has_content(payload):
+                raise ValueError("El embed está vacío.")
+            embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
+            await interaction.response.defer(ephemeral=True)
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except (ValueError, discord.HTTPException):
+            return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
+        self.stop()
+        await interaction.edit_original_response(content="Mensaje enviado correctamente.", embed=None, view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=1)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Envío cancelado.", embed=None, view=None)
 
 
 class ConfirmSave(discord.ui.View):
@@ -205,7 +266,7 @@ class ConfirmSave(discord.ui.View):
         # La confirmación es efímera independiente; el panel se refresca al usarlo.
         return
 
-    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Guardado cancelado.", view=None)
@@ -227,7 +288,7 @@ class ConfirmDelete(discord.ui.View):
         self.stop()
         await interaction.response.edit_message(content="Mensaje eliminado.", view=None)
 
-    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger)
     async def no(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Eliminación cancelada.", view=None)
