@@ -1,3 +1,7 @@
+## 2026-11-02 — Visibilidad de moderación por acción
+
+`bot.py` asigna permisos predeterminados separados para ban, kick, timeout, purga, casos, roles, estructura y verificación; configuración continúa con `manage_guild`. El cambio anterior de permisos uniformes se reemplaza. Pruebas estructurales ajustadas; CI y permisos de ejecución finales aún sin verificar. `main` intacta.
+
 ## 2026-11-02 — Visibilidad y acceso al constructor personal
 
 Corrección en `Pruebas`: se añade `_heraldo_apply_command_visibility()` al final del registro, se reemplaza `/embed` administrativo por el constructor personal y se asignan permisos predeterminados `manage_guild` a los demás comandos excepto `/profile`. Tests estructurales añadidos. Pendiente ejecutar CI y aceptación con usuario normal/administrador en Discord tras sincronizar; no se desplegó ni se modificó `main`.
