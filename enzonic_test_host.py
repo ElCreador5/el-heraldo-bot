@@ -97,8 +97,15 @@ def _github_metadata(path):
 
 def _git_blob_sha(path, size):
     """Huella de los bytes en disco, equivalente al SHA de blob Git."""
+    # Diagnóstico seguro: no muestra contenido de archivos, tokens ni datos privados.
     if (not path.is_file() or path.is_symlink() or path.resolve() != path
-            or size < 0 or size > 32 * 1024 * 1024 or path.stat().st_size != size):
+            or size < 0 or size > 32 * 1024 * 1024
+            or path.stat().st_size != size):
+        relative = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else "outside_root"
+        reason = ("missing" if not path.is_file() else
+                  "symlink" if path.is_symlink() else
+                  "size" if path.stat().st_size != size else "invalid_path")
+        print(f"ENZONIC_CHECKOUT status=MISMATCH file={relative} reason={reason}", flush=True)
         blocked("enzonic_checkout_unverified")
     digest = hashlib.sha1()
     digest.update(f"blob {size}\0".encode("ascii"))
@@ -149,6 +156,7 @@ def _verified_github_deployment():
         if len(tracked) > 10000 or total_size > 64 * 1024 * 1024:
             blocked("enzonic_checkout_unverified")
         if _git_blob_sha(ROOT / name, size) != sha:
+            print(f"ENZONIC_CHECKOUT status=MISMATCH file={name} reason=content", flush=True)
             blocked("enzonic_checkout_unverified")
     if not tracked or "bot.py" not in tracked or "enzonic_test_host.py" not in tracked:
         blocked("enzonic_checkout_unverified")
@@ -216,6 +224,7 @@ def _verified_git_deployment():
         if len(tracked) > 10000 or total_size > 64 * 1024 * 1024:
             blocked("enzonic_checkout_unverified")
         if _git_blob_sha(ROOT / name, size) != sha:
+            print(f"ENZONIC_CHECKOUT status=MISMATCH file={name} reason=content", flush=True)
             blocked("enzonic_checkout_unverified")
     if not tracked or "bot.py" not in tracked or "enzonic_test_host.py" not in tracked:
         blocked("enzonic_checkout_unverified")
