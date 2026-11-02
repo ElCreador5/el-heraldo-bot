@@ -1,3 +1,7 @@
+## 2026-11-02 — Visibilidad y acceso al constructor personal
+
+Evidencia real del propietario: cuenta de miembro normal podía visualizar `/ban`, `/kick`, `/caselist`, `/template_sync`, etc., pero no `/embed`; las ejecuciones mostraban «la aplicación no ha respondido». Se corrigió el árbol local de `Pruebas` y se añadió `tests/test_public_command_visibility.py`; esta prueba NO se ha ejecutado en la sesión. PENDIENTE: CI, sincronización efectiva de comandos, inspección de permisos sobrescritos desde Integraciones de Discord y prueba real de visibilidad y rechazo de ejecución con miembro sin permisos y moderador autorizado. La corrección no implica despliegue.
+
 ## 2026-11-02 — Constructor personal /embed: pruebas pendientes
 
 CAMBIO DE CÓDIGO: publicación manual ahora exige elegir canal y confirmar, revalidando permisos de miembro/bot. `AllowedMentions.none()` evita notificaciones. TESTS AÑADIDOS (NO EJECUTADOS AQUÍ): aislamiento SQLite entre dos IDs, eliminación propia, autorización de canal y confirmación inicial deshabilitada, ausencia de planificador personal. PENDIENTE: CI en SHA definitivo; Gateway y clics de usuario normal; acceso a borradores ajenos; permiso denegado después de elegir canal; cancelación; reconexión/reinicio y persistencia real de Enzonic; registro único `/embed`; restricciones de `/setup`. No declarar aceptación en Discord.
