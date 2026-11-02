@@ -27197,6 +27197,27 @@ async def mensajes_command(interaction: discord.Interaction) -> None:
 
 mensajes_command.error(verify_command_error)
 
+# Visibilidad efectiva en el selector de Discord: la excepción pública es
+# /embed personal, además del comando comunitario /profile.
+# Las verificaciones internas de moderación y Setup se conservan.
+def _heraldo_apply_command_visibility():
+    import personal_embeds
+
+    bot.tree.remove_command("embed")
+    personal_embeds.install({"bot": bot, "stamp_embed": stamp_embed})
+    public = {"embed", "profile"}
+    for command in bot.tree.get_commands():
+        command.default_permissions = (
+            None if command.name in public
+            else discord.Permissions(manage_guild=True)
+        )
+    if sum(command.name == "embed" for command in bot.tree.get_commands()) != 1:
+        raise RuntimeError("personal_embed_registration_not_unique")
+
+
+_heraldo_apply_command_visibility()
+
+
 # El trabajador de mensajes se conserva únicamente para Anuncios.
 # No se registran comandos de Plantillas, autorespuestas, sticky ni webhooks de plantillas.
 import message_automation
