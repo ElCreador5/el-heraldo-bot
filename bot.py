@@ -25761,6 +25761,9 @@ async def embed_group_error(interaction: discord.Interaction, error: discord.app
 # disponibles internamente, pero no se publican como subcomandos de Discord.
 class EmbedHubCreateModal(discord.ui.Modal, title="Crear embed"):
     nombre = discord.ui.TextInput(label="Nombre del embed", max_length=100)
+    titulo = discord.ui.TextInput(label="Título", required=False, max_length=256)
+    descripcion = discord.ui.TextInput(label="Descripción", style=discord.TextStyle.paragraph,
+                                        required=False, max_length=4000)
 
     def __init__(self, guild_id: int):
         super().__init__()
@@ -25775,9 +25778,11 @@ class EmbedHubCreateModal(discord.ui.Modal, title="Crear embed"):
         if embed_get(self.guild_id, name) is not None:
             await interaction.response.send_message("Ya existe un embed con ese nombre.", ephemeral=True)
             return
-        await interaction.response.send_modal(
-            EmbedContentModal(self.guild_id, name, {}, is_new=True)
-        )
+        embed_save(self.guild_id, name, {
+            "title": _clean(str(self.titulo)),
+            "description": _clean(str(self.descripcion)),
+        })
+        await embed_refresh(interaction, name, new=True)
 
 
 class EmbedHubDeleteConfirm(discord.ui.View):
