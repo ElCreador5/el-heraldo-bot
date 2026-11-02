@@ -20764,6 +20764,37 @@ install_main_panel_navigation(discord)
 
 # ---------------------------------------------------------------------------
 
+# Constructor público independiente del administrador de embeds de /mensajes.
+# La implementación anterior permanece disponible para los paneles de administración.
+import personal_embeds as _personal_embeds
+bot.tree.remove_command("embed")
+_personal_embeds.install({"bot": bot, "stamp_embed": stamp_embed})
+
+# Los permisos anunciados a Discord son la primera barrera visual.
+# Cada callback administrativo conserva además sus verificaciones internas.
+_heraldo_public_commands = {"embed", "profile"}
+_heraldo_action_permissions = {
+    "ban": "ban_members", "kick": "kick_members", "mute": "moderate_members",
+    "warn": "moderate_members", "advertencias": "moderate_members",
+    "purge": "manage_messages", "caseinfo": "moderate_members",
+    "caselist": "moderate_members", "caseupdate": "moderate_members",
+    "caseclose": "moderate_members", "casedelete": "moderate_members",
+    "setproof": "moderate_members", "condenar": "manage_roles",
+    "liberar": "manage_roles", "restaurar_roles_pendientes": "manage_roles",
+    "fusionar_canales": "manage_channels", "heraldo_check": "manage_roles",
+    "heraldo_check_all": "manage_roles", "verify": "manage_roles",
+    "verify_dm_preview": "manage_guild", "motw_test": "manage_guild",
+}
+for _command in bot.tree.get_commands():
+    if _command.name in _heraldo_public_commands:
+        _command.default_permissions = None
+    else:
+        _permission = _heraldo_action_permissions.get(_command.name, "manage_guild")
+        _command.default_permissions = discord.Permissions(**{_permission: True})
+if sum(_command.name == "embed" for _command in bot.tree.get_commands()) != 1:
+    raise RuntimeError("personal_embed_registration_not_unique")
+
+
 if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
