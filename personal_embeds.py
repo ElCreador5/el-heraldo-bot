@@ -205,6 +205,7 @@ class PersonalPanel(discord.ui.View):
         super().__init__(timeout=900)
         self.owner_id, self.guild_id, self.host = user_id, guild_id, host
         self.personal = True
+        self.panel_message = None
         self.name = name
         self.embed = copy.deepcopy(embed)
         self.initial = copy.deepcopy(embed)
@@ -233,6 +234,14 @@ class PersonalPanel(discord.ui.View):
                 f"**Mensaje seleccionado:** {discord.utils.escape_markdown(self.name) if self.name else 'Nuevo mensaje'}\n"
                 f"**Guardados:** {len(names)}\n"
                 f"**Estado:** {'Cambios sin guardar' if not self.save.disabled else 'Sin cambios pendientes'}")
+
+    async def refresh_visible(self, guild):
+        """Actualizar la vista original /embed, incluso después de una confirmación efímera."""
+        if self.panel_message is not None:
+            try:
+                await self.panel_message.edit(**self.kwargs(guild))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
 
     def kwargs(self, guild):
         self.refresh()
@@ -491,6 +500,7 @@ class ConfirmPublishedDelete(discord.ui.View):
         deleted, failed = await pub.delete(
             self.panel.host["bot"], _db, self.panel.owner_id, self.panel.name, self.selected)
         self.stop()
+        await self.panel.refresh_visible(interaction.guild)
         await interaction.edit_original_response(
             content=f"Eliminadas: {deleted}. Pendientes: {failed}.", view=None)
 
@@ -557,6 +567,7 @@ class ConfirmDelete(discord.ui.View):
         self.panel.name, self.panel.embed, self.panel.initial, self.panel.dirty = "", None, None, False
         self.panel.refresh()
         self.stop()
+        await self.panel.refresh_visible(interaction.guild)
         await interaction.edit_original_response(content="Mensaje guardado y publicaciones eliminados.", view=None)
 
     @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger)
@@ -583,3 +594,4 @@ def install(host):
             return await interaction.response.send_message("Por ahora, abre /embed dentro de un servidor.", ephemeral=True)
         panel = PersonalPanel(interaction.user.id, interaction.guild.id, host)
         await interaction.response.send_message(**panel.kwargs(interaction.guild), ephemeral=True)
+        panel.panel_message = await interaction.original_response()
