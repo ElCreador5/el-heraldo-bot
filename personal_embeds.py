@@ -234,6 +234,17 @@ class ConfirmDelete(discord.ui.View):
 
 
 def install(host):
+    host = dict(host)
+    if "stamp_embed" not in host:
+        def stamp_embed(embed, guild):
+            bot_name = str(getattr(getattr(host["bot"], "user", None), "name", "")).lower()
+            if "lab" in bot_name or "test" in bot_name:
+                embed.set_footer(text="El Heraldo's Labs 🧪")
+            elif guild is not None:
+                embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            return embed
+        host["stamp_embed"] = stamp_embed
+
     @host["bot"].tree.command(name="embed", description="Crear, guardar y enviar mensajes embed personales.")
     async def personal_embed(interaction: discord.Interaction):
         if interaction.guild is None:
