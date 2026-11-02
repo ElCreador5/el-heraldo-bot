@@ -205,20 +205,34 @@ class PersonalPanel(discord.ui.View):
         await interaction.response.edit_message(content="Panel personal cerrado.", embed=None, view=None)
 
 
+def resolve_publish_channel(interaction, selected):
+    """ChannelSelect can return AppCommandChannel rather than a TextChannel."""
+    guild = interaction.guild
+    if guild is None or selected is None:
+        return None
+    channel_id = getattr(selected, "id", selected)
+    try:
+        channel = guild.get_channel(int(channel_id))
+    except (TypeError, ValueError):
+        return None
+    return channel if isinstance(channel, discord.TextChannel) and channel.guild.id == guild.id else None
+
+
 def can_publish(interaction, channel):
-    if not isinstance(channel, discord.TextChannel) or interaction.guild is None:
+    channel = resolve_publish_channel(interaction, channel)
+    if channel is None:
         return False
-    if channel.guild.id != interaction.guild.id:
-        return False
-    member = interaction.guild.get_member(interaction.user.id)
-    bot_member = interaction.guild.me
+    guild = interaction.guild
+    member = interaction.user if isinstance(interaction.user, discord.Member) else guild.get_member(interaction.user.id)
+    bot_member = guild.me
     if member is None or bot_member is None:
         return False
     user_perms = channel.permissions_for(member)
     bot_perms = channel.permissions_for(bot_member)
+    # El usuario necesita poder escribir; el embed lo publica el bot, no el usuario.
     return (user_perms.view_channel and user_perms.send_messages
-            and user_perms.embed_links and bot_perms.view_channel
-            and bot_perms.send_messages and bot_perms.embed_links)
+            and bot_perms.view_channel and bot_perms.send_messages
+            and bot_perms.embed_links)
 
 
 class PublishChannelView(discord.ui.View):
@@ -238,7 +252,7 @@ class PublishChannelView(discord.ui.View):
         return await self.panel.interaction_check(interaction)
 
     async def choose(self, interaction):
-        channel = self.channel_select.values[0]
+        channel = resolve_publish_channel(interaction, self.channel_select.values[0])
         if not can_publish(interaction, channel):
             return await interaction.response.send_message(
                 "No tienes permisos para publicar embeds en ese canal.", ephemeral=True)
