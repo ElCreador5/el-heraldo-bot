@@ -56,6 +56,7 @@ class NameModal(discord.ui.Modal, title="Nombre del mensaje"):
         if not name:
             return await interaction.response.send_message("Escribe un nombre.", ephemeral=True)
         self.panel.name = name
+        self.panel.dirty = True
         self.panel.refresh()
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
