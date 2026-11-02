@@ -423,6 +423,83 @@ class PublishChannelView(discord.ui.View):
         await interaction.response.edit_message(content="Envío cancelado.", embed=None, view=None)
 
 
+class PublicationsView(discord.ui.View):
+    def __init__(self, panel):
+        super().__init__(timeout=180)
+        self.panel, self.selected = panel, None
+        with _db() as db:
+            rows = pub.list_for(db, panel.owner_id, panel.name)[:25]
+        self.pick.options = [
+            discord.SelectOption(label=f"Canal {c} · mensaje {m}", value=f"{g}:{c}:{m}")
+            for g,c,m,_ in rows]
+        self.edit.disabled = self.delete_one.disabled = True
+
+    async def interaction_check(self, interaction):
+        return await self.panel.interaction_check(interaction)
+
+    @discord.ui.select(placeholder="Mis publicaciones", options=[discord.SelectOption(label="Seleccionar", value="_")], row=0)
+    async def pick(self, interaction, select):
+        selected = tuple(map(int, select.values[0].split(":")))
+        with _db() as db:
+            valid = any((g,c,m) == selected for g,c,m,_ in pub.list_for(db,self.panel.owner_id,self.panel.name))
+        if not valid:
+            return await interaction.response.send_message("Publicación no disponible.", ephemeral=True)
+        self.selected = selected
+        self.edit.disabled = self.delete_one.disabled = False
+        await interaction.response.edit_message(content="Publicación seleccionada.", view=self)
+
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=1)
+    async def edit(self, interaction, button):
+        if not self.selected:
+            return await interaction.response.send_message("Selecciona una publicación.", ephemeral=True)
+        await interaction.response.send_message(
+            "Edita el borrador desde «Editar mensaje» o «Editar texto». Al confirmar «Guardar cambios» se actualizarán las publicaciones vinculadas.",
+            ephemeral=True)
+
+    @discord.ui.button(label="Eliminar publicación", style=discord.ButtonStyle.danger, row=1)
+    async def delete_one(self, interaction, button):
+        if not self.selected:
+            return await interaction.response.send_message("Selecciona una publicación.", ephemeral=True)
+        await interaction.response.send_message("¿Eliminar esta publicación del canal seleccionado?",
+            view=ConfirmPublishedDelete(self.panel, self.selected), ephemeral=True)
+
+    @discord.ui.button(label="Eliminar todas", style=discord.ButtonStyle.danger, row=2)
+    async def delete_all(self, interaction, button):
+        with _db() as db:
+            total = len(pub.list_for(db,self.panel.owner_id,self.panel.name))
+        await interaction.response.send_message(
+            f"¿Eliminar las {total} publicaciones de este mensaje? Se conservará el borrador.",
+            view=ConfirmPublishedDelete(self.panel), ephemeral=True)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Abre /embed para regresar a Mis mensajes.", view=None)
+
+
+class ConfirmPublishedDelete(discord.ui.View):
+    def __init__(self, panel, selected=None):
+        super().__init__(timeout=90)
+        self.panel, self.selected = panel, selected
+
+    async def interaction_check(self, interaction):
+        return await self.panel.interaction_check(interaction)
+
+    @discord.ui.button(label="Confirmar eliminación", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        await interaction.response.defer()
+        deleted, failed = await pub.delete(
+            self.panel.host["bot"], _db, self.panel.owner_id, self.panel.name, self.selected)
+        self.stop()
+        await interaction.edit_original_response(
+            content=f"Eliminadas: {deleted}. Pendientes: {failed}.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Eliminación cancelada.", view=None)
+
+
 class ConfirmSave(discord.ui.View):
     def __init__(self, panel):
         super().__init__(timeout=90)
