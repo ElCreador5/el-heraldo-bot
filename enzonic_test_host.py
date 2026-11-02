@@ -356,20 +356,29 @@ def require_restored_database():
                 "name TEXT NOT NULL COLLATE NOCASE, payload TEXT NOT NULL, "
                 "PRIMARY KEY(user_id, name))"
             )
+            published_table = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='personal_publications'"
+            ).fetchone()
             original_schema = conn.execute(
                 "SELECT type,name,tbl_name,sql FROM sqlite_master "
-                "WHERE sql IS NOT NULL AND name != 'personal_embeds' "
+                "WHERE sql IS NOT NULL AND name NOT IN ('personal_embeds','personal_publications') "
                 "ORDER BY type,name"
             ).fetchall()
         baseline_sha = hashlib.sha256(json.dumps(original_schema).encode()).hexdigest()
+        expected_publications = ("CREATE TABLE personal_publications (\n"
+            "        user_id INTEGER NOT NULL, name TEXT NOT NULL COLLATE NOCASE,\n"
+            "        guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,\n"
+            "        message_id INTEGER NOT NULL, author_id INTEGER NOT NULL,\n"
+            "        PRIMARY KEY (guild_id,channel_id,message_id))")
         if (personal_table is None or personal_table[0] != expected_personal
+                or (published_table is not None and published_table[0] != expected_publications)
                 or baseline_sha != record.get("schema_sha256")):
             print("ENZONIC_DATABASE status=BLOCKED reason=schema_diff_not_expected "
                   f"personal_table={personal_table is not None} "
                   f"baseline_matches={baseline_sha == record.get('schema_sha256')}",
                   flush=True)
             blocked("enzonic_restored_schema_mismatch")
-        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds "
+        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds,personal_publications "
               "baseline_schema=UNCHANGED integrity=OK", flush=True)
 
 
