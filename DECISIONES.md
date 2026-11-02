@@ -1,3 +1,7 @@
+## 2026-11-02 — Permisos específicos para comandos de moderación
+
+Se sustituye la máscara uniforme `manage_guild` por permisos predeterminados específicos para acciones (`ban_members`, `kick_members`, `moderate_members`, `manage_messages`, `manage_roles` y `manage_channels`), manteniendo `manage_guild` en la configuración del servidor. `/embed` y `/profile` públicos. Los checks de ejecución no se han relajado. Queda pendiente evaluar compatibilidad de cada check y los roles moderadores sin permisos nativos, además de la sincronización real en Discord. Solo `Pruebas`.
+
 ## 2026-11-02 — Visibilidad y acceso al constructor personal
 
 Política nueva: `/embed` se conecta a `personal_embeds.install` y se retira la entrada administrativa del árbol; la gestión de embeds del servidor permanece bajo `/mensajes`. `/profile` continúa público. El resto de comandos raíz recibe visibilidad por defecto `manage_guild`, sin retirar sus comprobaciones internas. Esta máscara de permisos no equivale a una comprobación interna universal ni sustituye los permisos de comando configurados manualmente en Discord. Se mantiene `main` fuera del alcance.
