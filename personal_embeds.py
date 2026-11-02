@@ -99,6 +99,8 @@ class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
         super().__init__()
         self.panel = panel
         payload = panel.embed or {}
+        if payload.get("kind") == "text":
+            payload = {}
         self.name.default = panel.name or ""
         self.embed_title.default = str(payload.get("title") or "")
         self.description.default = str(payload.get("description") or "")
@@ -109,6 +111,8 @@ class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
             return
         name = str(self.name).strip()
         payload = copy.deepcopy(self.panel.embed or {})
+        if payload.get("kind") == "text":
+            payload = {}
         payload["title"] = str(self.embed_title).strip()
         payload["description"] = str(self.description).strip()
         payload["color_hex"] = str(self.color_hex).strip().lstrip("#")
@@ -192,9 +196,9 @@ class PersonalPanel(discord.ui.View):
         is_text = isinstance(self.embed, dict) and self.embed.get("kind") == "text"
         preview = ""
         if is_text:
-            preview = "\\n\\n**Vista previa del texto:**\\n" + (self.embed.get("text") or "")
+            preview = "\n\n**Vista previa del texto:**\n" + (self.embed.get("text") or "")
             if self.embed.get("image_url"):
-                preview += "\\n" + self.embed["image_url"]
+                preview += "\n" + self.embed["image_url"]
         return dict(content=self.summary() + preview,
                     embed=render(self.embed, self.host["stamp_embed"], guild) if self.embed and not is_text else None,
                     view=self, allowed_mentions=discord.AllowedMentions.none())
@@ -335,7 +339,7 @@ class PublishChannelView(discord.ui.View):
             if payload.get("kind") == "text":
                 content = payload.get("text", "")
                 if payload.get("image_url"):
-                    content += ("\\n" if content else "") + payload["image_url"]
+                    content += ("\n" if content else "") + payload["image_url"]
                 await channel.send(content=content, allowed_mentions=discord.AllowedMentions.none())
             else:
                 embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
