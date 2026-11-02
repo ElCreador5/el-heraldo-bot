@@ -6,6 +6,7 @@ import sqlite3
 from urllib.parse import urlsplit
 import discord
 from discord import app_commands
+import personal_publications as pub
 from autofeed_embed_builder import EmbedBuilderView, validate_data, has_content, render
 
 
@@ -13,6 +14,7 @@ def _db():
     path = os.getenv("DB_PATH", "heraldo.db")
     connection = sqlite3.connect(path, timeout=10)
     connection.execute("CREATE TABLE IF NOT EXISTS personal_embeds (user_id INTEGER NOT NULL, name TEXT NOT NULL COLLATE NOCASE, payload TEXT NOT NULL, PRIMARY KEY(user_id, name))")
+    pub.setup(connection)
     return connection
 
 
@@ -273,6 +275,16 @@ class PersonalPanel(discord.ui.View):
             )
         await interaction.response.send_modal(EditImagesModal(self))
 
+    @discord.ui.button(label="Mis publicaciones", style=discord.ButtonStyle.secondary, row=3)
+    async def published(self, interaction, button):
+        with _db() as db:
+            rows = pub.list_for(db, self.owner_id, self.name) if self.name else []
+        if not rows:
+            return await interaction.response.send_message("Este mensaje no tiene publicaciones registradas.", ephemeral=True)
+        await interaction.response.send_message(
+            "Selecciona una publicación para editarla o eliminarla.",
+            view=PublicationsView(self), ephemeral=True)
+
     @discord.ui.button(label="Nombre", style=discord.ButtonStyle.secondary, row=1)
     async def rename(self, interaction, button):
         await interaction.response.send_modal(NameModal(self))
@@ -389,15 +401,21 @@ class PublishChannelView(discord.ui.View):
                 content = payload.get("text", "")
                 if payload.get("image_url"):
                     content += ("\n" if content else "") + payload["image_url"]
-                await channel.send(content=content, allowed_mentions=discord.AllowedMentions.none())
+                sent = await channel.send(content=content, allowed_mentions=discord.AllowedMentions.none())
             else:
                 embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
                 embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-                await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+                sent = await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         except (ValueError, discord.HTTPException):
             return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
+        try:
+            with _db() as db:
+                pub.register(db, self.panel.owner_id, self.panel.name, interaction.guild.id, channel.id, sent.id, interaction.user.id)
+            result = "Mensaje enviado y registrado."
+        except sqlite3.Error:
+            result = "Mensaje enviado, pero falló el registro de la publicación."
         self.stop()
-        await interaction.edit_original_response(content="Mensaje enviado correctamente.", embed=None, view=None)
+        await interaction.edit_original_response(content=result, embed=None, view=None)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=1)
     async def cancel(self, interaction, button):
@@ -423,7 +441,11 @@ class ConfirmSave(discord.ui.View):
         self.panel.dirty = False
         self.panel.refresh()
         self.stop()
-        await interaction.response.edit_message(content="Mensaje guardado en Mis mensajes.", view=None)
+        await interaction.response.defer()
+        updated, failed = await pub.update(self.panel.host["bot"], _db, self.panel.owner_id,
+            self.panel.name, self.panel.embed, self.panel.host["stamp_embed"], render)
+        await interaction.edit_original_response(
+            content=f"Guardado. Publicaciones actualizadas: {updated}; pendientes: {failed}.", view=None)
         try:
             await self.panel_message_update(interaction)
         except Exception:
@@ -449,11 +471,16 @@ class ConfirmDelete(discord.ui.View):
 
     @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger)
     async def yes(self, interaction, button):
+        await interaction.response.defer()
+        deleted, failed = await pub.delete(self.panel.host["bot"], _db, self.panel.owner_id, self.panel.name)
+        if failed:
+            return await interaction.edit_original_response(
+                content=f"Publicaciones eliminadas: {deleted}. Quedan {failed} pendientes; el borrador se conserva.", view=None)
         remove(self.panel.owner_id, self.panel.name)
         self.panel.name, self.panel.embed, self.panel.initial, self.panel.dirty = "", None, None, False
         self.panel.refresh()
         self.stop()
-        await interaction.response.edit_message(content="Mensaje eliminado.", view=None)
+        await interaction.edit_original_response(content="Mensaje guardado y publicaciones eliminados.", view=None)
 
     @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger)
     async def no(self, interaction, button):
