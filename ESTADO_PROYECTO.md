@@ -1,3 +1,7 @@
+## 2026-11-02 — Corrección de sincronización /embed
+
+Corregida la discrepancia del esquema de traducciones de `/embed` que bloqueaba el `bulk_upsert_guild_commands` en ambos servidores (`TranslationUnavailable: command_schema_changed:embed.description`). Añadida regresión de coincidencia fuente y catálogos. Falta resultado real de `COMMAND_SYNC status=SUCCESS` en Enzonic tras recibir este commit.
+
 ## 2026-11-02 — Visibilidad de moderación por acción
 
 `bot.py` asigna permisos predeterminados separados para ban, kick, timeout, purga, casos, roles, estructura y verificación; configuración continúa con `manage_guild`. El cambio anterior de permisos uniformes se reemplaza. Pruebas estructurales ajustadas; CI y permisos de ejecución finales aún sin verificar. `main` intacta.
