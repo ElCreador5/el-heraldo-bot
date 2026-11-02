@@ -21668,7 +21668,106 @@ async def honeypot_group_error(interaction: discord.Interaction, error: discord.
     await verify_command_error(interaction, error)
 
 
-bot.tree.add_command(honeypot_group)
+class HoneypotExemptSelector(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, adding: bool):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id, self.adding = guild_id, owner_id
+        roles = discord.ui.RoleSelect(placeholder="Seleccionar rol", row=0)
+        roles.callback = self.select_role
+        self.roles = roles
+        self.add_item(roles)
+        users = discord.ui.UserSelect(placeholder="Seleccionar miembro", row=1)
+        users.callback = self.select_user
+        self.users = users
+        self.add_item(users)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    async def select_role(self, interaction: discord.Interaction):
+        role = self.roles.values[0]
+        await interaction.response.edit_message(
+            content=f"Confirmar {'exención' if self.adding else 'retiro de exención'} de {role.mention}",
+            view=HoneypotExemptionConfirmView(self.guild_id, self.owner_id, "role", role.id, self.adding),
+        )
+
+    async def select_user(self, interaction: discord.Interaction):
+        user = self.users.values[0]
+        await interaction.response.edit_message(
+            content=f"Confirmar {'exención' if self.adding else 'retiro de exención'} de {user.mention}",
+            view=HoneypotExemptionConfirmView(self.guild_id, self.owner_id, "member", user.id, self.adding),
+        )
+
+
+class HoneypotCommandPanel(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Configuración", style=discord.ButtonStyle.primary, row=0)
+    async def settings(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = HeraldoHoneypotSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=None, embed=view._embed(interaction.guild), view=view)
+
+    @discord.ui.button(label="Historial", style=discord.ButtonStyle.secondary, row=0)
+    async def history(self, interaction: discord.Interaction, button: discord.ui.Button):
+        rows = hp_recent_triggers(self.guild_id, 10)
+        embed = discord.Embed(title="Historial de Honeypot",
+                              description=f"Activaciones totales: {hp_total_triggers(self.guild_id)}",
+                              color=discord.Color.orange())
+        for item in rows:
+            embed.add_field(
+                name=f"{item['username']} · {'Aplicada' if item['success'] else 'Fallida'}",
+                value=f"Canal: <#{item['channel_id']}> · Acción: {HONEYPOT_ACTION_LABELS.get(item['action'], item['action'])}",
+                inline=False,
+            )
+        if not rows:
+            embed.description = "Todavía no hay activaciones registradas."
+        await interaction.response.edit_message(content=None, embed=embed, view=self)
+
+    @discord.ui.button(label="Añadir exento", style=discord.ButtonStyle.secondary, row=1)
+    async def add_exempt(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="Selecciona un rol o miembro para eximir.",
+                                                 embed=None,
+                                                 view=HoneypotExemptSelector(self.guild_id, self.owner_id, True))
+
+    @discord.ui.button(label="Retirar exento", style=discord.ButtonStyle.secondary, row=1)
+    async def remove_exempt(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="Selecciona un rol o miembro.",
+                                                 embed=None,
+                                                 view=HoneypotExemptSelector(self.guild_id, self.owner_id, False))
+
+    @discord.ui.button(label="Reanudar", style=discord.ButtonStyle.success, row=2)
+    async def resume(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not honeypot_paused(self.guild_id):
+            await interaction.response.send_message("Honeypot no está pausado.", ephemeral=True)
+            return
+        await confirm_configuration(interaction, self.guild_id, {"honeypot_paused": "0"})
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="Panel cerrado.", embed=None, view=None)
+
+
+@bot.tree.command(name="honeypot", description="Abrir el panel de Honeypot.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def honeypot_panel_command(interaction: discord.Interaction):
+    if not await configuration_access(interaction):
+        return
+    await interaction.response.send_message(
+        "Panel de Honeypot: configuración, historial y exenciones.",
+        view=HoneypotCommandPanel(interaction.guild.id, interaction.user.id),
+        ephemeral=True,
+    )
+
+honeypot_panel_command.error(verify_command_error)
+
 
 # ---------------------------------------------------------------------------
 # 8. /fusionar_canales — migración segura de mensajes entre canales
