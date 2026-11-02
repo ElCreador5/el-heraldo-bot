@@ -25756,7 +25756,170 @@ async def embed_group_error(interaction: discord.Interaction, error: discord.app
     await verify_command_error(interaction, error)
 
 
-bot.tree.add_command(embed_group)
+
+# Panel único de administración de embeds. Los manejadores heredados permanecen
+# disponibles internamente, pero no se publican como subcomandos de Discord.
+class EmbedHubCreateModal(discord.ui.Modal, title="Crear embed"):
+    nombre = discord.ui.TextInput(label="Nombre del embed", max_length=100)
+
+    def __init__(self, guild_id: int):
+        super().__init__()
+        self.guild_id = guild_id
+
+    @_i18n_context
+    async def on_submit(self, interaction: discord.Interaction):
+        name = embed_normalize_name(str(self.nombre))
+        if not embed_name_is_valid(name):
+            await interaction.response.send_message("Nombre no válido.", ephemeral=True)
+            return
+        if embed_get(self.guild_id, name) is not None:
+            await interaction.response.send_message("Ya existe un embed con ese nombre.", ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            EmbedContentModal(self.guild_id, name, {}, is_new=True)
+        )
+
+
+class EmbedHubDeleteConfirm(discord.ui.View):
+    def __init__(self, owner_id: int, guild_id: int, name: str):
+        super().__init__(timeout=180)
+        self.owner_id, self.guild_id, self.name = owner_id, guild_id, name
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        allowed = (interaction.guild is not None
+                   and interaction.guild.id == self.guild_id
+                   and interaction.user.id == self.owner_id
+                   and await configuration_access(interaction))
+        return bool(allowed)
+
+    @discord.ui.button(label="Confirmar eliminación", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        deleted = embed_delete(self.guild_id, self.name)
+        self.stop()
+        await interaction.response.edit_message(
+            content=("Embed eliminado." if deleted else "Ese embed ya no existe."),
+            view=None,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(
+            content="Eliminación cancelada.", view=None
+        )
+
+
+class EmbedHubView(discord.ui.View):
+    def __init__(self, owner_id: int, guild_id: int, selected: str | None = None):
+        super().__init__(timeout=900)
+        self.owner_id, self.guild_id, self.selected = owner_id, guild_id, selected
+        names = embed_names(guild_id)
+        if names:
+            available = [name for name, _ in names[:25]]
+            if selected not in available:
+                self.selected = None
+            selector = discord.ui.Select(
+                placeholder="Selecciona un embed guardado",
+                options=[
+                    discord.SelectOption(
+                        label=name[:100], value=name,
+                        default=(name == self.selected)
+                    ) for name in available
+                ],
+                row=0,
+            )
+            selector.callback = self.pick
+            self.add_item(selector)
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        if interaction.guild is None or interaction.guild.id != self.guild_id:
+            await interaction.response.send_message("Servidor no válido.", ephemeral=True)
+            return False
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel pertenece a otra persona.", ephemeral=True)
+            return False
+        return await configuration_access(interaction)
+
+    async def pick(self, interaction: discord.Interaction):
+        chosen = interaction.data["values"][0]
+        await interaction.response.edit_message(
+            content=f"Embeds guardados · Seleccionado: **{chosen}**",
+            view=EmbedHubView(self.owner_id, self.guild_id, chosen),
+        )
+
+    @discord.ui.button(label="Crear", style=discord.ButtonStyle.primary, row=1)
+    async def create(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(EmbedHubCreateModal(self.guild_id))
+
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=1)
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected:
+            await interaction.response.send_message("Selecciona un embed primero.", ephemeral=True)
+            return
+        if embed_get(self.guild_id, self.selected) is None:
+            await interaction.response.send_message("Ese embed ya no existe.", ephemeral=True)
+            return
+        await embed_refresh(interaction, self.selected, new=True)
+
+    @discord.ui.button(label="Enviar", style=discord.ButtonStyle.success, row=1)
+    async def send(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected:
+            await interaction.response.send_message("Selecciona un embed primero.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "Selecciona el canal para publicar el embed.",
+            view=EmbedChannelPicker(self.owner_id, self.selected),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Programaciones", style=discord.ButtonStyle.secondary, row=1)
+    async def schedules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        conn = scheduled_embed_db()
+        try:
+            rows = conn.execute(
+                "SELECT id FROM scheduled_embeds WHERE guild_id=? LIMIT 1",
+                (self.guild_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        await interaction.response.send_message(
+            "Gestionar programaciones de embeds.",
+            view=EmbedSchedulesManageView(self.owner_id, self.guild_id) if rows else None,
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger, row=2)
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.selected:
+            await interaction.response.send_message("Selecciona un embed primero.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"¿Eliminar el embed **{self.selected}**?",
+            view=EmbedHubDeleteConfirm(self.owner_id, self.guild_id, self.selected),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+
+
+@bot.tree.command(name="embed", description="Administrar embeds desde un panel único.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def embed_hub_command(interaction: discord.Interaction):
+    if not await configuration_access(interaction):
+        return
+    await interaction.response.send_message(
+        "Administrador de embeds. Crea, selecciona, edita, envía o programa desde aquí.",
+        view=EmbedHubView(interaction.user.id, interaction.guild.id),
+        ephemeral=True,
+    )
+
+
+embed_hub_command.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
