@@ -27,6 +27,18 @@ class PublicCommandsPolicyTests(unittest.TestCase):
         self.assertIn('_heraldo_apply_command_visibility()', source)
         self.assertLess(source.index('def _heraldo_apply_command_visibility'), source.index('# El trabajador de mensajes'))
 
+    def test_embed_i18n_schema_matches_registered_command(self):
+        import json
+        root = Path(__file__).resolve().parents[1]
+        schema = json.loads((root / "locales/command_schema.json").read_text(encoding="utf-8"))
+        description = "Crear, guardar y enviar mensajes embed personales."
+        self.assertEqual(schema["embed.description"]["source"], description)
+        key = schema["embed.description"]["key"]
+        for locale in ("es-419", "en-US", "pt-BR"):
+            translations = json.loads((root / "locales" / f"{locale}.json").read_text(encoding="utf-8"))
+            self.assertTrue(1 <= len(translations[key]) <= 100, locale)
+        self.assertIn('description="' + description + '"', (root / "personal_embeds.py").read_text(encoding="utf-8"))
+
     def test_personal_embed_is_private_and_owner_bound(self):
         code = (Path(__file__).resolve().parents[1] / "personal_embeds.py").read_text(encoding="utf-8")
         self.assertIn('ephemeral=True', code)
