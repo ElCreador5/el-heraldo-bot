@@ -784,8 +784,7 @@ class FrequencyPickerView(discord.ui.View):
         value = PRESETS[mode]
         self.editor.parts = dict(value) if value else None
         self.editor.frequency_mode = mode
-        if self.editor.original and self.editor.original.get("repeat_parts") != self.editor.parts:
-            self.editor.start = None
+        # Cambiar la repetición no modifica la fecha de inicio elegida.
         self.editor.dirty = True
         # La fecha de inicio se calcula automáticamente al confirmar.
         for option in self.select.options:
@@ -1142,6 +1141,7 @@ class AutofeedEditorView(discord.ui.View):
             (self.embed_builder, "edit_embed", 2),
             (self.frequency, "repeat_picker", 2),
             (self.name_button, "name_button", 3),
+            (self.date_time, "start", 4),
             (self.save, None, 3),
             (self.discard, "discard", 3),
             (self.back, "back", 4),
