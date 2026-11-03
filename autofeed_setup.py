@@ -662,8 +662,7 @@ class CustomRepeatModal(discord.ui.Modal):
                 t("invalid_interval"), ephemeral=True)
         self.editor.parts = parts
         self.editor.frequency_mode = "custom"
-        if self.editor.original and self.editor.original.get("repeat_parts") != parts:
-            self.editor.start = None
+        # La frecuencia puede cambiar sin borrar la fecha/hora inicial elegida.
         self.editor.dirty = True
         await interaction.response.edit_message(
             **editor_panel_kwargs(self.editor, interaction.guild), view=self.editor)
