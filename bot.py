@@ -110,6 +110,11 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 from production_panel_text import text as _t, guild_context as _i18n_context
 import production_panel_text as i18n
 import production_report_labels
+import production_message_locale_sync as message_locale_sync
+import heraldo_i18n as locale_runtime
+import production_report_reminders as report_reminders
+from production_report_reminder_ui import ReminderHomeView
+from production_language_panel import LanguageSettingsView, language_panel_text
 from heraldo_datetime import format_clock, format_date_time, parse_clock
 
 import asyncio
@@ -2055,6 +2060,18 @@ async def on_ready() -> None:
         except Exception:
             print("H03_DAILY status=BLOCKED reason=startup_preflight_failed", flush=True)
     _startup_done = True
+    # Conciliar recordatorios identificables; no enviar nuevos sin autorización.
+    for guild in bot.guilds:
+        async def _startup_reminders(target=guild):
+            try:
+                await report_reminders.refresh_report_reminders(
+                    target, _production_reminder_host())
+            except Exception as exc:
+                print(f"REMINDER_LOCALE_STARTUP status=FAILED guild={target.id} "
+                      f"error={type(exc).__name__}", flush=True)
+        asyncio.create_task(_startup_reminders())
+    if not _production_report_reminder_loop.is_running():
+        _production_report_reminder_loop.start()
     print(f"El Heraldo conectado como {bot.user}")
 
 
@@ -8510,6 +8527,25 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
+    @discord.ui.button(label="Recordatorios", style=discord.ButtonStyle.primary, row=4)
+    async def open_reminders(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if any(x is not None for x in (
+                self.pending_channel_id, self.pending_reactions, self.pending_condemn_emoji)):
+            await interaction.response.send_message(
+                "Guarda o descarta los cambios de Reportes antes de abrir Recordatorios.",
+                ephemeral=True,
+            )
+            return
+        panel = ReminderHomeView(self.guild_id, self.owner_id,
+                                 _production_reminder_host())
+        await interaction.response.edit_message(
+            content=panel.summary(), view=panel)
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=4)
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content="Panel de reportes cerrado.", view=None)
+
 MODERATION_WARN_MAX_ALLOWED = 5
 
 
@@ -10316,7 +10352,7 @@ class HeraldoSetupView(discord.ui.View):
         ("role_connections", "Role Connections", "Conexiones de roles (pendiente)"),
         ("logging", "Logs", "Eventos y canales de registros"),
         ("verification", "Verification", "Verificación y orientación"),
-        ("language", "Idioma", "Configuración del idioma (pendiente)"),
+        ("language", "Idioma", "Idioma manual del servidor (es-419, en-US, pt-BR)"),
         ("messages", "Mensajes", "Editores de mensajes del sistema"),
         ("suggestions", "Sugerencias", "Panel y revisores de sugerencias"),
         ("announcements", "Anuncios", "Configuración del anuncio de Miembro de la Semana"),
@@ -10459,11 +10495,9 @@ class HeraldoSetupView(discord.ui.View):
             view = ServerDateTimeSetupView(globals(), self.guild_id, self.owner_id)
             content = view.summary()
         elif selected == "language":
-            content = (
-                "**El Heraldo · Idioma**\n\n"
-                "Módulo reservado para la internacionalización del bot."
-            )
-            view = HeraldoPendingSetupModuleView(self.guild_id, self.owner_id, "Idioma")
+            content = language_panel_text(self.guild_id, guild_language)
+            view = LanguageSettingsView(self.guild_id, self.owner_id,
+                                        _production_language_host())
         else:
             await interaction.response.send_message("Módulo no válido.", ephemeral=True)
             return
@@ -18824,11 +18858,18 @@ def _install_embed_hooks() -> None:
         orig = getattr(cls, name)
 
         async def wrapper(self, content=_MISSING if empty is _MISSING else None, **kw):
+            guild = guild_of(self)
             try:
-                content, kw = _embedify(content, kw, guild_of(self), empty)
+                content, kw = _embedify(content, kw, guild, empty)
             except Exception:
                 traceback.print_exc()
-            return await orig(self, content, **kw)
+            sent = await orig(self, content, **kw)
+            if name == "send":
+                try:
+                    message_locale_sync.note_sent(sent, guild, content, kw, db_connect)
+                except Exception as exc:
+                    print(f"LANGUAGE_TRACK status=FAILED error={type(exc).__name__}", flush=True)
+            return sent
 
         wrapper.__name__ = name
         wrapper.__doc__ = orig.__doc__
@@ -19168,7 +19209,8 @@ async def embed_send(
     if len(embed) > 6000:
         return f"Error: El embed mide {len(embed)} caracteres y Discord permite 6000 como máximo: acórtalo."
     try:
-        message = await channel.send(content=content, embed=embed, allowed_mentions=EMBED_ALLOWED_MENTIONS)
+        with message_locale_sync.suspend_tracking():
+            message = await channel.send(content=content, embed=embed, allowed_mentions=EMBED_ALLOWED_MENTIONS)
     except discord.Forbidden:
         return f"Error: No tengo permiso para enviar mensajes o embeds en {channel.mention}."
     except discord.HTTPException as e:
@@ -21087,6 +21129,74 @@ async def shortcut_anuncios(interaction: discord.Interaction):
 def guild_language(guild_id):
     configured = guild_config_get(guild_id, "language") or "es-419"
     return configured if configured in {"es-419", "en-US", "pt-BR"} else "es-419"
+
+
+locale_runtime.set_locale_resolver(guild_language)
+locale_runtime.install_discord(discord)
+
+
+async def _production_return_reports(interaction, guild_id, owner_id):
+    view = HeraldoUserReportsSetupView(guild_id, owner_id)
+    await interaction.response.edit_message(
+        content=view._content(interaction.guild), view=view)
+
+
+def _production_reminder_host():
+    return {
+        "get": guild_config_get,
+        "set": guild_config_set,
+        "connect": db_connect,
+        "reactions": moderation_report_reactions,
+        "stamp": stamp_embed,
+        "language": guild_language,
+        "format_datetime": format_configured_datetime,
+        "check_access": configuration_access,
+        "return_reports": _production_return_reports,
+    }
+
+
+async def _production_language_changed(guild, previous, current):
+    try:
+        await report_reminders.refresh_report_reminders(
+            guild, _production_reminder_host())
+    except Exception as exc:
+        print(f"REMINDER_LOCALE_SYNC status=FAILED guild={guild.id} "
+              f"error={type(exc).__name__}", flush=True)
+    await message_locale_sync.synchronize(guild, previous, current, db_connect)
+
+
+def _production_language_host():
+    return {
+        "get_language": guild_language,
+        "set_language": guild_config_set,
+        "check_access": configuration_access,
+        "return_home": heraldo_setup_go_home,
+        "on_changed": _production_language_changed,
+    }
+
+
+@tasks.loop(seconds=20)
+async def _production_report_reminder_loop():
+    await report_reminders.publish_due_reminders(bot, _production_reminder_host())
+
+
+@_production_report_reminder_loop.before_loop
+async def _before_production_report_reminder_loop():
+    await bot.wait_until_ready()
+
+
+@bot.tree.command(name="language", description="Configura el idioma manual de El Heraldo.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+async def language_command(interaction: discord.Interaction):
+    if not await configuration_access(interaction):
+        return
+    await interaction.response.send_message(
+        content=language_panel_text(interaction.guild.id, guild_language),
+        view=LanguageSettingsView(interaction.guild.id, interaction.user.id,
+                                  _production_language_host()),
+        ephemeral=True,
+    )
 
 
 def embed_normalize_name(value):
