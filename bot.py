@@ -7084,7 +7084,9 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
     async def toggle_rejoin_restore(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = (self.pending_restore if self.pending_restore is not None else
                    guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1")
-        self.pending_restore = not current
+        target = not current
+        stored = guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1"
+        self.pending_restore = None if target == stored else target
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label=_t('text.894651580d7e21'), style=discord.ButtonStyle.primary, row=3)
