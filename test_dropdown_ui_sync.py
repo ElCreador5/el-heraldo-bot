@@ -31,6 +31,18 @@ class Entity:
         self.id = id
 
 
+class Role(Entity):
+    pass
+
+
+class User(Entity):
+    pass
+
+
+class Member(User):
+    pass
+
+
 class DefaultValue:
     def __init__(self, id, type):
         self.id, self.type = id, type
@@ -50,6 +62,10 @@ class UserSelect(ChannelSelect):
     pass
 
 
+class MentionableSelect(ChannelSelect):
+    pass
+
+
 class View:
     def __init__(self, children):
         self.children = children
@@ -61,7 +77,8 @@ class DropdownTests(unittest.TestCase):
         self.fake = types.SimpleNamespace(
             ui=types.SimpleNamespace(View=View, Button=Button, Select=Select,
                                      ChannelSelect=ChannelSelect, RoleSelect=RoleSelect,
-                                     UserSelect=UserSelect),
+                                     UserSelect=UserSelect, MentionableSelect=MentionableSelect),
+            Role=Role, User=User, Member=Member,
             SelectDefaultValueType=types.SimpleNamespace(
                 channel="channel", role="role", user="user"),
             SelectDefaultValue=DefaultValue,
@@ -114,6 +131,17 @@ class DropdownTests(unittest.TestCase):
             self.assertEqual([(x.id, x.type) for x in control.default_values],
                              [(42, expected)])
             self.assertFalse(synchronize_dropdown_defaults(View([control])))
+
+    def test_mentionable_roles_and_users_are_not_confused(self):
+        view = View([MentionableSelect(values=[Role(10), User(20), Member(30)])])
+        self.assertTrue(synchronize_dropdown_defaults(view))
+        result = [(v.id, v.type) for v in view.children[0].default_values]
+        self.assertEqual(result, [(10, "role"), (20, "user"), (30, "user")])
+
+    def test_unknown_mentionable_type_is_not_guessed(self):
+        control = MentionableSelect(values=[Entity(100)])
+        self.assertFalse(synchronize_dropdown_defaults(View([control])))
+        self.assertEqual(control.default_values, [])
 
     def test_new_entity_selector_is_blank_and_edit_default_is_preserved(self):
         saved = DefaultValue(id=42, type="channel")
