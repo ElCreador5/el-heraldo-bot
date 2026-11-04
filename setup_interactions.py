@@ -15,6 +15,7 @@ import time
 
 from setup_save_controls import refresh_save_button
 from panel_navigation import ensure_navigation_controls, lineage
+from button_row_layout import balance_view_buttons, install as install_button_rows
 
 
 ACK_KEY = "heraldo_setup_deferred"
@@ -112,6 +113,7 @@ def prepare_navigation(view, interaction=None):
                         "content": getattr(message, "content", None),
                         "embed": embed[0] if embed else None,
                     }
+    balance_view_buttons(view)
     ensure_navigation_controls(view)
 
 
@@ -119,6 +121,7 @@ def install(discord):
     """Compatibilidad probada con el despacho de discord.py en CI."""
     if getattr(discord.ui.View._scheduled_task, "_heraldo_setup_guard", False):
         return
+    install_button_rows(discord)
     original_task = discord.ui.View._scheduled_task
     original_modal_task = discord.ui.Modal._scheduled_task
     original_send = discord.InteractionResponse.send_message
