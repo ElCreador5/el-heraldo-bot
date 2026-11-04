@@ -8,7 +8,7 @@ import sqlite3
 from tempfile import TemporaryDirectory
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import heraldo_i18n as locale
@@ -162,6 +162,56 @@ class LocaleReminderTests(unittest.TestCase):
         panel = ReminderHomeView(10, 99, host)
         self.assertEqual([x.label for x in panel.children if isinstance(x, discord.ui.Button)],
                          ["Volver", "Editar horario", "Vista previa", "Activar", "Cerrar"])
+
+
+class HistoricalReminderTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.db = FakeSettings()
+        self.db.set(10, "language", "en-US")
+        self.db.set(10, "report_reminder_channel", "20")
+        self.guild = SimpleNamespace(
+            id=10, me=SimpleNamespace(id=77),
+        )
+        self.channel = MagicMock(spec=discord.TextChannel)
+        self.channel.id = 20
+        self.channel.permissions_for.return_value = SimpleNamespace(
+            view_channel=True, read_message_history=True,
+        )
+        self.guild.get_channel = lambda channel_id: self.channel if channel_id == 20 else None
+        old = SimpleNamespace(
+            id=100, author=SimpleNamespace(id=77),
+            content="", embeds=[discord.Embed(description=(
+                locale.translate("es-419", "text.5d4decf366f299")
+                + locale.translate("es-419", "text.27ab166caf064d")
+            ))],
+        )
+        async def edit(**kwargs):
+            old.content = kwargs["content"] or ""
+            old.embeds = [kwargs["embed"]]
+        old.edit = AsyncMock(side_effect=edit)
+        self.old = old
+        self.channel.fetch_message = AsyncMock(return_value=old)
+        async def history(limit):
+            yield old
+            yield SimpleNamespace(
+                id=200, author=SimpleNamespace(id=99),
+                content=old.embeds[0].description, embeds=[],
+            )
+        self.channel.history = history
+
+    async def asyncTearDown(self):
+        self.db.close()
+
+    async def test_in_place_reconciliation_preserves_message_id_and_user_text(self):
+        from production_report_reminders import refresh_report_reminders
+        updated, failed = await refresh_report_reminders(self.guild, self.db.host)
+        self.assertEqual((updated, failed), (1, 0))
+        self.assertEqual(self.old.id, 100)
+        self.assertIn("How to help with moderation", self.old.embeds[0].description)
+        self.assertEqual(_load_refs(10, self.db.get), [(20, 100)])
+        self.old.edit.assert_awaited_once()
+        self.assertIsNone(self.old.edit.await_args.kwargs["content"])
+        self.assertFalse(self.old.edit.await_args.kwargs["allowed_mentions"].everyone)
 
 
 class LanguageSaveTests(unittest.IsolatedAsyncioTestCase):
