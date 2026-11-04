@@ -12887,6 +12887,25 @@ async def moderation_send_case_dm(guild: discord.Guild, user_id: int, case_numbe
         return False
 
 
+async def moderation_warn_channel_fallback(channel, member: discord.Member, case_number: int) -> bool:
+    """Aviso breve en el canal original si Discord bloquea el DM de WARN."""
+    if channel is None:
+        return False
+    try:
+        code = moderation_case_code(case_number, member.guild.id)
+        await channel.send(
+            f"{member.mention}, recibiste una advertencia (expediente **{code}**). "
+            "No fue posible enviarte el mensaje privado. "
+            "Consulta con moderación si necesitas detalles.",
+            allowed_mentions=discord.AllowedMentions(
+                everyone=False, users=[member], roles=False,
+            ),
+        )
+        return True
+    except (discord.HTTPException, AttributeError):
+        return False
+
+
 async def moderation_apply_case_punishment(interaction: discord.Interaction, member: discord.Member, case_type: str, reason: str, duration_minutes: int | None = None, proof: str | None = None) -> tuple[bool, str, int | None]:
     guild = interaction.guild
     case_type = case_type.upper()
@@ -12921,6 +12940,8 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         author_id=interaction.user.id, proof=proof, verified_proof=verified,
     )
     dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
+    if case_type == "WARN" and not dm_ok:
+        await moderation_warn_channel_fallback(interaction.channel, member, case_number)
     escalation_note = ""
     if case_type == "WARN":
         current, _ = moderation_warning_counts(guild.id, member.id)
