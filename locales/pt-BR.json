@@ -3558,5 +3558,6 @@
   "moderation.reminders.invalid_interval": "Intervalo inválido. Digite, por exemplo, 2m ou 7h. No ambiente de testes, são aceitos intervalos a partir de 10s; fora dele, de 1d até 365d.",
   "moderation.reminders.summary_custom": "**Lembretes de denúncias**\n\n{p0}\n\n**Estado salvo:** {p1}\n**Frequência:** {p2}\n**Início:** {p6}\n**Canal:** {p4}\nOs controles de edição começam sem opções marcadas. «Salvar alterações» grava a programação; «Ativar/Desativar» altera imediatamente apenas o estado. «Personalizar» aceita intervalos de 1d–365d e, em Test, a partir de 10s.\n**Próxima publicação estimada:** {p5}",
   "moderation.reminders.no_start": "Nenhuma data ou hora de início especificada.",
-  "moderation.reminders.start_defined": "{when} (Santo Domingo)"
+  "moderation.reminders.start_defined": "{when} (Santo Domingo)",
+  "moderation.warn.channel_fallback": "{p0}, você recebeu uma advertência da moderação (registro **{p1}**). Não foi possível enviar a notificação por mensagem privada. Procure a equipe de moderação se precisar de detalhes."
 }
