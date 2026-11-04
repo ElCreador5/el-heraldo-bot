@@ -12853,36 +12853,51 @@ def date_format_setup_summary(guild_id: int) -> str:
 
 @_i18n_context
 def format_configured_datetime(guild_id: int, dt: datetime) -> str:
-    """Representar una fecha sin alterar el instante original."""
+    """Muestra la hora del servidor en 12 o 24 horas sin cambiar el instante."""
+    from heraldo_datetime import format_date_time
     mode = guild_config_get(guild_id, "display_date_format") or "discord"
+    time_mode = guild_config_get(guild_id, "display_time_format")
     moment = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-    if mode == "discord" or mode not in DATE_FORMAT_CHOICES:
+    if mode == "discord" and time_mode is None:
         return discord.utils.format_dt(moment, "f")
-    from zoneinfo import ZoneInfo
-    local = moment.astimezone(ZoneInfo("America/Santo_Domingo"))
-    if mode == "dmy24":
-        return local.strftime("%d/%m/%Y %H:%M")
-    if mode == "mdy12":
-        return local.strftime("%m/%d/%Y %I:%M %p").replace(" 0", " ")
-    return local.strftime("%Y-%m-%d %H:%M")
+    return format_date_time(moment, date_mode=mode, time_mode=time_mode, locale=guild_language(guild_id))
 
 
 class HeraldoDateFormatSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
+        from heraldo_datetime import clock_style
         super().__init__(timeout=900)
         self.guild_id, self.owner_id = guild_id, owner_id
         self.original = guild_config_get(guild_id, "display_date_format") or "discord"
+        self.original_time = guild_config_get(guild_id, "display_time_format")
         self.pending = self.original
-        selection = discord.ui.Select(
+        self.pending_time = clock_style(self.original, self.original_time)
+        self.date_select = discord.ui.Select(
             placeholder=_t('text.a2d518f29c1efe'),
-            options=[discord.SelectOption(label=label, value=value,
-                                          default=bool(guild_config_get(guild_id, "display_date_format")) and value == self.pending)
+            options=[discord.SelectOption(label=label, value=value, default=value == self.pending)
                      for value, label in DATE_FORMAT_CHOICES.items()],
             row=0,
         )
-        selection.callback = self.select_format
-        self.add_item(selection)
+        self.date_select.callback = self.select_format
+        self.add_item(self.date_select)
+        self.time_select = discord.ui.Select(
+            placeholder=_t("setup.datetime.time_choice"),
+            options=[
+                discord.SelectOption(label=_t("setup.datetime.time12"), value="12h",
+                                     default=self.pending_time == "12h"),
+                discord.SelectOption(label=_t("setup.datetime.time24"), value="24h",
+                                     default=self.pending_time == "24h"),
+            ], row=1,
+        )
+        self.time_select.callback = self.select_time
+        self.add_item(self.time_select)
+
+    @_i18n_context
+    def preview(self) -> str:
+        from heraldo_datetime import format_clock
+        sample = format_clock(datetime(2026, 10, 15, 18, 30), self.pending, self.pending_time)
+        return date_format_setup_summary(self.guild_id) + "\n" + _t("setup.datetime.preview", clock=sample)
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -12895,34 +12910,47 @@ class HeraldoDateFormatSetupView(_SetupDirtySaveView):
             await interaction.response.send_message(_t('text.3a72704453002e'), ephemeral=True)
             return
         self.pending = value
-        for item in self.children:
-            if isinstance(item, discord.ui.Select):
-                for option in item.options:
-                    option.default = option.value == value
+        for option in self.date_select.options:
+            option.default = option.value == value
         await interaction.response.edit_message(
-            content=date_format_setup_summary(self.guild_id)
-                    + _t('text.88210e50a12a22', p0=f'{DATE_FORMAT_CHOICES[self.pending]}'),
+            content=self.preview() + _t('text.88210e50a12a22', p0=f'{DATE_FORMAT_CHOICES[self.pending]}'),
             view=self,
         )
 
-    @discord.ui.button(label=_t('text.bc60796c79da12'), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
+    async def select_time(self, interaction: discord.Interaction) -> None:
+        value = (interaction.data or {}).get("values", [None])[0]
+        if value not in {"12h", "24h"}:
+            await interaction.response.send_message(_t('text.3a72704453002e'), ephemeral=True)
+            return
+        self.pending_time = value
+        for option in self.time_select.options:
+            option.default = option.value == value
+        await interaction.response.edit_message(content=self.preview(), view=self)
+
+    @discord.ui.button(label=_t('text.bc60796c79da12'), style=discord.ButtonStyle.primary, row=2)
     @_i18n_context
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if (guild_config_get(self.guild_id, "display_date_format") or "discord") != self.original:
-            await interaction.response.send_message(
-                _t('text.98393c0f6986bc'), ephemeral=True)
+        from heraldo_datetime import clock_style
+        if ((guild_config_get(self.guild_id, "display_date_format") or "discord") != self.original
+                or guild_config_get(self.guild_id, "display_time_format") != self.original_time):
+            await interaction.response.send_message(_t('text.98393c0f6986bc'), ephemeral=True)
             return
-        if self.pending == self.original:
+        changes = {}
+        if self.pending != self.original:
+            changes["display_date_format"] = self.pending
+        if self.pending_time != clock_style(self.original, self.original_time):
+            changes["display_time_format"] = self.pending_time
+        if not changes:
             await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
             return
-        await confirm_configuration(interaction, self.guild_id, {"display_date_format": self.pending})
+        await confirm_configuration(interaction, self.guild_id, changes)
 
-    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger, row=1)
+    @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger, row=2)
     @_i18n_context
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content=_t('text.40bb00b053beae'), view=None)
-
 
 
 import heraldo_i18n as i18n
