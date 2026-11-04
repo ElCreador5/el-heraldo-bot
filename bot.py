@@ -10220,9 +10220,10 @@ class ReportReminderSetupView(_SetupDirtySaveView):
                    "monthly": _t('text.acacad0708eeed'), "custom": _t('text.4290938ed5e690')}
 
     @_i18n_context
-    def __init__(self, guild_id, owner_id):
+    def __init__(self, guild_id, owner_id, parent=None):
         super().__init__(timeout=900)
         self.guild_id, self.owner_id = guild_id, owner_id
+        self.parent = parent
         self.original = reminder_settings(guild_id)
         self.original_raw = {key: guild_config_get(guild_id, key) for key in self.original}
         self.pending = dict(self.original)
@@ -10359,11 +10360,8 @@ class ReportReminderSetupView(_SetupDirtySaveView):
         self._refresh_controls()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
-    @discord.ui.button(label=_t('text.af283098bcccea'), style=discord.ButtonStyle.primary, row=4)
-    @_i18n_context
-    async def custom(self, interaction, button):
-        await interaction.response.send_modal(ReportReminderOptionsModal(self))
-
+    # «Personalizada» en el selector de frecuencia abre este mismo formulario.
+    # El botón duplicado ocupaba la última plaza necesaria para «Cerrar».
     @discord.ui.button(label=_t('text.c5341f198fc2f4'), style=discord.ButtonStyle.secondary, row=4)
     @_i18n_context
     async def preview(self, interaction, button):
@@ -10433,8 +10431,14 @@ class ReportReminderSetupView(_SetupDirtySaveView):
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=4)
     @_i18n_context
     async def cancel(self, interaction, button):
-        # Volver descarta el borrador sin generar otro mensaje.
+        # Volver descarta únicamente el borrador de recordatorios.
         self.stop()
+        if self.parent is not None:
+            # Regresar al mismo menú de Reportes, conservando sus cambios.
+            await interaction.response.edit_message(
+                content=self.parent.parent._content(interaction.guild), view=self.parent,
+            )
+            return
         parent = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.response.edit_message(content=parent._content(interaction.guild), view=parent)
 
@@ -10581,8 +10585,9 @@ class HeraldoUserReportsMoreOptionsView(discord.ui.View):
     @discord.ui.button(label=_t('text.471b155a597e21'), style=discord.ButtonStyle.primary, row=0)
     @_i18n_context
     async def reminders(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = ReportReminderSetupView(self.guild_id, self.owner_id)
-        await interaction.response.send_message(content=view.summary(), view=view, ephemeral=True)
+        # Navegar dentro del mismo mensaje efímero; no generar un panel paralelo.
+        view = ReportReminderSetupView(self.guild_id, self.owner_id, parent=self)
+        await interaction.response.edit_message(content=view.summary(), view=view)
 
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=1)
     @_i18n_context
