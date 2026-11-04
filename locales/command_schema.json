@@ -287,6 +287,10 @@
     "key": "command.c78edb86b90cbd32",
     "source": "Configura los roles de ingreso."
   },
+  "conexiones.description": {
+    "key": "command.role_connections.description",
+    "source": "Configura las conexiones automáticas de roles."
+  },
   "roles_reaccion.description": {
     "key": "command.6635cc564aee9ffc",
     "source": "Configura los roles por reacción."

@@ -62,8 +62,14 @@ def _decode(row):
 
 
 def list_rules(connect, guild_id: int) -> list[Rule]:
-    ensure_schema(connect)
+    # Abrir /setup o recibir un evento nunca altera el esquema SQLite.
+    # La tabla solo se crea al confirmar el primer guardado.
     with closing(connect()) as db:
+        if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='heraldo_role_connections'"
+        ).fetchone() is None:
+            return []
         rows = db.execute(
             "SELECT rule_id,name,target_role_id,groups_json,groups_mode,enabled,revision "
             "FROM heraldo_role_connections WHERE guild_id=? ORDER BY name,rule_id",
