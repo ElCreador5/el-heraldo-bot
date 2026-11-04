@@ -10398,7 +10398,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
                         local_start = datetime.strptime(start_text, "%Y-%m-%d").replace(
                             hour=int(p["report_reminder_hour"]))
                     local_start = local_start.replace(tzinfo=ZoneInfo("America/Santo_Domingo"))
-                    start_label = _t("moderation.reminders.saved_start",
+                    start_label = _t("moderation.reminders.start_defined",
                         when=format_date_time(
                             local_start,
                             date_mode=guild_config_get(self.guild_id, "display_date_format") or "discord",
