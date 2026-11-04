@@ -311,10 +311,6 @@
     "key": "command.464fd58fb6774d77",
     "source": "Abre la configuración de Sugerencias."
   },
-  "template_sync.description": {
-    "key": "command.83c9e7c684178560",
-    "source": "Sincronizar ahora la plantilla del servidor y ver su enlace."
-  },
   "variables.canal.description": {
     "key": "text.53e73fed2e6b96",
     "source": "Canal con cuyos datos se prueba (por defecto, este)"
