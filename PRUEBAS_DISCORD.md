@@ -1,3 +1,13 @@
+## 2026-11-04 — Matriz de aceptación de Role Connections (Pruebas)
+
+- [ ] CI: compilación de `bot.py`, `role_connections.py`, `role_connections_setup.py`, `enzonic_test_host.py`.
+- [ ] CI: condiciones AND/OR, grupos AND/OR, tiene/no tiene, cambio de rol y retirada, dependencias entre roles, rechazo de ciclos y privilegios, SQLite y control de versiones.
+- [ ] Discord Lab: abrir vía `/setup` y `/conexiones`, seleccionar rol principal, agregar 2 condiciones AND, agregar grupo OR, editar/eliminar condición y grupo, descartar, guardar, reabrir y eliminar.
+- [ ] Discord Lab: cambiar idioma es-419/en-US/pt-BR, confirmar navegación Volver/Cerrar, selección persistente en editor y vacío inicial, panel sin filas imposibles.
+- [ ] Discord Lab: miembro con rol A y B recibe C; al perder A se retira C; si una condición NO tiene X cambia, se retira o asigna; comprobar que roles gestionados, administrativos, de verificación y condena quedan intactos.
+- [ ] Discord Lab: probar pausa/reactivación, dos sesiones de edición concurrentes, reinicio en Enzonic sin schema mismatch, sincronización de miembros preexistentes con confirmación y sin actividad en `main`.
+- Las pruebas automatizadas y la cobertura real en Discord se reportarán por separado; los checks de GitHub son informativos y no certifican aceptación visual.
+
 ## 2026-11-04 — Matriz pendiente: idiomas + desplegables
 
 Código actualizado en `Pruebas` y `main`: sincronización de defaults al renderizar para StringSelect, ChannelSelect, RoleSelect, UserSelect y MentionableSelect; regresiones incluidas en `test_dropdown_ui_sync.py`. En `Pruebas`, contexto de idioma por `panel` incluido y prueba `test_i18n_nested_panels.py`.

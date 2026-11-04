@@ -1,0 +1,24 @@
+name: Role connections lab
+on:
+  push:
+    branches: [Pruebas]
+    paths:
+      - 'bot.py'
+      - 'role_connections.py'
+      - 'role_connections_setup.py'
+      - 'enzonic_test_host.py'
+      - 'tests/test_role_connections.py'
+      - 'tests/test_role_connections_ui.py'
+      - '.github/workflows/role-connections-lab.yml'
+  workflow_dispatch:
+jobs:
+  role-connections:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q bot.py role_connections.py role_connections_setup.py enzonic_test_host.py
+      - run: python -m unittest discover -s tests -p 'test_role_connections*.py' -v

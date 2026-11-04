@@ -120,6 +120,8 @@ import evidence_archive
 import setup_interactions
 import heraldo_i18n as i18n
 import message_locale_sync
+import role_connections
+import role_connections_setup
 import moderation_report_labels
 from honeypot_interactions import honeypot_operation, serialize_honeypot_warning
 import io
@@ -2887,6 +2889,48 @@ async def on_member_update(before: discord.Member, after: discord.Member) -> Non
     # el temporizador. La personalidad solo nace cuando El Heraldo procesa una
     # verificación nueva desde su botón. Esto protege a miembros antiguos y evita
     # aplicar expulsiones retroactivas al instalar o reconfigurar el bot.
+
+
+@bot.listen("on_member_join")
+async def heraldo_role_connections_join(member: discord.Member) -> None:
+    """Conexiones al ingreso, sin alterar el flujo independiente de verificación."""
+    if member.bot:
+        return
+    try:
+        await role_connections.reconcile_member(
+            member, connect=db_connect,
+            protected_ids=role_connections_setup.Context(
+                globals(), member.guild.id, member.guild.owner_id
+            ).protected(),
+            blocked=role_connections_setup.Context(
+                globals(), member.guild.id, member.guild.owner_id
+            ).blocked,
+        )
+    except Exception as exc:
+        print(f"ROLE_CONNECTIONS status=JOIN_FAILED guild={member.guild.id} "
+              f"exception={type(exc).__name__}", flush=True)
+
+
+@bot.listen("on_member_update")
+async def heraldo_role_connections_update(
+    before: discord.Member, after: discord.Member,
+) -> None:
+    """Escuchar cambios de roles independientemente de moderación y verificaciones."""
+    if before.bot or {r.id for r in before.roles} == {r.id for r in after.roles}:
+        return
+    try:
+        await role_connections.reconcile_member(
+            after, connect=db_connect,
+            protected_ids=role_connections_setup.Context(
+                globals(), after.guild.id, after.guild.owner_id
+            ).protected(),
+            blocked=role_connections_setup.Context(
+                globals(), after.guild.id, after.guild.owner_id
+            ).blocked,
+        )
+    except Exception as exc:
+        print(f"ROLE_CONNECTIONS status=UPDATE_FAILED guild={after.guild.id} "
+              f"exception={type(exc).__name__}", flush=True)
 
 
 _verification_expiry_inflight: set[tuple[int, int]] = set()
@@ -13861,7 +13905,6 @@ class HeraldoSetupView(discord.ui.View):
                     description=i18n.translate(guild_language(guild_id), description),
                 )
                 for key, label, description in self.MODULES
-                if key not in {"role_connections"}
             ],
         )
         select.callback = self.select_module
@@ -13920,10 +13963,9 @@ class HeraldoSetupView(discord.ui.View):
             view = HeraldoReactionRolesSetupView(self.guild_id, self.owner_id)
             content = view.summary(interaction.guild)
         elif selected == "role_connections":
-            content = (
-                _t('text.945ced8381d4c3')
+            content, view = role_connections_setup.create_panel(
+                globals(), self.guild_id, self.owner_id
             )
-            view = HeraldoPendingSetupModuleView(self.guild_id, self.owner_id, "Role Connections")
         elif selected == "logging":
             view = HeraldoLoggingSetupView(self.guild_id, self.owner_id)
             content = view._content(interaction.guild)
@@ -14088,6 +14130,14 @@ async def shortcut_roles_ingreso(interaction: discord.Interaction) -> None:
 @_i18n_context
 async def shortcut_roles_reaccion(interaction: discord.Interaction) -> None:
     await _heraldo_setup_shortcut(interaction, "reaction_roles")
+
+@bot.tree.command(name="conexiones", description="Configura las conexiones automáticas de roles.")
+@app_commands.default_permissions(administrator=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_conexiones(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "role_connections")
+
 
 @bot.tree.command(name="registros", description="Abre la configuración de Registros.")
 @app_commands.default_permissions(administrator=True)
@@ -25078,7 +25128,7 @@ def _list_command_lines() -> list[str]:
 # Se conserva /list comandos para no introducir otro comando redundante.
 def _heraldo_command_category(path: str) -> str:
     root = path.split()[0].lower()
-    if root in {"setup", "automod", "moderacion", "roles_ingreso", "roles_reaccion",
+    if root in {"setup", "automod", "moderacion", "roles_ingreso", "roles_reaccion", "conexiones",
                 "registros", "anuncios", "verificacion", "formato_fecha", "language",
                 "mensajes", "honeypot", "raid", "embed", "sugerencias", "miembro_semana",
                 "estructura_servidor"}:
@@ -25110,7 +25160,7 @@ def _heraldo_command_module(path: str) -> str:
     root = path.split()[0]
     groups = {
         "verification": {"verificacion", "verify", "verify_dm_preview", "heraldo_check", "heraldo_check_all"},
-        "roles": {"roles_ingreso", "roles_reaccion"},
+        "roles": {"roles_ingreso", "roles_reaccion", "conexiones"},
         "automod": {"automod", "honeypot", "raid"},
         "announcements": {"anuncios", "miembro_semana", "motw_test"},
         "messages": {"mensajes", "embed", "variables"},

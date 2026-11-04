@@ -1,3 +1,12 @@
+## 2026-11-04 — Conexiones automáticas de roles (alcance de Pruebas)
+
+- Se habilita el módulo Role Connections, inspirado en el ejemplo visual de Sapphire: cada conexión tiene un rol principal y de 1 a 5 grupos; cada grupo permite hasta 10 condiciones `Tiene / No tiene`, combinadas por AND/OR, y entre grupos se permite AND/OR. Se admiten hasta 20 conexiones por servidor.
+- Solo un rol principal por conexión; se impiden dependencias cíclicas, roles inexistentes, roles administrados por Discord, roles privilegiados o superiores al rol del bot y roles protegidos por verificación o condena.
+- Configuración desde `/setup → Conexiones de roles` y acceso directo `/conexiones` restringido a administradores autorizados. Los cambios de selectores viven en borrador; guardar y eliminar exigen confirmación, activar/pausar solo cambia el estado.
+- Los eventos de entrada/cambio de rol mantienen las conexiones sincronizadas; los miembros existentes se revisan solo cuando un administrador confirma Sincronizar. Eliminar una conexión no retira retroactivamente roles. Las condenas activas o un rol de condena presente impiden la automatización.
+- Panel nativo Discord sin web, idiomas es-419/en-US/pt-BR, botones Volver y Cerrar, sin introducir OAuth2 ni Linked Roles.
+- Implementación en rama Pruebas, pendiente de aceptar mediante CI y ensayo real de permisos, cambios, revocaciones, dependencias y reinstalación en el servidor de laboratorio. `main` queda fuera del alcance.
+
 ## 2026-11-04 — Revisión de idiomas y selección persistente
 
 Se conserva la regla vigente: el idioma de presentación se determina por la preferencia del servidor, nunca por el idioma del usuario. En `Pruebas` permanecen `es-419`, `en-US` y `pt-BR` con catálogos paralelos; `main` sigue únicamente en español hasta una migración propia. Los desplegables de texto y de entidades conservan visualmente la selección recibida en el panel mientras se edita, sin persistir nada hasta el guardado explícito. Al abrir una creación nueva no debe heredarse una selección de otra sesión; al editar se carga la guardada. Aplicar también a paneles anidados y evitar cambiar valores canónicos. Excepciones: módulos sin localización (actualmente `personal_embeds.py`) requieren traducción completa, no un cambio cosmético ni una falsa declaración de cumplimiento. CI/Discord pendientes de validación.

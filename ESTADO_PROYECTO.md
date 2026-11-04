@@ -1,3 +1,10 @@
+## 2026-11-04 — Role Connections: nueva función en Pruebas
+
+- Nuevos módulos `role_connections.py` (SQLite, motor de evaluación, protección de permisos) y `role_connections_setup.py` (panel Discord). Se añade `/conexiones` y la sección visible del `/setup`; los listeners son independientes de los eventos de verificación/moderación.
+- Esquema `heraldo_role_connections`: regla aislada por `guild_id`, rol principal, grupos y sus operadores, estado y versión de edición. Actualizado el preflight de Enzonic para aceptar exactamente esta tabla opcional sin relajar el esquema histórico.
+- Pruebas añadidas: `tests/test_role_connections.py` y `tests/test_role_connections_ui.py`; workflow informativo `role-connections-lab.yml`. Resultado de ejecución CI y Discord: PENDIENTE de verificación al publicar.
+- No hay despliegue ni modificación autorizada en `main`. La regla no aplica cambios masivos al guardar; solo eventos normales y sincronización explícitamente confirmada.
+
 ## 2026-11-04 — Idiomas y desplegables: revisión transversal (parcial)
 
 - `Pruebas`: catálogo adicional `locales/es-419.json`, `locales/en-US.json` y `locales/pt-BR.json` con **3595 claves en cada uno** y los mismos nombres de variables de interpolación; la preferencia por servidor se lee desde SQLite mediante `guild_language(guild_id)`. `heraldo_i18n._source_id` también recorre `.panel` en subpaneles enlazados (p. ej. paneles personales).

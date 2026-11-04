@@ -363,10 +363,14 @@ def require_restored_database():
                 "SELECT sql FROM sqlite_master WHERE type='table' "
                 "AND name='verified_rejoin_snapshots'"
             ).fetchone()
+            connections_table = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='heraldo_role_connections'"
+            ).fetchone()
             original_schema = conn.execute(
                 "SELECT type,name,tbl_name,sql FROM sqlite_master "
                 "WHERE sql IS NOT NULL AND name NOT IN "
-                "('personal_embeds','personal_publications','verified_rejoin_snapshots') "
+                "('personal_embeds','personal_publications','verified_rejoin_snapshots','heraldo_role_connections') "
                 "ORDER BY type,name"
             ).fetchall()
         baseline_sha = hashlib.sha256(json.dumps(original_schema).encode()).hexdigest()
@@ -386,9 +390,12 @@ def require_restored_database():
             "    PRIMARY KEY (guild_id, user_id)\n"
             ")"
         )
+        from role_connections import SCHEMA as CONNECTIONS_SCHEMA
+        expected_connections = CONNECTIONS_SCHEMA.strip().replace("IF NOT EXISTS ", "", 1)
         if (personal_table is None or personal_table[0] != expected_personal
                 or (published_table is not None and published_table[0] != expected_publications)
                 or (rejoin_table is not None and rejoin_table[0] != expected_rejoin)
+                or (connections_table is not None and connections_table[0] != expected_connections)
                 or baseline_sha != record.get("schema_sha256")):
             print("ENZONIC_DATABASE status=BLOCKED reason=schema_diff_not_expected "
                   f"personal_table={personal_table is not None} "
@@ -396,7 +403,7 @@ def require_restored_database():
                   f"baseline_matches={baseline_sha == record.get('schema_sha256')}",
                   flush=True)
             blocked("enzonic_restored_schema_mismatch")
-        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds,personal_publications,verified_rejoin_snapshots "
+        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds,personal_publications,verified_rejoin_snapshots,heraldo_role_connections "
               "baseline_schema=UNCHANGED integrity=OK", flush=True)
 
 
