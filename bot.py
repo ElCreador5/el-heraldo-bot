@@ -16675,6 +16675,30 @@ async def moderation_send_case_dm(guild: discord.Guild, user_id: int, case_numbe
 
 
 @_i18n_context
+async def moderation_warn_channel_fallback(
+    channel: discord.abc.Messageable | None, member: discord.Member,
+    case_number: int,
+) -> bool:
+    """If WARN DM delivery fails, notify the member in the originating channel.
+
+    Public notice intentionally omits private case details and evidence.
+    """
+    if channel is None:
+        return False
+    try:
+        await channel.send(
+            _t('moderation.warn.channel_fallback',
+               p0=member.mention, p1=moderation_case_code(case_number, member.guild.id)),
+            allowed_mentions=discord.AllowedMentions(
+                everyone=False, users=[member], roles=False,
+            ),
+        )
+        return True
+    except (discord.HTTPException, discord.Forbidden, AttributeError):
+        return False
+
+
+@_i18n_context
 async def moderation_apply_case_punishment(interaction: discord.Interaction, member: discord.Member, case_type: str, reason: str, duration_minutes: int | None = None, proof: str | None = None) -> tuple[bool, str, int | None]:
     guild = interaction.guild
     case_type = case_type.upper()
@@ -16719,6 +16743,8 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
         )
     # La advertencia se envía ANTES de cualquier expulsión o baneo por acumulación.
     dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
+    if case_type == "WARN" and not dm_ok:
+        await moderation_warn_channel_fallback(interaction.channel, member, case_number)
     escalation_note = ""
     if case_type == "WARN" and active == warn_limit:
         escalation_note = await moderation_warning_escalation(
@@ -17073,6 +17099,8 @@ async def execute_moderation_report_action(
                 sent = await moderation_send_case_dm(guild, target.id, case_number)
             except Exception:
                 sent = False
+            if not sent:
+                await moderation_warn_channel_fallback(message.channel, target, case_number)
             if active == limit:
                 reached = "; " + await moderation_warning_escalation(
                     guild, target, case_number, active, limit,
