@@ -17738,6 +17738,56 @@ async def delete_with_evidence(
 
 
 @_i18n_context
+async def delete_purge_panel_message(
+    channel, message_id: int, *, expected_author_id: int,
+    after: datetime | None = None, before: datetime | None = None,
+    content_type: str = "all",
+) -> bool:
+    """Purga manual confirmada: borra solo los IDs de la vista previa.
+
+    No crea archivos ni copias de contenido. Revalida identidad, alcance,
+    permisos y tipo antes de cada borrado. Otras rutas de moderación
+    conservan su archivo de evidencias sin cambios.
+    """
+    guild = getattr(channel, "guild", None)
+    if guild is None or guild.me is None or expected_author_id <= 0:
+        return False
+    key = (guild.id, channel.id, message_id)
+    if key in _evidence_delete_inflight:
+        return False
+    try:
+        perms = channel.permissions_for(guild.me)
+        if not (perms.view_channel and perms.read_message_history and perms.manage_messages):
+            return False
+    except (AttributeError, discord.HTTPException):
+        return False
+    _evidence_delete_inflight.add(key)
+    try:
+        message = await channel.fetch_message(message_id)
+        if (
+            message.guild is None or message.guild.id != guild.id
+            or message.channel.id != channel.id
+            or message.author.id != expected_author_id
+            or (after is not None and message.created_at <= after)
+            or (before is not None and message.created_at >= before)
+            or not _purge_message_matches(message, content_type)
+        ):
+            return False
+        # Comprobación final: no borrar si la capacidad se revocó mientras
+        # consultábamos el mensaje.
+        perms = channel.permissions_for(guild.me)
+        if not (perms.view_channel and perms.read_message_history and perms.manage_messages):
+            return False
+        await message.delete()
+        return True
+    except Exception as exc:
+        print(f"PURGE_PANEL_DELETE status=FAILED error={type(exc).__name__}", flush=True)
+        return False
+    finally:
+        _evidence_delete_inflight.discard(key)
+
+
+@_i18n_context
 async def delete_honeypot_message(
     channel, message_id: int, expected_author_id: int,
     *, after: datetime | None = None, before: datetime | None = None,
@@ -23144,7 +23194,7 @@ async def purge_command(interaction: discord.Interaction) -> None:
         footer=heraldo_footer,
         targets=purge_targets,
         matches=_purge_message_matches,
-        delete=delete_with_evidence,
+        delete=delete_purge_panel_message,
         log=log_embed,
         parse_duration=parse_duration,
         max_minutes=PURGE_MAX_MINUTES,
