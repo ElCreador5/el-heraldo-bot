@@ -10211,11 +10211,13 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
             return
         interval = str(self.days).strip().lower().replace(" ", "")
         match = re.fullmatch(r"(\d+)(s|m|h|d)", interval)
-        minimum_seconds = 10 if heraldo_is_test() else 86400
-        seconds = (int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match.group(2)]
+        is_test = heraldo_is_test()
+        minimum_seconds = 10 if is_test else 86400
+        unit = match.group(2) if match else ""
+        seconds = (int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
                    if match else 0)
         if (not match or seconds < minimum_seconds or seconds > 365 * 86400
-                or (match.group(2) == "s" and not heraldo_is_test())):
+                or (unit == 's' and (not is_test))):
             # El error aparece en el panel original, sin mensajes privados adicionales.
             self.parent._refresh_controls()
             await interaction.response.edit_message(
