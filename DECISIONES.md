@@ -1,3 +1,7 @@
+## 2026-11-04 — Revisión de idiomas y selección persistente
+
+Se conserva la regla vigente: el idioma de presentación se determina por la preferencia del servidor, nunca por el idioma del usuario. En `Pruebas` permanecen `es-419`, `en-US` y `pt-BR` con catálogos paralelos; `main` sigue únicamente en español hasta una migración propia. Los desplegables de texto y de entidades conservan visualmente la selección recibida en el panel mientras se edita, sin persistir nada hasta el guardado explícito. Al abrir una creación nueva no debe heredarse una selección de otra sesión; al editar se carga la guardada. Aplicar también a paneles anidados y evitar cambiar valores canónicos. Excepciones: módulos sin localización (actualmente `personal_embeds.py`) requieren traducción completa, no un cambio cosmético ni una falsa declaración de cumplimiento. CI/Discord pendientes de validación.
+
 ## 2026-11-04 — NH: mantener actualizada toda información dependiente de configuración
 
 Decisión global del propietario: «Si la configuración cambia, la información sobre la misma (si existe) debe actualizarse». Aplica a paneles, mensajes explicativos, recordatorios y publicaciones activas relacionadas con los ajustes guardados. Por ejemplo, si cambia el número de personas necesarias en una regla de reacción (sube o baja), las nuevas publicaciones y los avisos informativos editables deben indicar el umbral vigente. Solo se sincroniza tras un guardado confirmado; una selección nueva o cancelada no reescribe contenido ajeno.
