@@ -929,7 +929,7 @@
   "text.2de621923133d5": "Duración no permitida.",
   "text.2e1e396c157975": "Error: No tengo permiso para enviar mensajes o embeds en {p0}.",
   "text.2e2946769ed603": "Sanción o advertencia por reacción de moderación.",
-  "text.2e2c1ff499c328": "**Recordatorios de reportes**\n\n{p0}\n\n**Estado guardado:** {p1}\n**Frecuencia:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** {p4}\nLos selectores preparan un borrador. «Guardar cambios» conserva la programación; «Activar/Desactivar» aplica solo el estado, inmediatamente. «Personalizar» permite intervalos de 1d–365d y, en Test, desde 10s.\n**Próxima publicación estimada:** {p5}",
+  "text.2e2c1ff499c328": "**Recordatorios de reportes**\n\n{p0}\n\n**Estado guardado:** {p1}\n**Frecuencia:** {p2}\n**Hora:** {p3} (Santo Domingo)\n**Canal:** {p4}\nLos controles de edición comienzan sin opciones marcadas. «Guardar cambios» conserva la programación; «Activar/Desactivar» aplica solo el estado, inmediatamente. «Personalizar» permite intervalos de 1d–365d y, en Test, desde 10s.\n**Próxima publicación estimada:** {p5}",
   "text.2e2ea18f980de9": "Advertencia: Conversación privada pendiente",
   "text.2eaaf547035da1": "Borrar los mensajes que los sancionados mandaron desde que entraron",
   "text.2eb03796ac8a31": "**Borrador sin guardar.** Pulse **{p0}** para revisar la configuración antes de confirmarla. Cancelar descarta el borrador.",
@@ -3545,5 +3545,12 @@
   "text.ffb94c3fd3c42b": "Buscar recursos del servidor por nombre o ID",
   "text.ffe4eebf612d10": "`{canal_mencion:reglas}` → mención de un canal por nombre o ID\n`{rol_mencion:Moderador}` → mención de un rol por nombre o ID\n`{usuario_mencion:Nombre}` → mención de un miembro por nombre o ID\n`{emoji:fuego}` → emoji personalizado del servidor\nFormato recomendado para canales: `{#ID_DEL_CANAL}` (sustituye ID_DEL_CANAL por el ID numérico).\nAtajos antiguos compatibles: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nEjemplo: `Hola {usuario_mencion}, lee {canal_mencion:reglas}` · imagen: `{servidor_icono_url}`",
   "text.fff331093852fa": "\n\nRol creado: {p0}. Quedó seleccionado en **{p1}**. Pulsa **Guardar** para aplicar la configuración de la reacción. El rol ya existe en el servidor aunque salgas sin guardar.",
-  "text.fff8867b824e73": "Martes"
+  "text.fff8867b824e73": "Martes",
+  "moderation.reminders.interval_hint": "Ej.: 2m, 6h, 14d",
+  "moderation.reminders.start_date": "Fecha de inicio (AAAA-MM-DD, opcional)",
+  "moderation.reminders.date_hint": "Ej.: 2026-11-04",
+  "moderation.reminders.start_clock": "Hora de inicio (12 h o 24 h, opcional)",
+  "moderation.reminders.clock_hint": "Ej.: 10:30 PM o 22:30",
+  "moderation.reminders.invalid_start": "Indique un intervalo válido y una fecha AAAA-MM-DD. Si introduce una hora, incluya también la fecha. Se aceptan 10:30 PM y 22:30.",
+  "moderation.reminders.saved_start": "Inicio de la programación: {when} (Santo Domingo)"
 }
