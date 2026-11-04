@@ -148,12 +148,16 @@ class ServerFooterTests(unittest.TestCase):
     def test_direct_user_dm_with_known_server_is_stamped(self):
         for call in (
             "owner.send(embed=stamp_embed(embed.copy(), guild))",
-            "owner.send(embed=stamp_embed(embed.copy(), interaction.guild))",
             "reviewer.send(",
             "requester.send(embed=stamp_embed(result_embed.copy(), guild))",
             "message.edit(embed=stamp_embed(final_embed.copy(), guild)",
         ):
             self.assertIn(call, SOURCE)
+        # La sincronización manual ya no está en /template_sync: reside en el
+        # panel de estructura y conserva el mismo footer oficial en el DM.
+        structure = Path(__file__).with_name("server_structure_setup.py").read_text(encoding="utf-8")
+        self.assertIn('owner.send(embed=host["stamp_embed"](embed.copy(), guild))', structure)
+        self.assertNotIn('@bot.tree.command(name="template_sync"', SOURCE)
 
     def test_transversal_hooks_and_editor_help_present(self):
         self.assertIn('wrap_positional(discord.abc.Messageable, "send"', SOURCE)
