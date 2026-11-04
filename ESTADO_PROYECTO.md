@@ -62,3 +62,12 @@ copió su código ni su documentación histórica completa a esta rama selectiva
 Cambios selectivos incorporados: `production_report_labels.py`, conexión en `bot.py` para presentar etiquetas oficiales de reportes mediante `guild_language(guild_id)` leyendo el valor manual ya guardado (fallback es-419), prueba `test_production_report_labels.py` y comprobación CI en `member-logs-checks.yml`. Sin migraciones SQLite, sin cambios a Railway, sin fusión de ramas.
 
 Diferencia estructural verificada: `main` conserva un selector de idioma pendiente y NO dispone del recordatorio `reminder_preview`, `refresh_report_reminder_publications` ni del mecanismo histórico de `Pruebas`. Por tanto los recordatorios anteriores y los demás mensajes de sistema en `main` aún NO se traducen automáticamente; la presentación de reportes sigue dependiendo de que haya idioma guardado. No afirmar finalización del objetivo original ni pruebas Discord reales.
+
+
+## 2026-11-04 — Idioma y recordatorios añadidos a main
+
+Implementación: `heraldo_i18n.py`, `locales/{es-419,en-US,pt-BR}.json`, adaptador con fallback seguro `production_panel_text.py`, `production_language_panel.py`, `production_report_reminders.py`, `production_report_reminder_ui.py`, `production_message_locale_sync.py`, integración en `bot.py`, exclusión de publicaciones privadas en `personal_embeds.py`, y suite `test_main_language_reminders.py` incluida en CI de main.
+
+Accesos: `/language` y `/setup → Idioma`; `/setup → Moderación → Reportes → Recordatorios`. Guardado confirmado, idiomas es-419/en-US/pt-BR por servidor, opción persistente durante edición, historial de recordatorios identificado por referencias/plantilla propia y reconstrucción con contenido localizado. El programador no publica por defecto. Sus tablas SQLite siguen iguales, usa claves actuales de guild_settings y no modifica expedientes ni anuncios personales.
+
+Cobertura limitada: las cadenas españolas originales en main que no están etiquetadas por catálogo no se traducen de forma general ni retroactiva. El escaneo histórico del sistema es conservador (hasta 300 mensajes por canal, 40 canales); el de recordatorios hasta 500 del canal configurado, y hasta 100 referencias guardadas. No declarar éxito de despliegue en Railway ni pruebas reales Discord si solo se observa CI.

@@ -52,3 +52,14 @@ de seguridad permanecen vigentes.
 Se autorizó promover las correcciones recientes de idiomas. La rama `main` usa `production_panel_text` y todavía NO contiene el selector `/language` ni los recordatorios públicos con referencias editables que existen en `Pruebas`. No se autorizó incorporar indiscriminadamente todos los cambios divergentes.
 
 Se incorporó en `main` `production_report_labels.py` y se integró con los resúmenes, selectores y nombres de reportes existentes. Solo se traducen etiquetas institucionales predeterminadas vinculadas al mismo emoji y al idioma del servidor almacenado en `guild_settings`; cualquier etiqueta personalizada permanece literal. En ausencia de un idioma guardado, español es el predeterminado. No se ha incorporado el historial retroactivo ni el selector pendiente: esta promoción NO constituye internacionalización global completa.
+
+
+## 2026-11-04 — Selector de idioma y recordatorios históricos, promoción selectiva completa en main
+
+El propietario autorizó expresamente incorporar en `main` el selector de idioma y los recordatorios históricos que faltaban respecto de `Pruebas`, sin fusionar el resto de ramas.
+
+El idioma se configura manualmente por servidor desde `/language` o `/setup → Idioma` y se guarda únicamente al pulsar Guardar cambios; hay Volver, Descartar cambios solo si hay borrador y Cerrar. Los idiomas son es-419, en-US y pt-BR, declarados todavía parciales en traducciones heredadas. El texto personalizado se preserva literalmente.
+
+El módulo de recordatorios se abre desde Moderación → Reportes → Recordatorios. Los envíos quedan desactivados por defecto y requieren canal, horario y activación explícita. Se guardan referencias de publicaciones en `guild_settings.report_reminder_active_messages` y el siguiente vencimiento bajo claves existentes de `guild_settings`. No hay migraciones de SQLite. La conciliación busca referencias antiguas y, solo en el canal configurado y con firma de contenido institucional, puede descubrir recordatorios históricos de El Heraldo; los edita en el mismo ID, sin repostear, y no menciona a terceros. También se ejecuta al inicio y después de cambiar idioma.
+
+Se integraron catálogos y conciliación conservadora para otros mensajes institucionales. Solo se modifican textos reconocibles de catálogo y publicados por el bot; el resto del historial y algunos textos heredados en producción pueden permanecer en español. No anunciar una internacionalización absoluta ni despliegue activo hasta verificar en Discord y Railway. Railway permanece pausado, y no debe reactivarse automáticamente.

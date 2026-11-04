@@ -114,3 +114,18 @@ La PR continúa en borrador y no se ha desplegado Honeypot en producción.
 - [ ] Confirmar estado real de Railway tras el próximo despliegue permitido, sin reactivarlo manualmente.
 
 El cambio no despliega el sistema completo de traducción histórica: no trasladar archivos indiscriminadamente de `Pruebas` ni declarar éxito sobre mensajes ya publicados.
+
+
+## 2026-11-04 — Aceptación selector /language + Recordatorios en main
+
+- [x] Nuevo selector y panel en `/language` y `/setup` guardan por confirmación, conservando borrador y navegación.
+- [x] Nuevos recordatorios habilitables solo con canal autorizado; frecuencia diaria, semanal, quincenal, mensual y personalizada con inicio explícito.
+- [x] Se revisan y actualizan mensajes institucionales identificados en el mismo canal y mensaje, sin borrado ni publicaciones repetidas.
+- [x] Se excluyen publicaciones de `/embed` y editor personalizado.
+- [x] Se añadieron pruebas aisladas de catálogos en-US/pt-BR, texto personalizado, estado desactivado, cálculo de fechas, persistencia de referencias, guardado de idioma, reconocimiento de recordatorios y edición de un mensaje histórico simulada sin Gateway.
+- [ ] Probar en servidor Discord real cambio es-419 → en-US → pt-BR → es-419 con un aviso anterior, comprobando ID inalterado y ausencia de menciones.
+- [ ] Confirmar permisos y error seguro al perder acceso al canal.
+- [ ] Confirmar que mensajes de sistema de main no catalogados permanezcan intactos (cobertura parcial).
+- [ ] Verificar Railway cuando los despliegues de producción se autoricen de nuevo, sin reactivarlo.
+
+No se habilitan mensajes por defecto ni se modifican los esquemas SQLite. Las regresiones offline no prueban Discord real ni el estado activo del servicio.
