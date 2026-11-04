@@ -3516,11 +3516,6 @@ class HeraldoJoinRolesSetupView(_JoinRolesOwnedView):
             view=HeraldoJoinRolesSyncView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label="Advertencias", style=discord.ButtonStyle.primary, row=1)
-    async def warnings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
-
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
@@ -9199,8 +9194,8 @@ class HeraldoModerationSetupView(discord.ui.View):
     async def cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         await interaction.edit_original_response(
-            content=moderation_cases_summary(interaction.guild),
-            view=HeraldoCasesSetupView(self.guild_id, self.owner_id),
+            content=(view := HeraldoCasesSetupView(self.guild_id, self.owner_id))._content(interaction.guild),
+            view=view,
         )
 
     @discord.ui.button(label="Reportes", style=discord.ButtonStyle.primary, row=0)
@@ -9208,6 +9203,11 @@ class HeraldoModerationSetupView(discord.ui.View):
         await interaction.response.defer()
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
+
+    @discord.ui.button(label="Advertencias", style=discord.ButtonStyle.primary, row=1)
+    async def warnings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild), view=view)
 
     @discord.ui.button(label="Configurar advertencias", style=discord.ButtonStyle.primary, row=1)
     async def warnings_policy(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
