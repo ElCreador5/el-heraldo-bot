@@ -27,6 +27,34 @@ class NavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(isinstance(x, navigation.AdministrativeClose)
                              for x in child.children), 1)
 
+    async def test_close_deletes_transient_panel_without_receipt(self):
+        view = ParentPanel()
+        navigation.ensure_navigation_controls(view)
+        close = next(x for x in view.children
+                     if isinstance(x, navigation.AdministrativeClose))
+        response = NS(is_done=lambda: False, defer=AsyncMock(),
+                      edit_message=AsyncMock(), send_message=AsyncMock())
+        i = NS(guild=NS(id=345),
+               user=NS(id=6, guild_permissions=discord.Permissions(manage_guild=True)),
+               response=response, delete_original_response=AsyncMock(),
+               edit_original_response=AsyncMock())
+        await close.callback(i)
+        response.defer.assert_awaited_once()
+        i.delete_original_response.assert_awaited_once()
+        response.edit_message.assert_not_awaited()
+        response.send_message.assert_not_awaited()
+
+    async def test_fallback_close_clears_panel_without_status_card(self):
+        response = NS(is_done=lambda: True, defer=AsyncMock())
+        i = NS(response=response,
+               delete_original_response=AsyncMock(
+                   side_effect=discord.Forbidden(NS(status=403, reason="Forbidden"), "No access")),
+               edit_original_response=AsyncMock())
+        await navigation.dismiss_panel(i)
+        response.defer.assert_not_awaited()
+        i.edit_original_response.assert_awaited_once_with(
+            content="\\u200b", embed=None, view=None)
+
     async def test_back_returns_actual_previous_panel(self):
         parent, child = ParentPanel(), ParentPanel()
         child._heraldo_back_target = parent
