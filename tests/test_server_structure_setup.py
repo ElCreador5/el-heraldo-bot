@@ -82,11 +82,11 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_late_modal_and_invalid_ranges_do_not_change_settings(self):
         view=self.view(); modal=StructureScheduleModal(view)
-        modal.hour._value="24"
+        modal.clock._value="25:00"
         i=interaction(guild_id=self.guild_id)
         await modal.on_submit(i)
         self.assertEqual(self.snapshot(),self.original)
-        modal.hour._value="12"; view.stop()
+        modal.clock._value="12:00 PM"; view.stop()
         await modal.on_submit(i)
         self.assertEqual(view.values,view.initial)
 
