@@ -9549,8 +9549,9 @@ async def heraldo_message_components_dispatch(interaction: discord.Interaction):
 async def heraldo_expired_panel_reply(interaction: discord.Interaction):
     if interaction.type not in (discord.InteractionType.component, discord.InteractionType.modal_submit):
         return
-    # El despacho de View se agenda antes del listener; no competir con su ACK/modal.
-    await asyncio.sleep(0)
+    # Discord despacha los callbacks de las vistas en otra tarea. Se concede
+    # tiempo para el ACK antes de considerar caducada una interacción.
+    await asyncio.sleep(0.25)
     if interaction.extras.get(setup_interactions.STARTED_KEY) or interaction.response.is_done():
         return
     custom_id = str((interaction.data or {}).get("custom_id", ""))
@@ -9559,6 +9560,25 @@ async def heraldo_expired_panel_reply(interaction: discord.Interaction):
     message = interaction.message
     if message is None or bot.user is None or message.author.id != bot.user.id:
         return
+
+    # Un panel /purge previo al reinicio no puede ejecutar confirmaciones:
+    # la instantánea de IDs no existe en el proceso nuevo. Evitar que el
+    # recuperador genérico abra /setup y parezca haber confirmado la limpieza.
+    purge_titles = {
+        catalog.messages.get(f"purge.panel.{key}")
+        for catalog in i18n.CATALOGS.values()
+        for key in ("title", "review")
+    }
+    is_purge = custom_id.startswith("ehpurge:v1:") or any(
+        getattr(embed, "title", None) in purge_titles
+        for embed in (getattr(message, "embeds", None) or ())
+    )
+    if is_purge:
+        await interaction.response.edit_message(
+            content=_t("purge.panel.expired"), embed=None, view=None,
+        )
+        return
+
     can_configure = (interaction.guild is not None and
                      getattr(getattr(interaction.user, "guild_permissions", None), "manage_guild", False))
     await interaction.response.send_message(
