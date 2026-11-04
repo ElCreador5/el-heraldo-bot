@@ -884,3 +884,10 @@ Validación pendiente de cierre: resultado final del CI Heraldo Lab para el SHA 
 - Corrección solamente en `Pruebas`: si el checkout es limpio se mantiene la verificación anterior; si está modificado, la alternativa verifica por HTTPS los metadatos del commit y cada blob del árbol publicado en la rama remota `Pruebas` (sin operaciones de escritura). Una discrepancia, archivo ausente, ruta insegura, respuesta incompleta o fallo de red bloquean el arranque. El SHA devuelto debe corresponder al commit remoto verificado.
 - No se modifica SQLite, el estado H-03, los recibos privados, las variables, la producción ni `main`.
 - Regresiones añadidas a `tests/test_enzonic_migration.py`; observar las ejecuciones CI para el último commit y confirmar posteriormente con el registro real de Enzonic el regreso de Discord Gateway.
+
+
+## 2026-11-04 — Internacionalización histórica (desarrollo exclusivo en Pruebas)
+
+Se añadió `message_locale_sync.py` con traducción por catálogos para campos y líneas completas, conservación de variables y textos libres, registro de publicaciones institucionales, exclusión de `/embed` y de mensajes programados, y trabajo de conciliación tras confirmar un cambio de idioma. Se integró en los hooks públicos de envío de `bot.py` y el guardado del idioma. No se añadieron tablas ni migraciones. Se agregaron pruebas `test_message_locale_sync.py` y cobertura al workflow Lab.
+
+Límites pendientes de comprobación en Discord: permisos y alcance real de historial, respuestas efímeras/DM, mensajes antiguos sin procedencia, contenidos multisegmento no reconocidos y disponibilidad de traducciones en en-US y pt-BR (catálogos aún parciales). No declarar cobertura total retroactiva ni despliegue probado en Enzonic/producción sin evidencia. `main` no cambia con esta tarea.
