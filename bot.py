@@ -10182,6 +10182,79 @@ def reminder_preview(guild_id):
             + _t('text.27ab166caf064d'))[:1900]
 
 
+REPORT_REMINDER_ACTIVE_MESSAGE_LIMIT = 100
+
+
+def reminder_active_message_refs(guild_id: int) -> list[tuple[int, int]]:
+    raw = guild_config_get(guild_id, "report_reminder_active_messages")
+    try:
+        data = json.loads(raw) if raw else []
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    refs = []
+    for item in data[-REPORT_REMINDER_ACTIVE_MESSAGE_LIMIT:]:
+        if not isinstance(item, list) or len(item) != 2:
+            continue
+        try:
+            ref = (int(item[0]), int(item[1]))
+        except (TypeError, ValueError):
+            continue
+        if min(ref) > 0 and ref not in refs:
+            refs.append(ref)
+    return refs
+
+
+def remember_report_reminder_publication(guild_id: int, channel_id: int, message_id: int) -> None:
+    refs = reminder_active_message_refs(guild_id)
+    pair = (int(channel_id), int(message_id))
+    refs = [ref for ref in refs if ref != pair] + [pair]
+    guild_config_set(guild_id, "report_reminder_active_messages",
+                     json.dumps(refs[-REPORT_REMINDER_ACTIVE_MESSAGE_LIMIT:]))
+
+
+async def refresh_report_reminder_publications(guild: discord.Guild) -> tuple[int, int]:
+    """Sincroniza avisos actuales del bot, nunca expedientes ni logs históricos."""
+    refs = reminder_active_message_refs(guild.id)
+    if not refs:
+        return 0, 0
+    changed, failed, live = 0, 0, []
+    content = reminder_preview(guild.id)
+    own_id = getattr(bot.user, "id", None)
+    for channel_id, message_id in refs:
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            live.append((channel_id, message_id))
+            failed += 1
+            continue
+        perms = channel.permissions_for(guild.me) if guild.me else None
+        if perms is None or not (perms.view_channel and perms.read_message_history and perms.send_messages):
+            live.append((channel_id, message_id))
+            failed += 1
+            continue
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            continue
+        except (discord.Forbidden, discord.HTTPException):
+            live.append((channel_id, message_id))
+            failed += 1
+            continue
+        if own_id is None or message.author.id != own_id:
+            continue
+        try:
+            if message.content != content:
+                await message.edit(content=content, allowed_mentions=discord.AllowedMentions.none())
+                changed += 1
+        except (discord.Forbidden, discord.HTTPException):
+            failed += 1
+        live.append((channel_id, message_id))
+    if live != refs:
+        guild_config_set(guild.id, "report_reminder_active_messages", json.dumps(live))
+    return changed, failed
+
+
 class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975')):
     days = discord.ui.TextInput(label=_t('text.32dd7bcc6f08f2'), placeholder=_t("moderation.reminders.interval_hint"), max_length=10)
     date = discord.ui.TextInput(label=_t("moderation.reminders.start_date"), placeholder=_t("moderation.reminders.date_hint"), required=False, max_length=10)
@@ -10636,8 +10709,10 @@ async def report_reminders_loop():
                 if claim:
                     # La fecha siguiente se persiste antes de enviar, para no duplicar
                     # notificaciones tras fallos ambiguos o reinicios.
-                    await channel.send(content=reminder_preview(guild.id),
-                                       allowed_mentions=discord.AllowedMentions.none())
+                    sent = await channel.send(content=reminder_preview(guild.id),
+                                              allowed_mentions=discord.AllowedMentions.none())
+                    if sent is not None and getattr(sent, "id", None):
+                        remember_report_reminder_publication(guild.id, channel.id, sent.id)
             except (discord.HTTPException, sqlite3.Error, ValueError, TypeError):
                 print(f"Advertencia: recordatorio pendiente en servidor {guild.id}")
             except Exception:
@@ -11030,6 +11105,7 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
                         _t('text.61080b9bcd7ec2', p0=f'{moderation_action_label(action)}'), ephemeral=True,
                     )
                     return
+        previous_reactions = copy.deepcopy(self.original_reactions)
         if self.pending_channel_id is not None:
             channel = interaction.guild.get_channel(self.pending_channel_id)
             me = interaction.guild.me
@@ -11055,6 +11131,13 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
         self.pending_condemn_emoji = None
         self._rebuild_reaction_select()
         await interaction.response.edit_message(content=self._content(interaction.guild) + _t('text.f1c5938f74bc84'), view=self)
+        if self.original_reactions != previous_reactions:
+            try:
+                changed, failed = await refresh_report_reminder_publications(interaction.guild)
+                if failed:
+                    print(f"REMINDER_CONFIG_SYNC status=PARTIAL changed={changed} failed={failed}")
+            except (sqlite3.Error, ValueError, TypeError, discord.HTTPException):
+                print("REMINDER_CONFIG_SYNC status=FAILED")
 
     @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=4)
     @_i18n_context
