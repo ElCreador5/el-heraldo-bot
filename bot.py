@@ -10179,20 +10179,34 @@ def reminder_preview(guild_id):
 
 
 class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975')):
-    days = discord.ui.TextInput(label=_t('text.32dd7bcc6f08f2'), placeholder=_t('text.db355ca643a358'), max_length=10)
-    date = discord.ui.TextInput(label=_t('text.0fd452b43bf5c7'), placeholder=_t('text.159a055643b7a0'), required=False, max_length=10)
+    days = discord.ui.TextInput(label=_t('text.32dd7bcc6f08f2'), placeholder="Ej.: 2m, 6h, 14d", max_length=10)
+    date = discord.ui.TextInput(label="Fecha de inicio (AAAA-MM-DD, opcional)", placeholder="Ej.: 2026-11-04", required=False, max_length=10)
+    clock = discord.ui.TextInput(label="Hora de inicio (12 h o 24 h, opcional)", placeholder="Ej.: 10:30 PM o 22:30", required=False, max_length=20)
+
     @_i18n_context
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        current = parent.pending["report_reminder_interval"]
-        self.days.default = current if re.fullmatch(r"(\d+)(s|m|h|d)", current) else f"{current}d"
-        self.date.default = parent.pending["report_reminder_start"]
+        # Solo recuperar entradas hechas en ESTA edición; nunca precargar un formulario nuevo.
+        if "report_reminder_interval" in parent.selected_fields:
+            self.days.default = parent.pending["report_reminder_interval"]
+        if "report_reminder_start" in parent.selected_fields:
+            start = parent.pending["report_reminder_start"]
+            if start:
+                self.date.default = start[:10]
+                from heraldo_datetime import format_clock
+                from datetime import time as _time
+                hour, minute = (int(v) for v in start[11:].split(":")) if len(start) > 10 else (int(parent.pending["report_reminder_hour"]), 0)
+                self.clock.default = format_clock(_time(hour, minute),
+                    guild_config_get(parent.guild_id, "display_date_format") or "discord",
+                    guild_config_get(parent.guild_id, "display_time_format"))
+
     @_i18n_context
     async def on_submit(self, interaction):
         if not await self.parent.interaction_check(interaction):
             return
         try:
+            from heraldo_datetime import parse_clock
             interval = str(self.days).strip().lower()
             match = re.fullmatch(r"(\d+)(s|m|h|d)", interval)
             if not match:
@@ -10202,13 +10216,24 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
             is_test = heraldo_is_test()
             if seconds < (10 if is_test else 86400) or seconds > 365 * 86400 or (unit == "s" and not is_test):
                 raise ValueError()
-            start = str(self.date).strip()
-            if start:
-                datetime.strptime(start, "%Y-%m-%d")
+            raw_date, raw_clock = str(self.date).strip(), str(self.clock).strip()
+            if bool(raw_clock) and not raw_date:
+                raise ValueError()
+            start = ""
+            if raw_date:
+                day = datetime.strptime(raw_date, "%Y-%m-%d").date()
+                if raw_clock:
+                    parsed = parse_clock(raw_clock)
+                    start = f"{day.isoformat()} {parsed.hour:02d}:{parsed.minute:02d}"
+                else:
+                    start = day.isoformat()
         except ValueError:
-            await interaction.response.send_message(_t('text.ba197b2069f756'), ephemeral=True)
+            await interaction.response.send_message(
+                "Indique un intervalo válido y una fecha AAAA-MM-DD. Si introduce una hora, "
+                "incluya también la fecha. Se aceptan 10:30 PM y 22:30.", ephemeral=True)
             return
         self.parent.pending.update(report_reminder_interval=interval, report_reminder_start=start, report_reminder_frequency="custom")
+        self.parent.selected_fields.update(("report_reminder_frequency", "report_reminder_interval", "report_reminder_start"))
         self.parent._refresh_controls()
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
 
@@ -10227,15 +10252,20 @@ class ReportReminderSetupView(_SetupDirtySaveView):
         self.original = reminder_settings(guild_id)
         self.original_raw = {key: guild_config_get(guild_id, key) for key in self.original}
         self.pending = dict(self.original)
+        self.selected_fields = set()  # Ninguna opción preseleccionada al abrir.
         self.selectors = {}
         self.weekday_names = (_t('text.d0e80862185ff7'), _t('text.fff8867b824e73'),
                               _t('text.0635bc16ddbe4c'), _t('text.ca7b8cbccb8fd8'),
                               _t('text.7e9a9f126f1f58'), _t('text.f7a8575b1a8fe0'),
                               _t('text.424e93aa513406'))
+        from heraldo_datetime import format_clock
+        from datetime import time as _time
+        date_mode = guild_config_get(guild_id, "display_date_format") or "discord"
+        time_mode = guild_config_get(guild_id, "display_time_format")
         menus = [
             ("report_reminder_frequency", 0, list(self.FREQUENCIES.items())),
             ("report_reminder_day", 1, [(str(i), label) for i, label in enumerate(self.weekday_names)]),
-            ("report_reminder_hour", 2, [(str(i), f"{i:02d}:00") for i in range(24)]),
+            ("report_reminder_hour", 2, [(str(i), format_clock(_time(i, 0), date_mode, time_mode)) for i in range(24)]),
         ]
         placeholders = {
             "report_reminder_frequency": _t('text.e1867c7f9bb33f'),
@@ -10246,7 +10276,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
             select = discord.ui.Select(
                 placeholder=placeholders[field], row=row,
                 options=[discord.SelectOption(label=label, value=value,
-                           default=(self.original_raw.get(field) is not None and value == self.pending[field])) for value, label in options],
+                           default=False) for value, label in options],
             )
 
             @_i18n_context
@@ -10261,6 +10291,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
                     await interaction.response.send_modal(ReportReminderOptionsModal(self))
                     return
                 self.pending[name] = value
+                self.selected_fields.add(name)
                 if name == "report_reminder_frequency" and value != "custom":
                     # Un ancla oculta de otro modo no puede afectar la nueva frecuencia.
                     self.pending["report_reminder_start"] = ""
@@ -10291,18 +10322,25 @@ class ReportReminderSetupView(_SetupDirtySaveView):
     def _refresh_controls(self):
         for field, select in self.selectors.items():
             for option in select.options:
-                option.default = (self.original_raw.get(field) is not None and option.value == self.pending[field])
+                option.default = field in self.selected_fields and option.value == self.pending[field]
         # El selector de día únicamente se utiliza en el modo semanal.
         day_select = self.selectors["report_reminder_day"]
-        if self.pending["report_reminder_frequency"] == "weekly":
+        if "report_reminder_frequency" in self.selected_fields and self.pending["report_reminder_frequency"] == "weekly":
             if day_select not in self.children:
                 self.add_item(day_select)
         elif day_select in self.children:
             self.remove_item(day_select)
+        # En frecuencia personalizada, la hora exacta se elige en el formulario de inicio.
+        hour_select = self.selectors["report_reminder_hour"]
+        if "report_reminder_frequency" in self.selected_fields and self.pending["report_reminder_frequency"] == "custom":
+            if hour_select in self.children:
+                self.remove_item(hour_select)
+        elif hour_select not in self.children:
+            self.add_item(hour_select)
         channel_id = int(self.pending["report_reminder_channel"])
         self.channel_select.default_values = (
             [discord.SelectDefaultValue(id=channel_id, type=discord.SelectDefaultValueType.channel)]
-            if channel_id else []
+            if channel_id and "report_reminder_channel" in self.selected_fields else []
         )
         enabled = self.original["report_reminder_enabled"] == "1"
         self.toggle.label = _t('text.7ef1cd2d3486b2') if enabled else _t('text.8e38c2571d87f6')
@@ -10340,6 +10378,20 @@ class ReportReminderSetupView(_SetupDirtySaveView):
                      p1=f'{state}', p2=f'{detail}',
                      p3=f"{int(p['report_reminder_hour']):02d}", p4=f'{channel}',
                      p5=f'{format_configured_datetime(self.guild_id, due)}')
+        if p["report_reminder_start"] and p["report_reminder_frequency"] == "custom":
+            from heraldo_datetime import format_date_time
+            from zoneinfo import ZoneInfo
+            raw = p["report_reminder_start"]
+            try:
+                local_start = datetime.strptime(raw, "%Y-%m-%d %H:%M") if len(raw) > 10 else datetime.strptime(raw, "%Y-%m-%d").replace(hour=int(p["report_reminder_hour"]))
+                local_start = local_start.replace(tzinfo=ZoneInfo("America/Santo_Domingo"))
+                label = format_date_time(local_start,
+                    date_mode=guild_config_get(self.guild_id, "display_date_format") or "discord",
+                    time_mode=guild_config_get(self.guild_id, "display_time_format"),
+                    locale=guild_language(self.guild_id))
+                content += f"\nInicio de la programación: {label} (Santo Domingo)"
+            except ValueError:
+                pass
         return content + (f"\n\n{notice}" if notice else "")
 
     @_i18n_context
@@ -10357,6 +10409,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
                 content=self.summary(_t('text.000135b3cd2a46')), view=self)
             return
         self.pending["report_reminder_channel"] = str(channel.id)
+        self.selected_fields.add("report_reminder_channel")
         self._refresh_controls()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
@@ -10425,6 +10478,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
         self.original = reminder_settings(self.guild_id)
         self.original_raw = {key: guild_config_get(self.guild_id, key) for key in self.original}
         self.pending = dict(self.original)
+        self.selected_fields.clear()
         self._refresh_controls()
         await interaction.response.edit_message(content=self.summary(), view=self)
 
@@ -10447,7 +10501,6 @@ def reminder_next_due(settings, now):
     """Calcula una fecha futura en horario de Santo Domingo (UTC-4)."""
     local = now.astimezone(timezone(timedelta(hours=-4)))
     hour = max(0, min(23, int(settings["report_reminder_hour"])))
-    # Los recordatorios guardan una hora entera; no existe un campo de minutos.
     candidate = local.replace(hour=hour, minute=0, second=0, microsecond=0)
     frequency = settings["report_reminder_frequency"]
     if frequency == "daily":
@@ -10472,8 +10525,13 @@ def reminder_next_due(settings, now):
     start = settings["report_reminder_start"]
     if frequency in {"custom", "fortnightly", "monthly"} and start:
         try:
-            candidate = datetime.strptime(start, "%Y-%m-%d").replace(
-                tzinfo=timezone(timedelta(hours=-4)), hour=hour)
+            # Compatible con la fecha heredada y con fecha+hora exacta.
+            if len(start) > 10:
+                candidate = datetime.strptime(start, "%Y-%m-%d %H:%M").replace(
+                    tzinfo=timezone(timedelta(hours=-4)))
+            else:
+                candidate = datetime.strptime(start, "%Y-%m-%d").replace(
+                    tzinfo=timezone(timedelta(hours=-4)), hour=hour)
         except ValueError:
             pass
     # Evitar millones de iteraciones si un intervalo corto parte de una fecha antigua.
