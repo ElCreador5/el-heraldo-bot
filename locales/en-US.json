@@ -3590,5 +3590,8 @@
   "personality.rejoin.toggle": "Restore on rejoin",
   "personality.rejoin.summary": "Restore verification and personality on rejoin: {state}",
   "personality.rejoin.enabled": "Enabled",
-  "personality.rejoin.disabled": "Disabled"
+  "personality.rejoin.disabled": "Disabled",
+  "personality.rejoin.help": "**Verification and personality restoration**\nMembers who voluntarily leave the server may recover their valid verification and last personality role. Administrative permissions and roles following kicks or bans are never restored.",
+  "personality.rejoin.confirm.prompt": "Confirm this change to automatic restoration?",
+  "personality.rejoin.confirm.button": "Confirm changes"
 }
