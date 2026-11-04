@@ -19,8 +19,8 @@ class ModerationPolicyUITests(unittest.TestCase):
         setup = member("__init__")
         self.assertIn("self.punishment_select", setup)
         self.assertIn("default=False", setup)
-        self.assertIn("label=f", setup)
-        self.assertIn("text.d91694e8816537", setup)
+        self.assertIn("discord.SelectOption(label=label, value=action, description=hint", setup)
+        self.assertNotIn("label=f", setup)
 
     def test_only_timeout_shows_duration(self):
         controls = member("_refresh_controls")
