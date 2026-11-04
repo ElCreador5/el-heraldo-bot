@@ -1,3 +1,7 @@
+## 2026-11-04 — Norma NH: sincronización de información vigente (Pruebas)
+
+Regla global registrada en AGENTS.md y DECISIONES.md: si cambia una configuración confirmada, los paneles y mensajes informativos activos que dependen de ella deben actualizarse. Primer ajuste concreto en Reportes: nuevas publicaciones de recordatorios guardan referencias de sus mensajes y al guardar cambios de reacciones se intenta editar hasta 100 avisos informativos activos registrados, sin modificar logs ni expedientes históricos. Los mensajes anteriores a la incorporación del índice no son editables retroactivamente por esta vía. Pruebas GitHub y aceptación manual en Discord pendientes; no afecta main ni Railway producción. El resto de módulos sigue pendiente de auditoría.
+
 ## 2026-11-02 — Corrección de sincronización /embed
 
 Corregida la discrepancia del esquema de traducciones de `/embed` que bloqueaba el `bulk_upsert_guild_commands` en ambos servidores (`TranslationUnavailable: command_schema_changed:embed.description`). Añadida regresión de coincidencia fuente y catálogos. Falta resultado real de `COMMAND_SYNC status=SUCCESS` en Enzonic tras recibir este commit.
