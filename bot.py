@@ -11444,6 +11444,15 @@ class HeraldoCaseManagerSetupView(discord.ui.View):
         effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
         moderation_case_close(self.guild_id, self.selected, closed_by=interaction.user.id,
                               resolution="Cerrado mediante gestión de casos")
+        if str(row["type"]) == "CONDEMN":
+            condemned = condemnation_get(self.guild_id, int(row["user_id"]), active_only=False)
+            if (condemned is not None and condemned["moderation_case_number"] is not None
+                    and int(condemned["moderation_case_number"]) == self.selected):
+                await condemnation_mark_closed_card(
+                    interaction.guild, condemned, "Caso cerrado por moderación")
+                if condemned["thread_id"]:
+                    await condemnation_close_private_thread(
+                        interaction.guild, int(condemned["thread_id"]))
         self.selected = None
         await interaction.edit_original_response(
             content=f"Caso cerrado. {effect}\n\n{self.summary()}", view=self)
