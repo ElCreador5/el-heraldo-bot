@@ -6,6 +6,7 @@ import sqlite3
 from urllib.parse import urlsplit
 import discord
 from discord import app_commands
+import personal_publications as pub
 from autofeed_embed_builder import EmbedBuilderView, validate_data, has_content, render
 
 
@@ -13,6 +14,7 @@ def _db():
     path = os.getenv("DB_PATH", "heraldo.db")
     connection = sqlite3.connect(path, timeout=10)
     connection.execute("CREATE TABLE IF NOT EXISTS personal_embeds (user_id INTEGER NOT NULL, name TEXT NOT NULL COLLATE NOCASE, payload TEXT NOT NULL, PRIMARY KEY(user_id, name))")
+    pub.setup(connection)
     return connection
 
 
@@ -82,7 +84,18 @@ class NameModal(discord.ui.Modal, title="Nombre del mensaje"):
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
 
-class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
+def as_embed_payload(payload):
+    """Conservar los borradores de texto antiguos al abrir el editor único de embeds."""
+    payload = copy.deepcopy(payload or {})
+    if payload.get("kind") == "text":
+        return {
+            "description": payload.get("text") or "",
+            "image_url": payload.get("image_url") or "",
+        }
+    return payload
+
+
+class EditMessageModal(discord.ui.Modal, title="Editar embed"):
     """Formulario básico del embed, sin controles de programación."""
     name = discord.ui.TextInput(label="Nombre del mensaje", max_length=70, min_length=1)
     embed_title = discord.ui.TextInput(label="Título", max_length=256, required=False)
@@ -98,9 +111,7 @@ class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
     def __init__(self, panel):
         super().__init__()
         self.panel = panel
-        payload = panel.embed or {}
-        if payload.get("kind") == "text":
-            payload = {}
+        payload = as_embed_payload(panel.embed)
         self.name.default = panel.name or ""
         self.embed_title.default = str(payload.get("title") or "")
         self.description.default = str(payload.get("description") or "")
@@ -110,9 +121,7 @@ class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
         if not await self.panel.interaction_check(interaction):
             return
         name = str(self.name).strip()
-        payload = copy.deepcopy(self.panel.embed or {})
-        if payload.get("kind") == "text":
-            payload = {}
+        payload = as_embed_payload(self.panel.embed)
         payload["title"] = str(self.embed_title).strip()
         payload["description"] = str(self.description).strip()
         payload["color_hex"] = str(self.color_hex).strip().lstrip("#")
@@ -130,33 +139,6 @@ class EditMessageModal(discord.ui.Modal, title="Editar mensaje"):
         await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
 
 
-class EditTextModal(discord.ui.Modal, title="Editar texto"):
-    name = discord.ui.TextInput(label="Nombre del mensaje", max_length=70, min_length=1)
-    message = discord.ui.TextInput(label="Texto", style=discord.TextStyle.paragraph, max_length=2000, required=False)
-    image_url = discord.ui.TextInput(label="Foto (enlace HTTPS)", max_length=1900, required=False)
-
-    def __init__(self, panel):
-        super().__init__()
-        self.panel = panel
-        payload = panel.embed or {}
-        self.name.default = panel.name or ""
-        if payload.get("kind") == "text":
-            self.message.default = payload.get("text", "")
-            self.image_url.default = payload.get("image_url", "")
-
-    async def on_submit(self, interaction):
-        if not await self.panel.interaction_check(interaction):
-            return
-        try:
-            payload = valid_personal({"kind": "text", "text": str(self.message), "image_url": str(self.image_url)})
-        except ValueError as exc:
-            return await interaction.response.send_message(str(exc), ephemeral=True)
-        self.panel.name = str(self.name).strip()
-        self.panel.embed = payload
-        self.panel.dirty = True
-        await interaction.response.edit_message(**self.panel.kwargs(interaction.guild))
-
-
 class EditImagesModal(discord.ui.Modal, title="Imágenes del embed"):
     image_url = discord.ui.TextInput(
         label="Imagen grande (URL)", placeholder="https://ejemplo.com/imagen.jpg",
@@ -170,21 +152,14 @@ class EditImagesModal(discord.ui.Modal, title="Imágenes del embed"):
     def __init__(self, panel):
         super().__init__()
         self.panel = panel
-        payload = panel.embed or {}
-        if payload.get("kind") == "text":
-            payload = {}
+        payload = as_embed_payload(panel.embed)
         self.image_url.default = str(payload.get("image_url") or "")
         self.thumbnail_url.default = str(payload.get("thumbnail_url") or "")
 
     async def on_submit(self, interaction):
         if not await self.panel.interaction_check(interaction):
             return
-        if isinstance(self.panel.embed, dict) and self.panel.embed.get("kind") == "text":
-            return await interaction.response.send_message(
-                "Selecciona un embed para editar sus imágenes. Los mensajes de texto tienen su propio campo de foto.",
-                ephemeral=True,
-            )
-        payload = copy.deepcopy(self.panel.embed or {})
+        payload = as_embed_payload(self.panel.embed)
         payload["image_url"] = str(self.image_url).strip()
         payload["thumbnail_url"] = str(self.thumbnail_url).strip()
         try:
@@ -203,6 +178,7 @@ class PersonalPanel(discord.ui.View):
         super().__init__(timeout=900)
         self.owner_id, self.guild_id, self.host = user_id, guild_id, host
         self.personal = True
+        self.panel_message = None
         self.name = name
         self.embed = copy.deepcopy(embed)
         self.initial = copy.deepcopy(embed)
@@ -232,16 +208,19 @@ class PersonalPanel(discord.ui.View):
                 f"**Guardados:** {len(names)}\n"
                 f"**Estado:** {'Cambios sin guardar' if not self.save.disabled else 'Sin cambios pendientes'}")
 
+    async def refresh_visible(self, guild):
+        """Actualizar la vista original /embed, incluso después de una confirmación efímera."""
+        if self.panel_message is not None:
+            try:
+                await self.panel_message.edit(**self.kwargs(guild))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
     def kwargs(self, guild):
         self.refresh()
-        is_text = isinstance(self.embed, dict) and self.embed.get("kind") == "text"
-        preview = ""
-        if is_text:
-            preview = "\n\n**Vista previa del texto:**\n" + (self.embed.get("text") or "")
-            if self.embed.get("image_url"):
-                preview += "\n" + self.embed["image_url"]
-        return dict(content=self.summary() + preview,
-                    embed=render(self.embed, self.host["stamp_embed"], guild) if self.embed and not is_text else None,
+        preview_embed = render(as_embed_payload(self.embed), self.host["stamp_embed"], guild) if self.embed else None
+        return dict(content=self.summary(),
+                    embed=preview_embed,
                     view=self, allowed_mentions=discord.AllowedMentions.none())
 
     @discord.ui.select(placeholder="Mis mensajes", options=[discord.SelectOption(label="Sin mensajes", value="_empty")], row=0)
@@ -257,21 +236,23 @@ class PersonalPanel(discord.ui.View):
         self.name, self.embed, self.initial, self.dirty = name, loaded, copy.deepcopy(loaded), False
         await interaction.response.edit_message(**self.kwargs(interaction.guild))
 
-    @discord.ui.button(label="Editar mensaje", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Editar embed", style=discord.ButtonStyle.primary, row=1)
     async def edit(self, interaction, button):
         await interaction.response.send_modal(EditMessageModal(self))
 
-    @discord.ui.button(label="Editar texto", style=discord.ButtonStyle.primary, row=1)
-    async def edit_text(self, interaction, button):
-        await interaction.response.send_modal(EditTextModal(self))
-
     @discord.ui.button(label="Imágenes", style=discord.ButtonStyle.secondary, row=1)
     async def edit_images(self, interaction, button):
-        if isinstance(self.embed, dict) and self.embed.get("kind") == "text":
-            return await interaction.response.send_message(
-                "Para una foto en un mensaje de texto, utiliza «Editar texto».", ephemeral=True,
-            )
         await interaction.response.send_modal(EditImagesModal(self))
+
+    @discord.ui.button(label="Mis publicaciones", style=discord.ButtonStyle.secondary, row=3)
+    async def published(self, interaction, button):
+        with _db() as db:
+            rows = pub.list_for(db, self.owner_id, self.name) if self.name else []
+        if not rows:
+            return await interaction.response.send_message("Este mensaje no tiene publicaciones registradas.", ephemeral=True)
+        await interaction.response.send_message(
+            "Selecciona una publicación para editarla o eliminarla.",
+            view=PublicationsView(self), ephemeral=True)
 
     @discord.ui.button(label="Nombre", style=discord.ButtonStyle.secondary, row=1)
     async def rename(self, interaction, button):
@@ -370,8 +351,7 @@ class PublishChannelView(discord.ui.View):
         self.confirm.disabled = False
         await interaction.response.edit_message(
             content=f"Destino: {channel.mention}. Revisa la vista previa y confirma el envío.",
-            embed=(render(self.panel.embed, self.panel.host["stamp_embed"], interaction.guild)
-                   if self.panel.embed.get("kind") != "text" else None),
+            embed=render(as_embed_payload(self.panel.embed), self.panel.host["stamp_embed"], interaction.guild),
             view=self, allowed_mentions=discord.AllowedMentions.none(),
         )
 
@@ -385,24 +365,107 @@ class PublishChannelView(discord.ui.View):
             payload = copy.deepcopy(self.panel.embed)
             valid_personal(payload)
             await interaction.response.defer(ephemeral=True)
-            if payload.get("kind") == "text":
-                content = payload.get("text", "")
-                if payload.get("image_url"):
-                    content += ("\n" if content else "") + payload["image_url"]
-                await channel.send(content=content, allowed_mentions=discord.AllowedMentions.none())
-            else:
-                embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
-                embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-                await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            embed = pub.publication_embed(
+                payload, self.panel.host["stamp_embed"], interaction.guild,
+                interaction.user, self.panel.name, render,
+            )
+            content = payload.get("text") or None if payload.get("kind") == "text" else None
+            sent = await channel.send(
+                content=content, embed=embed, allowed_mentions=discord.AllowedMentions.none(),
+            )
         except (ValueError, discord.HTTPException):
             return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
+        try:
+            with _db() as db:
+                pub.register(db, self.panel.owner_id, self.panel.name, interaction.guild.id, channel.id, sent.id, interaction.user.id)
+            result = "Mensaje enviado y registrado."
+        except sqlite3.Error:
+            result = "Mensaje enviado, pero falló el registro de la publicación."
         self.stop()
-        await interaction.edit_original_response(content="Mensaje enviado correctamente.", embed=None, view=None)
+        await interaction.edit_original_response(content=result, embed=None, view=None)
 
     @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.danger, row=1)
     async def cancel(self, interaction, button):
         self.stop()
         await interaction.response.edit_message(content="Envío cancelado.", embed=None, view=None)
+
+
+class PublicationsView(discord.ui.View):
+    def __init__(self, panel):
+        super().__init__(timeout=180)
+        self.panel, self.selected = panel, None
+        with _db() as db:
+            rows = pub.list_for(db, panel.owner_id, panel.name)[:25]
+        self.pick.options = [
+            discord.SelectOption(label=f"Canal {c} · mensaje {m}", value=f"{g}:{c}:{m}")
+            for g,c,m,_ in rows]
+        self.edit.disabled = self.delete_one.disabled = True
+
+    async def interaction_check(self, interaction):
+        return await self.panel.interaction_check(interaction)
+
+    @discord.ui.select(placeholder="Mis publicaciones", options=[discord.SelectOption(label="Seleccionar", value="_")], row=0)
+    async def pick(self, interaction, select):
+        selected = tuple(map(int, select.values[0].split(":")))
+        with _db() as db:
+            valid = any((g,c,m) == selected for g,c,m,_ in pub.list_for(db,self.panel.owner_id,self.panel.name))
+        if not valid:
+            return await interaction.response.send_message("Publicación no disponible.", ephemeral=True)
+        self.selected = selected
+        self.edit.disabled = self.delete_one.disabled = False
+        await interaction.response.edit_message(content="Publicación seleccionada.", view=self)
+
+    @discord.ui.button(label="Editar", style=discord.ButtonStyle.primary, row=1)
+    async def edit(self, interaction, button):
+        if not self.selected:
+            return await interaction.response.send_message("Selecciona una publicación.", ephemeral=True)
+        await interaction.response.send_message(
+            "Edita el borrador desde «Editar embed» o «Imágenes». Al confirmar «Guardar cambios» se actualizarán las publicaciones vinculadas.",
+            ephemeral=True)
+
+    @discord.ui.button(label="Eliminar publicación", style=discord.ButtonStyle.danger, row=1)
+    async def delete_one(self, interaction, button):
+        if not self.selected:
+            return await interaction.response.send_message("Selecciona una publicación.", ephemeral=True)
+        await interaction.response.send_message("¿Eliminar esta publicación del canal seleccionado?",
+            view=ConfirmPublishedDelete(self.panel, self.selected), ephemeral=True)
+
+    @discord.ui.button(label="Eliminar todas", style=discord.ButtonStyle.danger, row=2)
+    async def delete_all(self, interaction, button):
+        with _db() as db:
+            total = len(pub.list_for(db,self.panel.owner_id,self.panel.name))
+        await interaction.response.send_message(
+            f"¿Eliminar las {total} publicaciones de este mensaje? Se conservará el borrador.",
+            view=ConfirmPublishedDelete(self.panel), ephemeral=True)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Abre /embed para regresar a Mis mensajes.", view=None)
+
+
+class ConfirmPublishedDelete(discord.ui.View):
+    def __init__(self, panel, selected=None):
+        super().__init__(timeout=90)
+        self.panel, self.selected = panel, selected
+
+    async def interaction_check(self, interaction):
+        return await self.panel.interaction_check(interaction)
+
+    @discord.ui.button(label="Confirmar eliminación", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        await interaction.response.defer()
+        deleted, failed = await pub.delete(
+            self.panel.host["bot"], _db, self.panel.owner_id, self.panel.name, self.selected)
+        self.stop()
+        await self.panel.refresh_visible(interaction.guild)
+        await interaction.edit_original_response(
+            content=f"Eliminadas: {deleted}. Pendientes: {failed}.", view=None)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Eliminación cancelada.", view=None)
 
 
 class ConfirmSave(discord.ui.View):
@@ -423,7 +486,11 @@ class ConfirmSave(discord.ui.View):
         self.panel.dirty = False
         self.panel.refresh()
         self.stop()
-        await interaction.response.edit_message(content="Mensaje guardado en Mis mensajes.", view=None)
+        await interaction.response.defer()
+        updated, failed = await pub.update(self.panel.host["bot"], _db, self.panel.owner_id,
+            self.panel.name, self.panel.embed, self.panel.host["stamp_embed"], render)
+        await interaction.edit_original_response(
+            content=f"Guardado. Publicaciones actualizadas: {updated}; pendientes: {failed}.", view=None)
         try:
             await self.panel_message_update(interaction)
         except Exception:
@@ -449,11 +516,17 @@ class ConfirmDelete(discord.ui.View):
 
     @discord.ui.button(label="Eliminar", style=discord.ButtonStyle.danger)
     async def yes(self, interaction, button):
+        await interaction.response.defer()
+        deleted, failed = await pub.delete(self.panel.host["bot"], _db, self.panel.owner_id, self.panel.name)
+        if failed:
+            return await interaction.edit_original_response(
+                content=f"Publicaciones eliminadas: {deleted}. Quedan {failed} pendientes; el borrador se conserva.", view=None)
         remove(self.panel.owner_id, self.panel.name)
         self.panel.name, self.panel.embed, self.panel.initial, self.panel.dirty = "", None, None, False
         self.panel.refresh()
         self.stop()
-        await interaction.response.edit_message(content="Mensaje eliminado.", view=None)
+        await self.panel.refresh_visible(interaction.guild)
+        await interaction.edit_original_response(content="Mensaje guardado y publicaciones eliminados.", view=None)
 
     @discord.ui.button(label="Descartar", style=discord.ButtonStyle.danger)
     async def no(self, interaction, button):
@@ -479,3 +552,4 @@ def install(host):
             return await interaction.response.send_message("Por ahora, abre /embed dentro de un servidor.", ephemeral=True)
         panel = PersonalPanel(interaction.user.id, interaction.guild.id, host)
         await interaction.response.send_message(**panel.kwargs(interaction.guild), ephemeral=True)
+        panel.panel_message = await interaction.original_response()
