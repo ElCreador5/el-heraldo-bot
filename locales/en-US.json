@@ -347,7 +347,7 @@
   "setup.structure.confirm": "Confirm the displayed schedule to save it. Back keeps the draft.",
   "setup.structure.confirm_button": "Confirm changes",
   "setup.structure.conflict": "The settings or schedule changed in another session. Reopen the panel.",
-  "setup.structure.draft": "Draft: {mode}\nLocal hour: {hour}:00 · Weekday: {weekday} (0 Monday–6 Sunday)\nDay of month: {monthday} · Interval: {interval} minutes.\nThe selection is saved only after confirmation.",
+  "setup.structure.draft": "Draft: {mode}\nLocal hour: {clock} · Weekday: {weekday} (0 Monday–6 Sunday)\nDay of month: {monthday} · Interval: {interval} minutes.\nThe selection is saved only after confirmation.",
   "setup.structure.expired": "This draft changed or is closed. Reopen the panel.",
   "setup.structure.help.daily": "One backup each day at the selected local hour.",
   "setup.structure.help.interval": "Repeat the backup after the selected number of minutes.",
