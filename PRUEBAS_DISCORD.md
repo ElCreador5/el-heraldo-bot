@@ -1,3 +1,9 @@
+## 2026-11-04 — Matriz pendiente: idiomas + desplegables
+
+Código actualizado en `Pruebas` y `main`: sincronización de defaults al renderizar para StringSelect, ChannelSelect, RoleSelect, UserSelect y MentionableSelect; regresiones incluidas en `test_dropdown_ui_sync.py`. En `Pruebas`, contexto de idioma por `panel` incluido y prueba `test_i18n_nested_panels.py`.
+
+**PENDIENTE de ejecución real en Discord**: abrir panel con cada idioma; cambiar selección; pulsar editar, volver, descartar y guardar; reabrir; confirmar que un selector nuevo está vacío y un editor existente muestra lo guardado; repetir para canales, roles y usuarios. Comparar dos servidores con idiomas distintos y verificar que el idioma personal de Discord no anula su configuración. Revisar `/embed` público por los textos actualmente fijos en español. Sin registro verificable de CI o Discord no marcar como APROBADO. No desplegar desde esta auditoría.
+
 ## 2026-11-04 — Validación pendiente: norma global de actualización de información
 
 Escenario de Reportes en Lab: publicar un recordatorio, cambiar umbral de una reacción de 2 a 3 y guardar; comprobar que el mensaje informativo registrado y el siguiente recordatorio dicen 3. Repetir de 3 a 1. Descartar una modificación debe dejar el mensaje sin cambios. Comprobar ausencia de reescritura de expedientes y logs históricos, aislamiento entre servidores, falta de permisos de edición y mensajes borrados. El código registra solo los últimos 100 avisos activos; mensajes previos sin índice y módulos distintos a Reportes requieren auditoría específica. **Sin aceptación real de Discord todavía; main excluido.**
