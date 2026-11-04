@@ -6,7 +6,7 @@ Las fechas almacenadas conservan fecha ISO y zona horaria, sin ambigüedad.
 """
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 import re
 from zoneinfo import ZoneInfo
 
@@ -86,3 +86,40 @@ def parse_date_time(value: str, *, date_mode: str = "discord",
     if local.utcoffset() != local_naive.replace(tzinfo=tz, fold=1).utcoffset():
         raise ValueError("ambiguous_datetime")
     return local.astimezone(timezone.utc)
+
+
+def parse_reminder_start(date_input: str, clock_input: str, *, date_mode: str = "discord",
+                         locale: str = "es-419", now: datetime | None = None,
+                         zone: str = "America/Santo_Domingo") -> str:
+    """Normaliza el inicio opcional de recordatorios sin precargar campos guardados.
+
+    Acepta fecha ISO o el orden de fecha configurado en el servidor; hora en
+    12/24 h. Si se indica solo una hora, el primer inicio es la siguiente
+    aparición de esa hora local (hoy o mañana). Devuelve ISO local persistible.
+    """
+    raw_date, raw_clock = str(date_input).strip(), str(clock_input).strip()
+    if not raw_date and not raw_clock:
+        return ""
+    tz = ZoneInfo(zone)
+    current = now if now is not None else datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        raise ValueError("invalid_now")
+    local_now = current.astimezone(tz)
+    if raw_date:
+        pattern = "%Y-%m-%d" if "-" in raw_date else date_pattern(date_mode, locale)
+        try:
+            day = datetime.strptime(raw_date, pattern).date()
+        except ValueError as exc:
+            raise ValueError("invalid_reminder_date") from exc
+    else:
+        day = local_now.date()
+    if not raw_clock:
+        return day.isoformat()
+    try:
+        clock = parse_clock(raw_clock)
+    except ValueError as exc:
+        raise ValueError("invalid_reminder_clock") from exc
+    anchored = datetime.combine(day, clock).replace(tzinfo=tz)
+    if not raw_date and anchored <= local_now:
+        anchored += timedelta(days=1)
+    return anchored.strftime("%Y-%m-%d %H:%M")
