@@ -367,17 +367,10 @@ def persist_schedule(host, guild_id, actor, job, *, snapshot=None, editing=False
     return atomic_change(host, guild_id, apply, expected=snapshot)
 
 def start_from_form(value, zone):
+    """Fecha ISO y reloj en formato 12 o 24 horas, sin cambiar las duraciones."""
+    from heraldo_datetime import parse_date_time
     try:
-        local = datetime.fromisoformat(value.strip().replace(" ", "T"))
-        if local.tzinfo is not None:
-            raise ValueError("timezone")
-        tz = ZoneInfo(zone)
-        check = local.replace(tzinfo=tz)
-        if check.astimezone(timezone.utc).astimezone(tz).replace(tzinfo=None) != local:
-            raise ValueError("time")
-        if check.utcoffset() != local.replace(tzinfo=tz, fold=1).utcoffset():
-            raise ValueError("ambiguous")
-        start = check.astimezone(timezone.utc)
+        start = parse_date_time(value, date_mode="iso", zone=zone)
         if start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("past")
         return start
