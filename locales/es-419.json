@@ -76,7 +76,7 @@
   "command.6565f549545a8c72": "Lista los casos más recientes de Moderación.",
   "command.6635cc564aee9ffc": "Configura los roles por reacción.",
   "command.66d50cbd0c9d3a5a": "Actualiza motivo, duración o notas de un caso.",
-  "command.6d77b1db250ab2e2": "Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.",
+  "command.6d77b1db250ab2e2": "Abre un panel privado para limpiar mensajes.",
   "command.7122b57dd492205c": "Editar el mensaje del panel, el texto del botón y el mensaje tras verificarse.",
   "command.7ac1cc8252894d60": "Elegir si el creador del servidor también recibe las sugerencias por DM.",
   "command.7b9eba332b75753e": "Terminar el modo raid ahora y reabrir invitaciones.",

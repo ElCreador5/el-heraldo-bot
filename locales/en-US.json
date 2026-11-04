@@ -76,7 +76,7 @@
   "command.6565f549545a8c72": "List the most recent moderation cases.",
   "command.6635cc564aee9ffc": "Configure reaction roles.",
   "command.66d50cbd0c9d3a5a": "Update a case's reason, duration, or notes.",
-  "command.6d77b1db250ab2e2": "Delete a user's messages: all, a count, or a time range.",
+  "command.6d77b1db250ab2e2": "Open a private panel to clean up messages.",
   "command.7122b57dd492205c": "Edit the panel message, button text, and post-verification message.",
   "command.7ac1cc8252894d60": "Choose whether the server creator also receives suggestions by DM.",
   "command.7b9eba332b75753e": "End raid mode now and reopen invites.",

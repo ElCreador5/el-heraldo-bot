@@ -263,49 +263,9 @@
     "key": "text.5a69a6cd666b87",
     "source": "Miembro a consultar (déjalo vacío para ver el tuyo)"
   },
-  "purge.canal.description": {
-    "key": "text.b43abe6d11544f",
-    "source": "Limitar a un canal o hilo (por defecto, todo el servidor)"
-  },
-  "purge.cantidad.description": {
-    "key": "text.87aa336c7ad0de",
-    "source": "Borrar solo sus N mensajes más recientes"
-  },
   "purge.description": {
     "key": "command.6d77b1db250ab2e2",
-    "source": "Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo."
-  },
-  "purge.desde.description": {
-    "key": "text.1016a2fcdba001",
-    "source": "Inicio del rango: hace cuánto (30m, 12h, 2d, 1d 12h…)"
-  },
-  "purge.hasta.description": {
-    "key": "text.49a6c92238df02",
-    "source": "Fin del rango: hace cuánto (por defecto, ahora)"
-  },
-  "purge.tipo.choice.1e1d0f251d3a": {
-    "key": "command.644a743dc8c76e11",
-    "source": "Texto — sin imagen ni vídeo"
-  },
-  "purge.tipo.choice.30a74f913836": {
-    "key": "command.1a045cf243759ca3",
-    "source": "Links — mensajes con enlaces"
-  },
-  "purge.tipo.choice.5cf7504d9781": {
-    "key": "command.875fc5727ea244b1",
-    "source": "Todo — cualquier mensaje"
-  },
-  "purge.tipo.description": {
-    "key": "text.7694dea3bd45ef",
-    "source": "Qué tipo de contenido borrar: todo, links o solo texto"
-  },
-  "purge.todos.description": {
-    "key": "text.881de47ec9a982",
-    "source": "Borrar TODOS sus mensajes (no se combina con cantidad ni rango)"
-  },
-  "purge.usuario.description": {
-    "key": "text.932a4dc0aab747",
-    "source": "Usuario cuyos mensajes borrar (puede haber salido del servidor)"
+    "source": "Abre un panel privado para limpiar mensajes."
   },
   "raid.description": {
     "key": "command.f250b34d03e32470",
