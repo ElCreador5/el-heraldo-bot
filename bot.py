@@ -2937,7 +2937,11 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         )
     # Conservar un registro privado para el comentario aunque el registro
     # general de salidas esté desactivado. No publicar respuestas en canales públicos.
-    if kind == "member_leave" and survey_enabled and original is None:
+    if kind == "member_leave" and survey_enabled and (
+            original is None or not exit_comment_private(original.channel)):
+        # El registro público sigue intacto; la encuesta usa únicamente un
+        # registro privado, para no revelar respuestas personales.
+        original = None
         destination = guild.get_channel(log_member_channel_id(guild.id, "member_leave"))
         if isinstance(destination, discord.TextChannel) and exit_comment_private(destination):
             try:
