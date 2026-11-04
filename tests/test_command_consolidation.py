@@ -215,3 +215,25 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
             await view.publish.callback(i)
             send.assert_awaited_once()
         b.embed_delete(901,name)
+
+    async def test_moderation_reports_secondary_options_leave_room_for_close(self):
+        panel = b.HeraldoUserReportsSetupView(901, 10)
+        panel.pending_condemn_emoji = "❕"
+        self.assertEqual(panel.extra_settings.label, b.i18n.translate("es-419", "text.81db3b5709d0ba"))
+        ensure_close_control(panel)
+        panel.to_components()  # Antes se lanzaba administrative_panel_has_no_close_slot.
+        self.assertEqual(sum(isinstance(item, AdministrativeClose) for item in panel.children), 1)
+        original = self.settings()
+        i = interaction()
+        await panel.extra_settings.callback(i)
+        more = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(more, b.HeraldoUserReportsMoreOptionsView)
+        self.assertIs(more.parent, panel)
+        self.assertEqual(more.configure_warn_limit.label, b.i18n.translate("es-419", "text.19bd5bd18edc40"))
+        self.assertEqual(more.reminders.label, b.i18n.translate("es-419", "text.471b155a597e21"))
+        ensure_close_control(more)
+        more.to_components()
+        await more.back.callback(i)
+        self.assertIs(i.response.edit_message.call_args.kwargs["view"], panel)
+        self.assertEqual(panel.pending_condemn_emoji, "❕")
+        self.assertEqual(self.settings(), original)
