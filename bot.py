@@ -3727,6 +3727,8 @@ def _setup_has_unsaved_changes(view: discord.ui.View) -> bool:
             changed("pending_timeout_minutes", hp_timeout_minutes(guild_id)),
             changed("pending_purge_spec", hp_purge_spec(guild_id)),
         ))
+    if kind == "HeraldoRejoinSetupView":
+        return changed("pending_enabled", guild_config_get(guild_id, "verified_rejoin_restore_enabled") == "1")
     if kind == "HeraldoVerificationSetupView":
         return any((
             changed("pending_restore", guild_config_get(guild_id, "verified_rejoin_restore_enabled") == "1"),
