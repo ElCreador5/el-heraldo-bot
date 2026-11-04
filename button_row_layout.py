@@ -33,6 +33,60 @@ def _choose_navigation(buttons, kind):
     return next((item for item in matching if type(item).__name__ != generic_name), matching[0])
 
 
+def synchronize_dropdown_defaults(view):
+    """Retain visible choices from the CURRENT interaction, never save them.
+
+    A newly-created selector has no interaction values, so defaults set by
+    its constructor (including intentionally blank creation forms) are kept.
+    Saved selections explicitly loaded by edit views remain untouched.
+    """
+    import discord
+    if not isinstance(view, discord.ui.View):
+        return False
+    changed = False
+    string_select = getattr(discord.ui, "Select", None)
+    select_types = (
+        ("ChannelSelect", "channel"),
+        ("RoleSelect", "role"),
+        ("UserSelect", "user"),
+    )
+    for item in view.children:
+        # discord.py populates _values only when Discord submitted a selection.
+        # Never infer a selection from a placeholder or from stored SQLite data.
+        raw = getattr(item, "_values", None)
+        if not raw:
+            continue
+        if string_select is not None and isinstance(item, string_select):
+            selected = {str(v) for v in raw}
+            options = getattr(item, "options", None) or ()
+            if not any(str(opt.value) in selected for opt in options):
+                continue  # The options changed; do not revive an obsolete value.
+            for opt in options:
+                desired = str(opt.value) in selected
+                if opt.default != desired:
+                    opt.default = desired
+                    changed = True
+            continue
+        kind = next((kind for class_name, kind in select_types
+                     if isinstance(item, getattr(discord.ui, class_name, ()))), None)
+        if kind is None:
+            continue
+        ids = [getattr(value, "id", None) for value in raw]
+        if not all(type(value) is int and value > 0 for value in ids):
+            continue
+        current = [(int(v.id), getattr(v.type, "value", v.type))
+                   for v in (getattr(item, "default_values", None) or [])]
+        expected = [(int(value), kind) for value in ids]
+        if current == expected:
+            continue
+        type_enum = getattr(discord.SelectDefaultValueType, kind)
+        item.default_values = [
+            discord.SelectDefaultValue(id=value, type=type_enum) for value in ids
+        ]
+        changed = True
+    return changed
+
+
 def balance_view_buttons(view):
     """Repack an existing discord.ui.View while retaining each item and callback.
 
@@ -134,6 +188,7 @@ def install(discord):
 
     @wraps(original)
     def components(view):
+        synchronize_dropdown_defaults(view)
         balance_view_buttons(view)
         return original(view)
 
