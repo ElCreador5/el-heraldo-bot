@@ -224,18 +224,45 @@ class PurgePanel(discord.ui.View):
             self._button("back", discord.ButtonStyle.secondary, 0, self.back)
             self._button("close", discord.ButtonStyle.secondary, 0, self.close)
             return
-        self.user_select = discord.ui.UserSelect(
-            placeholder=self.t("selected") + f": {len(self.user_ids)}/25",
-            min_values=0, max_values=25, row=0,
-        )
+        user_kwargs = {}
+        if hasattr(discord, "SelectDefaultValue"):
+            user_kwargs["default_values"] = [
+                discord.SelectDefaultValue(id=uid, type=discord.SelectDefaultValueType.user)
+                for uid in self.user_ids
+            ]
+        try:
+            self.user_select = discord.ui.UserSelect(
+                placeholder=self.t("selected") + f": {len(self.user_ids)}/25",
+                min_values=0, max_values=25, row=0, **user_kwargs,
+            )
+        except TypeError:
+            self.user_select = discord.ui.UserSelect(
+                placeholder=self.t("selected") + f": {len(self.user_ids)}/25",
+                min_values=0, max_values=25, row=0,
+            )
         self.user_select.callback = self.users_changed
         self.add_item(self.user_select)
-        self.channel_select = discord.ui.ChannelSelect(
-            placeholder=self.t("channel") + ": " + (
-                str(self.channel_id) if self.channel_id else self.t("whole")
-            ),
-            min_values=0, max_values=1, row=1,
-        )
+        channel_kwargs = {}
+        if self.channel_id is not None and hasattr(discord, "SelectDefaultValue"):
+            channel_kwargs["default_values"] = [
+                discord.SelectDefaultValue(
+                    id=self.channel_id, type=discord.SelectDefaultValueType.channel,
+                )
+            ]
+        try:
+            self.channel_select = discord.ui.ChannelSelect(
+                placeholder=self.t("channel") + ": " + (
+                    str(self.channel_id) if self.channel_id else self.t("whole")
+                ),
+                min_values=0, max_values=1, row=1, **channel_kwargs,
+            )
+        except TypeError:
+            self.channel_select = discord.ui.ChannelSelect(
+                placeholder=self.t("channel") + ": " + (
+                    str(self.channel_id) if self.channel_id else self.t("whole")
+                ),
+                min_values=0, max_values=1, row=1,
+            )
         self.channel_select.callback = self.channel_changed
         self.add_item(self.channel_select)
         self.kind_select = discord.ui.Select(
