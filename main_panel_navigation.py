@@ -3,6 +3,7 @@ from functools import wraps
 from contextvars import ContextVar
 
 from panel_navigation import ensure_close_control, ensure_navigation_controls, is_setup_home, lineage
+from button_row_layout import balance_view_buttons, install as install_button_rows
 
 
 
@@ -75,6 +76,7 @@ def compact_reaction_editor(discord, view):
 
 
 def install(discord):
+    install_button_rows(discord)
     if getattr(discord.ui.View.to_components, "_heraldo_command_navigation", False):
         return
     original_components = discord.ui.View.to_components
@@ -82,6 +84,7 @@ def install(discord):
 
     @wraps(original_components)
     def components(view):
+        balance_view_buttons(view)
         remember_previous_panel(view)
         try:
             ensure_navigation_controls(view)
