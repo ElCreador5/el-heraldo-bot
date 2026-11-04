@@ -3551,6 +3551,7 @@
   "moderation.reminders.date_hint": "Ex.: 2026-11-04",
   "moderation.reminders.start_clock": "Hora de início (12 h ou 24 h, opcional)",
   "moderation.reminders.clock_hint": "Ex.: 10:30 PM ou 22:30",
-  "moderation.reminders.invalid_start": "Informe um intervalo válido e a data AAAA-MM-DD. Se informar uma hora, inclua também a data. São aceitos 10:30 PM e 22:30.",
-  "moderation.reminders.saved_start": "Início da programação: {when} (Santo Domingo)"
+  "moderation.reminders.invalid_start": "Data ou hora inválida. Use AAAA-MM-DD ou o formato de data do servidor (por exemplo, 11/04/2026). Informe a hora como 10:30 PM ou 22:30; também é possível informar apenas a hora.",
+  "moderation.reminders.saved_start": "Início da programação: {when} (Santo Domingo)",
+  "moderation.reminders.invalid_interval": "Intervalo inválido. Digite, por exemplo, 2m ou 7h. No ambiente de testes, são aceitos intervalos a partir de 10s; fora dele, de 1d até 365d."
 }
