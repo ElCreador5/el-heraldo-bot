@@ -1,5 +1,6 @@
 """Confirmed configuration for the existing server structure backup scheduler."""
 from datetime import datetime, timedelta, timezone, time
+import unicodedata
 
 from heraldo_datetime import format_clock, parse_clock
 
@@ -14,9 +15,10 @@ FIELDS = {
     "template_minute": "get_template_minute",
     "template_weekday": "get_template_weekday",
     "template_monthday": "get_template_monthday",
-    "template_interval_minutes": "get_template_interval_minutes",
 }
-MARKERS = ("template_last_run", "template_last_slot")
+MARKERS = ("template_last_run", "template_last_slot", "template_interval_minutes")
+ACTIVE_MODES = ("off", "daily", "weekly", "monthly")
+SCHEDULED_MODES = ("daily", "weekly", "monthly")
 
 
 def last_slot(values, now):
@@ -36,44 +38,91 @@ def last_slot(values, now):
     return None
 
 
+def weekday_label(index: int) -> str:
+    """Nombre visible del día según el idioma del servidor."""
+    return t("setup.structure.weekday." + str(index))
+
+
+def parse_weekday(value: str) -> int:
+    """Reconoce el nombre de día en los tres idiomas y los índices anteriores."""
+    clean = "".join(
+        character for character in unicodedata.normalize("NFKD", value.strip().casefold())
+        if not unicodedata.combining(character)
+    )
+    if clean in {str(index) for index in range(7)}:
+        return int(clean)
+    variants = {
+        0: ("lunes", "monday", "segunda", "segunda-feira"),
+        1: ("martes", "tuesday", "terca", "terca-feira"),
+        2: ("miercoles", "wednesday", "quarta", "quarta-feira"),
+        3: ("jueves", "thursday", "quinta", "quinta-feira"),
+        4: ("viernes", "friday", "sexta", "sexta-feira"),
+        5: ("sabado", "saturday"),
+        6: ("domingo", "sunday"),
+    }
+    for index, names in variants.items():
+        if clean in names:
+            return index
+    raise ValueError("weekday")
+
+
 class StructureScheduleModal(discord.ui.Modal):
+    """Muestra solo los campos que necesita la frecuencia elegida."""
     @guild_context
     def __init__(self, editor):
         self.editor = editor
         self.guild_id, self.owner_id = editor.guild_id, editor.owner_id
+        self.mode = editor.values["template_mode"]
+        if self.mode not in SCHEDULED_MODES:
+            raise ValueError("unsupported_schedule_mode")
         super().__init__(title=t("setup.structure.schedule"))
-        clock = format_clock(time(int(editor.values["template_hour"]), int(editor.values["template_minute"])),
-                             editor.date_mode, editor.time_mode)
-        for name, key in (("clock", "template_hour"), ("weekday", "template_weekday"),
-                          ("monthday", "template_monthday"), ("interval", "template_interval_minutes")):
-            default = clock if name == "clock" else editor.values[key]
-            field = discord.ui.TextInput(label=t("setup.structure." + name), default=default,
-                                         max_length=16 if name == "clock" else 6)
-            setattr(self, name, field)
-            self.add_item(field)
+        clock = format_clock(
+            time(int(editor.values["template_hour"]), int(editor.values["template_minute"])),
+            editor.date_mode, editor.time_mode,
+        )
+        # La hora siempre es exacta, no una duración.
+        self.clock = discord.ui.TextInput(
+            label=t("setup.structure.clock"), required=True,
+            default=clock, placeholder=clock, max_length=16,
+        )
+        if self.mode == "weekly":
+            label = weekday_label(int(editor.values["template_weekday"]))
+            self.weekday = discord.ui.TextInput(
+                label=t("setup.structure.weekday_name"), required=True,
+                default=label, placeholder=weekday_label(0), max_length=24,
+            )
+            self.add_item(self.weekday)
+        elif self.mode == "monthly":
+            self.monthday = discord.ui.TextInput(
+                label=t("setup.structure.monthday"), required=True,
+                default=editor.values["template_monthday"], placeholder="15", max_length=2,
+            )
+            self.add_item(self.monthday)
+        self.add_item(self.clock)
 
     @guild_context
     async def on_submit(self, interaction):
         if not await self.editor.interaction_check(interaction):
             return
-        if self.editor.is_finished():
+        if (self.editor.is_finished() or self.editor.values["template_mode"] != self.mode):
             return await interaction.response.send_message(t("setup.structure.expired"), ephemeral=True)
         try:
             clock = parse_clock(str(self.clock))
-            weekday, monthday, interval = (int(str(getattr(self, name)))
-                                           for name in ("weekday", "monthday", "interval"))
-            if not (0 <= weekday <= 6 and 1 <= monthday <= 28 and 1 <= interval <= 43200):
-                raise ValueError
+            proposed = {"template_hour": str(clock.hour), "template_minute": str(clock.minute)}
+            if self.mode == "weekly":
+                proposed["template_weekday"] = str(parse_weekday(str(self.weekday)))
+            elif self.mode == "monthly":
+                monthday = int(str(self.monthday).strip())
+                if not 1 <= monthday <= 28:
+                    raise ValueError("monthday")
+                proposed["template_monthday"] = str(monthday)
         except ValueError:
             return await interaction.response.send_message(t("setup.structure.invalid"), ephemeral=True)
-        self.editor.values.update({
-            "template_hour": str(clock.hour), "template_minute": str(clock.minute),
-            "template_weekday": str(weekday), "template_monthday": str(monthday),
-            "template_interval_minutes": str(interval),
-        })
+        self.editor.values.update(proposed)
         self.editor.refresh()
-        await interaction.response.edit_message(content=self.editor.summary(), embed=None, view=self.editor)
-
+        await interaction.response.edit_message(
+            content=self.editor.summary(), embed=None, view=self.editor,
+        )
 
 class ServerStructureSetupView(discord.ui.View):
     @guild_context
@@ -89,7 +138,9 @@ class ServerStructureSetupView(discord.ui.View):
             placeholder=t("setup.structure.choose"), row=0,
             options=[discord.SelectOption(label=t("setup.structure.mode." + mode), value=mode,
                                           description=t("setup.structure.help." + mode))
-                     for mode in ("off", "daily", "weekly", "monthly", "interval")])
+                     for mode in ((*ACTIVE_MODES, "interval")
+                                  if self.initial["template_mode"] == "interval"
+                                  else ACTIVE_MODES)])
         chooser.callback = self.choose
         self.chooser = chooser
         self.add_item(chooser)
@@ -107,17 +158,41 @@ class ServerStructureSetupView(discord.ui.View):
         for option in self.chooser.options:
             option.default = option.value == self.values["template_mode"]
         self.save.disabled = self.discard.disabled = not self._has_pending_changes()
+        self.schedule.disabled = self.values["template_mode"] not in SCHEDULED_MODES
 
     @guild_context
     def summary(self):
-        return (t("setup.structure.title") + "\n\n"
-                + self.host["template_config_summary"](self.guild_id, datetime.now(timezone.utc))
-                + "\n\n" + t("setup.structure.draft", mode=t("setup.structure.mode." + self.values["template_mode"]),
-                    clock=format_clock(time(int(self.values["template_hour"]), int(self.values["template_minute"])),
-                                       self.date_mode, self.time_mode),
-                    weekday=self.values["template_weekday"], monthday=self.values["template_monthday"],
-                    interval=self.values["template_interval_minutes"]))
-
+        mode = self.values["template_mode"]
+        clock = format_clock(
+            time(int(self.values["template_hour"]), int(self.values["template_minute"])),
+            self.date_mode, self.time_mode,
+        )
+        if mode == "daily":
+            detail = t("setup.structure.detail.daily", clock=clock)
+        elif mode == "weekly":
+            detail = t(
+                "setup.structure.detail.weekly",
+                weekday=weekday_label(int(self.values["template_weekday"])),
+                clock=clock,
+            )
+        elif mode == "monthly":
+            detail = t(
+                "setup.structure.detail.monthly",
+                monthday=self.values["template_monthday"], clock=clock,
+            )
+        elif mode == "interval":
+            detail = t("setup.structure.detail.legacy")
+        else:
+            detail = t("setup.structure.detail.off")
+        original = (t("setup.structure.legacy_active")
+                    if self.initial["template_mode"] == "interval"
+                    else self.host["template_config_summary"](
+                        self.guild_id, datetime.now(timezone.utc)))
+        return (t("setup.structure.title") + "\n\n" + original + "\n\n"
+                + t("setup.structure.draft",
+                    mode=t("setup.structure.mode.legacy_interval") if mode == "interval"
+                    else t("setup.structure.mode." + mode),
+                    details=detail))
     @guild_context
     async def choose(self, interaction):
         selected = (interaction.data or {}).get("values", [None])[0]
@@ -130,6 +205,9 @@ class ServerStructureSetupView(discord.ui.View):
     @discord.ui.button(label=t("setup.structure.schedule"), style=discord.ButtonStyle.primary, row=1)
     @guild_context
     async def schedule(self, interaction, button):
+        if self.values["template_mode"] not in SCHEDULED_MODES:
+            return await interaction.response.send_message(
+                t("setup.structure.select_frequency"), ephemeral=True)
         await interaction.response.send_modal(StructureScheduleModal(self))
 
     @discord.ui.button(label="Sincronizar ahora", style=discord.ButtonStyle.secondary, row=1)
@@ -255,26 +333,12 @@ class StructureSaveConfirmView(discord.ui.View):
             return await interaction.response.send_message(t("setup.structure.expired"), ephemeral=True)
         now = datetime.now(timezone.utc)
         changes = {key: value for key, value in self.pending.items() if value != editor.initial[key]}
-        if self.pending["template_mode"] == "interval":
-            # La hora elegida es la PRIMERA sincronización. El intervalo sigue
-            # siendo una duración independiente, no un formato de reloj.
-            if {"template_mode", "template_hour", "template_minute",
-                    "template_interval_minutes"} & changes.keys():
-                local_now = now.astimezone(host["STREAK_TZ"])
-                first = local_now.replace(
-                    hour=int(self.pending["template_hour"]),
-                    minute=int(self.pending["template_minute"]),
-                    second=0, microsecond=0,
-                )
-                if first <= local_now:
-                    first += timedelta(days=1)
-                interval = timedelta(minutes=int(self.pending["template_interval_minutes"]))
-                # El motor existente calcula próxima_copia = última_copia + intervalo.
-                changes["template_last_run"] = (first - interval).astimezone(timezone.utc).isoformat()
-        else:
-            slot = last_slot(self.pending, now.astimezone(host["STREAK_TZ"]))
-            if slot is not None:
-                changes["template_last_slot"] = slot.isoformat()
+        if self.pending["template_mode"] not in ACTIVE_MODES:
+            return await interaction.response.send_message(
+                t("setup.structure.select_frequency"), ephemeral=True)
+        slot = last_slot(self.pending, now.astimezone(host["STREAK_TZ"]))
+        if slot is not None:
+            changes["template_last_slot"] = slot.isoformat()
         conn = host["db_connect"]()
         try:
             conn.execute("BEGIN IMMEDIATE")
