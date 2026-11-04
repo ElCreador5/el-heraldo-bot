@@ -11235,6 +11235,43 @@ def moderation_active_warning_cases(guild_id: int) -> list[sqlite3.Row]:
     ][:25]
 
 
+@_i18n_context
+async def moderation_notify_warning_pardon(
+    guild: discord.Guild, user_id: int, case_number: int,
+    reason: str, channel: discord.abc.Messageable | None = None,
+) -> str:
+    """Brief plain-text pardon notice: DM first, originating channel on DM failure."""
+    code = moderation_case_code(case_number, guild.id)
+    member = guild.get_member(user_id)
+    if member is None:
+        try:
+            member = await guild.fetch_member(user_id)
+        except (discord.HTTPException, AttributeError):
+            member = None
+    if member is not None:
+        try:
+            await member.send(
+                _t('moderation.warning.pardon_dm', p0=code, p1=reason),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return "dm"
+        except discord.HTTPException:
+            pass
+    if channel is not None:
+        try:
+            await channel.send(
+                _t('moderation.warning.pardon_channel',
+                   p0=f"<@{user_id}>", p1=code, p2=reason),
+                allowed_mentions=discord.AllowedMentions(
+                    everyone=False, users=[discord.Object(id=user_id)], roles=False,
+                ),
+            )
+            return "channel"
+        except (discord.HTTPException, AttributeError):
+            pass
+    return "failed"
+
+
 class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.pardon_title')):
     reason = discord.ui.TextInput(
         label=_t('moderation.warning.reason_label'),
@@ -11274,6 +11311,10 @@ class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.p
                 _t('moderation.warning.not_active'), ephemeral=True)
             return
         code = moderation_case_code(self.case_number, self.guild_id)
+        delivery = await moderation_notify_warning_pardon(
+            interaction.guild, int(row['user_id']), self.case_number,
+            reason, interaction.channel,
+        )
         try:
             await log_embed(
                 interaction.guild, _t('moderation.warning.pardon_title'),
@@ -11284,7 +11325,8 @@ class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.p
             )
         except (discord.HTTPException, sqlite3.Error):
             traceback.print_exc()
-        notice = _t('moderation.warning.pardoned', p0=code)
+        notice = _t('moderation.warning.pardoned', p0=code) + " " + _t(
+            'moderation.warning.pardon_delivery_' + delivery)
         if interaction.message is not None:
             view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
             await interaction.response.edit_message(
