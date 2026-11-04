@@ -3551,6 +3551,7 @@
   "moderation.reminders.date_hint": "E.g. 2026-11-04",
   "moderation.reminders.start_clock": "Start time (12h or 24h, optional)",
   "moderation.reminders.clock_hint": "E.g. 10:30 PM or 22:30",
-  "moderation.reminders.invalid_start": "Enter a valid interval and date in YYYY-MM-DD format. If you specify a time, also enter a date. Times such as 10:30 PM and 22:30 are supported.",
-  "moderation.reminders.saved_start": "Schedule begins: {when} (Santo Domingo)"
+  "moderation.reminders.invalid_start": "Invalid date or time. Use YYYY-MM-DD or your server's date format (for example, 11/04/2026). Enter time as 10:30 PM or 22:30; time can also be provided without a date.",
+  "moderation.reminders.saved_start": "Schedule begins: {when} (Santo Domingo)",
+  "moderation.reminders.invalid_interval": "Invalid interval. Enter, for example, 2m or 7h. The test environment permits intervals from 10s; outside testing, from 1d up to 365d."
 }
