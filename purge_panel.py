@@ -5,7 +5,7 @@ La vista previa conserva únicamente IDs; nunca vuelve a buscar al confirmar.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from purge_period import PurgePeriodError, parse_purge_period
 import asyncio
 import re
 
@@ -19,11 +19,11 @@ class PurgeRangeModal(discord.ui.Modal):
         super().__init__(title=panel.t("settings"))
         self.from_input = discord.ui.TextInput(
             label=panel.t("period_from"), required=False, max_length=40,
-            default=panel.from_text or "",
+            placeholder=panel.period_hint(), default=panel.from_text or "",
         )
         self.to_input = discord.ui.TextInput(
             label=panel.t("period_to"), required=False, max_length=40,
-            default=panel.to_text or "",
+            placeholder=panel.period_hint(), default=panel.to_text or "",
         )
         self.count_input = discord.ui.TextInput(
             label=panel.t("quantity"), required=False, max_length=12,
@@ -40,19 +40,21 @@ class PurgeRangeModal(discord.ui.Modal):
         raw_to = str(self.to_input).strip()
         raw_count = str(self.count_input).strip()
         try:
-            now = datetime.now(timezone.utc)
-            after = (now - timedelta(minutes=self.panel.parse_duration(raw_from, 1, self.panel.max_minutes))) if raw_from else None
-            before = (now - timedelta(minutes=self.panel.parse_duration(raw_to, 1, self.panel.max_minutes))) if raw_to else None
+            period = parse_purge_period(
+                raw_from, raw_to, mode=self.panel.date_mode, locale=self.panel.language,
+            )
             count = int(raw_count) if raw_count else None
             if count is not None and count <= 0:
                 raise ValueError("non-positive")
+        except PurgePeriodError as exc:
+            error = "range_error" if str(exc) == "order" else "invalid"
+            await interaction.response.send_message(self.panel.t(error), ephemeral=True)
+            return
         except (ValueError, OverflowError):
             await interaction.response.send_message(self.panel.t("invalid"), ephemeral=True)
             return
-        if after is not None and before is not None and after >= before:
-            await interaction.response.send_message(self.panel.t("range_error"), ephemeral=True)
-            return
-        self.panel.after, self.panel.before = after, before
+        self.panel.after, self.panel.before = period.after, period.before
+        self.panel.display_from, self.panel.display_to = period.display_from, period.display_to
         self.panel.from_text, self.panel.to_text, self.panel.limit = raw_from, raw_to, count
         self.panel.everything = False
         self.panel.invalidate()
@@ -98,6 +100,7 @@ class PurgePanel(discord.ui.View):
         self, interaction: discord.Interaction, *,
         language: str, footer, targets, matches, delete, log, parse_duration,
         max_minutes: int, running: set, audit_channel_id: int,
+        date_mode: str = "discord", format_datetime=None,
     ):
         super().__init__(timeout=900)
         self.origin = interaction
@@ -113,6 +116,8 @@ class PurgePanel(discord.ui.View):
         self.max_minutes = max_minutes
         self.running = running
         self.audit_channel_id = audit_channel_id
+        self.date_mode = date_mode
+        self.format_datetime = format_datetime or (lambda dt: dt.strftime("%Y-%m-%d %H:%M"))
         self.user_ids: tuple[int, ...] = ()
         self.selected_user_ids: tuple[int, ...] = ()
         self.manual_user_ids: tuple[int, ...] = ()
@@ -122,6 +127,7 @@ class PurgePanel(discord.ui.View):
         self.everything = False
         self.after = self.before = None
         self.from_text = self.to_text = ""
+        self.display_from = self.display_to = None
         self.limit: int | None = None
         self.snapshot: list[tuple[int, int, int]] | None = None
         self.scanned = self.skipped = 0
@@ -130,6 +136,16 @@ class PurgePanel(discord.ui.View):
 
     def t(self, key: str) -> str:
         return i18n.CATALOGS[self.language].messages['purge.panel.' + key]
+
+    def period_hint(self) -> str:
+        """Ejemplos para el formato configurado en el servidor."""
+        if self.date_mode == "mdy12":
+            return "05/06/2026 6:00 PM · 6:00 PM"
+        if self.date_mode == "iso":
+            return "2026-05-06 18:00 · 18:00"
+        if self.date_mode == "discord" and self.language == "en-US":
+            return "05/06/2026 6:00 PM · 6:00 PM"
+        return "06/05/2026 18:00 · 6:00 PM"
 
     def invalidate(self) -> None:
         self.snapshot = None
@@ -253,8 +269,9 @@ class PurgePanel(discord.ui.View):
         user_mentions = ", ".join(f"<@{uid}>" for uid in self.user_ids) or self.t("none")
         where = f"<#{self.channel_id}>" if self.channel_id else self.t("whole")
         scope = self.t("all") if self.everything else (
-            f"{self.from_text or '—'} → {self.to_text or '0'}"
-            if self.from_text or self.to_text else "—"
+            f"{self.format_datetime(self.display_from) if self.display_from else '—'}"
+            f" → {self.format_datetime(self.display_to) if self.display_to else '—'}"
+            if self.display_from or self.display_to else "—"
         )
         result.add_field(name=self.t("users"), value=user_mentions[:1024], inline=False)
         result.add_field(name=self.t("channel"), value=where)
@@ -315,6 +332,7 @@ class PurgePanel(discord.ui.View):
         self.everything = not self.everything
         if self.everything:
             self.from_text = self.to_text = ""
+            self.display_from = self.display_to = None
             self.after = self.before = None
             self.limit = None
         self.invalidate()
