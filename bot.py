@@ -109,6 +109,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 
 from production_panel_text import text as _t, guild_context as _i18n_context
 import production_panel_text as i18n
+import production_report_labels
 from heraldo_datetime import format_clock, format_date_time, parse_clock
 
 import asyncio
@@ -8317,7 +8318,7 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title="Condenar mediante rea
         conflict = next((item for item in report_mappings if _moderation_emoji_key(item["emoji"]) == _moderation_emoji_key(emoji)), None)
         if conflict:
             await interaction.response.send_message(
-                f"Ese emoji pertenece al reporte **{conflict['label']}**: "
+                f"Ese emoji pertenece al reporte **{production_report_labels.report_label(conflict, guild_language(self.parent_view.guild_id))}**: "
                 f"{moderation_action_label(str(conflict.get('action', 'report')))}, "
                 f"con un umbral de {conflict.get('threshold', 1)} personas distintas. "
                 "Revísalo en **/setup → Moderation → Reportes → selecciona la reacción → Regla**. "
@@ -8367,7 +8368,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             for index, item in enumerate(reactions):
                 action = moderation_action_label(str(item.get("action", "report")))
                 options.append(discord.SelectOption(
-                    label=str(item["label"])[:100],
+                    label=production_report_labels.report_label(item, guild_language(self.guild_id))[:100],
                     value=str(index),
                     emoji=str(item["emoji"]),
                     description=f"{action} · {item.get('threshold', 1)} reporte(s)"[:100],
@@ -8401,7 +8402,7 @@ class HeraldoUserReportsSetupView(discord.ui.View):
                 duration = item.get("duration_minutes")
                 purge = item.get("purge_minutes")
                 selected = (
-                    f"\n\n**Seleccionado:** {item['emoji']} **{item['label']}**"
+                    f"\n\n**Seleccionado:** {item['emoji']} **{production_report_labels.report_label(item, guild_language(self.guild_id))}**"
                     f"\nAcción: {moderation_action_label(str(item.get('action', 'report')))}"
                     f" · Umbral: {item.get('threshold', 1)}"
                     f" · Duración: {format_duration(int(duration)) if duration else '—'}"
@@ -13107,7 +13108,7 @@ def moderation_report_rule_for_emoji(guild_id: int, emoji: str) -> dict[str, obj
 
 def moderation_report_type_for_emoji(guild_id: int, emoji: str) -> str | None:
     rule = moderation_report_rule_for_emoji(guild_id, emoji)
-    return str(rule["label"]) if rule else None
+    return production_report_labels.report_label(rule, guild_language(guild_id)) if rule else None
 
 
 def moderation_report_record(
@@ -13250,7 +13251,8 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         duration_text = f" · {format_duration(int(duration))}" if duration else ""
         purge = item.get("purge_minutes") if str(item.get("action", "report")) != "report" else None
         purge_text = f" · purgar {format_duration(int(purge))}" if purge else ""
-        return f"• {item['emoji']} → **{item['label']}** · {action}{duration_text} · {threshold} reporte(s){purge_text}"
+        label = production_report_labels.report_label(item, guild_language(guild.id))
+        return f"• {item['emoji']} → **{label}** · {action}{duration_text} · {threshold} reporte(s){purge_text}"
     mapping_text = "\n".join(rule_line(item) for item in mappings) or "• Sin reacciones configuradas"
     return (
         f"**Canal de reportes:** {channel.mention if isinstance(channel, discord.TextChannel) else 'no configurado'}\n"
@@ -21083,7 +21085,8 @@ async def shortcut_anuncios(interaction: discord.Interaction):
 
 
 def guild_language(guild_id):
-    return "es-419"
+    configured = guild_config_get(guild_id, "language") or "es-419"
+    return configured if configured in {"es-419", "en-US", "pt-BR"} else "es-419"
 
 
 def embed_normalize_name(value):
