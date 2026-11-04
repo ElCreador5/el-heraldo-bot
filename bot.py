@@ -12881,6 +12881,7 @@ class HeraldoDateFormatSetupView(_SetupDirtySaveView):
         self.original_time = guild_config_get(guild_id, "display_time_format")
         self.pending = self.original
         self.pending_time = clock_style(self.original, self.original_time)
+        self.time_touched = False
         self.date_select = discord.ui.Select(
             placeholder=_t('text.a2d518f29c1efe'),
             options=[discord.SelectOption(label=label, value=value, default=value == self.pending)
@@ -12932,6 +12933,7 @@ class HeraldoDateFormatSetupView(_SetupDirtySaveView):
             await interaction.response.send_message(_t('text.3a72704453002e'), ephemeral=True)
             return
         self.pending_time = value
+        self.time_touched = True
         for option in self.time_select.options:
             option.default = option.value == value
         await interaction.response.edit_message(content=self.preview(), view=self)
@@ -12947,7 +12949,8 @@ class HeraldoDateFormatSetupView(_SetupDirtySaveView):
         changes = {}
         if self.pending != self.original:
             changes["display_date_format"] = self.pending
-        if self.pending_time != clock_style(self.pending, self.original_time):
+        if ((self.time_touched and self.pending_time != self.original_time)
+                or (not self.time_touched and self.pending_time != clock_style(self.pending, self.original_time))):
             changes["display_time_format"] = self.pending_time
         if not changes:
             await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
