@@ -83,6 +83,26 @@ class PersonalEmbedsTests(unittest.TestCase):
         self.assertEqual(rendered.author.name, "Miembro creador")
         self.assertEqual(rendered.image.url, visual["image_url"])
 
+    def test_legacy_text_opens_as_embed_without_losing_content(self):
+        from personal_embeds import as_embed_payload
+        legacy = {"kind": "text", "text": "Texto anterior",
+                  "image_url": "https://example.com/image.png"}
+        converted = as_embed_payload(legacy)
+        self.assertEqual(converted["description"], "Texto anterior")
+        self.assertEqual(converted["image_url"], legacy["image_url"])
+        self.assertNotIn("kind", converted)
+        self.assertEqual(legacy["kind"], "text")
+
+    def test_editor_buttons_use_single_embed_flow(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "personal_embeds.py").read_text(encoding="utf-8")
+        self.assertIn('label="Editar embed"', source)
+        self.assertIn('label="Imágenes"', source)
+        self.assertNotIn('label="Editar texto"', source)
+        self.assertNotIn("class EditTextModal", source)
+        self.assertIn("thumbnail_url", source)
+        self.assertIn("image_url", source)
+
     def test_no_personal_scheduler(self):
         from pathlib import Path
         source = (Path(__file__).resolve().parents[1] / "personal_embeds.py").read_text(encoding="utf-8")
