@@ -41,13 +41,13 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /verify_setup (rol, timeout, acción, activar) y /verify_texts (mensaje del
      panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
-6. COPIA DE SEGURIDAD DE LA PLANTILLA (/server_template_setup, /template_sync)
+6. COPIA DE SEGURIDAD DE LA PLANTILLA (/estructura_servidor)
    - Sincroniza la plantilla del servidor (roles, canales y permisos) con su estado
      actual, como una copia de seguridad: cada día, semana o mes, o cada intervalo
      configurable en días/horas/minutos, con
      día y hora a elección. Tras cada copia manda el enlace por mensaje privado (si no
      puede, deja constancia en el canal de logs, sin el enlace).
-   - /template_sync la hace al momento y muestra el enlace.
+   - /estructura_servidor permite sincronización manual confirmada y enlace por DM.
 
 7. CONDENAS / HONEYPOT
    - El rol Condenado es la fuente de verdad. /condenar, el honeypot, una reacción ☠️ de un
@@ -10435,7 +10435,7 @@ def reminder_next_due(settings, now):
     """Calcula una fecha futura en horario de Santo Domingo (UTC-4)."""
     local = now.astimezone(timezone(timedelta(hours=-4)))
     hour = max(0, min(23, int(settings["report_reminder_hour"])))
-    candidate = local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    candidate = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
     frequency = settings["report_reminder_frequency"]
     if frequency == "daily":
         days = 1
@@ -14455,7 +14455,7 @@ async def joinroles_group_error(
 
 
 # ---------------------------------------------------------------------------
-# Copia de seguridad de la plantilla del servidor (/server_template_setup, /template_sync)
+# Copia de seguridad de la plantilla del servidor (integrada en /estructura_servidor)
 # ---------------------------------------------------------------------------
 
 def _meta_int(key: str, default: int) -> int:
@@ -14488,9 +14488,20 @@ def get_template_mode(guild_id: int) -> str:
 @_i18n_context
 def get_template_hour(guild_id: int) -> int:
     try:
-        return int(_template_value(guild_id, "template_hour", str(TEMPLATE_HOUR_DEFAULT)))
+        value = int(_template_value(guild_id, "template_hour", str(TEMPLATE_HOUR_DEFAULT)))
+        return value if 0 <= value <= 23 else TEMPLATE_HOUR_DEFAULT
     except (TypeError, ValueError):
         return TEMPLATE_HOUR_DEFAULT
+
+
+@_i18n_context
+def get_template_minute(guild_id: int) -> int:
+    """Los respaldos anteriores sin minuto siguen ejecutándose a la hora en punto."""
+    try:
+        value = int(_template_value(guild_id, "template_minute", "0"))
+        return value if 0 <= value <= 59 else 0
+    except (TypeError, ValueError):
+        return 0
 
 
 @_i18n_context
@@ -14523,7 +14534,12 @@ def get_template_interval_minutes(guild_id: int) -> int:
 @_i18n_context
 def template_schedule_text(guild_id: int) -> str:
     mode = get_template_mode(guild_id)
-    hour = _t('text.4e47f18abfcd85', p0=f'{get_template_hour(guild_id)}')
+    from heraldo_datetime import format_clock
+    hour = format_clock(
+        datetime(2026, 1, 1, get_template_hour(guild_id), get_template_minute(guild_id)),
+        guild_config_get(guild_id, "display_date_format") or "discord",
+        guild_config_get(guild_id, "display_time_format"),
+    )
     if mode == "off":
         return _t('text.987d904d7afee2')
     if mode == "daily":
@@ -14538,8 +14554,9 @@ def template_schedule_text(guild_id: int) -> str:
 @_i18n_context
 def template_last_slot(guild_id: int, mode: str, now: datetime) -> datetime | None:
     hour = get_template_hour(guild_id)
+    minute = get_template_minute(guild_id)
     if mode == "daily":
-        slot = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        slot = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if slot > now:
             slot -= timedelta(days=1)
         return slot
@@ -14551,10 +14568,10 @@ def template_last_slot(guild_id: int, mode: str, now: datetime) -> datetime | No
         return slot
     if mode == "monthly":
         day = get_template_monthday(guild_id)
-        slot = now.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
+        slot = now.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
         if slot > now:
             last_of_previous = now.replace(day=1) - timedelta(days=1)
-            slot = last_of_previous.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
+            slot = last_of_previous.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
         return slot
     return None
 
@@ -14708,13 +14725,13 @@ async def template_backup_loop() -> None:
 def template_config_summary(guild_id: int, now_utc: datetime) -> str:
     next_run = template_next_run(guild_id, now_utc)
     next_text = (
-        f"{discord.utils.format_dt(next_run, 'F')} ({discord.utils.format_dt(next_run, 'R')})"
+        f"{format_configured_datetime(guild_id, next_run)} ({discord.utils.format_dt(next_run, 'R')})"
         if next_run else "—"
     )
     last = guild_config_get(guild_id, "template_last_run")
     if last is None and db_meta_get("template_guild_id") == str(guild_id):
         last = db_meta_get("template_last_run")
-    last_text = discord.utils.format_dt(datetime.fromisoformat(last), "f") if last and get_template_mode(guild_id) != "off" else _t('text.6ef07c6f2106fd')
+    last_text = format_configured_datetime(guild_id, datetime.fromisoformat(last)) if last and get_template_mode(guild_id) != "off" else _t('text.6ef07c6f2106fd')
     return (
         _t('text.5b16c305693555', p0=f'{template_schedule_text(guild_id)}', p1=f'{next_text}', p2=f'{last_text}')
     )
@@ -14807,41 +14824,9 @@ async def template_config(
     )
 
 
-@bot.tree.command(name="template_sync", description="Sincronizar ahora la plantilla del servidor y ver su enlace.")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-@discord.app_commands.guild_only()
-@_i18n_context
-async def template_sync(interaction: discord.Interaction) -> None:
-    await interaction.response.defer(ephemeral=True)
-    template, was_dirty, error = await sync_server_template(interaction.guild)
-    if error:
-        await interaction.followup.send(_t('text.8904a29c5dcf0c', p0=f'{error}'), ephemeral=True)
-        return
-    embed = template_report_embed(interaction.guild, template, was_dirty, "manual")
-    try:
-        owner = await bot.fetch_user(interaction.guild.owner_id)
-        await owner.send(embed=stamp_embed(embed, interaction.guild))
-        if interaction.user.id == owner.id:
-            confirmation = _t('text.5ff0d429b2f758')
-        else:
-            confirmation = _t('text.f8f47b4d6bb589')
-        await interaction.followup.send(confirmation, ephemeral=True)
-    except discord.HTTPException:
-        # El enlace no se publica en el canal ni se entrega a otro administrador.
-        await interaction.followup.send(
-            _t('text.93db647131ce45'),
-            ephemeral=True,
-        )
-    await log_embed(
-        interaction.guild, _t('text.ad1fa0172380ff'),
-        _t('text.22854288f334bb', p0=f'{interaction.user.mention}'),
-        discord.Color.blurple(),
-    )
-
 
 # Manejador genérico (permisos / errores), el mismo de los comandos de verificación.
 template_config.error(verify_command_error)
-template_sync.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
@@ -24279,7 +24264,7 @@ def _heraldo_command_category(path: str) -> str:
         return "configuration"
     if root in {"list", "profile", "advertencias", "caseinfo", "caselist", "variables"}:
         return "consultation"
-    if root in {"template_sync", "restaurar_roles_pendientes"}:
+    if root in {"restaurar_roles_pendientes"}:
         return "administration"
     return "action"
 
@@ -24309,7 +24294,7 @@ def _heraldo_command_module(path: str) -> str:
         "announcements": {"anuncios", "miembro_semana", "motw_test"},
         "messages": {"mensajes", "embed", "variables"},
         "logging": {"registros"},
-        "structure": {"estructura_servidor", "template_sync", "fusionar_canales"},
+        "structure": {"estructura_servidor", "fusionar_canales"},
         "moderation": {"moderacion", "sugerencias", "condenar", "liberar", "restaurar_roles_pendientes",
                        "warn", "advertencias", "mute", "kick", "ban", "purge", "caseinfo", "caselist",
                        "caseupdate", "setproof", "caseclose", "casedelete"},
