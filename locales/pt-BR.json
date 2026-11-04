@@ -175,6 +175,7 @@
   "purge.panel.confirm": "Confirmar exclusão",
   "purge.panel.deleted": "Excluídas",
   "purge.panel.done": "Resultado da limpeza",
+  "purge.panel.expired": "O painel de /purge expirou ou o bot foi reiniciado. Nenhuma exclusão foi feita com este clique. Execute /purge novamente e confirme em uma nova prévia.",
   "purge.panel.failed": "Não excluídas",
   "purge.panel.finished": "Operação concluída",
   "purge.panel.ids": "Adicionar IDs de usuários",
