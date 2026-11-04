@@ -1,3 +1,9 @@
+## 2026-11-04 — NH: mantener actualizada toda información dependiente de configuración
+
+Decisión global del propietario: «Si la configuración cambia, la información sobre la misma (si existe) debe actualizarse». Aplica a paneles, mensajes explicativos, recordatorios y publicaciones activas relacionadas con los ajustes guardados. Por ejemplo, si cambia el número de personas necesarias en una regla de reacción (sube o baja), las nuevas publicaciones y los avisos informativos editables deben indicar el umbral vigente. Solo se sincroniza tras un guardado confirmado; una selección nueva o cancelada no reescribe contenido ajeno.
+
+No alterar expedientes, resultados de moderación ya sucedidos ni registros probatorios: son hechos históricos, no información de configuración actual. Respetar permisos y aislamiento por servidor, y registrar fallos de edición. El cumplimiento de todos los módulos requiere auditoría; una corrección de Reportes no lo certifica. Solo Pruebas, sin cambios en main ni despliegue productivo.
+
 ## 2026-11-02 — Corrección de sincronización /embed
 
 La sincronización del laboratorio falló en ambos servidores por `TranslationUnavailable: command_schema_changed:embed.description`. Se conserva la validación estricta de i18n y se actualiza la fuente de `embed.description` en `locales/command_schema.json` junto a sus textos es-419, en-US y pt-BR para el constructor personal. No se cambia `main`.
