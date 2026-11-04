@@ -3176,7 +3176,9 @@ def render_personality_recovery_dm(guild: discord.Guild, invite_url: str) -> str
 async def send_recovery_dm(member: discord.Member, report: bool = True, *,
                            dm_channel: discord.DMChannel | None = None) -> bool:
     """Mensaje oficial previo de recuperación: nunca afirmar que ya se expulsó."""
-    channel = member.guild.get_channel(get_recovery_channel_id(member.guild.id))
+    channel = member.guild.get_channel(get_orientation_channel_id(member.guild.id))
+    if not isinstance(channel, discord.TextChannel):
+        channel = None
     invite_url = ""
     if channel is not None:
         try:
@@ -16866,28 +16868,20 @@ async def send_test_removal_notice(member: discord.Member, action: str,
     guild = member.guild
     invite_url = None
     if allow_reentry_invite and action == "KICK":
-        preferred = guild.get_channel(get_recovery_channel_id(guild.id))
-        channels = ([preferred] if isinstance(preferred, discord.TextChannel) else []) + list(guild.text_channels)
-        seen = set()
-        for channel in channels:
-            if channel.id in seen:
-                continue
-            seen.add(channel.id)
-            if guild.me is None:
-                break
+        # El reingreso por personalidad apunta solo al canal de roles configurado.
+        channel = guild.get_channel(get_orientation_channel_id(guild.id))
+        if isinstance(channel, discord.TextChannel) and guild.me is not None:
             permissions = channel.permissions_for(guild.me)
             public = channel.permissions_for(guild.default_role)
-            if not (permissions.view_channel and permissions.create_instant_invite and public.view_channel):
-                continue
-            try:
-                invite = await channel.create_invite(
-                    max_uses=1, max_age=0, unique=True,
-                    reason=_t('text.62d370ef7bb5b3'),
-                )
-                invite_url = invite.url
-                break
-            except discord.HTTPException:
-                continue
+            if permissions.view_channel and permissions.create_instant_invite and public.view_channel:
+                try:
+                    invite = await channel.create_invite(
+                        max_uses=1, max_age=0, unique=True,
+                        reason=_t('text.62d370ef7bb5b3'),
+                    )
+                    invite_url = invite.url
+                except discord.HTTPException:
+                    pass
     if action == "BAN" and minutes:
         availability = _t('text.39fd321fa2c02d', p0=f'{format_duration(minutes)}')
     elif action == "BAN":
