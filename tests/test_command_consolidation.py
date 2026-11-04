@@ -231,7 +231,8 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
         more = i.response.edit_message.call_args.kwargs["view"]
         self.assertIsInstance(more, b.HeraldoUserReportsMoreOptionsView)
         self.assertIs(more.parent, panel)
-        self.assertEqual(more.configure_warn_limit.label, b.i18n.translate("es-419", "text.19bd5bd18edc40"))
+        self.assertFalse(hasattr(more, "configure_warn_limit"))
+        self.assertTrue(hasattr(b.HeraldoModerationSetupView(901, 10), "warnings_policy"))
         self.assertEqual(more.reminders.label, b.i18n.translate("es-419", "text.471b155a597e21"))
         ensure_close_control(more)
         more.to_components()
