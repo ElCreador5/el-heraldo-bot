@@ -8599,7 +8599,8 @@ class HeraldoWarningPolicyConfirmView(discord.ui.View):
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary)
     async def close(self, interaction, button):
         self.stop()
-        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 class HeraldoWarningPolicyView(discord.ui.View):
@@ -8730,7 +8731,8 @@ class HeraldoWarningPolicyView(discord.ui.View):
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=3)
     async def close(self, interaction, button):
         self.stop()
-        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 def moderation_active_warning_cases(guild_id: int) -> list[sqlite3.Row]:
@@ -8965,7 +8967,8 @@ class HeraldoCasesSetupView(discord.ui.View):
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=2)
     async def close(self, interaction, button):
         self.stop()
-        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Duración predeterminada"):
@@ -10401,7 +10404,8 @@ class HeraldoSetupView(discord.ui.View):
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=1)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
-        await interaction.response.edit_message(content="Panel de configuración cerrado.", view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
     async def open_module(self, interaction: discord.Interaction, *, direct: bool = False) -> None:
         selected = self.selected_module
@@ -20388,7 +20392,8 @@ class HeraldoMessagesView(discord.ui.View):
     @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=2)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
-        await interaction.response.edit_message(content="Centro de mensajes cerrado.", view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(
@@ -20667,7 +20672,8 @@ class HoneypotCommandPanel(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), embed=None, view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(name="honeypot", description="Abrir el panel de Honeypot.")
@@ -20741,7 +20747,8 @@ class RaidCommandPanel(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), embed=None, view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(name="raid", description="Abrir el panel de protección anti-raid.")
@@ -21048,7 +21055,8 @@ class EmbedHubView(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(name="embed", description="Administrar embeds desde un panel único.")
