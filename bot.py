@@ -13942,7 +13942,8 @@ class HeraldoSetupView(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
-        await interaction.response.edit_message(content=_t('text.83e4a94cefc9df'), view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 
@@ -13975,7 +13976,8 @@ class _HeraldoPanelClose(discord.ui.Button):
             await interaction.response.send_message(_t("setup.structure.unsaved"), ephemeral=True)
             return
         panel.stop()
-        await interaction.response.edit_message(content=_t("setup.structure.closed"), embed=None, view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 def _heraldo_install_close_buttons() -> None:
@@ -22686,7 +22688,8 @@ class HoneypotCommandPanel(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), embed=None, view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(name="honeypot", description="Abrir el panel de Honeypot.")
@@ -24631,7 +24634,8 @@ class RaidCommandPanel(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), embed=None, view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(name="raid", description="Abrir el panel de protección anti-raid.")
@@ -26951,7 +26955,8 @@ class EmbedHubView(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
-        await interaction.response.edit_message(content=_t("setup.command_panels.be0999a4268c9788"), view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(name="embed", description="Administrar embeds desde un panel único.")
@@ -27952,7 +27957,8 @@ class HeraldoMessagesView(discord.ui.View):
     @_i18n_context
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
-        await interaction.response.edit_message(content=_t('text.5c4321ee46bf31'), view=None)
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
 
 
 @bot.tree.command(
