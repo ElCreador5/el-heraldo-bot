@@ -23130,6 +23130,8 @@ async def purge_command(interaction: discord.Interaction) -> None:
         max_minutes=PURGE_MAX_MINUTES,
         running=_purge_running,
         audit_channel_id=get_log_channel_id(guild.id),
+        date_mode=guild_config_get(guild.id, "display_date_format") or "discord",
+        format_datetime=lambda dt: format_configured_datetime(guild.id, dt),
     )
     await interaction.response.send_message(
         embed=panel.embed(), view=panel, ephemeral=True,
