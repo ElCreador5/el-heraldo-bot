@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 import asyncio
+import re
 
 import discord
 
@@ -23,7 +24,8 @@ TEXT = {
         "settings": "Rango y límite", "all_button": "Todos",
         "channel_reset": "Quitar canal", "next": "Continuar",
         "back": "Volver", "close": "Cerrar", "confirm": "Confirmar eliminación",
-        "selected": "Usuarios seleccionados", "scanned": "Canales examinados",
+        "selected": "Usuarios seleccionados", "ids": "Añadir usuarios por ID",
+        "ids_input": "ID de usuarios separados por comas", "max_users": "Máximo 25 usuarios en total.", "scanned": "Canales examinados",
         "skipped": "Canales omitidos", "total": "Mensajes encontrados",
         "per_user": "Desglose por usuario", "deleted": "Eliminados",
         "failed": "No eliminados", "audit": "Registro de limpieza",
@@ -59,7 +61,8 @@ TEXT = {
         "settings": "Range and limit", "all_button": "All",
         "channel_reset": "Clear channel", "next": "Continue",
         "back": "Back", "close": "Close", "confirm": "Confirm deletion",
-        "selected": "Selected users", "scanned": "Channels scanned",
+        "selected": "Selected users", "ids": "Add users by ID",
+        "ids_input": "Comma-separated user IDs", "max_users": "Maximum 25 users in total.", "scanned": "Channels scanned",
         "skipped": "Channels skipped", "total": "Messages found",
         "per_user": "By user", "deleted": "Deleted",
         "failed": "Not deleted", "audit": "Cleanup audit",
@@ -95,7 +98,8 @@ TEXT = {
         "settings": "Período e limite", "all_button": "Todas",
         "channel_reset": "Limpar canal", "next": "Continuar",
         "back": "Voltar", "close": "Fechar", "confirm": "Confirmar exclusão",
-        "selected": "Usuários selecionados", "scanned": "Canais analisados",
+        "selected": "Usuários selecionados", "ids": "Adicionar IDs de usuários",
+        "ids_input": "IDs separados por vírgulas", "max_users": "Máximo de 25 usuários.", "scanned": "Canais analisados",
         "skipped": "Canais ignorados", "total": "Mensagens encontradas",
         "per_user": "Por usuário", "deleted": "Excluídas",
         "failed": "Não excluídas", "audit": "Registro da limpeza",
@@ -170,6 +174,39 @@ class PurgeRangeModal(discord.ui.Modal):
         await self.panel.refresh()
 
 
+
+class PurgeUsersModal(discord.ui.Modal):
+    """Permite seleccionar autores que ya abandonaron el servidor."""
+
+    def __init__(self, panel: "PurgePanel"):
+        self.panel = panel
+        super().__init__(title=panel.t("ids"))
+        self.ids_input = discord.ui.TextInput(
+            label=panel.t("ids_input"), style=discord.TextStyle.paragraph,
+            required=False, max_length=600,
+            default=", ".join(str(uid) for uid in panel.manual_user_ids),
+        )
+        self.add_item(self.ids_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not await self.panel.authorize(interaction):
+            return
+        raw = str(self.ids_input).strip()
+        try:
+            manual = tuple(dict.fromkeys(int(item) for item in re.split(r"[\s,;]+", raw) if item))
+            combined = tuple(dict.fromkeys((*self.panel.selected_user_ids, *manual)))
+            if any(uid <= 0 for uid in manual) or len(combined) > 25:
+                raise ValueError("invalid user ID")
+        except ValueError:
+            await interaction.response.send_message(self.panel.t("max_users"), ephemeral=True)
+            return
+        self.panel.manual_user_ids = manual
+        self.panel.user_ids = combined
+        self.panel.invalidate()
+        await interaction.response.defer(ephemeral=True)
+        await self.panel.refresh()
+
+
 class PurgePanel(discord.ui.View):
     def __init__(
         self, interaction: discord.Interaction, *,
@@ -191,6 +228,9 @@ class PurgePanel(discord.ui.View):
         self.running = running
         self.audit_channel_id = audit_channel_id
         self.user_ids: tuple[int, ...] = ()
+        self.selected_user_ids: tuple[int, ...] = ()
+        self.manual_user_ids: tuple[int, ...] = ()
+        self.scanned_channels: dict[int, object] = {}
         self.channel_id: int | None = None
         self.kind = "all"
         self.everything = False
@@ -208,6 +248,7 @@ class PurgePanel(discord.ui.View):
     def invalidate(self) -> None:
         self.snapshot = None
         self.scanned = self.skipped = 0
+        self.scanned_channels = {}
         self._build()
 
     def _button(self, key, style, row, callback):
@@ -228,7 +269,7 @@ class PurgePanel(discord.ui.View):
         if hasattr(discord, "SelectDefaultValue"):
             user_kwargs["default_values"] = [
                 discord.SelectDefaultValue(id=uid, type=discord.SelectDefaultValueType.user)
-                for uid in self.user_ids
+                for uid in self.selected_user_ids
             ]
         try:
             self.user_select = discord.ui.UserSelect(
@@ -277,6 +318,7 @@ class PurgePanel(discord.ui.View):
         self._button("settings", discord.ButtonStyle.primary, 3, self.open_range)
         self._button("all_button", discord.ButtonStyle.secondary, 3, self.toggle_all)
         self._button("channel_reset", discord.ButtonStyle.secondary, 3, self.clear_channel)
+        self._button("ids", discord.ButtonStyle.secondary, 3, self.open_ids)
         self._button("next", discord.ButtonStyle.success, 4, self.continue_scan)
         self._button("close", discord.ButtonStyle.secondary, 4, self.close)
 
@@ -353,7 +395,13 @@ class PurgePanel(discord.ui.View):
         return result
 
     async def users_changed(self, interaction: discord.Interaction) -> None:
-        self.user_ids = tuple(dict.fromkeys(u.id for u in self.user_select.values))
+        selected = tuple(dict.fromkeys(u.id for u in self.user_select.values))
+        combined = tuple(dict.fromkeys((*selected, *self.manual_user_ids)))
+        if len(combined) > 25:
+            await interaction.response.send_message(self.t("max_users"), ephemeral=True)
+            return
+        self.selected_user_ids = selected
+        self.user_ids = combined
         self.invalidate()
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
@@ -369,6 +417,9 @@ class PurgePanel(discord.ui.View):
 
     async def open_range(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(PurgeRangeModal(self))
+
+    async def open_ids(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(PurgeUsersModal(self))
 
     async def toggle_all(self, interaction: discord.Interaction) -> None:
         perms = interaction.user.guild_permissions
@@ -450,6 +501,7 @@ class PurgePanel(discord.ui.View):
             target_channels = await self.targets(guild, self._channel(), self.after)
             found: dict[int, list[tuple[int, int, int]]] = {uid: [] for uid in self.user_ids}
             self.scanned = self.skipped = 0
+            self.scanned_channels = {}
             for channel in target_channels:
                 if not self._channel_available(channel, interaction.user):
                     self.skipped += 1
@@ -473,6 +525,7 @@ class PurgePanel(discord.ui.View):
                         ):
                             break
                     self.scanned += 1
+                    self.scanned_channels[channel.id] = channel
                 except (discord.Forbidden, discord.HTTPException):
                     self.skipped += 1
             if self.scanned == 0:
@@ -528,7 +581,8 @@ class PurgePanel(discord.ui.View):
         try:
             guild = interaction.guild
             for channel_id, message_id, uid in frozen:
-                channel = guild.get_channel(channel_id) or guild.get_thread(channel_id)
+                channel = (self.scanned_channels.get(channel_id)
+                           or guild.get_channel(channel_id) or guild.get_thread(channel_id))
                 if channel is None or not self._channel_available(channel, interaction.user) or not self._permissions(interaction):
                     failed += 1
                     continue
