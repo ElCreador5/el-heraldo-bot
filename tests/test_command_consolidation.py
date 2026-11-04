@@ -26,7 +26,8 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(RETIRED.intersection(roots))
         self.assertEqual(len(roots), len(set(roots)))
         for name in ("setup", "embed", "honeypot", "raid", "roles_ingreso", "anuncios",
-                     "mensajes", "sugerencias", "miembro_semana", "estructura_servidor"):
+                     "mensajes", "sugerencias", "miembro_semana", "estructura_servidor",
+                     "conexiones"):
             self.assertEqual(roots.count(name), 1)
             self.assertIsInstance(b.bot.tree.get_command(name), b.app_commands.Command)
         self.assertEqual([cmd.name for cmd in b.bot.tree.get_commands()
@@ -52,6 +53,7 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
     async def test_new_shortcuts_reuse_existing_editors_and_do_not_save(self):
         before = self.settings()
         for command, expected in ((b.shortcut_roles_ingreso, b.HeraldoJoinRolesSetupView),
+                                  (b.shortcut_conexiones, __import__("role_connections_setup").ConnectionsList),
                                   (b.shortcut_sugerencias, __import__("suggestions_setup").SuggestionsSetupView),
                                   (b.shortcut_miembro_semana, b.HeraldoMotwSetupView),
                                   (b.shortcut_estructura_servidor, __import__("server_structure_setup").ServerStructureSetupView)):
@@ -71,7 +73,7 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
             conn.close()
 
     async def test_shortcuts_deny_a_member_without_management_permissions(self):
-        for cmd in (b.mensajes_command, b.shortcut_roles_ingreso, b.shortcut_sugerencias,
+        for cmd in (b.mensajes_command, b.shortcut_roles_ingreso, b.shortcut_conexiones, b.shortcut_sugerencias,
                     b.shortcut_miembro_semana, b.shortcut_estructura_servidor):
             i=interaction(False)
             await cmd.callback(i)
@@ -82,7 +84,7 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(view.commands),len(b._heraldo_registered_commands()))
         i=interaction(); i.data={"values":["roles"]}
         await view.choose_module(i)
-        self.assertEqual({path for path,_ in view._rows()}, {"roles_ingreso","roles_reaccion"})
+        self.assertEqual({path for path,_ in view._rows()}, {"roles_ingreso","roles_reaccion","conexiones"})
         i.data={"values":["consultation"]}
         await view.choose(i)
         self.assertEqual(view.module,"roles")
@@ -95,7 +97,7 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await view.interaction_check(interaction(False)))
 
     def test_command_types_separate_configuration_actions_queries_and_maintenance(self):
-        for root in ("embed","honeypot","raid","sugerencias","estructura_servidor"):
+        for root in ("embed","honeypot","raid","sugerencias","estructura_servidor","conexiones"):
             self.assertEqual(b._heraldo_command_category(root),"configuration")
         for root in ("ban","caseupdate","verify"):
             self.assertEqual(b._heraldo_command_category(root),"action")
