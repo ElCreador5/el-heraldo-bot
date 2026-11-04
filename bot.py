@@ -9989,21 +9989,21 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             if moderation_report_punishment_enabled(guild_id, action)
         }
         self.max_select = discord.ui.Select(
-            placeholder=_t('text.d720988b416352'),
+            placeholder=_t('text.d720988b416352').split('. ', 1)[-1],
             options=[
                 discord.SelectOption(
                     label=_t('text.f43a239b05c658', p0=f'{value}', p1=f"{('s' if value > 1 else '')}"), value=str(value),
-                    default=False,
+                    default=value == self.max_warns,
                 ) for value in range(1, MODERATION_WARN_MAX_ALLOWED + 1)
             ], row=0,
         )
         self.max_select.callback = self.select_max
         self.add_item(self.max_select)
         self.escalation_select = discord.ui.Select(
-            placeholder=_t('text.a117c67ac9c5cb'),
+            placeholder=_t('text.a117c67ac9c5cb').split('. ', 1)[-1],
             options=[
                 discord.SelectOption(label=label, value=action, description=hint,
-                                     default=False)
+                                     default=action == self.escalation)
                 for action, label, hint in (
                     ("none", _t('text.312db41e982943'), _t('text.758ee92b68cc28')),
                     ("timeout", _t('text.22b733ebaab166'), _t('text.17bde07ad7426a')),
@@ -10016,10 +10016,10 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         self.escalation_select.callback = self.select_escalation
         self.add_item(self.escalation_select)
         self.duration_select = discord.ui.Select(
-            placeholder=_t('text.6f85e3cd67f8db'),
+            placeholder=_t('text.6f85e3cd67f8db').split('. ', 1)[-1],
             options=[
                 discord.SelectOption(label=format_duration(minutes), value=str(minutes),
-                                     default=False)
+                                     default=minutes == self.mute_minutes)
                 for minutes in MODERATION_WARN_ESCALATION_DURATION_CHOICES
             ],
             row=2,
@@ -10027,10 +10027,10 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         self.duration_select.callback = self.select_duration
         self.add_item(self.duration_select)
         self.punishment_select = discord.ui.Select(
-            placeholder=_t('text.d91694e8816537'),
+            placeholder=_t('text.d91694e8816537').split('. ', 1)[-1],
             options=[
                 discord.SelectOption(label=label, value=action, description=hint,
-                                     default=False)
+                                     default=action in self.enabled_actions)
                 for action, label, hint in self.POLICY_ACTIONS
             ],
             min_values=0, max_values=len(self.POLICY_ACTIONS), row=3,
