@@ -8512,6 +8512,232 @@ class HeraldoUserReportsSetupView(discord.ui.View):
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
+MODERATION_WARN_MAX_ALLOWED = 5
+
+
+def moderation_warning_limit(guild_id: int) -> int:
+    return max(1, min(MODERATION_WARN_MAX_ALLOWED,
+                      guild_setting_int(guild_id, "moderation_warn_limit", 3)))
+
+
+def moderation_warn_escalation_action(guild_id: int) -> str:
+    action = guild_config_get(guild_id, "moderation_warn_limit_action") or "none"
+    return action if action in {"none", "timeout", "kick", "ban"} else "none"
+
+
+def moderation_warning_counts(guild_id: int, user_id: int) -> tuple[int, int]:
+    conn = db_connect()
+    try:
+        active, total = conn.execute(
+            "SELECT COALESCE(SUM(CASE WHEN open=1 AND (expires_at IS NULL OR expires_at > ?) "
+            "THEN 1 ELSE 0 END),0), COUNT(*) FROM moderation_cases "
+            "WHERE guild_id=? AND user_id=? AND type='WARN'",
+            (datetime.now(timezone.utc).isoformat(), guild_id, user_id),
+        ).fetchone()
+        return int(active), int(total)
+    finally:
+        conn.close()
+
+
+async def moderation_warning_escalation(
+    guild: discord.Guild, member: discord.Member,
+    case_number: int, active: int, maximum: int,
+) -> str:
+    if active != maximum:
+        return ""
+    action = moderation_warn_escalation_action(guild.id)
+    if action == "none":
+        return "Solo avisar"
+    me = guild.me
+    perm = {"timeout": "moderate_members", "kick": "kick_members",
+            "ban": "ban_members"}[action]
+    if (me is None or member.bot or member.id == guild.owner_id
+            or not getattr(me.guild_permissions, perm, False)
+            or member.top_role >= me.top_role):
+        return "Sanción automática omitida por permisos o protección."
+    try:
+        if action == "timeout":
+            minutes = guild_setting_int(guild.id, "moderation_warn_limit_mute_minutes", 60)
+            minutes = minutes if minutes in {30, 60, 1440, 10080} else 60
+            await member.timeout(datetime.now(timezone.utc) + timedelta(minutes=minutes),
+                                 reason=f"Máximo de advertencias: {case_number}")
+        elif action == "kick":
+            await member.kick(reason=f"Máximo de advertencias: {case_number}")
+        else:
+            await member.ban(reason=f"Máximo de advertencias: {case_number}",
+                             delete_message_seconds=0)
+        return {"timeout": "Aislar", "kick": "Expulsar", "ban": "Banear"}[action]
+    except discord.HTTPException:
+        return "La sanción automática no se pudo ejecutar."
+
+
+class HeraldoWarningPolicyConfirmView(discord.ui.View):
+    def __init__(self, guild_id, owner_id, changes, previous):
+        super().__init__(timeout=180)
+        self.guild_id, self.owner_id, self.changes, self.previous = guild_id, owner_id, changes, previous
+
+    async def interaction_check(self, interaction):
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.moderate_members):
+            await interaction.response.send_message("Acceso denegado.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction, button):
+        if any(guild_config_get(self.guild_id, key) != old
+               for key, old in self.previous.items()):
+            await interaction.response.send_message(
+                "La configuración cambió. Reabre el panel.", ephemeral=True)
+            return
+        for key, value in self.changes.items():
+            guild_config_set(self.guild_id, key, value)
+        view = HeraldoWarningPolicyView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(), view=view)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction, button):
+        view = HeraldoWarningPolicyView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(), view=view)
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary)
+    async def close(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+
+
+class HeraldoWarningPolicyView(discord.ui.View):
+    def __init__(self, guild_id, owner_id):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.original = {
+            key: guild_config_get(guild_id, key)
+            for key in ("moderation_warn_limit", "moderation_warn_limit_action",
+                        "moderation_warn_limit_mute_minutes")
+        }
+        self.maximum = moderation_warning_limit(guild_id)
+        self.action = moderation_warn_escalation_action(guild_id)
+        self.duration = guild_setting_int(guild_id, "moderation_warn_limit_mute_minutes", 60)
+        if self.duration not in {30, 60, 1440, 10080}:
+            self.duration = 60
+        self.maximum_select = discord.ui.Select(
+            placeholder="Máximo de advertencias vigentes",
+            options=[discord.SelectOption(label=f"{n} advertencia(s)", value=str(n),
+                                          default=n == self.maximum) for n in range(1, 6)],
+            row=0,
+        )
+        self.maximum_select.callback = self.select_maximum
+        self.add_item(self.maximum_select)
+        self.action_select = discord.ui.Select(
+            placeholder="Acción al llegar al máximo",
+            options=[
+                discord.SelectOption(label=label, value=value, default=value == self.action)
+                for value, label in (("none", "Solo avisar"), ("timeout", "Aislar"),
+                                     ("kick", "Expulsar"), ("ban", "Banear"))
+            ], row=1,
+        )
+        self.action_select.callback = self.select_action
+        self.add_item(self.action_select)
+        self.duration_select = discord.ui.Select(
+            placeholder="Duración del aislamiento",
+            options=[
+                discord.SelectOption(label=label, value=str(n), default=n == self.duration)
+                for n, label in ((30, "30 minutos"), (60, "1 hora"),
+                                 (1440, "1 día"), (10080, "1 semana"))
+            ], row=2,
+        )
+        self.duration_select.callback = self.select_duration
+        self._refresh()
+
+    def _changes(self):
+        requested = {
+            "moderation_warn_limit": str(self.maximum),
+            "moderation_warn_limit_action": self.action,
+            "moderation_warn_limit_mute_minutes": str(self.duration),
+        }
+        defaults = {"moderation_warn_limit": "3", "moderation_warn_limit_action": "none",
+                    "moderation_warn_limit_mute_minutes": "60"}
+        return {key: value for key, value in requested.items()
+                if (self.original[key] if self.original[key] is not None
+                    else defaults[key]) != value}
+
+    def _refresh(self):
+        if self.action == "timeout":
+            if self.duration_select not in self.children:
+                self.add_item(self.duration_select)
+        elif self.duration_select in self.children:
+            self.remove_item(self.duration_select)
+        self.review.disabled = not bool(self._changes())
+
+    def _content(self):
+        names = {"none": "Solo avisar", "timeout": "Aislar",
+                 "kick": "Expulsar", "ban": "Banear"}
+        return (f"**Moderación · Política de advertencias**\n\n"
+                f"**Máximo vigente:** {self.maximum} de 5 posibles.\n"
+                f"**Al alcanzar el máximo:** {names[self.action]}.\n\n"
+                "Esta configuración es independiente de los reportes. "
+                "Los cambios se aplican únicamente después de confirmar.")
+
+    async def interaction_check(self, interaction):
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.moderate_members):
+            await interaction.response.send_message("Acceso denegado.", ephemeral=True)
+            return False
+        return True
+
+    async def select_maximum(self, interaction):
+        self.maximum = int(interaction.data["values"][0])
+        for option in self.maximum_select.options:
+            option.default = option.value == str(self.maximum)
+        self._refresh()
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    async def select_action(self, interaction):
+        self.action = interaction.data["values"][0]
+        for option in self.action_select.options:
+            option.default = option.value == self.action
+        self._refresh()
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    async def select_duration(self, interaction):
+        self.duration = int(interaction.data["values"][0])
+        for option in self.duration_select.options:
+            option.default = option.value == str(self.duration)
+        self._refresh()
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    @discord.ui.button(label="Revisar y confirmar", style=discord.ButtonStyle.primary, row=3)
+    async def review(self, interaction, button):
+        changes = self._changes()
+        if not changes:
+            await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
+            return
+        if any(guild_config_get(self.guild_id, key) != old
+               for key, old in self.original.items()):
+            await interaction.response.send_message("La configuración cambió. Reabre el panel.", ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=self._content() + "\n\n¿Confirmas estos cambios?",
+            view=HeraldoWarningPolicyConfirmView(
+                self.guild_id, self.owner_id, changes, self.original,
+            ),
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction, button):
+        await interaction.response.edit_message(
+            content="**El Heraldo · Moderación**\n\nSelecciona una sección.",
+            view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
+        )
+
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=3)
+    async def close(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content="Panel cerrado.", view=None)
+
+
 def moderation_active_warning_cases(guild_id: int) -> list[sqlite3.Row]:
     now = datetime.now(timezone.utc)
     return [
@@ -8982,6 +9208,11 @@ class HeraldoModerationSetupView(discord.ui.View):
         await interaction.response.defer()
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
+
+    @discord.ui.button(label="Configurar advertencias", style=discord.ButtonStyle.primary, row=1)
+    async def warnings_policy(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoWarningPolicyView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(), view=view)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -12680,11 +12911,22 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             return False, "Tipo de castigo no compatible.", None
     except discord.HTTPException as exc:
         return False, f"Discord rechazó la acción: {exc}", None
+    if case_type == "WARN":
+        active, _ = moderation_warning_counts(guild.id, member.id)
+        maximum = moderation_warning_limit(guild.id)
+        if active >= maximum:
+            return False, f"El miembro ya alcanzó el máximo de {maximum} advertencias vigentes.", None
     case_number = moderation_case_create(
         guild.id, case_type, member.id, reason, duration_minutes=duration_minutes,
         author_id=interaction.user.id, proof=proof, verified_proof=verified,
     )
     dm_ok = await moderation_send_case_dm(guild, member.id, case_number)
+    escalation_note = ""
+    if case_type == "WARN":
+        current, _ = moderation_warning_counts(guild.id, member.id)
+        if current == maximum:
+            escalation_note = await moderation_warning_escalation(
+                guild, member, case_number, current, maximum)
     await log_embed(
         guild, f"Moderation · {case_type}",
         f"Expediente {moderation_case_code(case_number, guild.id)} · {member.mention} ({member.id})\nMotivo: {reason}\nModerador: {interaction.user.mention}\nDM: {'enviado' if dm_ok else 'no disponible'}",
@@ -12698,7 +12940,8 @@ async def moderation_apply_case_punishment(interaction: discord.Interaction, mem
             f"Expediente: {moderation_case_code(case_number, guild.id)}",
             discord.Color.orange(), member=member,
         )
-    return True, f"Expediente {moderation_case_code(case_number, guild.id)} creado.", case_number
+    return True, (f"Expediente {moderation_case_code(case_number, guild.id)} creado."
+                  + (f" Al alcanzar el límite: {escalation_note}" if escalation_note else "")), case_number
 
 
 async def moderation_close_case_effect(guild: discord.Guild, row: sqlite3.Row, actor: discord.Member) -> str:
