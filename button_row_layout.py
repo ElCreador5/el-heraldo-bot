@@ -69,19 +69,34 @@ def synchronize_dropdown_defaults(view):
             continue
         kind = next((kind for class_name, kind in select_types
                      if isinstance(item, getattr(discord.ui, class_name, ()))), None)
-        if kind is None:
+        mixed = isinstance(item, getattr(discord.ui, "MentionableSelect", ()))
+        if kind is None and not mixed:
             continue
-        ids = [getattr(value, "id", None) for value in raw]
-        if not all(type(value) is int and value > 0 for value in ids):
+        requested = []
+        for value in raw:
+            identifier = getattr(value, "id", None)
+            if type(identifier) is not int or identifier <= 0:
+                break
+            actual_kind = kind
+            if mixed:
+                if isinstance(value, getattr(discord, "Role", ())):
+                    actual_kind = "role"
+                elif isinstance(value, (getattr(discord, "Member", ()),
+                                        getattr(discord, "User", ()))):
+                    actual_kind = "user"
+                else:
+                    break  # Never guess whether a mentionable ID is a role or user.
+            requested.append((identifier, actual_kind))
+        if len(requested) != len(raw):
             continue
         current = [(int(v.id), getattr(v.type, "value", v.type))
                    for v in (getattr(item, "default_values", None) or [])]
-        expected = [(int(value), kind) for value in ids]
-        if current == expected:
+        if current == requested:
             continue
-        type_enum = getattr(discord.SelectDefaultValueType, kind)
         item.default_values = [
-            discord.SelectDefaultValue(id=value, type=type_enum) for value in ids
+            discord.SelectDefaultValue(
+                id=value, type=getattr(discord.SelectDefaultValueType, type_name))
+            for value, type_name in requested
         ]
         changed = True
     return changed
