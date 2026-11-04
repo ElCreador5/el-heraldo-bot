@@ -11196,6 +11196,19 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
+@_i18n_context
+def moderation_active_warning_cases(guild_id: int) -> list[sqlite3.Row]:
+    """Return only unexpired, open warning cases for the management selector."""
+    now = datetime.now(timezone.utc)
+    return [
+        row for row in moderation_case_list(
+            guild_id, case_type="WARN", open_only=True, limit=50,
+        )
+        if not row["expires_at"]
+        or datetime.fromisoformat(row["expires_at"]) > now
+    ][:25]
+
+
 class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.pardon_title')):
     reason = discord.ui.TextInput(
         label=_t('moderation.warning.reason_label'),
@@ -11217,7 +11230,8 @@ class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.p
                 _t('moderation.warning.denied'), ephemeral=True)
             return
         row = moderation_case_get(self.guild_id, self.case_number)
-        if row is None or str(row["type"]) != "WARN" or not row["open"]:
+        if (row is None or str(row["type"]) != "WARN" or not row["open"]
+                or (row["expires_at"] and datetime.fromisoformat(row["expires_at"]) <= datetime.now(timezone.utc))):
             await interaction.response.send_message(
                 _t('moderation.warning.not_active'), ephemeral=True)
             return
@@ -11322,9 +11336,7 @@ class HeraldoCasesSetupView(discord.ui.View):
     def _rebuild_warning_select(self) -> None:
         if hasattr(self, "warning_select"):
             self.remove_item(self.warning_select)
-        rows = moderation_case_list(
-            self.guild_id, case_type="WARN", open_only=True, limit=25,
-        )
+        rows = moderation_active_warning_cases(self.guild_id)
         valid = {int(row["case_number"]) for row in rows}
         if self.selected_case not in valid:
             self.selected_case = None
@@ -11358,7 +11370,7 @@ class HeraldoCasesSetupView(discord.ui.View):
         summary = moderation_cases_summary(guild)
         instructions = _t('moderation.warning.panel_help')
         if self.selected_case is None:
-            return instructions + "\n\n" + summary
+            return (instructions + "\n\n" + summary)[:1900]
         row = moderation_case_get(self.guild_id, self.selected_case)
         if row is None or row["type"] != "WARN" or not row["open"]:
             return instructions + "\n\n" + summary
@@ -11368,7 +11380,7 @@ class HeraldoCasesSetupView(discord.ui.View):
             p1=f"<@{row['user_id']}>",
             p2=str(row["reason"])[:250],
         )
-        return instructions + "\n\n" + selected + "\n\n" + summary
+        return (instructions + "\n\n" + selected + "\n\n" + summary)[:1900]
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -11395,8 +11407,7 @@ class HeraldoCasesSetupView(discord.ui.View):
         row = moderation_case_get(self.guild_id, case_number)
         if (row is None or str(row["type"]) != "WARN" or not row["open"]
                 or case_number not in {
-                    int(item["case_number"]) for item in moderation_case_list(
-                        self.guild_id, case_type="WARN", open_only=True, limit=25)
+                    int(item["case_number"]) for item in moderation_active_warning_cases(self.guild_id)
                 }):
             await interaction.response.send_message(
                 _t('moderation.warning.not_active'), ephemeral=True)
