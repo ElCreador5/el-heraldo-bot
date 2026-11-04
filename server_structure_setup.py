@@ -256,7 +256,21 @@ class StructureSaveConfirmView(discord.ui.View):
         now = datetime.now(timezone.utc)
         changes = {key: value for key, value in self.pending.items() if value != editor.initial[key]}
         if self.pending["template_mode"] == "interval":
-            changes["template_last_run"] = now.isoformat()
+            # La hora elegida es la PRIMERA sincronización. El intervalo sigue
+            # siendo una duración independiente, no un formato de reloj.
+            if {"template_mode", "template_hour", "template_minute",
+                    "template_interval_minutes"} & changes.keys():
+                local_now = now.astimezone(host["STREAK_TZ"])
+                first = local_now.replace(
+                    hour=int(self.pending["template_hour"]),
+                    minute=int(self.pending["template_minute"]),
+                    second=0, microsecond=0,
+                )
+                if first <= local_now:
+                    first += timedelta(days=1)
+                interval = timedelta(minutes=int(self.pending["template_interval_minutes"]))
+                # El motor existente calcula próxima_copia = última_copia + intervalo.
+                changes["template_last_run"] = (first - interval).astimezone(timezone.utc).isoformat()
         else:
             slot = last_slot(self.pending, now.astimezone(host["STREAK_TZ"]))
             if slot is not None:
