@@ -40,7 +40,7 @@ jobs:
       - name: Regresión de historial de idiomas con protección de texto libre
         env:
           PYTHONPATH: "tests:."
-        run: python -m unittest -v test_message_locale_sync
+        run: python -m unittest -v test_message_locale_sync test_moderation_report_language
       - name: Internacionalización por servidor y detección de textos sin catálogo
         env:
           PYTHONPATH: "tests:."
@@ -98,7 +98,7 @@ jobs:
       - name: Comprobar dependencias
         run: python -m pip check
       - name: Compile Python sources
-        run: python -m py_compile bot.py message_locale_sync.py test_message_locale_sync.py sqlite_recovery.py supabase_backup.py backup_job.py production_backup_scheduler.py preupdate_gate.py h03_publication_adapter.py h03_startup_gate.py h03_release_handoff.py h03_railway_test_api.py h03_test_railway_release.py test_backup_runtime.py test_backup_scheduler.py restore_enzonic_test.py enzonic_test_host.py enzonic_test_backup.py tools/scheduled_lab_backup.py tools/backup_health.py evidence_archive.py message_payload.py message_automation.py message_components.py message_editor.py test_regressions.py test_member_logs.py
+        run: python -m py_compile bot.py message_locale_sync.py moderation_report_labels.py test_message_locale_sync.py tests/test_moderation_report_language.py sqlite_recovery.py supabase_backup.py backup_job.py production_backup_scheduler.py preupdate_gate.py h03_publication_adapter.py h03_startup_gate.py h03_release_handoff.py h03_railway_test_api.py h03_test_railway_release.py test_backup_runtime.py test_backup_scheduler.py restore_enzonic_test.py enzonic_test_host.py enzonic_test_backup.py tools/scheduled_lab_backup.py tools/backup_health.py evidence_archive.py message_payload.py message_automation.py message_components.py message_editor.py test_regressions.py test_member_logs.py
       - name: Existing offline regression suite
         run: python -m unittest -v test_regressions.py
       - name: Lab component validation regressions
