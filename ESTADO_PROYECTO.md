@@ -1,3 +1,11 @@
+## 2026-11-04 — Idiomas y desplegables: revisión transversal (parcial)
+
+- `Pruebas`: catálogo adicional `locales/es-419.json`, `locales/en-US.json` y `locales/pt-BR.json` con **3595 claves en cada uno** y los mismos nombres de variables de interpolación; la preferencia por servidor se lee desde SQLite mediante `guild_language(guild_id)`. `heraldo_i18n._source_id` también recorre `.panel` en subpaneles enlazados (p. ej. paneles personales).
+- `main`: `guild_language` devuelve siempre `es-419`; no se debe anunciar soporte de tres idiomas en producción. **PENDIENTE**: migración selectiva de internacionalización, no autorizada por el cambio meramente visual.
+- Ambas ramas: `button_row_layout.synchronize_dropdown_defaults` mantiene la última selección enviada por Discord para opciones, canales, roles, usuarios y menciones; no escribe SQLite ni sustituye botones. Si no hubo interacción, preserva los valores iniciales del constructor, incluidos formularios nuevos vacíos y ediciones existentes precargadas.
+- Detectado: `personal_embeds.py` conserva etiquetas y respuestas fijas en español; por tanto, la traducción completa de `/embed` en `en-US` y `pt-BR` sigue **PENDIENTE**.
+- Se añadieron tests sin Gateway (`test_dropdown_ui_sync.py`, `test_i18n_nested_panels.py`) y se extendió `.github/workflows/button-row-layout.yml`. **CI y aceptación visual Discord no verificadas en esta revisión**. No se modificaron datos ni esquemas SQLite ni se reiniciaron servidores.
+
 ## 2026-11-04 — Norma NH: sincronización de información vigente (Pruebas)
 
 Regla global registrada en AGENTS.md y DECISIONES.md: si cambia una configuración confirmada, los paneles y mensajes informativos activos que dependen de ella deben actualizarse. Primer ajuste concreto en Reportes: nuevas publicaciones de recordatorios guardan referencias de sus mensajes y al guardar cambios de reacciones se intenta editar hasta 100 avisos informativos activos registrados, sin modificar logs ni expedientes históricos. Los mensajes anteriores a la incorporación del índice no son editables retroactivamente por esta vía. Pruebas GitHub y aceptación manual en Discord pendientes; no afecta main ni Railway producción. El resto de módulos sigue pendiente de auditoría.
