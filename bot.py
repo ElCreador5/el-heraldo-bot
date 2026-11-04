@@ -2672,6 +2672,16 @@ async def orientation_departure_has_detailed_log(
 
 
 
+@bot.listen("on_member_ban")
+async def heraldo_invalidate_banned_snapshot(guild: discord.Guild, user: discord.User) -> None:
+    # También invalida los casos en que el usuario fue baneado mientras estaba fuera.
+    try:
+        from member_rejoin_restore import forget
+        forget(db_connect, guild.id, user.id)
+    except sqlite3.Error as exc:
+        print(f"REJOIN_SNAPSHOT status=BAN_INVALIDATE_FAILED reason={type(exc).__name__}", flush=True)
+
+
 @bot.listen("on_member_remove")
 async def heraldo_capture_verified_departure(member: discord.Member) -> None:
     if member.bot:
