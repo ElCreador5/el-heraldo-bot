@@ -237,3 +237,34 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(i.response.edit_message.call_args.kwargs["view"], panel)
         self.assertEqual(panel.pending_condemn_emoji, "❕")
         self.assertEqual(self.settings(), original)
+
+    async def test_reports_reminders_opens_inline_with_close_and_preserved_draft(self):
+        panel = b.HeraldoUserReportsSetupView(901, 10)
+        panel.pending_condemn_emoji = "❕"
+        options = b.HeraldoUserReportsMoreOptionsView(panel)
+        before = self.settings()
+        i = interaction()
+        await options.reminders.callback(i)
+        i.response.send_message.assert_not_awaited()
+        i.response.edit_message.assert_awaited_once()
+        reminders = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(reminders, b.ReportReminderSetupView)
+        self.assertIs(reminders.parent, options)
+        ensure_close_control(reminders)
+        reminders.to_components()  # Must fit a red Close button without overflow.
+        closes = [item for item in reminders.children
+                  if isinstance(item, b.discord.ui.Button)
+                  and item.label in b.i18n.variants("text.aeccae342e4bd0")]
+        self.assertEqual(len(closes), 1)
+        self.assertEqual(closes[0].style, b.discord.ButtonStyle.danger)
+        self.assertFalse(hasattr(reminders, "custom"))  # Frequency selector opens the same modal.
+        frequency = reminders.selectors["report_reminder_frequency"]
+        modal_i = interaction()
+        modal_i.data = {"values": ["custom"]}
+        await frequency.callback(modal_i)
+        modal_i.response.send_modal.assert_awaited_once()
+        back_i = interaction()
+        await reminders.cancel.callback(back_i)
+        self.assertIs(back_i.response.edit_message.call_args.kwargs["view"], options)
+        self.assertEqual(panel.pending_condemn_emoji, "❕")
+        self.assertEqual(self.settings(), before)
