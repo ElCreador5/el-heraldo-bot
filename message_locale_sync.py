@@ -219,12 +219,21 @@ def _personal_publication_ids(guild_id, db_connect):
         exists = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='personal_publications'"
         ).fetchone()
-        if not exists:
-            return set()
-        return {(int(c), int(m)) for c, m in conn.execute(
+        personal = {(int(c), int(m)) for c, m in conn.execute(
             "SELECT channel_id,message_id FROM personal_publications WHERE guild_id=?",
             (guild_id,),
-        )}
+        )} if exists else set()
+        # Los últimos envíos de los trabajos programados también son texto
+        # redactado en formularios; excluirlos aunque no sean /embed.
+        scheduled_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_schedule_state'"
+        ).fetchone()
+        if scheduled_exists:
+            for (message_id,) in conn.execute(
+                "SELECT message_id FROM message_schedule_state "
+                "WHERE guild_id=? AND message_id IS NOT NULL", (guild_id,)):
+                personal.add((None, int(message_id)))
+        return personal
     finally:
         conn.close()
 
@@ -290,7 +299,8 @@ async def synchronize(guild, old_locale, new_locale, db_connect, *,
         if key in visited:
             return
         visited.add(key)
-        if key in personal or message.author.id != guild.me.id:
+        if (key in personal or (None, message.id) in personal
+                or message.author.id != guild.me.id):
             counts["skipped"] += 1
             return
         patch = _message_patch(message, source_locale, new_locale)
