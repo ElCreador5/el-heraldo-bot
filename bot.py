@@ -3371,6 +3371,9 @@ def verification_hub_content(guild_id: int) -> str:
     return (
         _t('text.6bbbfa47640d16')
         + age_time_summary(guild_id) + "\n\n" + personality_time_summary(guild_id)
+        + "\n\n" + _t("personality.rejoin.summary", state=str(_t(
+            "personality.rejoin.enabled" if guild_config_get(guild_id, "verified_rejoin_restore_enabled") == "1"
+            else "personality.rejoin.disabled")))
     )
 
 
@@ -7088,16 +7091,6 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
         )
         guild_config_set(self.guild_id, "verify_panel_ref", f"{channel.id}:{message.id}")
         await interaction.followup.send(_t('text.016469237e5fe0', p0=f'{channel.mention}'), ephemeral=True)
-
-    @discord.ui.button(label=_t("personality.rejoin.toggle"), style=discord.ButtonStyle.secondary, row=3)
-    @_i18n_context
-    async def toggle_rejoin_restore(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        current = (self.pending_restore if self.pending_restore is not None else
-                   guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1")
-        target = not current
-        stored = guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1"
-        self.pending_restore = None if target == stored else target
-        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label=_t('text.894651580d7e21'), style=discord.ButtonStyle.primary, row=3)
     @_i18n_context
@@ -12217,10 +12210,130 @@ class HeraldoVerificationHubView(discord.ui.View):
             view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
         )
 
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label=_t("personality.rejoin.toggle"), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
+    async def rejoin_settings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoRejoinSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=view._content(), embed=None, view=view,
+        )
+
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+
+class HeraldoRejoinSetupView(_SetupDirtySaveView):
+    """Configuración separada, sin saturar los cinco renglones de verificación de edad."""
+
+    @_i18n_context
+    def __init__(self, guild_id: int, owner_id: int) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.owner_id = owner_id
+        self.pending_enabled: bool | None = None
+        self.original_enabled = guild_config_get(guild_id, "verified_rejoin_restore_enabled")
+
+    @_i18n_context
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return False
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(_t('text.62876186654ca2'), ephemeral=True)
+            return False
+        return True
+
+    @_i18n_context
+    def _content(self) -> str:
+        current = self.pending_enabled if self.pending_enabled is not None else (
+            guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1"
+        )
+        return (_t("personality.rejoin.help") + "\n\n"
+                + _t("personality.rejoin.summary", state=str(_t(
+                    "personality.rejoin.enabled" if current else "personality.rejoin.disabled"))))
+
+    @discord.ui.button(label=_t("personality.rejoin.toggle"), style=discord.ButtonStyle.primary, row=0)
+    @_i18n_context
+    async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        saved = guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1"
+        current = self.pending_enabled if self.pending_enabled is not None else saved
+        desired = not current
+        self.pending_enabled = None if desired == saved else desired
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=1)
+    @_i18n_context
+    async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_enabled is None:
+            await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=self._content() + "\n\n" + _t("personality.rejoin.confirm.prompt"),
+            view=HeraldoRejoinConfirmView(self),
+        )
+
+    @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
+    async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.pending_enabled = None
+        await interaction.response.edit_message(content=self._content(), view=self)
+
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
+    @_i18n_context
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.pending_enabled is not None:
+            await interaction.response.send_message(_t('text.2f7c7dc2d8138c'), ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=verification_hub_content(self.guild_id), embed=None,
+            view=HeraldoVerificationHubView(self.guild_id, self.owner_id),
+        )
+
+
+class HeraldoRejoinConfirmView(discord.ui.View):
+    @_i18n_context
+    def __init__(self, editor: HeraldoRejoinSetupView) -> None:
+        super().__init__(timeout=180)
+        self.editor = editor
+        self.guild_id = editor.guild_id
+        self.owner_id = editor.owner_id
+
+    @_i18n_context
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await self.editor.interaction_check(interaction)
+
+    @discord.ui.button(label=_t("personality.rejoin.confirm.button"), style=discord.ButtonStyle.success, row=0)
+    @_i18n_context
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        editor = self.editor
+        if editor.pending_enabled is None:
+            await interaction.response.edit_message(content=editor._content(), view=editor)
+            return
+        expected = {"verified_rejoin_restore_enabled": editor.original_enabled}
+        changes = {"verified_rejoin_restore_enabled": "1" if editor.pending_enabled else "0"}
+        try:
+            applied = verification_atomic_setup_save(editor.guild_id, expected, changes)
+        except (sqlite3.Error, ValueError) as exc:
+            await interaction.response.send_message(
+                _t('text.0c247cd167ef75', p0=f'{type(exc).__name__}'), ephemeral=True)
+            return
+        if not applied:
+            await interaction.response.send_message(_t('text.054697a998868e'), ephemeral=True)
+            return
+        editor.pending_enabled = None
+        editor.original_enabled = guild_config_get(editor.guild_id, "verified_rejoin_restore_enabled")
+        self.stop()
+        await interaction.response.edit_message(
+            content=editor._content() + "\n\n" + _t('text.2398046c362972'),
+            view=editor,
+        )
+
+    @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.secondary, row=0)
+    @_i18n_context
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content=self.editor._content(), view=self.editor)
 
 
 class HeraldoLoggingSetupView(_SetupDirtySaveView):
