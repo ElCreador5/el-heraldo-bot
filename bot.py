@@ -11325,8 +11325,12 @@ class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.p
             )
         except (discord.HTTPException, sqlite3.Error):
             traceback.print_exc()
-        notice = _t('moderation.warning.pardoned', p0=code) + " " + _t(
-            'moderation.warning.pardon_delivery_' + delivery)
+        delivery_key = {
+            "dm": _t('moderation.warning.pardon_delivery_dm'),
+            "channel": _t('moderation.warning.pardon_delivery_channel'),
+            "failed": _t('moderation.warning.pardon_delivery_failed'),
+        }[delivery]
+        notice = _t('moderation.warning.pardoned', p0=code) + " " + delivery_key
         if interaction.message is not None:
             view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
             await interaction.response.edit_message(
