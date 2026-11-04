@@ -10198,9 +10198,9 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
-        parent = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
+        parent = HeraldoModerationSetupView(self.guild_id, self.owner_id)
         await interaction.response.edit_message(
-            content=parent._content(interaction.guild), view=parent)
+            content=_t('text.da10e9d8927c80'), view=parent)
 
     @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger, row=4)
     @_i18n_context
@@ -10796,12 +10796,6 @@ class HeraldoUserReportsMoreOptionsView(discord.ui.View):
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return await self.parent.interaction_check(interaction)
-
-    @discord.ui.button(label=_t('text.19bd5bd18edc40'), style=discord.ButtonStyle.primary, row=0)
-    @_i18n_context
-    async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
-        await interaction.response.send_message(content=view._content(), view=view, ephemeral=True)
 
     @discord.ui.button(label=_t('text.471b155a597e21'), style=discord.ButtonStyle.primary, row=0)
     @_i18n_context
@@ -11982,8 +11976,8 @@ class HeraldoModerationSetupView(discord.ui.View):
     async def cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
         await interaction.edit_original_response(
-            content=moderation_cases_summary(interaction.guild),
-            view=HeraldoCasesSetupView(self.guild_id, self.owner_id),
+            content=(view := HeraldoCasesSetupView(self.guild_id, self.owner_id))._content(interaction.guild),
+            view=view,
         )
 
     @discord.ui.button(label=_t('text.772ffb657276d9'), style=discord.ButtonStyle.primary, row=0)
@@ -11992,6 +11986,12 @@ class HeraldoModerationSetupView(discord.ui.View):
         await interaction.response.defer()
         view = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
         await interaction.edit_original_response(content=view._content(interaction.guild), view=view)
+
+    @discord.ui.button(label=_t('text.19bd5bd18edc40'), style=discord.ButtonStyle.primary, row=1)
+    @_i18n_context
+    async def warnings_policy(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(), view=view)
 
     @discord.ui.button(label=_t('text.70cf296fe178d5'), style=discord.ButtonStyle.primary, row=1)
     @_i18n_context
