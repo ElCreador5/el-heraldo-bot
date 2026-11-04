@@ -16,7 +16,7 @@ from panel_navigation import AdministrativeClose, ensure_close_control
 RETIRED = {
     "joinroles", "suggestions", "programar", "heraldo_log_channel", "verify_setup",
     "verify_texts", "verify_dm_texts", "motw_set_schedule", "motw_set_channel",
-    "condenar_setup", "condenar_template", "server_template_setup",
+    "condenar_setup", "condenar_template", "server_template_setup", "template_sync",
 }
 
 
@@ -101,7 +101,7 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(b._heraldo_command_category(root),"action")
         for root in ("list comandos","caseinfo","variables"):
             self.assertEqual(b._heraldo_command_category(root),"consultation")
-        self.assertEqual(b._heraldo_command_category("template_sync"),"administration")
+        self.assertIsNone(b.bot.tree.get_command("template_sync"))
 
     async def test_catalog_translates_descriptions_using_the_server_language_only(self):
         original={path for _,path,_ in b._heraldo_registered_commands()}
