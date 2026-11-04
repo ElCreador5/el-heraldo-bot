@@ -10209,33 +10209,36 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
     async def on_submit(self, interaction):
         if not await self.parent.interaction_check(interaction):
             return
-        try:
-            from heraldo_datetime import parse_clock
-            interval = str(self.days).strip().lower()
-            match = re.fullmatch(r"(\d+)(s|m|h|d)", interval)
-            if not match:
-                raise ValueError()
-            number, unit = int(match.group(1)), match.group(2)
-            seconds = number * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
-            is_test = heraldo_is_test()
-            if seconds < (10 if is_test else 86400) or seconds > 365 * 86400 or (unit == "s" and not is_test):
-                raise ValueError()
-            raw_date, raw_clock = str(self.date).strip(), str(self.clock).strip()
-            if bool(raw_clock) and not raw_date:
-                raise ValueError()
-            start = ""
-            if raw_date:
-                day = datetime.strptime(raw_date, "%Y-%m-%d").date()
-                if raw_clock:
-                    parsed = parse_clock(raw_clock)
-                    start = f"{day.isoformat()} {parsed.hour:02d}:{parsed.minute:02d}"
-                else:
-                    start = day.isoformat()
-        except ValueError:
-            await interaction.response.send_message(
-                _t("moderation.reminders.invalid_start"), ephemeral=True)
+        interval = str(self.days).strip().lower().replace(" ", "")
+        match = re.fullmatch(r"(\d+)(s|m|h|d)", interval)
+        minimum_seconds = 10 if heraldo_is_test() else 86400
+        seconds = (int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match.group(2)]
+                   if match else 0)
+        if (not match or seconds < minimum_seconds or seconds > 365 * 86400
+                or (match.group(2) == "s" and not heraldo_is_test())):
+            # El error aparece en el panel original, sin mensajes privados adicionales.
+            self.parent._refresh_controls()
+            await interaction.response.edit_message(
+                content=self.parent.summary(_t("moderation.reminders.invalid_interval")),
+                view=self.parent,
+            )
             return
-        self.parent.pending.update(report_reminder_interval=interval, report_reminder_start=start, report_reminder_frequency="custom")
+        from heraldo_datetime import parse_reminder_start
+        try:
+            start = parse_reminder_start(
+                str(self.date), str(self.clock),
+                date_mode=guild_config_get(self.parent.guild_id, "display_date_format") or "discord",
+                locale=guild_language(self.parent.guild_id),
+            )
+        except ValueError:
+            self.parent._refresh_controls()
+            await interaction.response.edit_message(
+                content=self.parent.summary(_t("moderation.reminders.invalid_start")),
+                view=self.parent,
+            )
+            return
+        self.parent.pending.update(report_reminder_interval=interval,
+                                   report_reminder_start=start, report_reminder_frequency="custom")
         self.parent.selected_fields.update(("report_reminder_frequency", "report_reminder_interval", "report_reminder_start"))
         self.parent._refresh_controls()
         await interaction.response.edit_message(content=self.parent.summary(), view=self.parent)
