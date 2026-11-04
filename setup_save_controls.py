@@ -102,6 +102,8 @@ def has_unsaved_changes(view):
                             "pending_paused", "pending_action", "pending_kick_purge_minutes",
                             "pending_ban_minutes", "pending_timeout_minutes",
                             "pending_purge_spec")
+    if name == "HeraldoRejoinSetupView":
+        return _any_pending(view, "pending_enabled")
     if name == "HeraldoVerificationSetupView":
         return _any_pending(view, "pending_role_id", "pending_sin_role_id",
                             "pending_channel_id", "pending_enabled", "pending_restore")
