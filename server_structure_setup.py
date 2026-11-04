@@ -136,8 +136,13 @@ class ServerStructureSetupView(discord.ui.View):
         self.values = dict(self.initial)
         chooser = discord.ui.Select(
             placeholder=t("setup.structure.choose"), row=0,
-            options=[discord.SelectOption(label=t("setup.structure.mode." + mode), value=mode,
-                                          description=t("setup.structure.help." + mode))
+            options=[discord.SelectOption(
+                label=t("setup.structure.mode.legacy_interval")
+                      if mode == "interval" else t("setup.structure.mode." + mode),
+                value=mode,
+                description=t("setup.structure.help.legacy_interval")
+                            if mode == "interval" else t("setup.structure.help." + mode),
+            )
                      for mode in ((*ACTIVE_MODES, "interval")
                                   if self.initial["template_mode"] == "interval"
                                   else ACTIVE_MODES)])
