@@ -58,14 +58,14 @@ class WarningManagementPanelTests(unittest.TestCase):
         self.assertIn("await member.send(", source)
         self.assertIn("await channel.send(", source)
         self.assertLess(source.index("await member.send("), source.index("await channel.send("))
-        self.assertIn("moderation.warning.pardon_dm", source)
-        self.assertIn("moderation.warning.pardon_channel", source)
+        self.assertIn("Advertencia perdonada", source)
+        self.assertIn("tu advertencia", source)
         self.assertIn("return 'failed'", source)
         submit = method("HeraldoWarningPardonModal", "on_submit")
         self.assertIn("await moderation_notify_warning_pardon(", submit)
-        self.assertIn("moderation.warning.pardon_delivery_dm", submit)
-        self.assertIn("moderation.warning.pardon_delivery_channel", submit)
-        self.assertIn("moderation.warning.pardon_delivery_failed", submit)
+        self.assertIn("Se notificó al miembro por DM", submit)
+        self.assertIn("Se notificó en este canal", submit)
+        self.assertIn("No se pudo entregar la notificación", submit)
 
     def test_all_translations_match_variables(self):
         messages = []
