@@ -37,7 +37,7 @@ COPY = {
         "info":"Formato Discord: título, descripción, color, autor, miniatura, imagen, hasta 25 campos, fecha y footer automático.",
         "write_hint":"Para mencionar un canal, usa {#ID_DEL_CANAL} en la descripción o selecciónalo en el editor.",
         "date_error": "Introduce una fecha válida de Santo Domingo o deja vacío para limpiar.",
-        "date_input": "Fecha del embed (AAAA-MM-DD HH:MM)",
+        "date_input": "Fecha del embed (12/24 h)",
         "date_manual": "Seleccionar fecha",
     },
     "en-US": {
@@ -63,7 +63,7 @@ COPY = {
         "info":"Discord format: title, description, color, author, thumbnail, image, up to 25 fields, timestamp and automatic footer.",
         "write_hint":"To reference a channel, use {#ID_DEL_CANAL} in the description or select it in the editor.",
         "date_error": "Enter a valid Santo Domingo date or leave empty to clear.",
-        "date_input": "Embed date (YYYY-MM-DD HH:MM)",
+        "date_input": "Embed date (12/24 h)",
         "date_manual": "Select date",
     },
     "pt-BR": {
@@ -89,7 +89,7 @@ COPY = {
         "info":"Formato Discord: título, descrição, cor, autor, miniatura, imagem, até 25 campos, data e rodapé automático.",
         "write_hint":"Para mencionar um canal, use {#ID_DEL_CANAL} na descrição ou selecione-o no editor.",
         "date_error": "Digite uma data válida de Santo Domingo ou deixe vazio para limpar.",
-        "date_input": "Data do embed (AAAA-MM-DD HH:MM)",
+        "date_input": "Data do embed (12/24 h)",
         "date_manual": "Selecionar data",
     }
 }
@@ -301,19 +301,26 @@ class SectionModal(discord.ui.Modal):
 
 
 class DateStampModal(discord.ui.Modal):
-    """Fecha mostrada dentro del embed, independiente de la programación."""
+    """Fecha mostrada en el embed; admite reloj de 12/24 h, no duraciones."""
     def __init__(self, parent):
+        from heraldo_datetime import format_date_time
         super().__init__(title=t("date_manual"))
         self.parent = parent
+        config = parent.host["guild_config_get"]
+        self.date_mode = config(parent.guild_id, "display_date_format") or "discord"
+        self.time_mode = config(parent.guild_id, "display_time_format")
+        self.locale = parent.host.get("guild_language", lambda _: "es-419")(parent.guild_id)
         previous = (parent.embed or {}).get("timestamp_value") or ""
         if previous:
             try:
-                previous = datetime.fromisoformat(previous).astimezone(
-                    ZoneInfo("America/Santo_Domingo")).strftime("%Y-%m-%d %H:%M")
+                previous = format_date_time(
+                    datetime.fromisoformat(previous), date_mode=self.date_mode,
+                    time_mode=self.time_mode, locale=self.locale,
+                )
             except ValueError:
                 previous = ""
         self.date = discord.ui.TextInput(label=t("date_input"), required=False,
-                                         max_length=16, default=previous)
+                                         max_length=32, default=previous)
         self.add_item(self.date)
 
     @guild_context
@@ -324,12 +331,13 @@ class DateStampModal(discord.ui.Modal):
         data = dict(self.parent.embed or {})
         if raw:
             try:
-                local = datetime.strptime(raw, "%Y-%m-%d %H:%M")
-                instant = local.replace(tzinfo=ZoneInfo("America/Santo_Domingo"))
-                data["timestamp_value"] = instant.astimezone(timezone.utc).isoformat()
+                from heraldo_datetime import parse_date_time
+                instant = parse_date_time(
+                    raw, date_mode=self.date_mode, locale=self.locale,
+                )
+                data["timestamp_value"] = instant.isoformat()
                 data["timestamp"] = True
             except ValueError:
-                from message_autofeeds import respond_error
                 return await interaction.response.send_message(t("date_error"), ephemeral=True)
         else:
             data["timestamp_value"], data["timestamp"] = "", False
@@ -339,7 +347,6 @@ class DateStampModal(discord.ui.Modal):
             from message_autofeeds import respond_error
             return await respond_error(interaction, "invalid")
         await redraw(interaction, self.parent, "date")
-
 
 class FieldModal(discord.ui.Modal):
     def __init__(self, parent, *, index=None):
