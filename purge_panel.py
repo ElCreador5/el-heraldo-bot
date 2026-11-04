@@ -8,6 +8,7 @@ from collections import Counter
 from purge_period import PurgePeriodError, parse_purge_period
 import asyncio
 import re
+import secrets
 
 import discord
 import heraldo_i18n as i18n
@@ -106,6 +107,9 @@ class PurgePanel(discord.ui.View):
         self.origin = interaction
         self.guild_id = interaction.guild.id
         self.owner_id = interaction.user.id
+        # La vista es temporal: el identificador permite reconocerla después de reiniciar.
+        # No se restaura una confirmación antigua ni se conserva una purga pendiente.
+        self.session_id = secrets.token_hex(8)
         self.language = language if language in i18n.TARGET_LOCALES else "es-419"
         self.footer = footer
         self.targets = targets
@@ -153,8 +157,14 @@ class PurgePanel(discord.ui.View):
         self.scanned_channels = {}
         self._build()
 
+    def _custom_id(self, action: str) -> str:
+        return f"ehpurge:v1:{self.session_id}:{action}"
+
     def _button(self, key, style, row, callback):
-        button = discord.ui.Button(label=self.t(key), style=style, row=row)
+        button = discord.ui.Button(
+            label=self.t(key), style=style, row=row,
+            custom_id=self._custom_id(key),
+        )
         button.callback = callback
         self.add_item(button)
 
@@ -183,6 +193,7 @@ class PurgePanel(discord.ui.View):
                 placeholder=self.t("selected") + f": {len(self.user_ids)}/25",
                 min_values=0, max_values=25, row=0,
             )
+        self.user_select.custom_id = self._custom_id("users")
         self.user_select.callback = self.users_changed
         self.add_item(self.user_select)
         channel_kwargs = {}
@@ -206,6 +217,7 @@ class PurgePanel(discord.ui.View):
                 ),
                 min_values=0, max_values=1, row=1,
             )
+        self.channel_select.custom_id = self._custom_id("channel")
         self.channel_select.callback = self.channel_changed
         self.add_item(self.channel_select)
         self.kind_select = discord.ui.Select(
@@ -215,6 +227,7 @@ class PurgePanel(discord.ui.View):
                 for v, k in (("all", "all_kind"), ("links", "links"), ("text", "text"))
             ],
         )
+        self.kind_select.custom_id = self._custom_id("kind")
         self.kind_select.callback = self.kind_changed
         self.add_item(self.kind_select)
         self._button("settings", discord.ButtonStyle.primary, 3, self.open_range)
