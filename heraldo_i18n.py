@@ -166,7 +166,7 @@ def _source_id(value, *, guild=False, seen=None):
         candidate = getattr(original, "id", None)
         if type(candidate) is int:
             return candidate
-    for attr in ("parent", "editor", "parent_view", "setup_view", "channel"):
+    for attr in ("parent", "editor", "parent_view", "setup_view", "panel", "channel"):
         parent = (getattr(value, attr, None)
                   if attr in getattr(value, "__dict__", {}) or hasattr(type(value), attr) else None)
         if parent is not None and parent is not value:
@@ -199,7 +199,7 @@ def guild_context(function):
                 continue
             if type(candidate) is int:
                 return candidate
-        for name in ("guild", "source_guild", "origin_guild", "interaction", "ctx", "member", "message", "channel", "self", "parent", "editor", "view"):
+        for name in ("guild", "source_guild", "origin_guild", "interaction", "ctx", "member", "message", "channel", "self", "parent", "editor", "panel", "view"):
             if name in values:
                 found = _source_id(values[name], guild=name in {"guild", "source_guild", "origin_guild"})
                 if found is not None:
