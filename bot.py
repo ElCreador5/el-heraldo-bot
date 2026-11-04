@@ -10382,34 +10382,44 @@ class ReportReminderSetupView(_SetupDirtySaveView):
             due = reminder_next_due(p, now)
         state = (_t('text.0a0ca661486c7e') if self.original["report_reminder_enabled"] == "1"
                  else _t('text.e252efe6974743'))
-        from heraldo_datetime import format_clock
-        from datetime import time as _time
-        start_text = p["report_reminder_start"]
-        start_clock = (int(start_text[11:13]), int(start_text[14:16])
-                       ) if frequency == "custom" and len(start_text) > 10 else (
-                           int(p["report_reminder_hour"]), 0)
-        clock_display = format_clock(
-            _time(*start_clock),
-            guild_config_get(self.guild_id, "display_date_format") or "discord",
-            guild_config_get(self.guild_id, "display_time_format"))
-        content = _t('text.2e2c1ff499c328', p0=f'{REPORT_REMINDER_HELP}',
-                     p1=f'{state}', p2=f'{detail}',
-                     p3=clock_display, p4=f'{channel}',
-                     p5=f'{format_configured_datetime(self.guild_id, due)}')
-        if p["report_reminder_start"] and p["report_reminder_frequency"] == "custom":
-            from heraldo_datetime import format_date_time
-            from zoneinfo import ZoneInfo
-            raw = p["report_reminder_start"]
-            try:
-                local_start = datetime.strptime(raw, "%Y-%m-%d %H:%M") if len(raw) > 10 else datetime.strptime(raw, "%Y-%m-%d").replace(hour=int(p["report_reminder_hour"]))
-                local_start = local_start.replace(tzinfo=ZoneInfo("America/Santo_Domingo"))
-                label = format_date_time(local_start,
-                    date_mode=guild_config_get(self.guild_id, "display_date_format") or "discord",
-                    time_mode=guild_config_get(self.guild_id, "display_time_format"),
-                    locale=guild_language(self.guild_id))
-                content += "\n" + _t("moderation.reminders.saved_start", when=label)
-            except ValueError:
-                pass
+        due_text = format_configured_datetime(self.guild_id, due)
+        if frequency == "custom":
+            # Un intervalo no tiene una hora fija. Mostrar solo el inicio explícito
+            # y la próxima ejecución, sin la hora heredada del modo diario.
+            start_text = p["report_reminder_start"]
+            start_label = _t("moderation.reminders.no_start")
+            if start_text:
+                from heraldo_datetime import format_date_time
+                from zoneinfo import ZoneInfo
+                try:
+                    if len(start_text) > 10:
+                        local_start = datetime.strptime(start_text, "%Y-%m-%d %H:%M")
+                    else:
+                        local_start = datetime.strptime(start_text, "%Y-%m-%d").replace(
+                            hour=int(p["report_reminder_hour"]))
+                    local_start = local_start.replace(tzinfo=ZoneInfo("America/Santo_Domingo"))
+                    start_label = _t("moderation.reminders.saved_start",
+                        when=format_date_time(
+                            local_start,
+                            date_mode=guild_config_get(self.guild_id, "display_date_format") or "discord",
+                            time_mode=guild_config_get(self.guild_id, "display_time_format"),
+                            locale=guild_language(self.guild_id)))
+                except (ValueError, OverflowError):
+                    start_label = _t("moderation.reminders.no_start")
+            content = _t("moderation.reminders.summary_custom",
+                         p0=f'{REPORT_REMINDER_HELP}', p1=f'{state}',
+                         p2=f'{detail}', p4=f'{channel}', p5=f'{due_text}',
+                         p6=f'{start_label}')
+        else:
+            from heraldo_datetime import format_clock
+            from datetime import time as _time
+            clock_display = format_clock(
+                _time(int(p["report_reminder_hour"]), 0),
+                guild_config_get(self.guild_id, "display_date_format") or "discord",
+                guild_config_get(self.guild_id, "display_time_format"))
+            content = _t('text.2e2c1ff499c328', p0=f'{REPORT_REMINDER_HELP}',
+                         p1=f'{state}', p2=f'{detail}',
+                         p3=clock_display, p4=f'{channel}', p5=f'{due_text}')
         return content + (f"\n\n{notice}" if notice else "")
 
     @_i18n_context
