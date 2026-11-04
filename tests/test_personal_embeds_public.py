@@ -74,10 +74,10 @@ class PersonalEmbedsTests(unittest.TestCase):
         self.assertEqual(text_embed.footer.text, "El Heraldo")
 
         visual = {"title": "Título original", "image_url": "https://example.com/foto.png"}
-        renderer = lambda data, stamp_fn, guild: stamp_fn(
-            discord.Embed(title=data["title"]).set_image(url=data["image_url"]) or discord.Embed(),
-            guild,
-        )
+        def renderer(data, stamp_fn, guild):
+            embed = discord.Embed(title=data["title"])
+            embed.set_image(url=data["image_url"])
+            return stamp_fn(embed, guild)
         rendered = publication_embed(visual, stamp, None, member, "Nombre interno", renderer)
         self.assertEqual(rendered.title, "Título original")
         self.assertEqual(rendered.author.name, "Miembro creador")
