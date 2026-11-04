@@ -105,13 +105,22 @@ class CustodioDetectionView(discord.ui.View):
             enabled=json.loads(self.parent.get_setting(self.guild_id,KEY) or '{}').get('enabled') is True
         except (ValueError,TypeError,AttributeError):
             enabled=False
+        interpreted=sum(counts[key] for key in (
+            'watchable','partial','clarification','contradiction','unsupported',
+            'no_prohibition','disabled'))
+        if interpreted == 0:
+            results=str(_t('text.custodio.analysis.no_results'))
+        else:
+            results=str(_t('text.custodio.analysis.results',
+                watchable=counts['watchable'],partial=counts['partial'],
+                ambiguous=counts['clarification']+counts['contradiction'],
+                human=counts['unsupported'],none=counts['no_prohibition'],
+                disabled=counts['disabled'],unavailable=counts['unavailable']))
         return str(_t('text.custodio.analysis.panel',
             state=str(_t('text.custodio.on' if enabled else 'text.custodio.off')),
-            total=self.snapshot.count, watchable=counts['watchable'],partial=counts['partial'],
-            ambiguous=counts['clarification']+counts['contradiction'],human=counts['unsupported'],
-            none=counts['no_prohibition'],disabled=counts['disabled'],unavailable=counts['unavailable'],
+            total=self.snapshot.count,results=results,
             revision=self.snapshot.revision[:12],
-            updated=f'<t:{self.pending.created_at}:F>' if self.pending else str(_t('common.none_sentence')),
+            updated=f'<t:{self.pending.created_at}:f>' if self.pending and interpreted else str(_t('common.none_sentence')),
             pending=str(_t('text.custodio.yes' if self.pending!=self.saved else 'text.custodio.no'))))
 
     async def blocked(self,interaction):
