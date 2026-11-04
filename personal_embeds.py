@@ -219,7 +219,7 @@ class PersonalPanel(discord.ui.View):
     def kwargs(self, guild):
         self.refresh()
         preview_embed = render(as_embed_payload(self.embed), self.host["stamp_embed"], guild) if self.embed else None
-        return dict(content=self.summary() + preview,
+        return dict(content=self.summary(),
                     embed=preview_embed,
                     view=self, allowed_mentions=discord.AllowedMentions.none())
 
