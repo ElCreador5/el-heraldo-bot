@@ -119,6 +119,7 @@ import message_payload
 import evidence_archive
 import setup_interactions
 import heraldo_i18n as i18n
+import message_locale_sync
 from honeypot_interactions import honeypot_operation, serialize_honeypot_warning
 import io
 import os
@@ -13756,6 +13757,18 @@ class HeraldoLanguageView(_SetupDirtySaveView):
             content=language_panel_text(self.guild_id) + "\n\n**" + i18n.translate(self.pending, "language.saved") + "**",
             view=HeraldoLanguageView(self.guild_id, self.owner_id,
                                      from_setup=self.from_setup))
+        if (self.pending != self.original and interaction.guild is not None
+                and bot.is_ready()):
+            # Conciliación iniciada solo tras guardar y responder a Discord.
+            # El contenido libre y las publicaciones personales no se traducen.
+            async def _reconcile_language():
+                try:
+                    await message_locale_sync.synchronize(
+                        interaction.guild, self.original, self.pending, db_connect)
+                except Exception as exc:
+                    print("LANGUAGE_HISTORY_SYNC status=FAILED "
+                          f"guild={self.guild_id} error={type(exc).__name__}", flush=True)
+            asyncio.create_task(_reconcile_language())
         if interaction.guild is not None and bot.is_ready():
             try:
                 await bot.tree.sync(guild=interaction.guild)
@@ -25420,8 +25433,18 @@ def _install_embed_hooks() -> None:
 
         @_i18n_context
         async def wrapper(self, content=_MISSING if empty is _MISSING else None, **kw):
-            content, kw = _embedify(content, kw, guild_of(self), empty)
-            return await orig(self, content, **kw)
+            guild = guild_of(self)
+            content, kw = _embedify(content, kw, guild, empty)
+            sent = await orig(self, content, **kw)
+            # Registrar solo publicaciones públicas institucionales confirmadas.
+            # Los envíos originales nunca fallan por una incidencia del índice.
+            if name == "send":
+                try:
+                    message_locale_sync.note_sent(sent, guild, content, kw, db_connect)
+                except Exception as exc:
+                    print("LANGUAGE_TRACK status=FAILED "
+                          f"error={type(exc).__name__}", flush=True)
+            return sent
 
         wrapper.__name__ = name
         wrapper.__doc__ = orig.__doc__
