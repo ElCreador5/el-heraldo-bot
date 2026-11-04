@@ -18,7 +18,10 @@ class ModerationPolicyUITests(unittest.TestCase):
     def test_report_actions_are_distinguishable_from_escalation(self):
         setup = member("__init__")
         self.assertIn("self.punishment_select", setup)
-        self.assertIn("default=False", setup)
+        self.assertIn("default=value == self.max_warns", setup)
+        self.assertIn("default=action == self.escalation", setup)
+        self.assertIn("default=action in self.enabled_actions", setup)
+        self.assertIn("split(", setup)
         self.assertIn("discord.SelectOption(label=label, value=action, description=hint", setup)
         self.assertNotIn("label=f", setup)
 
