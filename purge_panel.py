@@ -10,121 +10,7 @@ import asyncio
 import re
 
 import discord
-
-
-TEXT = {
-    "es-419": {
-        "title": "🧹 Limpieza de mensajes", "review": "Confirmar limpieza",
-        "done": "Resultado de la limpieza", "users": "Usuarios",
-        "channel": "Canal", "kind": "Tipo", "range": "Intervalo",
-        "limit": "Límite por usuario", "all": "Todos los mensajes",
-        "none": "Sin seleccionar", "whole": "Todos los canales",
-        "all_kind": "Cualquier mensaje", "links": "Solo enlaces",
-        "text": "Solo texto (sin imágenes ni vídeos)",
-        "settings": "Rango y límite", "all_button": "Todos",
-        "channel_reset": "Quitar canal", "next": "Continuar",
-        "back": "Volver", "close": "Cerrar", "confirm": "Confirmar eliminación",
-        "selected": "Usuarios seleccionados", "ids": "Añadir usuarios por ID",
-        "ids_input": "ID de usuarios separados por comas", "max_users": "Máximo 25 usuarios en total.", "scanned": "Canales examinados",
-        "skipped": "Canales omitidos", "total": "Mensajes encontrados",
-        "per_user": "Desglose por usuario", "deleted": "Eliminados",
-        "failed": "No eliminados", "audit": "Registro de limpieza",
-        "permission": "No tienes permisos para administrar mensajes en esta operación.",
-        "owner": "Este panel pertenece a otro moderador.",
-        "busy": "Hay una operación en curso. No se puede modificar el panel.",
-        "choose": "Selecciona al menos un usuario.",
-        "scope": "Indica un intervalo o un límite, o activa «Todos».",
-        "wide": "La limpieza completa exige «Gestionar servidor».",
-        "range_error": "El intervalo es inválido: «Desde» debe ser más antiguo que «Hasta».",
-        "invalid": "Introduce una duración válida y una cantidad entera positiva.",
-        "no_access": "No hay canales accesibles con los permisos necesarios.",
-        "stale": "La vista previa ya no es válida. Ejecuta «Continuar» otra vez.",
-        "preview_help": "Esta es una fotografía de los mensajes encontrados; solo esos ID podrán eliminarse. Los mensajes nuevos quedan fuera.",
-        "partial": "Algunos canales no pudieron revisarse; el total corresponde únicamente a los examinados.",
-        "no_messages": "No se encontraron mensajes; no hay nada que eliminar.",
-        "audit_missing": "No se puede completar la operación: el canal de registros del bot no está disponible.",
-        "running": "Otra limpieza ya está procesando uno de los usuarios seleccionados.",
-        "unexpected": "No se pudo completar la búsqueda. No se eliminó ningún mensaje.",
-        "closed": "Panel cerrado sin eliminar mensajes.",
-        "period_from": "Desde (ej. 2d, 12h)", "period_to": "Hasta (ej. 2h)",
-        "quantity": "Cantidad máxima por usuario", "mode_note": "«Todos» elimina los límites de cantidad y tiempo.",
-        "log_status": "Resultado", "finished": "Operación terminada",
-    },
-    "en-US": {
-        "title": "🧹 Message cleanup", "review": "Confirm cleanup",
-        "done": "Cleanup result", "users": "Users",
-        "channel": "Channel", "kind": "Type", "range": "Time range",
-        "limit": "Limit per user", "all": "All messages",
-        "none": "Not selected", "whole": "All channels",
-        "all_kind": "Any message", "links": "Links only",
-        "text": "Text only (no images/videos)",
-        "settings": "Range and limit", "all_button": "All",
-        "channel_reset": "Clear channel", "next": "Continue",
-        "back": "Back", "close": "Close", "confirm": "Confirm deletion",
-        "selected": "Selected users", "ids": "Add users by ID",
-        "ids_input": "Comma-separated user IDs", "max_users": "Maximum 25 users in total.", "scanned": "Channels scanned",
-        "skipped": "Channels skipped", "total": "Messages found",
-        "per_user": "By user", "deleted": "Deleted",
-        "failed": "Not deleted", "audit": "Cleanup audit",
-        "permission": "You lack permission to manage messages for this operation.",
-        "owner": "This panel belongs to another moderator.",
-        "busy": "An operation is in progress. Changes are disabled.",
-        "choose": "Select at least one user.",
-        "scope": "Set a time range or limit, or enable All.",
-        "wide": "Full cleanup requires Manage Server permission.",
-        "range_error": "Invalid time range: From must be older than To.",
-        "invalid": "Enter valid durations and a positive whole number.",
-        "no_access": "No channels are accessible with the required permissions.",
-        "stale": "The preview is no longer valid. Continue again.",
-        "preview_help": "This is a fixed snapshot of message IDs. New messages cannot be added.",
-        "partial": "Some channels could not be inspected; the count covers inspected channels only.",
-        "no_messages": "No messages were found.",
-        "audit_missing": "Cannot proceed: the bot's audit log channel is unavailable.",
-        "running": "Another cleanup is already processing one of the selected users.",
-        "unexpected": "The scan failed; no messages were deleted.",
-        "closed": "Panel closed without deleting messages.",
-        "period_from": "From (e.g. 2d, 12h)", "period_to": "To (e.g. 2h)",
-        "quantity": "Maximum messages per user", "mode_note": "All removes time and count limits.",
-        "log_status": "Result", "finished": "Operation complete",
-    },
-    "pt-BR": {
-        "title": "🧹 Limpeza de mensagens", "review": "Confirmar limpeza",
-        "done": "Resultado da limpeza", "users": "Usuários",
-        "channel": "Canal", "kind": "Tipo", "range": "Período",
-        "limit": "Limite por usuário", "all": "Todas as mensagens",
-        "none": "Não selecionado", "whole": "Todos os canais",
-        "all_kind": "Qualquer mensagem", "links": "Apenas links",
-        "text": "Apenas texto (sem imagens ou vídeos)",
-        "settings": "Período e limite", "all_button": "Todas",
-        "channel_reset": "Limpar canal", "next": "Continuar",
-        "back": "Voltar", "close": "Fechar", "confirm": "Confirmar exclusão",
-        "selected": "Usuários selecionados", "ids": "Adicionar IDs de usuários",
-        "ids_input": "IDs separados por vírgulas", "max_users": "Máximo de 25 usuários.", "scanned": "Canais analisados",
-        "skipped": "Canais ignorados", "total": "Mensagens encontradas",
-        "per_user": "Por usuário", "deleted": "Excluídas",
-        "failed": "Não excluídas", "audit": "Registro da limpeza",
-        "permission": "Você não tem permissão para gerenciar mensagens.",
-        "owner": "Este painel pertence a outro moderador.",
-        "busy": "Uma operação está em andamento; alterações desativadas.",
-        "choose": "Selecione pelo menos um usuário.",
-        "scope": "Defina um período/limite ou ative Todas.",
-        "wide": "A limpeza completa requer Gerenciar Servidor.",
-        "range_error": "Período inválido: De deve ser anterior a Até.",
-        "invalid": "Informe durações válidas e um número inteiro positivo.",
-        "no_access": "Não há canais acessíveis com as permissões necessárias.",
-        "stale": "A prévia expirou. Continue novamente.",
-        "preview_help": "Esta é uma lista fixa de IDs; mensagens novas não serão incluídas.",
-        "partial": "Alguns canais não puderam ser lidos; a contagem cobre apenas os analisados.",
-        "no_messages": "Nenhuma mensagem encontrada.",
-        "audit_missing": "Impossível continuar: o canal de registro do bot está indisponível.",
-        "running": "Outra limpeza já está processando um usuário selecionado.",
-        "unexpected": "A busca falhou; nenhuma mensagem foi excluída.",
-        "closed": "Painel fechado sem excluir mensagens.",
-        "period_from": "De (ex. 2d, 12h)", "period_to": "Até (ex. 2h)",
-        "quantity": "Máximo de mensagens por usuário", "mode_note": "Todas remove os limites.",
-        "log_status": "Resultado", "finished": "Operação concluída",
-    },
-}
+import heraldo_i18n as i18n
 
 
 class PurgeRangeModal(discord.ui.Modal):
@@ -217,7 +103,7 @@ class PurgePanel(discord.ui.View):
         self.origin = interaction
         self.guild_id = interaction.guild.id
         self.owner_id = interaction.user.id
-        self.language = language if language in TEXT else "es-419"
+        self.language = language if language in i18n.TARGET_LOCALES else "es-419"
         self.footer = footer
         self.targets = targets
         self.matches = matches
@@ -243,7 +129,7 @@ class PurgePanel(discord.ui.View):
         self._build()
 
     def t(self, key: str) -> str:
-        return TEXT[self.language][key]
+        return i18n.CATALOGS[self.language].messages['purge.panel.' + key]
 
     def invalidate(self) -> None:
         self.snapshot = None
