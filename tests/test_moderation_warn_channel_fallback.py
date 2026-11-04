@@ -22,7 +22,7 @@ def function_source(name):
 class WarningChannelFallbackTests(unittest.TestCase):
     def test_fallback_only_after_failed_manual_dm(self):
         code = function_source("moderation_apply_case_punishment")
-        self.assertIn('case_type == "WARN" and not dm_ok', code)
+        self.assertIn("if case_type == 'WARN' and not dm_ok:", code)
         self.assertIn("moderation_warn_channel_fallback(interaction.channel, member, case_number)", code)
         self.assertLess(code.index("moderation_warn_channel_fallback("), code.index("moderation_warning_escalation("))
 
