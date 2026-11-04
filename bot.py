@@ -10447,7 +10447,8 @@ def reminder_next_due(settings, now):
     """Calcula una fecha futura en horario de Santo Domingo (UTC-4)."""
     local = now.astimezone(timezone(timedelta(hours=-4)))
     hour = max(0, min(23, int(settings["report_reminder_hour"])))
-    candidate = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    # Los recordatorios guardan una hora entera; no existe un campo de minutos.
+    candidate = local.replace(hour=hour, minute=0, second=0, microsecond=0)
     frequency = settings["report_reminder_frequency"]
     if frequency == "daily":
         days = 1
