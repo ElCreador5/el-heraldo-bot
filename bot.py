@@ -11263,7 +11263,7 @@ class HeraldoCasesSetupView(discord.ui.View):
 
 
 class HeraldoCaseManagementConfirm(discord.ui.Modal):
-    """Confirmation for irreversible operations. Never erase open cases in bulk."""
+    """Confirmation for irreversible operations, including explicit full clearing."""
     confirmation = discord.ui.TextInput(
         label="Confirmación", placeholder="Código del caso o LIMPIAR",
         required=True, max_length=90)
@@ -11276,6 +11276,10 @@ class HeraldoCaseManagementConfirm(discord.ui.Modal):
         self.filter_key, self.page = filter_key, page
         if case_number is not None:
             self.confirmation.placeholder = moderation_case_code(case_number, guild_id)
+        elif operation == "cleanup_all":
+            self.title = "Eliminar todos los casos"
+            self.confirmation.label = "Escribe LIMPIAR TODO"
+            self.confirmation.placeholder = "LIMPIAR TODO"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if (interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id
@@ -11295,11 +11299,32 @@ class HeraldoCaseManagementConfirm(discord.ui.Modal):
                 return
             success = moderation_case_delete(self.guild_id, self.case_number)
             label = f"Caso {expected} eliminado." if success else "El caso ya no existe."
+        elif self.operation == "cleanup_all":
+            if str(self.confirmation).strip().upper() != "LIMPIAR TODO":
+                await interaction.response.send_message(
+                    "Confirmación incorrecta. Escribe LIMPIAR TODO.", ephemeral=True)
+                return
+            # Solo elimina registros de casos de este servidor. No ejecuta
+            # cambios en sanciones activas ni borra hilos o registros de Discord.
+            with closing(db_connect()) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    counts = conn.execute(
+                        "SELECT COUNT(*), COALESCE(SUM(open), 0) "
+                        "FROM moderation_cases WHERE guild_id=?",
+                        (self.guild_id,)).fetchone()
+                    conn.execute(
+                        "DELETE FROM moderation_cases WHERE guild_id=?", (self.guild_id,))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+            label = (f"Limpieza total completada: {counts[0]} expedientes eliminados "
+                     f"({counts[1]} abiertos). Las sanciones de Discord no se han modificado.")
         else:
             if str(self.confirmation).strip().upper() != "LIMPIAR":
                 await interaction.response.send_message("Escribe LIMPIAR para confirmar.", ephemeral=True)
                 return
-            # Revalidar en la misma transacción; nunca borrar sanciones abiertas.
             with closing(db_connect()) as conn:
                 count = conn.execute(
                     "SELECT COUNT(*) FROM moderation_cases WHERE guild_id=? AND open=0",
@@ -11310,6 +11335,28 @@ class HeraldoCaseManagementConfirm(discord.ui.Modal):
             label = f"Limpieza completada: {count} casos cerrados eliminados. Los abiertos siguen intactos."
         print(f"CASE_MANAGEMENT action={self.operation} guild={self.guild_id} moderator={interaction.user.id} case={self.case_number} result={label}")
         await interaction.response.send_message(label, ephemeral=True)
+
+
+class HeraldoCaseCleanupAllConfirmView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=120)
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        if (interaction.guild_id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.administrator
+                or not await configuration_access(interaction, self.guild_id, self.owner_id)):
+            return
+        await interaction.response.send_modal(HeraldoCaseManagementConfirm(
+            self.guild_id, self.owner_id, None, "cleanup_all"))
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(
+            content="Limpieza total cancelada.", view=None)
 
 
 class HeraldoCaseManagerSetupView(discord.ui.View):
@@ -11375,8 +11422,10 @@ class HeraldoCaseManagerSetupView(discord.ui.View):
         self.delete_one.disabled = current is None or bool(current["open"])
         self.previous.disabled = self.page == 0
         self.next_page.disabled = (self.page + 1) * 25 >= total
-        self.cleanup.disabled = not any(
-            not r["open"] for r in moderation_case_list(self.guild_id, open_only=False, limit=1))
+        self.cleanup.disabled = not bool(moderation_case_list(
+            self.guild_id, open_only=False, limit=1))
+        self.cleanup_all.disabled = not bool(moderation_case_list(
+            self.guild_id, limit=1))
         return rows, total, current
 
     def summary(self):
@@ -11394,7 +11443,9 @@ class HeraldoCaseManagerSetupView(discord.ui.View):
             lines.append("Sin expediente seleccionado.")
         lines.append("**Cerrar** resuelve el caso (y puede revertir su sanción). "
                      "**Omitir** descarta la revisión sin cambiar sanciones. "
-                     "**Limpiar** elimina únicamente casos cerrados, con confirmación.")
+                     "**Limpiar cerrados** borra solo casos resueltos. "
+                     "**Limpiar todo** borra los expedientes abiertos y cerrados, "
+                     "pero no revierte sanciones de Discord. Ambas requieren confirmación.")
         return "\n\n".join(lines)[:1900]
 
     async def interaction_check(self, interaction):
@@ -11498,6 +11549,24 @@ class HeraldoCaseManagerSetupView(discord.ui.View):
             return
         await interaction.response.send_modal(HeraldoCaseManagementConfirm(
             self.guild_id, self.owner_id, None, "cleanup", self.filter_key, self.page))
+
+    @discord.ui.button(label="Limpiar todo", style=discord.ButtonStyle.danger, row=4)
+    async def cleanup_all(self, interaction, button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Solo administradores.", ephemeral=True)
+            return
+        with closing(db_connect()) as conn:
+            counts = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(open), 0) "
+                "FROM moderation_cases WHERE guild_id=?", (self.guild_id,)
+            ).fetchone()
+        await interaction.response.send_message(
+            f"**Confirmación de limpieza total**\n"
+            f"Se eliminarán {counts[0]} casos, incluidos {counts[1]} abiertos. "
+            "No se revertirán baneos, silenciamientos ni otras sanciones. "
+            "Esta acción es irreversible. Pulsa Confirmar para continuar.",
+            ephemeral=True,
+            view=HeraldoCaseCleanupAllConfirmView(self.guild_id, self.owner_id))
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
     async def back(self, interaction, button):
