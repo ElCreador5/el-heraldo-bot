@@ -263,6 +263,7 @@ class CommandConsolidationTests(unittest.IsolatedAsyncioTestCase):
         frequency = reminders.selectors["report_reminder_frequency"]
         modal_i = interaction()
         modal_i.data = {"values": ["custom"]}
+        modal_i.response.send_modal = AsyncMock()
         await frequency.callback(modal_i)
         modal_i.response.send_modal.assert_awaited_once()
         back_i = interaction()
