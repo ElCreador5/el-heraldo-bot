@@ -575,3 +575,10 @@ La petición del propietario autoriza implementación y pruebas de respaldo/recu
 - Para el despliegue automático Enzonic de `Pruebas`, el commit `HEAD` local puede permanecer antiguo aunque los archivos se actualicen. No asumir que `git diff --quiet HEAD` equivale a modificación maliciosa.
 - Una diferencia en el checkout solo se acepta si se valida íntegramente el contenido de los archivos publicados en la rama remota `Pruebas` mediante el manifiesto público de blobs Git y HTTPS. La comprobación no altera el índice Git ni archivos persistentes. Si la validación falla se debe bloquear el inicio, sin permitir una excepción general de árbol sucio.
 - Mantener el alcance en el bot de pruebas; sin cambios en `main` ni relajación de la protección de copia de seguridad, restauración o identificación de la cuenta Discord.
+ 
+
+## 2026-11-04 — Idioma retroactivo de mensajes institucionales (Pruebas)
+
+El idioma es una preferencia manual del servidor (es-419, en-US, pt-BR). Al confirmar el cambio en `/language` o desde Setup se inicia una conciliación de mensajes institucionales de El Heraldo. El bot solo puede traducir fragmentos identificables mediante sus propios catálogos y conserva intactos motivos, datos variables, contenido de formularios, anuncios y publicaciones personales. Los mensajes se editan en su lugar, sin crear publicaciones duplicadas ni menciones nuevas. No se traduce por IA ni se infiere el idioma a partir del miembro.
+
+La primera conciliación inspecciona un historial limitado (300 mensajes por canal, 40 canales como máximo) además de los IDs institucionales indexados. Los mensajes sin procedencia verificable, sin permisos o fuera del alcance siguen intactos. Por tanto no declarar actualización total de todo el historial; ampliar cobertura solo con trazabilidad de mensajes, sin reescribir el texto libre. El rastreo utiliza claves `i18npost.<channel>.<message>` en la tabla existente `guild_settings`, sin cambiar el esquema SQLite verificado de Enzonic. El despliegue de producción permanece sin autorización para este cambio.
