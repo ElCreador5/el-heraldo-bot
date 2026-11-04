@@ -12,6 +12,7 @@ import secrets
 
 import discord
 import heraldo_i18n as i18n
+from heraldo_datetime import clock_style
 
 
 class PurgeRangeModal(discord.ui.Modal):
@@ -101,7 +102,7 @@ class PurgePanel(discord.ui.View):
         self, interaction: discord.Interaction, *,
         language: str, footer, targets, matches, delete, log, parse_duration,
         max_minutes: int, running: set, audit_channel_id: int,
-        date_mode: str = "discord", format_datetime=None,
+        date_mode: str = "discord", time_mode: str | None = None, format_datetime=None,
     ):
         super().__init__(timeout=900)
         self.origin = interaction
@@ -121,6 +122,7 @@ class PurgePanel(discord.ui.View):
         self.running = running
         self.audit_channel_id = audit_channel_id
         self.date_mode = date_mode
+        self.time_mode = time_mode
         self.format_datetime = format_datetime or (lambda dt: dt.strftime("%Y-%m-%d %H:%M"))
         self.user_ids: tuple[int, ...] = ()
         self.selected_user_ids: tuple[int, ...] = ()
@@ -143,13 +145,12 @@ class PurgePanel(discord.ui.View):
 
     def period_hint(self) -> str:
         """Ejemplos para el formato configurado en el servidor."""
-        if self.date_mode == "mdy12":
-            return "05/06/2026 6:00 PM · 6:00 PM"
-        if self.date_mode == "iso":
-            return "2026-05-06 18:00 · 18:00"
-        if self.date_mode == "discord" and self.language == "en-US":
-            return "05/06/2026 6:00 PM · 6:00 PM"
-        return "06/05/2026 18:00 · 6:00 PM"
+        date = ("2026-05-06" if self.date_mode == "iso" else
+                "05/06/2026" if self.date_mode == "mdy12" or
+                (self.date_mode == "discord" and self.language == "en-US")
+                else "06/05/2026")
+        clock = "6:00 PM" if clock_style(self.date_mode, self.time_mode) == "12h" else "18:00"
+        return f"{date} {clock} · {clock}"
 
     def invalidate(self) -> None:
         self.snapshot = None
