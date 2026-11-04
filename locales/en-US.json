@@ -3581,5 +3581,10 @@
   "moderation.warning.pardoned": "Warning {p0} pardoned. History is preserved and the warning no longer counts as active.",
   "moderation.warning.deleted": "Case {p0} permanently deleted.",
   "moderation.warning.close": "Close",
-  "moderation.warning.closed_panel": "Cases panel closed."
+  "moderation.warning.closed_panel": "Cases panel closed.",
+  "moderation.warning.pardon_dm": "**Warning pardoned** · Case {p0}\nReason: {p1}\nThis warning no longer counts as active.",
+  "moderation.warning.pardon_channel": "{p0}, your warning **{p1}** has been pardoned.\nReason: {p2}\nIt no longer counts as active.",
+  "moderation.warning.pardon_delivery_dm": "The member was notified by DM.",
+  "moderation.warning.pardon_delivery_channel": "Notified in this channel because the DM could not be delivered.",
+  "moderation.warning.pardon_delivery_failed": "The member could not be notified."
 }
