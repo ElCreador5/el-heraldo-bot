@@ -115,7 +115,81 @@ def ensure_close_control(view):
     raise ValueError("administrative_panel_has_no_close_slot")
 
 
+
+def _arrange_navigation_controls(view):
+    """One Back on the left, one Close on the right, using valid Discord rows.
+
+    Preserve existing button objects and callbacks, even when a panel defines
+    custom navigation. Rebuild the rows only for the two navigation actions.
+    """
+    back_labels = variants("text.ab26ae7bca3621")
+    close_labels = variants("text.aeccae342e4bd0")
+    backs = [item for item in view.children
+             if isinstance(item, discord.ui.Button)
+             and (isinstance(item, AdministrativeBack) or item.label in back_labels)]
+    closes = [item for item in view.children
+              if isinstance(item, discord.ui.Button)
+              and (isinstance(item, AdministrativeClose) or item.label in close_labels)]
+    if not backs or not closes:
+        return
+
+    # Prefer the panel's own callback; never replace it with an unrelated one.
+    back = next((item for item in backs if not isinstance(item, AdministrativeBack)), backs[0])
+    close = next((item for item in closes if not isinstance(item, AdministrativeClose)), closes[0])
+    for item in (*backs, *closes):
+        view.remove_item(item)
+
+    back.style = discord.ButtonStyle.secondary
+    close.style = discord.ButtonStyle.danger
+
+    occupied = [0] * 5
+    for item in view.children:
+        row = getattr(item, "_rendered_row", None)
+        if row is None:
+            row = item.row
+        if row is not None:
+            occupied[row] += item.width
+
+    # Prefer the first free row immediately after the other controls.
+    # If the panel occupies all five rows, share its last available row.
+    last_used = max((row for row, width in enumerate(occupied) if width), default=-1)
+    together = next((row for row in range(last_used + 1, 5)
+                     if occupied[row] <= 3), None)
+    if together is None:
+        together = next((row for row in range(4, -1, -1)
+                         if occupied[row] <= 3), None)
+    if together is not None:
+        back_row = close_row = together
+    else:
+        # Packed five-row panels may have only one spare slot in each row.
+        # Keep both actions visible, with Back before Close.
+        available = [row for row, width in enumerate(occupied) if width <= 4]
+        if len(available) < 2:
+            raise ValueError("navigation_controls_no_two_available_slots")
+        back_row, close_row = available[-2:]
+
+    back.row = back_row
+    close.row = close_row
+    view.add_item(back)
+    view.add_item(close)
+
+    # discord.py orders components within a rendered row by insertion order.
+    # Reorder the underlying list without recreating buttons or their callbacks.
+    view._children[:] = [back] + [
+        item for item in view.children if item is not back and item is not close
+    ] + [close]
+
+
 def ensure_navigation_controls(view):
-    """Apply both navigation actions to rendered administrative panels."""
-    ensure_close_control(view)
-    ensure_back_control(view)
+    """Normalize Back / Close on every rendered panel with known navigation."""
+    if not isinstance(view, discord.ui.View):
+        return
+    panels = tuple(lineage(view))
+    owner = next((panel for panel in panels if getattr(panel, "guild_id", None)
+                  and getattr(panel, "owner_id", None)), None)
+    if owner is not None:
+        ensure_back_control(view)
+        ensure_close_control(view)
+    # Panels outside /setup can retain their own actions; merely standardize
+    # existing Back / Close controls without inventing administrative callbacks.
+    _arrange_navigation_controls(view)
