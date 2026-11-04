@@ -10179,9 +10179,9 @@ def reminder_preview(guild_id):
 
 
 class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975')):
-    days = discord.ui.TextInput(label=_t('text.32dd7bcc6f08f2'), placeholder="Ej.: 2m, 6h, 14d", max_length=10)
-    date = discord.ui.TextInput(label="Fecha de inicio (AAAA-MM-DD, opcional)", placeholder="Ej.: 2026-11-04", required=False, max_length=10)
-    clock = discord.ui.TextInput(label="Hora de inicio (12 h o 24 h, opcional)", placeholder="Ej.: 10:30 PM o 22:30", required=False, max_length=20)
+    days = discord.ui.TextInput(label=_t('text.32dd7bcc6f08f2'), placeholder=_t("moderation.reminders.interval_hint"), max_length=10)
+    date = discord.ui.TextInput(label=_t("moderation.reminders.start_date"), placeholder=_t("moderation.reminders.date_hint"), required=False, max_length=10)
+    clock = discord.ui.TextInput(label=_t("moderation.reminders.start_clock"), placeholder=_t("moderation.reminders.clock_hint"), required=False, max_length=20)
 
     @_i18n_context
     def __init__(self, parent):
@@ -10229,8 +10229,7 @@ class ReportReminderOptionsModal(discord.ui.Modal, title=_t('text.8fc45189cc5975
                     start = day.isoformat()
         except ValueError:
             await interaction.response.send_message(
-                "Indique un intervalo válido y una fecha AAAA-MM-DD. Si introduce una hora, "
-                "incluya también la fecha. Se aceptan 10:30 PM y 22:30.", ephemeral=True)
+                _t("moderation.reminders.invalid_start"), ephemeral=True)
             return
         self.parent.pending.update(report_reminder_interval=interval, report_reminder_start=start, report_reminder_frequency="custom")
         self.parent.selected_fields.update(("report_reminder_frequency", "report_reminder_interval", "report_reminder_start"))
@@ -10374,9 +10373,19 @@ class ReportReminderSetupView(_SetupDirtySaveView):
             due = reminder_next_due(p, now)
         state = (_t('text.0a0ca661486c7e') if self.original["report_reminder_enabled"] == "1"
                  else _t('text.e252efe6974743'))
+        from heraldo_datetime import format_clock
+        from datetime import time as _time
+        start_text = p["report_reminder_start"]
+        start_clock = (int(start_text[11:13]), int(start_text[14:16])
+                       ) if frequency == "custom" and len(start_text) > 10 else (
+                           int(p["report_reminder_hour"]), 0)
+        clock_display = format_clock(
+            _time(*start_clock),
+            guild_config_get(self.guild_id, "display_date_format") or "discord",
+            guild_config_get(self.guild_id, "display_time_format"))
         content = _t('text.2e2c1ff499c328', p0=f'{REPORT_REMINDER_HELP}',
                      p1=f'{state}', p2=f'{detail}',
-                     p3=f"{int(p['report_reminder_hour']):02d}", p4=f'{channel}',
+                     p3=clock_display, p4=f'{channel}',
                      p5=f'{format_configured_datetime(self.guild_id, due)}')
         if p["report_reminder_start"] and p["report_reminder_frequency"] == "custom":
             from heraldo_datetime import format_date_time
@@ -10389,7 +10398,7 @@ class ReportReminderSetupView(_SetupDirtySaveView):
                     date_mode=guild_config_get(self.guild_id, "display_date_format") or "discord",
                     time_mode=guild_config_get(self.guild_id, "display_time_format"),
                     locale=guild_language(self.guild_id))
-                content += f"\nInicio de la programación: {label} (Santo Domingo)"
+                content += "\n" + _t("moderation.reminders.saved_start", when=label)
             except ValueError:
                 pass
         return content + (f"\n\n{notice}" if notice else "")
