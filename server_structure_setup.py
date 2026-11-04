@@ -1,5 +1,7 @@
 """Confirmed configuration for the existing server structure backup scheduler."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
+
+from heraldo_datetime import format_clock, parse_clock
 
 import discord
 
@@ -9,6 +11,7 @@ from heraldo_i18n import guild_context, text as t
 FIELDS = {
     "template_mode": "get_template_mode",
     "template_hour": "get_template_hour",
+    "template_minute": "get_template_minute",
     "template_weekday": "get_template_weekday",
     "template_monthday": "get_template_monthday",
     "template_interval_minutes": "get_template_interval_minutes",
@@ -19,7 +22,7 @@ MARKERS = ("template_last_run", "template_last_slot")
 def last_slot(values, now):
     """Same calendar as the historical scheduler; no DB writes or API calls."""
     mode = values["template_mode"]
-    slot = now.replace(hour=int(values["template_hour"]), minute=0, second=0, microsecond=0)
+    slot = now.replace(hour=int(values["template_hour"]), minute=int(values.get("template_minute", 0)), second=0, microsecond=0)
     if mode == "daily":
         return slot - timedelta(days=1) if slot > now else slot
     if mode == "weekly":
@@ -39,9 +42,13 @@ class StructureScheduleModal(discord.ui.Modal):
         self.editor = editor
         self.guild_id, self.owner_id = editor.guild_id, editor.owner_id
         super().__init__(title=t("setup.structure.schedule"))
-        for name, key in (("hour", "template_hour"), ("weekday", "template_weekday"),
+        clock = format_clock(time(int(editor.values["template_hour"]), int(editor.values["template_minute"])),
+                             editor.date_mode, editor.time_mode)
+        for name, key in (("clock", "template_hour"), ("weekday", "template_weekday"),
                           ("monthday", "template_monthday"), ("interval", "template_interval_minutes")):
-            field = discord.ui.TextInput(label=t("setup.structure." + name), default=editor.values[key], max_length=6)
+            default = clock if name == "clock" else editor.values[key]
+            field = discord.ui.TextInput(label=t("setup.structure." + name), default=default,
+                                         max_length=16 if name == "clock" else 6)
             setattr(self, name, field)
             self.add_item(field)
 
@@ -52,14 +59,18 @@ class StructureScheduleModal(discord.ui.Modal):
         if self.editor.is_finished():
             return await interaction.response.send_message(t("setup.structure.expired"), ephemeral=True)
         try:
-            values = [int(str(getattr(self, name))) for name in ("hour", "weekday", "monthday", "interval")]
-            if not (0 <= values[0] <= 23 and 0 <= values[1] <= 6
-                    and 1 <= values[2] <= 28 and 1 <= values[3] <= 43200):
+            clock = parse_clock(str(self.clock))
+            weekday, monthday, interval = (int(str(getattr(self, name)))
+                                           for name in ("weekday", "monthday", "interval"))
+            if not (0 <= weekday <= 6 and 1 <= monthday <= 28 and 1 <= interval <= 43200):
                 raise ValueError
         except ValueError:
             return await interaction.response.send_message(t("setup.structure.invalid"), ephemeral=True)
-        for key, value in zip(list(FIELDS)[1:], values):
-            self.editor.values[key] = str(value)
+        self.editor.values.update({
+            "template_hour": str(clock.hour), "template_minute": str(clock.minute),
+            "template_weekday": str(weekday), "template_monthday": str(monthday),
+            "template_interval_minutes": str(interval),
+        })
         self.editor.refresh()
         await interaction.response.edit_message(content=self.editor.summary(), embed=None, view=self.editor)
 
@@ -68,6 +79,8 @@ class ServerStructureSetupView(discord.ui.View):
     @guild_context
     def __init__(self, host, guild_id, owner_id):
         self.host, self.guild_id, self.owner_id = host, guild_id, owner_id
+        self.date_mode = host["guild_config_get"](guild_id, "display_date_format") or "discord"
+        self.time_mode = host["guild_config_get"](guild_id, "display_time_format")
         super().__init__(timeout=900)
         self.original = {key: host["guild_config_get"](guild_id, key) for key in (*FIELDS, *MARKERS)}
         self.initial = {key: str(host[getter](guild_id)) for key, getter in FIELDS.items()}
@@ -80,6 +93,7 @@ class ServerStructureSetupView(discord.ui.View):
         chooser.callback = self.choose
         self.chooser = chooser
         self.add_item(chooser)
+        self.sync_now.label = t("setup.structure.sync")
         self.refresh()
 
     async def interaction_check(self, interaction):
@@ -99,8 +113,10 @@ class ServerStructureSetupView(discord.ui.View):
         return (t("setup.structure.title") + "\n\n"
                 + self.host["template_config_summary"](self.guild_id, datetime.now(timezone.utc))
                 + "\n\n" + t("setup.structure.draft", mode=t("setup.structure.mode." + self.values["template_mode"]),
-                    hour=self.values["template_hour"], weekday=self.values["template_weekday"],
-                    monthday=self.values["template_monthday"], interval=self.values["template_interval_minutes"]))
+                    clock=format_clock(time(int(self.values["template_hour"]), int(self.values["template_minute"])),
+                                       self.date_mode, self.time_mode),
+                    weekday=self.values["template_weekday"], monthday=self.values["template_monthday"],
+                    interval=self.values["template_interval_minutes"]))
 
     @guild_context
     async def choose(self, interaction):
@@ -115,6 +131,15 @@ class ServerStructureSetupView(discord.ui.View):
     @guild_context
     async def schedule(self, interaction, button):
         await interaction.response.send_modal(StructureScheduleModal(self))
+
+    @discord.ui.button(label="Sincronizar ahora", style=discord.ButtonStyle.secondary, row=1)
+    @guild_context
+    async def sync_now(self, interaction, button):
+        if self._has_pending_changes():
+            return await interaction.response.send_message(t("setup.structure.sync_unsaved"), ephemeral=True)
+        confirm = StructureSyncConfirmView(self)
+        await interaction.response.edit_message(
+            content=self.summary() + "\n\n" + t("setup.structure.sync_confirm"), view=confirm)
 
     @discord.ui.button(label=t("text.14bdfaf2face3a"), style=discord.ButtonStyle.success, row=2)
     @guild_context
@@ -142,6 +167,69 @@ class ServerStructureSetupView(discord.ui.View):
     @guild_context
     async def close(self, interaction, button):
         self.stop()
+        await interaction.response.edit_message(content=t("setup.structure.closed"), embed=None, view=None)
+
+
+class StructureSyncConfirmView(discord.ui.View):
+    """Confirmación manual sin alterar la frecuencia ni otros ajustes."""
+    @guild_context
+    def __init__(self, editor):
+        self.editor = editor
+        self.guild_id, self.owner_id = editor.guild_id, editor.owner_id
+        self.running = False
+        super().__init__(timeout=300)
+        self.execute.label = t("setup.structure.sync_do")
+
+    async def interaction_check(self, interaction):
+        return (not self.running and not self.is_finished()
+                and await self.editor.interaction_check(interaction))
+
+    @discord.ui.button(label="Confirmar sincronización", style=discord.ButtonStyle.success)
+    @guild_context
+    async def execute(self, interaction, button):
+        if not await self.interaction_check(interaction):
+            return
+        if self.editor.is_finished() or self.editor._has_pending_changes():
+            return await interaction.response.send_message(t("setup.structure.expired"), ephemeral=True)
+        self.running = True
+        await interaction.response.defer()
+        host, guild = self.editor.host, interaction.guild
+        try:
+            template, dirty, error = await host["sync_server_template"](guild)
+            if error:
+                outcome = t("setup.structure.sync_error", error=error)
+            else:
+                embed = host["template_report_embed"](guild, template, dirty, "manual")
+                try:
+                    owner = await host["bot"].fetch_user(guild.owner_id)
+                    await owner.send(embed=host["stamp_embed"](embed.copy(), guild))
+                    outcome = t("setup.structure.sync_sent")
+                except discord.HTTPException:
+                    outcome = t("setup.structure.sync_dm_failed")
+                await host["log_embed"](
+                    guild, t("text.ad1fa0172380ff"),
+                    t("text.22854288f334bb", p0=interaction.user.mention),
+                    discord.Color.blurple(),
+                )
+        except discord.HTTPException as exc:
+            outcome = t("setup.structure.sync_error", error=str(exc))
+        finally:
+            self.stop()
+        view = ServerStructureSetupView(host, self.guild_id, self.owner_id)
+        await interaction.edit_original_response(content=view.summary(), embed=None, view=view)
+        await interaction.followup.send(outcome, ephemeral=True)
+
+    @discord.ui.button(label=t("text.ab26ae7bca3621"), style=discord.ButtonStyle.secondary)
+    @guild_context
+    async def back(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(content=self.editor.summary(), view=self.editor)
+
+    @discord.ui.button(label=t("text.aeccae342e4bd0"), style=discord.ButtonStyle.danger)
+    @guild_context
+    async def close(self, interaction, button):
+        self.stop()
+        self.editor.stop()
         await interaction.response.edit_message(content=t("setup.structure.closed"), embed=None, view=None)
 
 
