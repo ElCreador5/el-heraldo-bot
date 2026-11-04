@@ -9564,6 +9564,7 @@ def validate_setup_view_layouts(guild_id: int) -> list[str]:
             access_check=configuration_access,
             parent_factory=lambda: HeraldoAutomodSetupView(guild_id, 0))),
         ("HeraldoVerificationHubView", lambda: HeraldoVerificationHubView(guild_id, 0)),
+        ("HeraldoRejoinSetupView", lambda: HeraldoRejoinSetupView(guild_id, 0)),
         ("HeraldoLoggingSetupView", lambda: HeraldoLoggingSetupView(guild_id, 0)),
         ("HeraldoReactionRolesSetupView", lambda: HeraldoReactionRolesSetupView(guild_id, 0)),
         ("HeraldoReactionRolesEditorView", lambda: HeraldoReactionRolesEditorView(
