@@ -141,10 +141,10 @@ async def restore_join(member, *, connect, enabled, personality_ids,
     if not _safe_role(guild, role):
         return False
     try:
-        await member.add_roles(role, reason="El Heraldo: restauración de verificación previa")
+        await member.add_roles(role, reason="rejoin")
         unverified = guild.get_role(int(sin_role_id(guild.id) or 0))
         if unverified is not None and unverified in member.roles and _safe_role(guild, unverified):
-            await member.remove_roles(unverified, reason="El Heraldo: verificación restaurada")
+            await member.remove_roles(unverified, reason="rejoin")
         return True
     except Exception:
         return False
