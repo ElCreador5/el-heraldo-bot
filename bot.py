@@ -17658,8 +17658,27 @@ _evidence_delete_inflight: set[tuple[int, int, int]] = set()
 
 
 @_i18n_context
-async def delete_with_evidence(channel, message_id: int) -> bool:
-    """La única ruta de borrado moderativo: copia privada verificada o no borra."""
+async def delete_with_evidence(
+    channel, message_id: int, *, expected_author_id: int | None = None,
+    after: datetime | None = None, before: datetime | None = None,
+    content_type: str = "all",
+) -> bool:
+    """La única ruta de borrado moderativo: copia privada verificada o no borra.
+
+    El panel /purge pasa restricciones inmutables para revalidar en ambas lecturas
+    (antes y después de archivar). Los demás flujos conservan el contrato previo.
+    """
+    def eligible(message) -> bool:
+        if expected_author_id is None:
+            return True
+        return (
+            message.guild is not None and message.guild.id == channel.guild.id
+            and message.channel.id == channel.id
+            and message.author.id == expected_author_id
+            and (after is None or message.created_at > after)
+            and (before is None or message.created_at < before)
+            and _purge_message_matches(message, content_type)
+        )
     guild = channel.guild
     key = (guild.id, channel.id, message_id)
     if key in _evidence_delete_inflight or not bot.intents.message_content:
@@ -17667,6 +17686,8 @@ async def delete_with_evidence(channel, message_id: int) -> bool:
     _evidence_delete_inflight.add(key)
     try:
         message = await channel.fetch_message(message_id)
+        if not eligible(message):
+            return False
         original_snapshot = evidence_archive.snapshot(message)
         archive = await evidence_archive.ensure_private_archive(
             guild, log_channel_id=get_log_channel_id(guild.id)
@@ -17680,6 +17701,8 @@ async def delete_with_evidence(channel, message_id: int) -> bool:
             return False
         # Releer: una edición durante la copia exige archivar la nueva versión.
         current = await channel.fetch_message(message_id)
+        if not eligible(current):
+            return False
         if evidence_archive.snapshot(current) != original_snapshot:
             return False
         if not evidence_archive.private_channel(guild, archive):
@@ -23086,131 +23109,31 @@ async def moderation_casedelete(interaction: discord.Interaction, caso: str) -> 
         _t('text.dd5f4ca4c65e56', p0=f'{moderation_case_code(case_number, interaction.guild.id)}'), ephemeral=True,
     )
 
-@bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
-@discord.app_commands.describe(
-    usuario=_t('text.932a4dc0aab747'),
-    tipo=_t('text.7694dea3bd45ef'),
-    todos=_t('text.881de47ec9a982'),
-    cantidad=_t('text.87aa336c7ad0de'),
-    desde=_t('text.1016a2fcdba001'),
-    hasta=_t('text.49a6c92238df02'),
-    canal=_t('text.b43abe6d11544f'),
-)
-@discord.app_commands.choices(tipo=[
-    discord.app_commands.Choice(name="Todo — cualquier mensaje", value="all"),
-    discord.app_commands.Choice(name="Links — mensajes con enlaces", value="links"),
-    discord.app_commands.Choice(name="Texto — sin imagen ni vídeo", value="text"),
-])
+@bot.tree.command(name="purge", description="Abre un panel privado para limpiar mensajes.")
 @discord.app_commands.checks.has_permissions(manage_messages=True)
 @discord.app_commands.guild_only()
 @_i18n_context
-async def purge_command(
-    interaction: discord.Interaction,
-    usuario: discord.User,
-    tipo: discord.app_commands.Choice[str],
-    todos: Optional[bool] = None,
-    cantidad: Optional[discord.app_commands.Range[int, 1]] = None,
-    desde: Optional[str] = None,
-    hasta: Optional[str] = None,
-    canal: Optional[Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel,
-                          discord.Thread, discord.ForumChannel]] = None,
-) -> None:
+async def purge_command(interaction: discord.Interaction) -> None:
+    """La configuración se hace exclusivamente en componentes de Discord."""
+    from purge_panel import PurgePanel
+
     guild = interaction.guild
-    if todos and not interaction.user.guild_permissions.manage_guild:
-        await interaction.response.send_message(
-            _t('text.a1bc0587a9ea32'),
-            ephemeral=True,
-        )
-        return
-    has_scope = cantidad is not None or desde is not None or hasta is not None
-    if todos and has_scope:
-        await interaction.response.send_message(_t('text.6434b6eafd82a8'), ephemeral=True)
-        return
-    if not todos and not has_scope:
-        await interaction.response.send_message(
-            _t('text.ebefc2244d3d4e'),
-            ephemeral=True,
-        )
-        return
-    if (guild.id, usuario.id) in _purge_running:
-        await interaction.response.send_message(_t('text.1b583966b12d21'), ephemeral=True)
-        return
-
-    now = datetime.now(timezone.utc)
-    after = before = None
-    try:
-        if desde is not None:
-            after = now - timedelta(minutes=parse_duration(desde, 1, PURGE_MAX_MINUTES))
-        if hasta is not None:
-            before = now - timedelta(minutes=parse_duration(hasta, 1, PURGE_MAX_MINUTES))
-    except ValueError as e:
-        await interaction.response.send_message(_t('text.8904a29c5dcf0c', p0=f'{e}'), ephemeral=True)
-        return
-    if after is not None and before is not None and after >= before:
-        await interaction.response.send_message(
-            _t('text.21457fd52316eb'), ephemeral=True
-        )
-        return
-
-    content_type = tipo.value
-    content_labels = {
-        "all": _t('text.fbe43ad576265e'),
-        "links": _t('text.db06cdc6c42e3c'),
-        "text": _t('text.20813cdeafa537'),
-    }
-
-    parts: list[str] = []
-    if todos:
-        parts.append(_t('text.59ec49f8e82d3f'))
-    if cantidad is not None:
-        parts.append(_t('text.3f3eb31542233f', p0=f'{cantidad}'))
-    if desde is not None or hasta is not None:
-        parts.append(_t('text.7a699bb19dfa0d', p0=f"{desde or '—'}", p1=f"{hasta or '0'}"))
-    where = canal.mention if canal is not None else _t('text.78961d6c9a830c')
-    parts.append(content_labels[content_type])
-    scope_text = _i18n_join(" · ", parts) + _t('text.2c171d5f61e0b5', p0=f'{where}')
-
-    if todos:
-        view = PurgeConfirmView(interaction.user.id)
-        await interaction.response.send_message(
-            _t('text.f5310090aedd59', p0=f'{usuario.mention}', p1=f'{content_labels[content_type]}', p2=f'{where}'),
-            view=view,
-            ephemeral=True,
-        )
-        await view.wait()
-        if view.value is None:
-            await interaction.edit_original_response(content=_t('text.c0100bdbe114b9'), view=None)
-            return
-        if not view.value:
-            return
-    else:
-        await interaction.response.send_message(_t('text.6dde1ddc4718e6'), ephemeral=True)
-
-    last_edit = [0.0]
-
-    async def progress(done: int, total: int, deleted: int) -> None:
-        if asyncio.get_event_loop().time() - last_edit[0] < 3:
-            return
-        last_edit[0] = asyncio.get_event_loop().time()
-        await interaction.edit_original_response(content=_t('text.034990e22f2b27', p0=f'{done}', p1=f'{total}', p2=f'{deleted}'))
-
-    async def job() -> None:
-        try:
-            result = await run_purge_job(
-                guild, usuario, scope_text=scope_text, requested_by=interaction.user.mention,
-                channel=canal, after=after, before=before, limit=cantidad, progress=progress,
-                content_type=content_type,
-            )
-        except Exception:
-            text = _t('text.e30e6b24e0c3a7')
-        else:
-            text = _t('text.1b6d958335f174') if result is None else f"{purge_result_text(result)}."
-        try:
-            await interaction.edit_original_response(content=text)
-        except discord.HTTPException:
-            pass  # el token de la interacción dura 15 min; el resultado ya quedó en el canal de logs
-
-    asyncio.create_task(job())
+    panel = PurgePanel(
+        interaction,
+        language=guild_language(guild.id),
+        footer=heraldo_footer,
+        targets=purge_targets,
+        matches=_purge_message_matches,
+        delete=delete_with_evidence,
+        log=log_embed,
+        parse_duration=parse_duration,
+        max_minutes=PURGE_MAX_MINUTES,
+        running=_purge_running,
+        audit_channel_id=get_log_channel_id(guild.id),
+    )
+    await interaction.response.send_message(
+        embed=panel.embed(), view=panel, ephemeral=True,
+    )
 
 
 purge_command.error(verify_command_error)
