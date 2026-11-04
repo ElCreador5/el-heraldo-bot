@@ -103,6 +103,14 @@ class PersonalEmbedsTests(unittest.TestCase):
         self.assertIn("thumbnail_url", source)
         self.assertIn("image_url", source)
 
+    def test_empty_panel_kwargs_open_without_preview_error(self):
+        host = {"stamp_embed": lambda embed, guild: embed}
+        panel = PersonalPanel(user_id=101, guild_id=5, host=host)
+        payload = panel.kwargs(None)
+        self.assertIsNone(payload["embed"])
+        self.assertIn("Mis mensajes", payload["content"])
+        self.assertIs(payload["view"], panel)
+
     def test_no_personal_scheduler(self):
         from pathlib import Path
         source = (Path(__file__).resolve().parents[1] / "personal_embeds.py").read_text(encoding="utf-8")
