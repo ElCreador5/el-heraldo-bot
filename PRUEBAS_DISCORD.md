@@ -889,3 +889,15 @@ Comprobaciones automatizadas agregadas: `tests/test_custodio_rule_actions.py` y 
 - [ ] Ejecutar `python -m unittest -v test_message_locale_sync` y el workflow Lab; distinguir estas pruebas de Discord real.
 
 Cobertura de exploración previa: se inspeccionan hasta 300 mensajes por canal y hasta 40 canales visibles; los mensajes fuera del índice o sin identificación segura pueden seguir en su idioma anterior. No se ha demostrado una migración completa del historial.
+
+
+## 2026-11-04 — Reporte público mixto inglés/español
+
+- [x] Añadida regresión para recordatorio en `en-US` con etiquetas predeterminadas almacenadas en español; las categorías aparecen en inglés.
+- [x] Añadidas regresiones para `pt-BR`, preservación de etiquetas personalizadas y prevención de traducción con emoji distinto.
+- [x] Se comprueba en fuente la conciliación de recordatorios con referencias guardadas al arrancar y después de guardar idioma.
+- [ ] En servidor Lab, verificar edición de un mensaje real sin repost, sin ping y con el mismo ID.
+- [ ] Validar que un registro histórico sin referencia permanece intacto.
+- [ ] Verificar logs de inicio `REMINDER_LOCALE_STARTUP` y de cambio `LANGUAGE_REMINDER_SYNC`.
+
+Verificación CI: `test_moderation_report_language` se ejecuta de forma independiente antes de la auditoría global de textos sin catálogo. No declarar éxito completo del contrato global mientras persista el problema previo de cadenas no catalogadas.

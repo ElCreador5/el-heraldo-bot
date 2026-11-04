@@ -891,3 +891,10 @@ Validación pendiente de cierre: resultado final del CI Heraldo Lab para el SHA 
 Se añadió `message_locale_sync.py` con traducción por catálogos para campos y líneas completas, conservación de variables y textos libres, registro de publicaciones institucionales, exclusión de `/embed` y de mensajes programados, y trabajo de conciliación tras confirmar un cambio de idioma. Se integró en los hooks públicos de envío de `bot.py` y el guardado del idioma. No se añadieron tablas ni migraciones. Se agregaron pruebas `test_message_locale_sync.py` y cobertura al workflow Lab.
 
 Límites pendientes de comprobación en Discord: permisos y alcance real de historial, respuestas efímeras/DM, mensajes antiguos sin procedencia, contenidos multisegmento no reconocidos y disponibilidad de traducciones en en-US y pt-BR (catálogos aún parciales). No declarar cobertura total retroactiva ni despliegue probado en Enzonic/producción sin evidencia. `main` no cambia con esta tarea.
+
+
+## 2026-11-04 — Corrección puntual: recordatorio de moderación bilingüe
+
+En `Pruebas` se incorporó `moderation_report_labels.py` y se adaptó `bot.py` para resolver etiquetas predeterminadas desde los catálogos `es-419`, `en-US` y `pt-BR`. La captura mostraba encabezado del recordatorio en inglés con categorías españolas almacenadas en la configuración. Ahora se localizan al presentar recordatorios, opciones y resúmenes sin alterar reglas guardadas ni textos personalizados. Los recordatorios con ID conocido se reconstruyen en cambio de idioma o arranque; se conserva la identificación del mensaje. Se incorporaron regresiones `tests/test_moderation_report_language.py`.
+
+`main` no se ha modificado. Pruebas de Discord reales y casos de recordatorios sin ID conocido pendientes de validar. La auditoría global de idiomas sigue detectando cadenas no traducidas ajenas a este fallo.
