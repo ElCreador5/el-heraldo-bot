@@ -9993,7 +9993,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             options=[
                 discord.SelectOption(
                     label=_t('text.f43a239b05c658', p0=f'{value}', p1=f"{('s' if value > 1 else '')}"), value=str(value),
-                    default=value == self.max_warns,
+                    default=False,
                 ) for value in range(1, MODERATION_WARN_MAX_ALLOWED + 1)
             ], row=0,
         )
@@ -10003,7 +10003,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             placeholder=_t('text.a117c67ac9c5cb'),
             options=[
                 discord.SelectOption(label=label, value=action, description=hint,
-                                     default=action == self.escalation)
+                                     default=False)
                 for action, label, hint in (
                     ("none", _t('text.312db41e982943'), _t('text.758ee92b68cc28')),
                     ("timeout", _t('text.22b733ebaab166'), _t('text.17bde07ad7426a')),
@@ -10019,24 +10019,50 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             placeholder=_t('text.6f85e3cd67f8db'),
             options=[
                 discord.SelectOption(label=format_duration(minutes), value=str(minutes),
-                                     default=minutes == self.mute_minutes)
+                                     default=False)
                 for minutes in MODERATION_WARN_ESCALATION_DURATION_CHOICES
             ],
-            disabled=self.escalation != "timeout", row=2,
+            row=2,
         )
         self.duration_select.callback = self.select_duration
         self.add_item(self.duration_select)
         self.punishment_select = discord.ui.Select(
             placeholder=_t('text.d91694e8816537'),
             options=[
-                discord.SelectOption(label=label, value=action, description=hint,
-                                     default=action in self.enabled_actions)
+                discord.SelectOption(label=f"{_t('text.d91694e8816537')}: {label}", value=action, description=hint,
+                                     default=False)
                 for action, label, hint in self.POLICY_ACTIONS
             ],
             min_values=0, max_values=len(self.POLICY_ACTIONS), row=3,
         )
         self.punishment_select.callback = self.select_punishments
         self.add_item(self.punishment_select)
+        self._refresh_controls()
+
+    def _changes(self):
+        desired = {
+            "moderation_warn_limit": str(self.max_warns),
+            "moderation_warn_limit_action": self.escalation,
+            "moderation_warn_limit_mute_minutes": str(self.mute_minutes),
+        }
+        for name, _, _ in self.POLICY_ACTIONS:
+            desired[f"moderation_reaction_{name}_enabled"] = (
+                "1" if name in self.enabled_actions else "0"
+            )
+        defaults = {"moderation_warn_limit": "3", "moderation_warn_limit_action": "none",
+                    "moderation_warn_limit_mute_minutes": "60"}
+        return {key: value for key, value in desired.items()
+                if (self.original_raw[key] if self.original_raw[key] is not None
+                    else defaults.get(key, "1")) != value}
+
+    def _refresh_controls(self):
+        # Solo mostrar duración si la acción realmente utiliza un intervalo.
+        if self.escalation == "timeout":
+            if self.duration_select not in self.children:
+                self.add_item(self.duration_select)
+        elif self.duration_select in self.children:
+            self.remove_item(self.duration_select)
+        self.review.disabled = not bool(self._changes())
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -10063,6 +10089,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         self.max_warns = int(values[0])
         for option in self.max_select.options:
             option.default = option.value == values[0]
+        self._refresh_controls()
         await interaction.response.edit_message(content=self._content(), view=self)
 
     @_i18n_context
@@ -10072,9 +10099,10 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
             await interaction.response.send_message(_t('text.e508b78647e723'), ephemeral=True)
             return
         self.escalation = values[0]
-        self.duration_select.disabled = self.escalation != "timeout"
+        self._refresh_controls()
         for option in self.escalation_select.options:
             option.default = option.value == self.escalation
+        self._refresh_controls()
         await interaction.response.edit_message(content=self._content(), view=self)
 
     @_i18n_context
@@ -10087,6 +10115,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         self.mute_minutes = int(values[0])
         for option in self.duration_select.options:
             option.default = option.value == values[0]
+        self._refresh_controls()
         await interaction.response.edit_message(content=self._content(), view=self)
 
     @_i18n_context
@@ -10099,6 +10128,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         self.enabled_actions = set(values)
         for option in self.punishment_select.options:
             option.default = option.value in self.enabled_actions
+        self._refresh_controls()
         await interaction.response.edit_message(content=self._content(), view=self)
 
     @discord.ui.button(label=_t('text.bc60796c79da12'), style=discord.ButtonStyle.primary, row=4)
@@ -10121,27 +10151,19 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
                     ephemeral=True,
                 )
                 return
-        changes = {
-            "moderation_warn_limit": str(self.max_warns),
-            "moderation_warn_limit_action": self.escalation,
-            "moderation_warn_limit_mute_minutes": str(self.mute_minutes),
-        }
-        for name, _, _ in self.POLICY_ACTIONS:
-            changes[f"moderation_reaction_{name}_enabled"] = (
-                "1" if name in self.enabled_actions else "0"
-            )
-        # Omitir valores semánticamente iguales, incluidos los valores predeterminados.
-        changes = {
-            key: value for key, value in changes.items()
-            if (self.original_raw[key] if self.original_raw[key] is not None else
-                "3" if key == "moderation_warn_limit" else
-                "none" if key == "moderation_warn_limit_action" else
-                "60" if key == "moderation_warn_limit_mute_minutes" else "1") != value
-        }
+        changes = self._changes()
         if not changes:
             await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
             return
         await confirm_configuration(interaction, self.guild_id, changes)
+
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=4)
+    @_i18n_context
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        parent = HeraldoUserReportsSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=parent._content(interaction.guild), view=parent)
 
     @discord.ui.button(label=_t('text.bb9dbb406dcbd5'), style=discord.ButtonStyle.danger, row=4)
     @_i18n_context
