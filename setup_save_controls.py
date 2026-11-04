@@ -104,7 +104,7 @@ def has_unsaved_changes(view):
                             "pending_purge_spec")
     if name == "HeraldoVerificationSetupView":
         return _any_pending(view, "pending_role_id", "pending_sin_role_id",
-                            "pending_channel_id", "pending_enabled")
+                            "pending_channel_id", "pending_enabled", "pending_restore")
     if name == "HeraldoRaidSetupView":
         return _changed_vs_getters(view, (
             ("pending_action", "raid_action"),
