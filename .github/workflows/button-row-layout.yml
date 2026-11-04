@@ -1,0 +1,31 @@
+name: Button row layout regression
+
+on:
+  push:
+    branches: [main, Pruebas]
+    paths:
+      - 'button_row_layout.py'
+      - 'test_button_row_layout.py'
+      - 'main_panel_navigation.py'
+      - 'setup_interactions.py'
+      - '.github/workflows/button-row-layout.yml'
+  pull_request:
+    branches: [main, Pruebas]
+    paths:
+      - 'button_row_layout.py'
+      - 'test_button_row_layout.py'
+      - 'main_panel_navigation.py'
+      - 'setup_interactions.py'
+
+jobs:
+  button-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax
+        run: python -m py_compile button_row_layout.py test_button_row_layout.py
+      - name: Button layout regression
+        run: python -m unittest -v test_button_row_layout.py
