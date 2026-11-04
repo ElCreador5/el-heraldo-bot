@@ -6,16 +6,22 @@ on:
     paths:
       - 'button_row_layout.py'
       - 'test_button_row_layout.py'
+      - 'test_dropdown_ui_sync.py'
       - 'main_panel_navigation.py'
       - 'setup_interactions.py'
+      - 'heraldo_i18n.py'
+      - 'test_i18n_nested_panels.py'
       - '.github/workflows/button-row-layout.yml'
   pull_request:
     branches: [main, Pruebas]
     paths:
       - 'button_row_layout.py'
       - 'test_button_row_layout.py'
+      - 'test_dropdown_ui_sync.py'
       - 'main_panel_navigation.py'
       - 'setup_interactions.py'
+      - 'heraldo_i18n.py'
+      - 'test_i18n_nested_panels.py'
 
 jobs:
   button-layout:
@@ -26,6 +32,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Syntax
-        run: python -m py_compile button_row_layout.py test_button_row_layout.py
+        run: python -m py_compile button_row_layout.py test_button_row_layout.py test_dropdown_ui_sync.py heraldo_i18n.py test_i18n_nested_panels.py
       - name: Button layout regression
-        run: python -m unittest -v test_button_row_layout.py
+        run: python -m unittest -v test_button_row_layout.py test_dropdown_ui_sync.py test_i18n_nested_panels.py
