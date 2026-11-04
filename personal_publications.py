@@ -2,6 +2,27 @@
 import sqlite3
 import discord
 
+def publication_embed(payload, stamp, guild, author, name, render):
+    """Use the same author, title and embedded image on send and subsequent edits."""
+    if payload.get("kind") == "text":
+        embed = discord.Embed(title=name or None, color=discord.Color.blurple())
+        if payload.get("image_url"):
+            embed.set_image(url=payload["image_url"])
+        embed = stamp(embed, guild)
+    else:
+        embed = render(payload, stamp, guild)
+        if embed is None:
+            raise ValueError("El embed está vacío.")
+        if not embed.title and name:
+            embed.title = name
+    if author is not None:
+        embed.set_author(
+            name=getattr(author, "display_name", None) or getattr(author, "name", str(author)),
+            icon_url=str(getattr(getattr(author, "display_avatar", None), "url", "") or "") or None,
+        )
+    return embed
+
+
 def setup(db):
     db.execute("""CREATE TABLE IF NOT EXISTS personal_publications (
         user_id INTEGER NOT NULL, name TEXT NOT NULL COLLATE NOCASE,
@@ -63,17 +84,10 @@ async def update(bot, connect, user_id, name, payload, stamp, render):
             if msg.author.id != bot.user.id:
                 failed += 1
                 continue
-            if payload.get("kind") == "text":
-                body = payload.get("text", "")
-                if payload.get("image_url"):
-                    body += ("\n" if body else "") + payload["image_url"]
-                await msg.edit(content=body, embed=None, allowed_mentions=discord.AllowedMentions.none())
-            else:
-                embed = render(payload, stamp, guild)
-                member = guild.get_member(author_id)
-                if member:
-                    embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-                await msg.edit(content=None, embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            member = guild.get_member(author_id) or bot.get_user(author_id)
+            embed = publication_embed(payload, stamp, guild, member, name, render)
+            body = (payload.get("text") or None) if payload.get("kind") == "text" else None
+            await msg.edit(content=body, embed=embed, allowed_mentions=discord.AllowedMentions.none())
             updated += 1
         except discord.NotFound:
             with connect() as db:
