@@ -127,8 +127,8 @@ class ServerFooterTests(unittest.TestCase):
     def test_global_brand_footer_still_uses_server_and_preserves_informative_footer(self):
         self.assertIn('GLOBAL_FOOTER_TEXT = "{botname}"', SOURCE)
         self.assertIn('GLOBAL_FOOTER_ICON = "{botavatar}"', SOURCE)
-        self.assertIn("server_footer_text(guild.name, detail)", snippet("stamp_embed"))
-        self.assertIn("if guild is None:", snippet("stamp_embed"))
+        self.assertIn('server_footer_text(guild.name if guild else "", detail)', snippet("stamp_embed"))
+        self.assertIn("bot_footer_avatar_url()", snippet("stamp_embed"))
 
 
 if __name__ == "__main__":
