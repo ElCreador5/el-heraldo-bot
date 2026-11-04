@@ -6911,7 +6911,8 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
         )
         return (_t('text.6e7c0122e9fa57') + verify_config_summary(guild)
                 + "\n\n" + age_time_summary(guild.id)
-                + "\nRestaurar al reingresar: " + ("Activado" if restore_on else "Desactivado")
+                + "\n" + _t("personality.rejoin.summary", state=str(_t(
+                    "personality.rejoin.enabled" if restore_on else "personality.rejoin.disabled"))))
                 + _pending_config_text(items))
 
     @_i18n_context
@@ -7078,7 +7079,8 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
         guild_config_set(self.guild_id, "verify_panel_ref", f"{channel.id}:{message.id}")
         await interaction.followup.send(_t('text.016469237e5fe0', p0=f'{channel.mention}'), ephemeral=True)
 
-    @discord.ui.button(label="Restaurar al reingresar", style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=_t("personality.rejoin.toggle"), style=discord.ButtonStyle.secondary, row=3)
+    @_i18n_context
     async def toggle_rejoin_restore(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         current = (self.pending_restore if self.pending_restore is not None else
                    guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1")
