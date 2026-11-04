@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import discord
 from discord import app_commands
 import personal_publications as pub
+import message_locale_sync
 from autofeed_embed_builder import EmbedBuilderView, validate_data, has_content, render
 
 
@@ -370,9 +371,11 @@ class PublishChannelView(discord.ui.View):
                 interaction.user, self.panel.name, render,
             )
             content = payload.get("text") or None if payload.get("kind") == "text" else None
-            sent = await channel.send(
-                content=content, embed=embed, allowed_mentions=discord.AllowedMentions.none(),
-            )
+            # El embed fue escrito por un miembro; excluirlo del idioma automático.
+            with message_locale_sync.suspend_tracking():
+                sent = await channel.send(
+                    content=content, embed=embed, allowed_mentions=discord.AllowedMentions.none(),
+                )
         except (ValueError, discord.HTTPException):
             return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
         try:
