@@ -1,9 +1,10 @@
 """Draft, CAS save and cancellation for the historical structure scheduler."""
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 import unittest
 
 from test_safety_regressions import b, interaction
-from server_structure_setup import FIELDS, MARKERS, ServerStructureSetupView, StructureScheduleModal, StructureSaveConfirmView, last_slot
+from server_structure_setup import FIELDS, MARKERS, ServerStructureSetupView, StructureScheduleModal, StructureSaveConfirmView, StructureSyncConfirmView, last_slot
 
 
 class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
@@ -27,10 +28,11 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
         i=interaction(guild_id=self.guild_id); i.data={"values":["daily"]}
         await view.choose(i)
         modal=StructureScheduleModal(view)
-        for field,value in (("hour","11"),("weekday","2"),("monthday","14"),("interval","120")):
+        for field,value in (("clock","6:15 p. m."),("weekday","2"),("monthday","14"),("interval","120")):
             getattr(modal,field)._value=value
         await modal.on_submit(i)
-        self.assertEqual(view.values["template_hour"],"11")
+        self.assertEqual(view.values["template_hour"],"18")
+        self.assertEqual(view.values["template_minute"],"15")
         self.assertEqual([x.value for x in view.chooser.options if x.default],["daily"])
         self.assertEqual(self.snapshot(),self.original)
         self.assertFalse(view.save.disabled)
@@ -87,6 +89,39 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
         modal.hour._value="12"; view.stop()
         await modal.on_submit(i)
         self.assertEqual(view.values,view.initial)
+
+    async def test_sync_confirm_sends_link_to_owner_without_saving_schedule(self):
+        guild_id = self.guild_id
+        view = self.view()
+        baseline = self.snapshot()
+        i = interaction(guild_id=guild_id)
+        i.guild.owner_id = 999
+        await view.sync_now.callback(i)
+        confirm = i.response.edit_message.call_args.kwargs["view"]
+        self.assertIsInstance(confirm, StructureSyncConfirmView)
+        self.assertEqual(baseline, self.snapshot())
+        sent = AsyncMock()
+        owner = type("Owner", (), {"send": sent})()
+        report = b.discord.Embed(title="Copia de seguridad")
+        with (patch.object(b, "sync_server_template", new=AsyncMock(return_value=(object(), False, None))) as sync,
+              patch.object(b.bot, "fetch_user", new=AsyncMock(return_value=owner)) as fetch,
+              patch.object(b, "template_report_embed", return_value=report),
+              patch.object(b, "stamp_embed", side_effect=lambda embed, guild: embed),
+              patch.object(b, "log_embed", new=AsyncMock())):
+            await confirm.execute.callback(i)
+            sync.assert_awaited_once_with(i.guild)
+            fetch.assert_awaited_once_with(999)
+            sent.assert_awaited_once()
+            self.assertEqual(baseline, self.snapshot())
+            self.assertIn("sincronizada", i.followup.send.call_args.args[0].lower())
+
+    async def test_sync_with_unsaved_schedule_is_blocked(self):
+        view = self.view()
+        view.values["template_mode"] = "interval"
+        i = interaction(guild_id=self.guild_id)
+        await view.sync_now.callback(i)
+        self.assertIsNone(i.response.edit_message.call_args)
+        self.assertEqual(self.snapshot(), self.original)
 
     def test_monthly_slot_uses_previous_month_without_touching_a_database(self):
         slot=last_slot({"template_mode":"monthly","template_hour":"9","template_monthday":"28"},
