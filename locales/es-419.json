@@ -3558,5 +3558,6 @@
   "moderation.reminders.invalid_interval": "Intervalo no válido. Escriba, por ejemplo, 2m o 7h. En el laboratorio se permiten intervalos desde 10s; fuera de pruebas, desde 1d hasta 365d.",
   "moderation.reminders.summary_custom": "**Recordatorios de reportes**\n\n{p0}\n\n**Estado guardado:** {p1}\n**Frecuencia:** {p2}\n**Inicio:** {p6}\n**Canal:** {p4}\nLos controles de edición comienzan sin opciones marcadas. «Guardar cambios» conserva la programación; «Activar/Desactivar» aplica solo el estado, inmediatamente. «Personalizar» permite intervalos de 1d–365d y, en Test, desde 10s.\n**Próxima publicación estimada:** {p5}",
   "moderation.reminders.no_start": "No se indicó una fecha u hora de inicio.",
-  "moderation.reminders.start_defined": "{when} (Santo Domingo)"
+  "moderation.reminders.start_defined": "{when} (Santo Domingo)",
+  "moderation.warn.channel_fallback": "{p0}, has recibido una advertencia de moderación (expediente **{p1}**). No fue posible enviarte el aviso por mensaje privado. Consulta con el equipo de moderación si necesitas conocer los detalles."
 }
