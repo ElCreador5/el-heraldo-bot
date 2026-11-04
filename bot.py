@@ -5661,7 +5661,7 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
             placeholder=_t('text.2c9494f9b0f04a'),
             options=[
                 discord.SelectOption(
-                    label=f"{hour:02d}:00", value=str(hour), default=hour == self.hour)
+                    label=self._clock(hour), value=str(hour), default=hour == self.hour)
                 for hour in range(24)
             ],
             row=2,
@@ -5670,6 +5670,14 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
         self.hour_select = hours
         self.add_item(hours)
         self._sync_controls()
+
+    def _clock(self, hour: int) -> str:
+        from heraldo_datetime import format_clock
+        return format_clock(
+            datetime(2026, 1, 1, hour, 0),
+            guild_config_get(self.guild_id, "display_date_format") or "discord",
+            guild_config_get(self.guild_id, "display_time_format"),
+        )
 
     def _has_pending_changes(self) -> bool:
         return (
@@ -5723,13 +5731,13 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
         if (self.weekday, self.hour) != (self.original_weekday, self.original_hour):
             items.append(
                 f"{_t('text.c9405caaf9687a')} → "
-                f"{MOTW_WEEKDAY_NAMES[self.weekday]} {self.hour:02d}:00"
+                f"{MOTW_WEEKDAY_NAMES[self.weekday]} {self._clock(self.hour)}"
             )
         return (
             _t('text.40a3e81f6086b6',
                p0=f"{(current.mention if current else _t('text.1372367d605704'))}",
                p1=f'{MOTW_WEEKDAY_NAMES[self.original_weekday]}',
-               p2=f'{self.original_hour}')
+               p2=self._clock(self.original_hour))
             + _pending_config_text(items)
         )
 
@@ -12939,7 +12947,7 @@ class HeraldoDateFormatSetupView(_SetupDirtySaveView):
         changes = {}
         if self.pending != self.original:
             changes["display_date_format"] = self.pending
-        if self.pending_time != clock_style(self.original, self.original_time):
+        if self.pending_time != clock_style(self.pending, self.original_time):
             changes["display_time_format"] = self.pending_time
         if not changes:
             await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
