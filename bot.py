@@ -2464,6 +2464,22 @@ async def on_member_join(member: discord.Member) -> None:
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         queue_join_roles(member)
 
+    # Una salida voluntaria validada permite recuperar el estado anterior.
+    try:
+        from member_rejoin_restore import restore_join
+        restored = await restore_join(
+            member, connect=db_connect,
+            enabled=lambda gid: guild_config_get(gid, "verified_rejoin_restore_enabled") == "1",
+            personality_ids=get_eval_role_ids, verify_role_id=get_verify_role_id,
+            sin_role_id=get_sin_verificado_role_id,
+        )
+        if restored:
+            db_clear_verify_pending(member.guild.id, member.id)
+            db_clear_sin_verificado(member.guild.id, member.id)
+            return
+    except (sqlite3.Error, discord.HTTPException) as exc:
+        print(f"REJOIN_RESTORE status=FAILED reason={type(exc).__name__}", flush=True)
+
     if verify_enabled(member.guild.id) and not verification_is_exempt(member):
         waiting_screening = (
             join_roles_wait_screening(member.guild.id)
@@ -2654,6 +2670,24 @@ async def orientation_departure_has_detailed_log(
     logged_at = _orientation_kick_log_sent.pop(key, None)
     return logged_at is not None and 0 <= now - logged_at <= _ORIENTATION_LOG_WINDOW
 
+
+
+@bot.listen("on_member_remove")
+async def heraldo_capture_verified_departure(member: discord.Member) -> None:
+    if member.bot:
+        return
+    try:
+        from member_rejoin_restore import capture_departure
+        await capture_departure(
+            member, connect=db_connect,
+            enabled=lambda gid: guild_config_get(gid, "verified_rejoin_restore_enabled") == "1",
+            personality_ids=get_eval_role_ids, verify_role_id=get_verify_role_id,
+            is_verified=lambda m: get_sin_verificado_role_id(m.guild.id)
+                not in {role.id for role in m.roles},
+            audit_action=discord.AuditLogAction,
+        )
+    except (sqlite3.Error, discord.HTTPException) as exc:
+        print(f"REJOIN_SNAPSHOT status=FAILED reason={type(exc).__name__}", flush=True)
 
 
 @bot.listen("on_member_remove")
@@ -3682,6 +3716,7 @@ def _setup_has_unsaved_changes(view: discord.ui.View) -> bool:
         ))
     if kind == "HeraldoVerificationSetupView":
         return any((
+            changed("pending_restore", guild_config_get(guild_id, "verified_rejoin_restore_enabled") == "1"),
             changed("pending_role_id", get_verify_role_id(guild_id)),
             changed("pending_sin_role_id", get_guild_role_id(guild_id, "sin_verificar")),
             changed("pending_channel_id", get_guild_channel_id(guild_id, "verification")),
@@ -6805,13 +6840,14 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
         self.pending_sin_role_id: int | None = None
         self.pending_channel_id: int | None = None
         self.pending_enabled: bool | None = None
+        self.pending_restore: bool | None = None
         self._refresh_origins()
 
     @_i18n_context
     def _refresh_origins(self) -> None:
         self.original_settings = {
             key: guild_config_get(self.guild_id, key)
-            for key in ("verify_role_id", "verify_channel_id", "verify_enabled")
+            for key in ("verify_role_id", "verify_channel_id", "verify_enabled", "verified_rejoin_restore_enabled")
         }
         self.original_resources = {
             ("role", "tentado"): guild_resource_get(self.guild_id, "role", "tentado"),
@@ -6870,7 +6906,13 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
             items.append(_t('text.989d26044050a1', p0=f'{(channel.mention if channel else self.pending_channel_id)}'))
         if self.pending_enabled is not None:
             items.append(_t('text.495c11e8a74893', p0=f"{(_t('text.913dba3a79e33b') if self.pending_enabled else _t('text.f7f5a5c6c80d49'))}"))
-        return _t('text.6e7c0122e9fa57') + verify_config_summary(guild) + "\n\n" + age_time_summary(guild.id) + _pending_config_text(items)
+        restore_on = self.pending_restore if self.pending_restore is not None else (
+            guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1"
+        )
+        return (_t('text.6e7c0122e9fa57') + verify_config_summary(guild)
+                + "\n\n" + age_time_summary(guild.id)
+                + "\nRestaurar al reingresar: " + ("Activado" if restore_on else "Desactivado")
+                + _pending_config_text(items))
 
     @_i18n_context
     async def select_role(self, interaction: discord.Interaction) -> None:
@@ -6996,7 +7038,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
     @discord.ui.button(label=_t('text.dda3bf5e92fb07'), style=discord.ButtonStyle.success, row=3)
     @_i18n_context
     async def publish(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if self.pending_role_id is not None or self.pending_sin_role_id is not None or self.pending_channel_id is not None or self.pending_enabled is not None:
+        if (self.pending_role_id is not None or self.pending_sin_role_id is not None or self.pending_channel_id is not None or self.pending_enabled is not None or self.pending_restore is not None):
             await interaction.response.send_message(_t('text.a14a594c9fbab1'), ephemeral=True)
             return
         channel_id = get_guild_channel_id(self.guild_id, "verification")
@@ -7036,6 +7078,13 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
         guild_config_set(self.guild_id, "verify_panel_ref", f"{channel.id}:{message.id}")
         await interaction.followup.send(_t('text.016469237e5fe0', p0=f'{channel.mention}'), ephemeral=True)
 
+    @discord.ui.button(label="Restaurar al reingresar", style=discord.ButtonStyle.secondary, row=3)
+    async def toggle_rejoin_restore(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        current = (self.pending_restore if self.pending_restore is not None else
+                   guild_config_get(self.guild_id, "verified_rejoin_restore_enabled") == "1")
+        self.pending_restore = not current
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
+
     @discord.ui.button(label=_t('text.894651580d7e21'), style=discord.ButtonStyle.primary, row=3)
     @_i18n_context
     async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -7053,7 +7102,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
     async def configure_times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if any(value is not None for value in (
                 self.pending_role_id, self.pending_sin_role_id,
-                self.pending_channel_id, self.pending_enabled)):
+                self.pending_channel_id, self.pending_enabled, self.pending_restore)):
             await interaction.response.send_message(
                 _t('text.86dc0bdd58f56e'),
                 ephemeral=True)
@@ -7065,7 +7114,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if all(value is None for value in (
                 self.pending_role_id, self.pending_sin_role_id,
-                self.pending_channel_id, self.pending_enabled)):
+                self.pending_channel_id, self.pending_enabled, self.pending_restore)):
             await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
             return
         if not await configuration_access(interaction, self.guild_id, self.owner_id):
@@ -7115,6 +7164,8 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
             resources[("channel", "verification")] = self.pending_channel_id
         if self.pending_enabled is not None:
             changes["verify_enabled"] = "1" if self.pending_enabled else "0"
+        if self.pending_restore is not None:
+            changes["verified_rejoin_restore_enabled"] = "1" if self.pending_restore else "0"
         await interaction.response.defer(ephemeral=True)
         try:
             applied = verification_atomic_setup_save(
@@ -7130,7 +7181,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
                 _t('text.054697a998868e'),
                 ephemeral=True)
             return
-        self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
+        self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = self.pending_restore = None
         self._refresh_origins()
         note = _t('text.2398046c362972')
         if channel is not None:
@@ -7143,7 +7194,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
     @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=4)
     @_i18n_context
     async def discard_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = None
+        self.pending_role_id = self.pending_sin_role_id = self.pending_channel_id = self.pending_enabled = self.pending_restore = None
         await interaction.response.edit_message(content=self._content(interaction.guild), view=self)
 
     @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=4)
@@ -7151,7 +7202,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if any(value is not None for value in (
                 self.pending_role_id, self.pending_sin_role_id,
-                self.pending_channel_id, self.pending_enabled)):
+                self.pending_channel_id, self.pending_enabled, self.pending_restore)):
             await interaction.response.send_message(
                 _t('text.2f7c7dc2d8138c'), ephemeral=True)
             return
