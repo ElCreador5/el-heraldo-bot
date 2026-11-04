@@ -82,7 +82,7 @@ class PurgeUsersModal(discord.ui.Modal):
             manual = tuple(dict.fromkeys(int(item) for item in re.split(r"[\s,;]+", raw) if item))
             combined = tuple(dict.fromkeys((*self.panel.selected_user_ids, *manual)))
             if any(uid <= 0 for uid in manual) or len(combined) > 25:
-                raise ValueError("invalid user ID")
+                raise ValueError
         except ValueError:
             await interaction.response.send_message(self.panel.t("max_users"), ephemeral=True)
             return
