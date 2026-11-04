@@ -11,7 +11,7 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.guild_id=445566
         self.host=vars(b)
-        self.original={"template_mode":"weekly","template_hour":"9","template_weekday":"3",
+        self.original={"template_mode":"weekly","template_hour":"9","template_minute":"0","template_weekday":"3",
                        "template_monthday":"1","template_interval_minutes":"1440",
                        "template_last_run":"2026-10-01T09:00:00+00:00","template_last_slot":"2026-10-01T09:00:00-04:00"}
         for key,value in self.original.items():b.guild_config_set(self.guild_id,key,value)
