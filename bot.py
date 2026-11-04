@@ -12850,9 +12850,9 @@ def date_format_setup_summary(guild_id: int) -> str:
         choice = "discord"
     examples = {
         "discord": _t('text.0b1839cfeef7f8'),
-        "dmy24": "15/10/2026 16:00",
-        "mdy12": "10/15/2026 4:00 PM",
-        "iso": "2026-10-15 16:00",
+        "dmy24": "15/10/2026",
+        "mdy12": "10/15/2026",
+        "iso": "2026-10-15",
     }
     return (
         _t('text.8542250eb9bab2', p0=f'{DATE_FORMAT_CHOICES[choice]}', p1=f'{examples[choice]}')
@@ -20433,6 +20433,9 @@ def configuration_review_value(guild, key, value):
         return _t('text.d8fc3bee61ea28')
     if key == "display_date_format":
         return DATE_FORMAT_CHOICES.get(raw, _t('text.33ad66b590bd0f'))
+    if key == "display_time_format":
+        return {"12h": _t("setup.datetime.time12"),
+                "24h": _t("setup.datetime.time24")}.get(raw, _t('text.33ad66b590bd0f'))
     if key == "moderation_warn_limit_action":
         return {"none": _t('text.716ff07341bc5e'), "timeout": _t('text.e57f389344d2ea'), "kick": _t('text.ffb1a9c946e708'),
                 "ban": _t('text.e1e571bc9280a3'), "condemn": _t('text.49c04f00c2a806')}.get(raw, _t('text.b781f6bd9b98e4'))
@@ -20460,6 +20463,7 @@ def configuration_review_label(key):
         "moderation_warn_limit": _t('text.df9a26332fc0e2'),
         "moderation_default_ban_minutes": _t('text.f588428e3333d0'),
         "display_date_format": _t('text.39d54e1a498dba'),
+        "display_time_format": _t("setup.datetime.time_choice"),
         "moderation_warn_limit_action": _t('text.b7b02c49913005'),
         "moderation_warn_limit_mute_minutes": _t('text.de98889d70700d'),
         "moderation_reaction_warn_enabled": _t('text.518abe92830de5'),
