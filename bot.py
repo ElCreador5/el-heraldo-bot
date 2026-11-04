@@ -11230,6 +11230,13 @@ class HeraldoCasesSetupView(discord.ui.View):
         await interaction.response.send_modal(
             HeraldoWarningDeleteModal(self.guild_id, self.selected_case, self.owner_id))
 
+    @discord.ui.button(label="Gestionar casos", style=discord.ButtonStyle.primary, row=3)
+    @_i18n_context
+    async def manage_cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoCaseManagerSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=view.summary(), embed=None, view=view)
+
     @discord.ui.button(label=_t('text.fe5f6628c7b56b'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -11253,6 +11260,241 @@ class HeraldoCasesSetupView(discord.ui.View):
             content=_t('moderation.warning.closed_panel'), view=None,
         )
 
+
+
+class HeraldoCaseManagementConfirm(discord.ui.Modal):
+    """Confirmation for irreversible operations. Never erase open cases in bulk."""
+    confirmation = discord.ui.TextInput(
+        label="Confirmación", placeholder="Código del caso o LIMPIAR",
+        required=True, max_length=90)
+
+    def __init__(self, guild_id: int, owner_id: int, case_number: int | None,
+                 operation: str, filter_key: str = "all", page: int = 0):
+        super().__init__(title="Confirmar eliminación")
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.case_number, self.operation = case_number, operation
+        self.filter_key, self.page = filter_key, page
+        if case_number is not None:
+            self.confirmation.placeholder = moderation_case_code(case_number, guild_id)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if (interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.administrator
+                or not await configuration_access(interaction, self.guild_id, self.owner_id)):
+            return
+        if self.operation == "delete":
+            expected = moderation_case_code(self.case_number, self.guild_id)
+            if str(self.confirmation).strip() != expected:
+                await interaction.response.send_message("El código no coincide.", ephemeral=True)
+                return
+            row = moderation_case_get(self.guild_id, self.case_number)
+            if row is None or row["open"]:
+                await interaction.response.send_message(
+                    "Solo puedes eliminar casos cerrados. Cierra o descarta el caso primero.",
+                    ephemeral=True)
+                return
+            success = moderation_case_delete(self.guild_id, self.case_number)
+            label = f"Caso {expected} eliminado." if success else "El caso ya no existe."
+        else:
+            if str(self.confirmation).strip().upper() != "LIMPIAR":
+                await interaction.response.send_message("Escribe LIMPIAR para confirmar.", ephemeral=True)
+                return
+            # Revalidar en la misma transacción; nunca borrar sanciones abiertas.
+            with closing(db_connect()) as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM moderation_cases WHERE guild_id=? AND open=0",
+                    (self.guild_id,)).fetchone()[0]
+                conn.execute(
+                    "DELETE FROM moderation_cases WHERE guild_id=? AND open=0",
+                    (self.guild_id,))
+            label = f"Limpieza completada: {count} casos cerrados eliminados. Los abiertos siguen intactos."
+        print(f"CASE_MANAGEMENT action={self.operation} guild={self.guild_id} moderator={interaction.user.id} case={self.case_number} result={label}")
+        await interaction.response.send_message(label, ephemeral=True)
+
+
+class HeraldoCaseManagerSetupView(discord.ui.View):
+    """Private, paginated review of moderation cases; does not change sanctions on 'omit'."""
+    def __init__(self, guild_id: int, owner_id: int,
+                 filter_key: str = "open", page: int = 0,
+                 selected: int | None = None):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.filter_key, self.page, self.selected = filter_key, page, selected
+        status = discord.ui.Select(
+            placeholder="Filtrar casos", row=0,
+            options=[
+                discord.SelectOption(label=name, value=value, default=value == filter_key)
+                for value, name in (("open", "Abiertos"), ("closed", "Cerrados"), ("all", "Todos"))
+            ])
+        status.callback = self.change_filter
+        self.add_item(status)
+        self.case_select = discord.ui.Select(
+            placeholder="Seleccionar expediente", row=1,
+            options=[discord.SelectOption(label="Sin casos", value="none")],
+            disabled=True)
+        self.case_select.callback = self.choose_case
+        self.add_item(self.case_select)
+        self.rebuild()
+
+    def rows(self):
+        with closing(db_connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            where = "guild_id=?"
+            params = [self.guild_id]
+            if self.filter_key != "all":
+                where += " AND open=?"
+                params.append(1 if self.filter_key == "open" else 0)
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM moderation_cases WHERE {where}", params
+            ).fetchone()[0]
+            self.page = min(self.page, max(0, (total - 1) // 25))
+            rows = conn.execute(
+                f"SELECT * FROM moderation_cases WHERE {where} "
+                "ORDER BY case_number DESC LIMIT 25 OFFSET ?",
+                [*params, self.page * 25]).fetchall()
+        return rows, total
+
+    def rebuild(self):
+        rows, total = self.rows()
+        self.case_select.options = [
+            discord.SelectOption(
+                label=f"{moderation_case_code(int(r['case_number']), self.guild_id)} · {r['type']}"[:100],
+                value=str(r["case_number"]),
+                description=(("Abierto" if r["open"] else "Cerrado") +
+                             " · " + str(r["reason"] or ""))[:100],
+                default=int(r["case_number"]) == self.selected)
+            for r in rows
+        ] or [discord.SelectOption(label="Sin casos", value="none")]
+        self.case_select.disabled = not bool(rows)
+        if self.selected not in {int(r["case_number"]) for r in rows}:
+            self.selected = None
+        current = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        self.inspect.disabled = current is None
+        self.finish.disabled = current is None or not current["open"]
+        self.omit.disabled = current is None or not current["open"]
+        self.delete_one.disabled = current is None or bool(current["open"])
+        self.previous.disabled = self.page == 0
+        self.next_page.disabled = (self.page + 1) * 25 >= total
+        self.cleanup.disabled = not any(
+            not r["open"] for r in moderation_case_list(self.guild_id, open_only=False, limit=1))
+        return rows, total, current
+
+    def summary(self):
+        rows, total, current = self.rebuild()
+        count_pages = max(1, (total + 24) // 25)
+        lines = [f"**Gestión de expedientes · {self.filter_key}**",
+                 f"Página {self.page + 1}/{count_pages} · {total} casos · Selecciona uno para revisarlo."]
+        if current is not None:
+            lines.append(
+                f"**{moderation_case_code(int(current['case_number']), self.guild_id)}** "
+                f"· {current['type']} · <@{current['user_id']}> "
+                f"· {'Abierto' if current['open'] else 'Cerrado'}"
+                f"\nMotivo: {discord.utils.escape_mentions(str(current['reason'] or 'Sin motivo'))[:300]}")
+        else:
+            lines.append("Sin expediente seleccionado.")
+        lines.append("**Cerrar** resuelve el caso (y puede revertir su sanción). "
+                     "**Omitir** descarta la revisión sin cambiar sanciones. "
+                     "**Limpiar** elimina únicamente casos cerrados, con confirmación.")
+        return "\n\n".join(lines)[:1900]
+
+    async def interaction_check(self, interaction):
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return False
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel pertenece a otro moderador.", ephemeral=True)
+            return False
+        return True
+
+    async def change_filter(self, interaction):
+        value = (interaction.data or {}).get("values", ["open"])[0]
+        if value in {"open", "closed", "all"}:
+            self.filter_key, self.page, self.selected = value, 0, None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    async def choose_case(self, interaction):
+        value = (interaction.data or {}).get("values", ["none"])[0]
+        if value != "none":
+            try:
+                number = int(value)
+                if number in {int(r["case_number"]) for r in self.rows()[0]}:
+                    self.selected = number
+            except ValueError:
+                pass
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Abrir caso", style=discord.ButtonStyle.primary, row=2)
+    async def inspect(self, interaction, button):
+        row = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        if row is None:
+            await interaction.response.send_message("Caso no encontrado.", ephemeral=True)
+            return
+        embed = moderation_case_embed(interaction.guild, row)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="Cerrar caso", style=discord.ButtonStyle.success, row=2)
+    async def finish(self, interaction, button):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("Permisos insuficientes.", ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        if row is None or not row["open"]:
+            await interaction.response.send_message("El caso ya está cerrado.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
+        moderation_case_close(self.guild_id, self.selected, closed_by=interaction.user.id,
+                              resolution="Cerrado mediante gestión de casos")
+        self.selected = None
+        await interaction.edit_original_response(
+            content=f"Caso cerrado. {effect}\n\n{self.summary()}", view=self)
+
+    @discord.ui.button(label="Omitir caso", style=discord.ButtonStyle.secondary, row=2)
+    async def omit(self, interaction, button):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("Permisos insuficientes.", ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        if row is None or not row["open"]:
+            await interaction.response.send_message("Caso no disponible.", ephemeral=True)
+            return
+        moderation_case_close(self.guild_id, self.selected, closed_by=interaction.user.id,
+                              resolution="Omitido por moderación; no modifica sanciones")
+        self.selected = None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Eliminar cerrado", style=discord.ButtonStyle.danger, row=2)
+    async def delete_one(self, interaction, button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Solo administradores.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoCaseManagementConfirm(
+            self.guild_id, self.owner_id, self.selected, "delete", self.filter_key, self.page))
+
+    @discord.ui.button(label="Anterior", style=discord.ButtonStyle.secondary, row=3)
+    async def previous(self, interaction, button):
+        self.page = max(0, self.page - 1)
+        self.selected = None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Siguiente", style=discord.ButtonStyle.secondary, row=3)
+    async def next_page(self, interaction, button):
+        self.page += 1
+        self.selected = None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Limpiar cerrados", style=discord.ButtonStyle.danger, row=3)
+    async def cleanup(self, interaction, button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Solo administradores.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoCaseManagementConfirm(
+            self.guild_id, self.owner_id, None, "cleanup", self.filter_key, self.page))
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction, button):
+        view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild),
+                                                embed=None, view=view)
 
 class HeraldoCondemnationDurationModal(discord.ui.Modal, title=_t('text.08a1d617293f3e')):
     duration = discord.ui.TextInput(
@@ -13491,7 +13733,17 @@ def _heraldo_install_close_buttons() -> None:
         def _wrapped(self, *args, _original=original_init, **kwargs):
             _original(self, *args, **kwargs)
             gid = getattr(self, "guild_id", None)
-            if gid is None or any(isinstance(item, _HeraldoPanelClose) for item in self.children):
+            close_names = {
+                i18n.translate(guild_language(gid), "text.aeccae342e4bd0").strip().casefold(),
+                "cerrar", "close", "fechar",
+            } if gid is not None else set()
+            # Los botones ya definidos por cada panel tienen prioridad.
+            if gid is None or any(
+                isinstance(item, _HeraldoPanelClose)
+                or (isinstance(item, discord.ui.Button)
+                    and str(item.label or "").strip().casefold() in close_names)
+                for item in self.children
+            ):
                 return
             button = _HeraldoPanelClose(gid)
             for row in range(4, -1, -1):
