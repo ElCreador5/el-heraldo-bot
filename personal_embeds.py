@@ -406,15 +406,14 @@ class PublishChannelView(discord.ui.View):
             payload = copy.deepcopy(self.panel.embed)
             valid_personal(payload)
             await interaction.response.defer(ephemeral=True)
-            if payload.get("kind") == "text":
-                content = payload.get("text", "")
-                if payload.get("image_url"):
-                    content += ("\n" if content else "") + payload["image_url"]
-                sent = await channel.send(content=content, allowed_mentions=discord.AllowedMentions.none())
-            else:
-                embed = render(payload, self.panel.host["stamp_embed"], interaction.guild)
-                embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-                sent = await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            embed = pub.publication_embed(
+                payload, self.panel.host["stamp_embed"], interaction.guild,
+                interaction.user, self.panel.name, render,
+            )
+            content = payload.get("text") or None if payload.get("kind") == "text" else None
+            sent = await channel.send(
+                content=content, embed=embed, allowed_mentions=discord.AllowedMentions.none(),
+            )
         except (ValueError, discord.HTTPException):
             return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
         try:
