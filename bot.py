@@ -16890,28 +16890,6 @@ async def fusionar_canales_error(interaction: discord.Interaction, error: discor
 # 9. /purge — limpieza individual de mensajes de un usuario
 # ---------------------------------------------------------------------------
 
-class PurgeConfirmView(discord.ui.View):
-    def __init__(self, user_id: int) -> None:
-        super().__init__(timeout=60)
-        self.user_id = user_id
-        self.value: bool | None = None
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == self.user_id
-
-    @discord.ui.button(label="Sí, borrar todo", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.value = True
-        await interaction.response.edit_message(content="Iniciando purga…", view=None)
-        self.stop()
-
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        self.value = False
-        await interaction.response.edit_message(content="Purga cancelada.", view=None)
-        self.stop()
-
-
 @bot.tree.command(name="warn", description="Advierte a un miembro y crea un caso de Moderation.")
 @app_commands.describe(usuario="Miembro", motivo="Motivo", duracion="Opcional: 30m, 2h, 7d", prueba="Enlace o texto de prueba")
 @app_commands.checks.has_permissions(moderate_members=True)
@@ -17090,132 +17068,81 @@ async def moderation_casedelete(interaction: discord.Interaction, caso: str) -> 
         f"Expediente {moderation_case_code(case_number, interaction.guild.id)} eliminado.", ephemeral=True,
     )
 
-@bot.tree.command(name="purge", description="Borrar mensajes de un usuario: todos, una cantidad o un rango de tiempo.")
-@discord.app_commands.describe(
-    usuario="Usuario cuyos mensajes borrar (puede haber salido del servidor)",
-    tipo="Qué tipo de contenido borrar: todo, links o solo texto",
-    todos="Borrar TODOS sus mensajes (no se combina con cantidad ni rango)",
-    cantidad="Borrar solo sus N mensajes más recientes",
-    desde="Inicio del rango: hace cuánto (30m, 12h, 2d, 1d 12h…)",
-    hasta="Fin del rango: hace cuánto (por defecto, ahora)",
-    canal="Limitar a un canal o hilo (por defecto, todo el servidor)",
-)
-@discord.app_commands.choices(tipo=[
-    discord.app_commands.Choice(name="Todo — cualquier mensaje", value="all"),
-    discord.app_commands.Choice(name="Links — mensajes con enlaces", value="links"),
-    discord.app_commands.Choice(name="Texto — sin imagen ni vídeo", value="text"),
-])
+# /purge usa una vista previa inmutable antes de eliminar mensajes.
+_purge_panel_deleting: set[tuple[int, int, int]] = set()
+
+
+async def delete_purge_panel_message(
+    channel, message_id: int, *, expected_author_id: int,
+    after: datetime | None = None, before: datetime | None = None,
+    content_type: str = "all",
+) -> bool:
+    """Borra solo IDs confirmados tras revalidar autor, fechas, tipo y permisos."""
+    guild = getattr(channel, "guild", None)
+    if guild is None or guild.me is None or expected_author_id <= 0:
+        return False
+    key = (guild.id, channel.id, message_id)
+    if key in _purge_panel_deleting:
+        return False
+    try:
+        permissions = channel.permissions_for(guild.me)
+        if not (permissions.view_channel and permissions.read_message_history
+                and permissions.manage_messages):
+            return False
+    except (AttributeError, discord.HTTPException):
+        return False
+    _purge_panel_deleting.add(key)
+    try:
+        message = await channel.fetch_message(message_id)
+        if (
+            message.guild is None or message.guild.id != guild.id
+            or message.channel.id != channel.id
+            or message.author.id != expected_author_id
+            or (after is not None and message.created_at <= after)
+            or (before is not None and message.created_at >= before)
+            or not _purge_message_matches(message, content_type)
+        ):
+            return False
+        permissions = channel.permissions_for(guild.me)
+        if not (permissions.view_channel and permissions.read_message_history
+                and permissions.manage_messages):
+            return False
+        await message.delete()
+        return True
+    except (discord.HTTPException, AttributeError, ValueError) as exc:
+        print(f"PURGE_PANEL_DELETE status=FAILED error={type(exc).__name__}", flush=True)
+        return False
+    finally:
+        _purge_panel_deleting.discard(key)
+
+
+@bot.tree.command(name="purge", description="Abre un panel privado para limpiar mensajes.")
+@discord.app_commands.default_permissions(manage_messages=True)
 @discord.app_commands.checks.has_permissions(manage_messages=True)
 @discord.app_commands.guild_only()
-async def purge_command(
-    interaction: discord.Interaction,
-    usuario: discord.User,
-    tipo: discord.app_commands.Choice[str],
-    todos: Optional[bool] = None,
-    cantidad: Optional[discord.app_commands.Range[int, 1]] = None,
-    desde: Optional[str] = None,
-    hasta: Optional[str] = None,
-    canal: Optional[Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel,
-                          discord.Thread, discord.ForumChannel]] = None,
-) -> None:
+async def purge_command(interaction: discord.Interaction) -> None:
+    from purge_panel import PurgePanel
+
     guild = interaction.guild
-    if todos and not interaction.user.guild_permissions.manage_guild:
-        await interaction.response.send_message(
-            "Error: Borrar **todos** los mensajes de alguien requiere el permiso Gestionar servidor. "
-            "Con Gestionar mensajes puedes usar `cantidad` o un rango.",
-            ephemeral=True,
-        )
-        return
-    has_scope = cantidad is not None or desde is not None or hasta is not None
-    if todos and has_scope:
-        await interaction.response.send_message("Error: Con `todos` no uses `cantidad`, `desde` ni `hasta`.", ephemeral=True)
-        return
-    if not todos and not has_scope:
-        await interaction.response.send_message(
-            "Error: Indica qué borrar: `todos:True`, una `cantidad`, o un rango con `desde` / `hasta` "
-            "(también puedes combinar cantidad con rango).",
-            ephemeral=True,
-        )
-        return
-    if (guild.id, usuario.id) in _purge_running:
-        await interaction.response.send_message("Ya hay una purga en curso para ese usuario.", ephemeral=True)
-        return
-
-    now = datetime.now(timezone.utc)
-    after = before = None
-    try:
-        if desde is not None:
-            after = now - timedelta(minutes=parse_duration(desde, 1, PURGE_MAX_MINUTES))
-        if hasta is not None:
-            before = now - timedelta(minutes=parse_duration(hasta, 1, PURGE_MAX_MINUTES))
-    except ValueError as e:
-        await interaction.response.send_message(f"Error: {e}", ephemeral=True)
-        return
-    if after is not None and before is not None and after >= before:
-        await interaction.response.send_message(
-            "Error: `desde` debe ser más antiguo que `hasta` (por ejemplo desde `3d` hasta `1d`).", ephemeral=True
-        )
-        return
-
-    content_type = tipo.value
-    content_labels = {
-        "all": "todo tipo de contenido",
-        "links": "solo mensajes con links",
-        "text": "solo mensajes de texto sin imagen ni vídeo",
-    }
-
-    parts: list[str] = []
-    if todos:
-        parts.append("**todos** sus mensajes")
-    if cantidad is not None:
-        parts.append(f"sus **{cantidad}** mensajes más recientes")
-    if desde is not None or hasta is not None:
-        parts.append(f"rango: desde hace {desde or '—'} hasta hace {hasta or '0'}")
-    where = canal.mention if canal is not None else "todo el servidor"
-    parts.append(content_labels[content_type])
-    scope_text = " · ".join(parts) + f" · en {where}"
-
-    if todos:
-        view = PurgeConfirmView(interaction.user.id)
-        await interaction.response.send_message(
-            f"Advertencia: Vas a borrar **todos** los mensajes de {usuario.mention} que coincidan con **{content_labels[content_type]}** en {where}. No se puede deshacer.",
-            view=view,
-            ephemeral=True,
-        )
-        await view.wait()
-        if view.value is None:
-            await interaction.edit_original_response(content="Tiempo agotado: no se borró nada.", view=None)
-            return
-        if not view.value:
-            return
-    else:
-        await interaction.response.send_message("Iniciando purga…", ephemeral=True)
-
-    last_edit = [0.0]
-
-    async def progress(done: int, total: int, deleted: int) -> None:
-        if asyncio.get_event_loop().time() - last_edit[0] < 3:
-            return
-        last_edit[0] = asyncio.get_event_loop().time()
-        await interaction.edit_original_response(content=f"Purgando… {done}/{total} canales revisados, {deleted} borrados.")
-
-    async def job() -> None:
-        try:
-            result = await run_purge_job(
-                guild, usuario, scope_text=scope_text, requested_by=interaction.user.mention,
-                channel=canal, after=after, before=before, limit=cantidad, progress=progress,
-                content_type=content_type,
-            )
-        except Exception:
-            text = "Error: La purga falló a mitad de camino; revisa el canal de logs."
-        else:
-            text = "Ya había una purga en curso para ese usuario." if result is None else f"{purge_result_text(result)}."
-        try:
-            await interaction.edit_original_response(content=text)
-        except discord.HTTPException:
-            pass  # el token de la interacción dura 15 min; el resultado ya quedó en el canal de logs
-
-    asyncio.create_task(job())
+    panel = PurgePanel(
+        interaction,
+        language=guild_language(guild.id),
+        footer=heraldo_footer,
+        targets=purge_targets,
+        matches=_purge_message_matches,
+        delete=delete_purge_panel_message,
+        log=log_embed,
+        parse_duration=parse_duration,
+        max_minutes=PURGE_MAX_MINUTES,
+        running=_purge_running,
+        audit_channel_id=get_log_channel_id(guild.id),
+        date_mode=guild_config_get(guild.id, "display_date_format") or "discord",
+        time_mode=guild_config_get(guild.id, "display_time_format"),
+        format_datetime=lambda dt: format_configured_datetime(guild.id, dt),
+    )
+    await interaction.response.send_message(
+        embed=panel.embed(), view=panel, ephemeral=True,
+    )
 
 
 purge_command.error(verify_command_error)
