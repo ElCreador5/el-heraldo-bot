@@ -130,5 +130,31 @@ class NavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((back._rendered_row, close._rendered_row), (3, 4))
 
 
+    async def test_actual_setup_home_has_close_but_never_back(self):
+        from test_safety_regressions import b
+        home = b.HeraldoSetupView(345, 6)
+        home._heraldo_back_target = ParentPanel()  # Even stale navigation state is ignored.
+        navigation.ensure_navigation_controls(home)
+        navigation.ensure_navigation_controls(home)
+        self.assertIs(home.children[0], home.module_select)
+        self.assertEqual(len(home.children), 2)
+        self.assertFalse(any(isinstance(item, navigation.AdministrativeBack)
+                             or getattr(item, "label", "") in navigation.variants("text.ab26ae7bca3621")
+                             for item in home.children))
+        self.assertIs(home.children[-1], home.close)
+        self.assertEqual(home.close.style, discord.ButtonStyle.danger)
+
+    async def test_setup_home_cleans_old_back_and_duplicate_close(self):
+        from test_safety_regressions import b
+        home = b.HeraldoSetupView(345, 6)
+        home.add_item(navigation.AdministrativeBack(345, 6))
+        home.add_item(discord.ui.Button(label="Cerrar", row=1))
+        navigation.ensure_navigation_controls(home)
+        buttons = [item for item in home.children if isinstance(item, discord.ui.Button)]
+        self.assertEqual(buttons, [home.close])
+        self.assertEqual(len(home.children), 2)
+
+
+
 if __name__ == "__main__":
     unittest.main()
