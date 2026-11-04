@@ -1045,7 +1045,7 @@
   "text.3799c393778b6e": "**Novo agendamento (não salvo)**\nSelecione canal, frequência e opções.",
   "text.37ad1f8c7a9080": "O emoji não pode estar vazio.",
   "text.37ae072b3fc80e": "Registre o caso para revisão humana.",
-  "text.37dd3fcdb335d9": "**El Heraldo · Moderação · Política de sanções**\n\n**1 · Advertências acumuladas**\nLimite: **{p0} advertências** (permitido: 1 a 5).\nAo atingir o limite: **{p2}**",
+  "text.37dd3fcdb335d9": "**El Heraldo · Moderação · Política de sanções**\n\n**1 · Advertências vigentes**\nLimite: **{p0} advertências** (permitido: 1 a 5).\nAo atingir o limite: **{p2}**",
   "text.37dddb486c6741": "Nome do autor",
   "text.37ff4f395c5382": "Honeypot atualizado",
   "text.38097d0e042a9f": "Editar cartão de personalidade",
