@@ -51,6 +51,22 @@ class WarningManagementPanelTests(unittest.TestCase):
         self.assertIn("expires_at", ast.unparse(func))
         self.assertIn("datetime.now(timezone.utc)", ast.unparse(func))
 
+    def test_pardon_notice_dm_then_channel_fallback(self):
+        helper = next(n for n in TREE.body if isinstance(n, ast.AsyncFunctionDef)
+                      and n.name == "moderation_notify_warning_pardon")
+        source = ast.unparse(helper)
+        self.assertIn("await member.send(", source)
+        self.assertIn("await channel.send(", source)
+        self.assertLess(source.index("await member.send("), source.index("await channel.send("))
+        self.assertIn("moderation.warning.pardon_dm", source)
+        self.assertIn("moderation.warning.pardon_channel", source)
+        self.assertIn("return 'failed'", source)
+        submit = method("HeraldoWarningPardonModal", "on_submit")
+        self.assertIn("await moderation_notify_warning_pardon(", submit)
+        self.assertIn("moderation.warning.pardon_delivery_dm", submit)
+        self.assertIn("moderation.warning.pardon_delivery_channel", submit)
+        self.assertIn("moderation.warning.pardon_delivery_failed", submit)
+
     def test_all_translations_match_variables(self):
         messages = []
         for lang in ("es-419", "en-US", "pt-BR"):
