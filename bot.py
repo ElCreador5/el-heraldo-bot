@@ -2674,9 +2674,11 @@ async def expel(member: discord.Member, report: bool = True) -> None:
 
 async def send_recovery_dm(member: discord.Member, report: bool = True) -> bool:
     """Devuelve True si el DM se envió con éxito."""
-    channel = member.guild.get_channel(get_recovery_channel_id(member.guild.id))
+    # Las invitaciones de recuperación de personalidad solo apuntan al
+    # canal de selección de roles configurado para ese módulo.
+    channel = member.guild.get_channel(get_orientation_channel_id(member.guild.id))
     invite_url = ""
-    if channel is not None:
+    if isinstance(channel, discord.TextChannel):
         try:
             invite = await channel.create_invite(
                 max_uses=1, unique=True, reason="Recuperación tras expulsión de Heraldo"
