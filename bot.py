@@ -41,13 +41,13 @@ El Heraldo - Bot de verificación, actividad y Miembro de la Semana (Paraíso)
    - /verificacion (rol, timeout, acción, activar) y /mensajes (mensaje del
      panel, texto del botón y mensaje tras verificarse) configuran todo sin redeploy.
 
-6. COPIA DE SEGURIDAD DE LA PLANTILLA (/server_template_setup, /template_sync)
+6. COPIA DE SEGURIDAD DE LA PLANTILLA (/estructura_servidor)
    - Sincroniza la plantilla del servidor (roles, canales y permisos) con su estado
      actual, como una copia de seguridad: cada día, semana o mes, o cada intervalo
      configurable en días/horas/minutos, con
      día y hora a elección. Tras cada copia manda el enlace por mensaje privado (si no
      puede, deja constancia en el canal de logs, sin el enlace).
-   - /template_sync la hace al momento y muestra el enlace.
+   - /estructura_servidor permite sincronización manual confirmada y envía el enlace por privado.
 
 7. CONDENAS / HONEYPOT
    - El rol Condenado es la fuente de verdad. /condenar, el honeypot, una reacción ☠️ de un
@@ -109,6 +109,7 @@ Permisos requeridos: Administrador (bot personal, confirmado por el usuario).
 
 from production_panel_text import text as _t, guild_context as _i18n_context
 import production_panel_text as i18n
+from heraldo_datetime import format_clock, format_date_time, parse_clock
 
 import asyncio
 import contextvars
@@ -9865,6 +9866,7 @@ class HeraldoSetupView(discord.ui.View):
         ("suggestions", "Sugerencias", "Panel y revisores de sugerencias"),
         ("announcements", "Anuncios", "Configuración del anuncio de Miembro de la Semana"),
         ("server_structure", "Estructura del servidor", "Respaldo de roles, canales y permisos"),
+        ("date_format", "Fecha y hora", "Formato del reloj de 12/24 horas y fecha"),
     )
 
     def __init__(self, guild_id: int, owner_id: int) -> None:
@@ -9996,6 +9998,9 @@ class HeraldoSetupView(discord.ui.View):
             content = view._content(interaction.guild)
         elif selected == "server_structure":
             view = ServerStructureSetupView(globals(), self.guild_id, self.owner_id)
+            content = view.summary()
+        elif selected == "date_format":
+            view = ServerDateTimeSetupView(globals(), self.guild_id, self.owner_id)
             content = view.summary()
         elif selected == "language":
             content = (
@@ -11026,7 +11031,7 @@ async def joinroles_group_error(
 
 
 # ---------------------------------------------------------------------------
-# Copia de seguridad de la plantilla del servidor (/server_template_setup, /template_sync)
+# Copia de seguridad de la plantilla del servidor (/estructura_servidor)
 # ---------------------------------------------------------------------------
 
 def _meta_int(key: str, default: int) -> int:
@@ -11056,9 +11061,34 @@ def get_template_mode(guild_id: int) -> str:
 
 def get_template_hour(guild_id: int) -> int:
     try:
-        return int(_template_value(guild_id, "template_hour", str(TEMPLATE_HOUR_DEFAULT)))
+        value = int(_template_value(guild_id, "template_hour", str(TEMPLATE_HOUR_DEFAULT)))
+        return value if 0 <= value <= 23 else TEMPLATE_HOUR_DEFAULT
     except (TypeError, ValueError):
         return TEMPLATE_HOUR_DEFAULT
+
+
+def get_template_minute(guild_id: int) -> int:
+    """Los horarios anteriores usan :00; la precisión por minuto es nueva."""
+    try:
+        value = int(_template_value(guild_id, "template_minute", "0"))
+        return value if 0 <= value <= 59 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def format_server_clock(guild_id: int, hour: int, minute: int = 0) -> str:
+    mode = guild_config_get(guild_id, "display_date_format") or "discord"
+    clock = guild_config_get(guild_id, "display_time_format")
+    return format_clock(datetime(2026, 1, 1, hour, minute), mode, clock)
+
+
+def format_configured_datetime(guild_id: int, dt: datetime) -> str:
+    mode = guild_config_get(guild_id, "display_date_format") or "discord"
+    clock = guild_config_get(guild_id, "display_time_format")
+    aware = dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    if mode == "discord" and clock is None:
+        return discord.utils.format_dt(aware, "f")
+    return format_date_time(aware, date_mode=mode, time_mode=clock, locale=guild_language(guild_id))
 
 
 def get_template_weekday(guild_id: int) -> int:
@@ -11087,7 +11117,7 @@ def get_template_interval_minutes(guild_id: int) -> int:
 
 def template_schedule_text(guild_id: int) -> str:
     mode = get_template_mode(guild_id)
-    hour = f"{get_template_hour(guild_id)}:00 (hora de RD)"
+    hour = format_server_clock(guild_id, get_template_hour(guild_id), get_template_minute(guild_id)) + " (hora de RD)"
     if mode == "off":
         return "Desactivada"
     if mode == "daily":
@@ -11101,23 +11131,24 @@ def template_schedule_text(guild_id: int) -> str:
 
 def template_last_slot(guild_id: int, mode: str, now: datetime) -> datetime | None:
     hour = get_template_hour(guild_id)
+    minute = get_template_minute(guild_id)
     if mode == "daily":
-        slot = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        slot = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if slot > now:
             slot -= timedelta(days=1)
         return slot
     if mode == "weekly":
         days_back = (now.weekday() - get_template_weekday(guild_id)) % 7
-        slot = (now - timedelta(days=days_back)).replace(hour=hour, minute=0, second=0, microsecond=0)
+        slot = (now - timedelta(days=days_back)).replace(hour=hour, minute=minute, second=0, microsecond=0)
         if slot > now:
             slot -= timedelta(days=7)
         return slot
     if mode == "monthly":
         day = get_template_monthday(guild_id)
-        slot = now.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
+        slot = now.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
         if slot > now:
             last_of_previous = now.replace(day=1) - timedelta(days=1)
-            slot = last_of_previous.replace(day=day, hour=hour, minute=0, second=0, microsecond=0)
+            slot = last_of_previous.replace(day=day, hour=hour, minute=minute, second=0, microsecond=0)
         return slot
     return None
 
@@ -11238,13 +11269,13 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
     elif not sent:
         await log_embed(
             guild, "Plantilla sincronizada (mensaje privado no enviado)",
-            "La copia se hizo, pero no pude mandarte el enlace por mensaje privado. Usa /template_sync para verlo.",
+            "La copia se hizo, pero no pude mandarte el enlace por privado. Revisa /estructura_servidor y habilita los mensajes privados.",
             discord.Color.orange(),
         )
     return error is None
 
 
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=1)
 async def template_backup_loop() -> None:
     """Revisa cada servidor por separado y solo marca el turno tras una copia correcta."""
     now = datetime.now(timezone.utc)
@@ -11262,13 +11293,13 @@ async def template_backup_loop() -> None:
 def template_config_summary(guild_id: int, now_utc: datetime) -> str:
     next_run = template_next_run(guild_id, now_utc)
     next_text = (
-        f"{discord.utils.format_dt(next_run, 'F')} ({discord.utils.format_dt(next_run, 'R')})"
+        f"{format_configured_datetime(guild_id, next_run)} ({discord.utils.format_dt(next_run, 'R')})"
         if next_run else "—"
     )
     last = guild_config_get(guild_id, "template_last_run")
     if last is None and db_meta_get("template_guild_id") == str(guild_id):
         last = db_meta_get("template_last_run")
-    last_text = discord.utils.format_dt(datetime.fromisoformat(last), "f") if last and get_template_mode(guild_id) != "off" else "ninguna todavía"
+    last_text = format_configured_datetime(guild_id, datetime.fromisoformat(last)) if last and get_template_mode(guild_id) != "off" else "ninguna todavía"
     return (
         f"**Frecuencia:** {template_schedule_text(guild_id)}\n"
         f"**Próxima copia:** {next_text}\n"
@@ -11276,127 +11307,6 @@ def template_config_summary(guild_id: int, now_utc: datetime) -> str:
         f"**Enlace por mensaje privado a:** creador/propietario del servidor"
     )
 
-
-@app_commands.command(name="server_template_setup", description="Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).")
-@discord.app_commands.describe(
-    frecuencia="Cada cuánto se hace la copia",
-    hora="Hora del día (0-23, hora de RD)",
-    dia_semana="Día de la semana (frecuencia semanal)",
-    dia_mes="Día del mes, 1-28 (frecuencia mensual)",
-    intervalo="Intervalo entre copias (frecuencia por intervalo): usa d, h y m, por ejemplo 30m, 6h o 1d",
-)
-@discord.app_commands.choices(
-    frecuencia=[
-        discord.app_commands.Choice(name=label, value=value) for value, label in TEMPLATE_MODE_LABELS.items()
-    ],
-    dia_semana=[
-        discord.app_commands.Choice(name=name, value=i) for i, name in enumerate(MOTW_WEEKDAY_NAMES)
-    ],
-)
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-@discord.app_commands.guild_only()
-async def template_config(
-    interaction: discord.Interaction,
-    frecuencia: Optional[discord.app_commands.Choice[str]] = None,
-    hora: Optional[discord.app_commands.Range[int, 0, 23]] = None,
-    dia_semana: Optional[discord.app_commands.Choice[int]] = None,
-    dia_mes: Optional[discord.app_commands.Range[int, 1, 28]] = None,
-    intervalo: Optional[str] = None,
-) -> None:
-    guild = interaction.guild
-    now = datetime.now(timezone.utc)
-    if all(v is None for v in (frecuencia, hora, dia_semana, dia_mes, intervalo)):
-        await interaction.response.send_message(template_config_summary(guild.id, now), ephemeral=True)
-        return
-    await interaction.response.defer(ephemeral=True)
-
-    # Validar el intervalo antes de guardar cualquier cambio.
-    intervalo_minutes = None
-    if intervalo is not None:
-        try:
-            intervalo_minutes = parse_duration(intervalo, 1, 30 * 24 * 60)
-        except ValueError as e:
-            await interaction.followup.send(f"Error: No guardé nada: {e}", ephemeral=True)
-            return
-
-    changes: list[str] = []
-    if frecuencia is not None:
-        guild_config_set(guild.id, "template_mode", frecuencia.value)
-        changes.append(f"frecuencia → {frecuencia.name}")
-    if hora is not None:
-        guild_config_set(guild.id, "template_hour", str(hora))
-        changes.append(f"hora → {hora}:00")
-    if dia_semana is not None:
-        guild_config_set(guild.id, "template_weekday", str(dia_semana.value))
-        changes.append(f"día de la semana → {dia_semana.name}")
-    if dia_mes is not None:
-        guild_config_set(guild.id, "template_monthday", str(dia_mes))
-        changes.append(f"día del mes → {dia_mes}")
-    if intervalo_minutes is not None:
-        guild_config_set(guild.id, "template_interval_minutes", str(intervalo_minutes))
-        changes.append(f"intervalo → {format_duration(intervalo_minutes)}")
-    # Un cambio de horario solo afecta a la PRÓXIMA copia: da por hecho el turno actual
-    # (o reinicia el reloj del intervalo) para que no dispare una copia inmediata.
-    if get_template_mode(guild.id) == "interval":
-        guild_config_set(guild.id, "template_last_run", now.isoformat())
-    elif get_template_mode(guild.id) in ("daily", "weekly", "monthly"):
-        slot = template_last_slot(guild.id, get_template_mode(guild.id), now.astimezone(STREAK_TZ))
-        if slot is not None:
-            guild_config_set(guild.id, "template_last_slot", slot.isoformat())
-
-    note = ""
-    if get_template_mode(guild.id) != "off":
-        try:
-            if not await guild.templates():
-                note = "\n\nAdvertencia: El servidor aún no tiene plantilla: créala en Ajustes del servidor → Plantilla de servidor, o la copia fallará."
-        except discord.HTTPException as e:
-            note = f"\n\nAdvertencia: No se pudo comprobar si hay plantilla: `{e}`"
-
-    await interaction.followup.send(
-        "Guardado: " + "; ".join(changes) + "\n\n" + template_config_summary(guild.id, now) + note,
-        ephemeral=True,
-    )
-    await log_embed(
-        guild, "Copia de seguridad de la plantilla actualizada",
-        f"{interaction.user.mention}: " + "; ".join(changes),
-        discord.Color.blurple(),
-    )
-
-
-@bot.tree.command(name="template_sync", description="Sincronizar ahora la plantilla del servidor y ver su enlace.")
-@discord.app_commands.checks.has_permissions(manage_guild=True)
-@discord.app_commands.guild_only()
-async def template_sync(interaction: discord.Interaction) -> None:
-    await interaction.response.defer(ephemeral=True)
-    template, was_dirty, error = await sync_server_template(interaction.guild)
-    if error:
-        await interaction.followup.send(f"Error: {error}", ephemeral=True)
-        return
-    embed = template_report_embed(template, was_dirty, "manual")
-    try:
-        owner = await bot.fetch_user(interaction.guild.owner_id)
-        await owner.send(embed=stamp_embed(embed.copy(), interaction.guild))
-        if interaction.user.id == owner.id:
-            confirmation = "Plantilla sincronizada. Te envié el enlace por mensaje privado."
-        else:
-            confirmation = "Plantilla sincronizada. El enlace fue enviado por mensaje privado al creador del servidor."
-        await interaction.followup.send(confirmation, ephemeral=True)
-    except discord.HTTPException:
-        # El enlace no se publica en el canal ni se entrega a otro administrador.
-        await interaction.followup.send(
-            "Advertencia: La plantilla se sincronizó, pero no pude enviar el enlace por mensaje privado al creador del servidor. Debe tener los DMs habilitados.",
-            ephemeral=True,
-        )
-    await log_embed(
-        interaction.guild, "Plantilla sincronizada manualmente",
-        f"{interaction.user.mention} sincronizó la plantilla del servidor.",
-        discord.Color.blurple(),
-    )
-
-
-# Manejador genérico (permisos / errores), el mismo de los comandos de verificación.
-template_config.error(verify_command_error)
-template_sync.error(verify_command_error)
 
 
 # ---------------------------------------------------------------------------
@@ -20178,6 +20088,14 @@ async def shortcut_estructura_servidor(interaction: discord.Interaction) -> None
     await _heraldo_setup_shortcut(interaction, "server_structure")
 
 
+@bot.tree.command(name="formato_fecha", description="Configura la fecha y hora global del servidor.")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+@_i18n_context
+async def shortcut_formato_fecha(interaction: discord.Interaction) -> None:
+    await _heraldo_setup_shortcut(interaction, "date_format")
+
+
 class HoneypotExemptionConfirmView(discord.ui.View):
     """Confirmación personal para exenciones de usuario o rol."""
     @_i18n_context
@@ -20440,7 +20358,7 @@ def _heraldo_command_category(path: str) -> str:
         return "configuration"
     if root in {"list", "profile", "advertencias", "caseinfo", "caselist", "variables"}:
         return "consultation"
-    if root in {"template_sync", "restaurar_roles_pendientes"}:
+    if root in {"restaurar_roles_pendientes"}:
         return "administration"
     return "action"
 
@@ -20468,7 +20386,7 @@ def _heraldo_command_module(path: str) -> str:
         "announcements": {"anuncios", "miembro_semana", "motw_test"},
         "messages": {"mensajes", "embed", "variables"},
         "logging": {"registros"},
-        "structure": {"estructura_servidor", "template_sync", "fusionar_canales"},
+        "structure": {"estructura_servidor", "fusionar_canales"},
         "moderation": {"moderacion", "sugerencias", "condenar", "liberar", "restaurar_roles_pendientes",
                        "warn", "advertencias", "mute", "kick", "ban", "purge", "caseinfo", "caselist",
                        "caseupdate", "setproof", "caseclose", "casedelete"},
@@ -20758,6 +20676,7 @@ def embed_name_is_valid(value):
 
 
 from server_structure_setup import ServerStructureSetupView
+from date_time_setup import ServerDateTimeSetupView
 from suggestions_setup import SuggestionsSetupView
 from main_panel_navigation import install as install_main_panel_navigation
 install_main_panel_navigation(discord)
