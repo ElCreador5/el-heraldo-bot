@@ -4410,33 +4410,34 @@ class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · 
         max_length=1,
     )
     hour_input = discord.ui.TextInput(
-        label="Hora (0-23, hora RD)",
+        label="Hora (12/24 h, en punto)",
         required=True,
-        max_length=2,
+        max_length=16,
     )
 
     def __init__(self, guild_id: int) -> None:
         super().__init__()
         self.guild_id = guild_id
         self.weekday_input.default = str(get_motw_weekday(guild_id))
-        self.hour_input.default = str(get_motw_hour(guild_id))
+        self.hour_input.default = format_server_clock(guild_id, get_motw_hour(guild_id))
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
             weekday = int(str(self.weekday_input).strip())
-            hour = int(str(self.hour_input).strip())
-            if weekday not in range(7) or hour not in range(24):
+            clock = parse_clock(str(self.hour_input).strip())
+            hour = clock.hour
+            if weekday not in range(7) or clock.minute != 0:
                 raise ValueError
         except ValueError:
             await interaction.response.send_message(
-                "Error: Día debe estar entre 0 y 6, y hora entre 0 y 23.",
+                "Error: día entre 0 y 6 y hora exacta en punto (por ejemplo 6:00 PM o 18:00).",
                 ephemeral=True,
             )
             return
         set_motw_schedule(self.guild_id, weekday, hour)
         motw_mark_current_slot(self.guild_id)
         await interaction.response.send_message(
-            f"Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {hour}:00** (hora RD).",
+            f"Miembro de la Semana: **{MOTW_WEEKDAY_NAMES[weekday]} a las {format_server_clock(self.guild_id, hour)}** (hora RD).",
             ephemeral=True,
         )
 
@@ -4473,7 +4474,7 @@ class HeraldoMotwSetupView(discord.ui.View):
         return (
             "**El Heraldo · Miembro de la Semana**\n\n"
             f"Canal guardado: {current.mention if current else 'no configurado'}\n"
-            f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} a las {get_motw_hour(self.guild_id)}:00** (hora RD)"
+            f"Horario: **{MOTW_WEEKDAY_NAMES[get_motw_weekday(self.guild_id)]} a las {format_server_clock(self.guild_id, get_motw_hour(self.guild_id))}** (hora RD)"
             + _pending_config_text(items)
         )
 
