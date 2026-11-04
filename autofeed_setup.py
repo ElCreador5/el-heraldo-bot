@@ -13,6 +13,16 @@ import uuid
 import discord
 from heraldo_i18n import guild_context, use_guild
 import message_autofeeds as feeds
+from heraldo_datetime import date_pattern, format_clock, parse_clock, parse_date_time
+
+
+def _editor_time_preferences(editor):
+    config = editor.host["guild_config_get"]
+    date_mode = config(editor.guild_id, "display_date_format") or "discord"
+    time_mode = config(editor.guild_id, "display_time_format")
+    language = editor.host.get("guild_language", lambda _: "es-419")(editor.guild_id)
+    return date_mode, time_mode, language
+
 
 LANG = {
     "es-419": {
@@ -64,11 +74,11 @@ LANG = {
         "choose_role": "Seleccionar rol",
         "choose_channel": "Seleccionar canal",
         "date_picker": "Fecha y hora",
-        "date_only": "Fecha (AAAA-MM-DD)",
-        "time_only": "Hora (HH:MM)",
+        "date_only": "Fecha",
+        "time_only": "Hora (12/24 h)",
         "repeat_picker": "Frecuencia",
         "edit_frequency": "Editar frecuencia", "week_day": "Día de la semana (1=lun, 7=dom)",
-        "month_day": "Día del mes (1-31)", "clock_field": "Hora (HH:MM)",
+        "month_day": "Día del mes (1-31)", "clock_field": "Hora (12/24 h)",
         "schedule_invalid": "Revisa el día y la hora.",
         "choose_frequency": "Elegir frecuencia",
         "once": "Una vez",
@@ -159,11 +169,11 @@ LANG = {
         "choose_role": "Select role",
         "choose_channel": "Select channel",
         "date_picker": "Date and time",
-        "date_only": "Date (YYYY-MM-DD)",
-        "time_only": "Time (HH:MM)",
+        "date_only": "Date",
+        "time_only": "Time (12/24 h)",
         "repeat_picker": "Frequency",
         "edit_frequency": "Edit frequency", "week_day": "Weekday (1=Mon, 7=Sun)",
-        "month_day": "Day of month (1-31)", "clock_field": "Time (HH:MM)",
+        "month_day": "Day of month (1-31)", "clock_field": "Time (12/24 h)",
         "schedule_invalid": "Check the day and time.",
         "choose_frequency": "Choose frequency",
         "once": "Once",
@@ -254,11 +264,11 @@ LANG = {
         "choose_role": "Selecionar cargo",
         "choose_channel": "Selecionar canal",
         "date_picker": "Data e hora",
-        "date_only": "Data (AAAA-MM-DD)",
-        "time_only": "Hora (HH:MM)",
+        "date_only": "Data",
+        "time_only": "Hora (12/24 h)",
         "repeat_picker": "Frequência",
         "edit_frequency": "Editar frequência", "week_day": "Dia da semana (1=seg, 7=dom)",
-        "month_day": "Dia do mês (1-31)", "clock_field": "Hora (HH:MM)",
+        "month_day": "Dia do mês (1-31)", "clock_field": "Hora (12/24 h)",
         "schedule_invalid": "Confira o dia e a hora.",
         "choose_frequency": "Escolher frequência",
         "once": "Uma vez",
@@ -603,12 +613,14 @@ class DateTimeModal(discord.ui.Modal):
         local = editor.start.astimezone(editor.timezone) if editor.start else (
             datetime.now(editor.timezone) + timedelta(days=1)).replace(
                 hour=18, minute=0, second=0, microsecond=0)
+        date_mode, time_mode, language = _editor_time_preferences(editor)
+        date_format = date_pattern(date_mode, language)
         self.date = discord.ui.TextInput(label=t("date_only"), required=False,
-            default=local.strftime("%Y-%m-%d") if editor.start else "",
-            placeholder="2026-11-01", max_length=10)
+            default=local.strftime(date_format) if editor.start else "",
+            placeholder=datetime(2026, 11, 1).strftime(date_format), max_length=10)
         self.time = discord.ui.TextInput(label=t("time_only"), required=False,
-            default=local.strftime("%H:%M") if editor.start else "",
-            placeholder="18:00", max_length=5)
+            default=format_clock(local, date_mode, time_mode) if editor.start else "",
+            placeholder=format_clock(local, date_mode, time_mode), max_length=16)
         self.add_item(self.date)
         self.add_item(self.time)
 
@@ -623,8 +635,14 @@ class DateTimeModal(discord.ui.Modal):
             if not date or not clock:
                 return await feeds.respond_error(interaction, "invalid")
             try:
+                date_mode, _time_mode, language = _editor_time_preferences(self.editor)
+                parsed = parse_date_time(
+                    f"{date} {clock}", date_mode=date_mode, locale=language,
+                    zone="America/Santo_Domingo",
+                )
+                local = parsed.astimezone(self.editor.timezone)
                 self.editor.start = feeds.start_from_form(
-                    f"{date} {clock}", "America/Santo_Domingo")
+                    local.strftime("%Y-%m-%d %H:%M"), "America/Santo_Domingo")
             except ValueError:
                 return await feeds.respond_error(interaction, "invalid")
         self.editor.dirty = True
@@ -691,8 +709,9 @@ class CalendarFrequencyModal(discord.ui.Modal):
             self.day = discord.ui.TextInput(label=t(key), max_length=2,
                                             default=str(initial), required=True)
             self.add_item(self.day)
-        self.clock = discord.ui.TextInput(label=t("clock_field"), max_length=5,
-                                           default=local.strftime("%H:%M"), required=True)
+        date_mode, time_mode, _language = _editor_time_preferences(editor)
+        self.clock = discord.ui.TextInput(label=t("clock_field"), max_length=16,
+                                           default=format_clock(local, date_mode, time_mode), required=True)
         self.add_item(self.clock)
 
     @guild_context
@@ -701,9 +720,8 @@ class CalendarFrequencyModal(discord.ui.Modal):
             return await feeds.respond_error(interaction, "denied")
         try:
             import calendar
-            hour, minute = map(int, str(self.clock).strip().split(":"))
-            if not (0 <= hour <= 23 and 0 <= minute <= 59):
-                raise ValueError("clock")
+            clock = parse_clock(str(self.clock).strip())
+            hour, minute = clock.hour, clock.minute
             now = datetime.now(self.editor.timezone)
             base = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if self.mode == "daily":
@@ -1211,7 +1229,7 @@ class AutofeedEditorView(discord.ui.View):
         """Resumen compacto de un solo panel; no mostrar Mensaje si está vacío."""
         channel = f"<#{self.channel_id}>" if self.channel_id else t("empty")
         role = f"<@&{self.role_id}>" if self.role_id else t("none")
-        date = f"<t:{int(self.start.timestamp())}:F>" if self.start else t("none_date")
+        date = self.host["format_configured_datetime"](self.guild_id, self.start) if self.start else t("none_date")
         period = (", ".join(f"{v} {t(k)}" for k, v in self.parts.items() if v)
                   if self.parts else t("no_repeat"))
         lines = [f"**{t('name_button')}:** {discord.utils.escape_markdown(self.name) if self.name else t('empty')}",
