@@ -2669,7 +2669,9 @@ async def orientation_departure_has_detailed_log(
 
 @_i18n_context
 def exit_comments_enabled(guild_id: int) -> bool:
-    return guild_config_get(guild_id, "exit_comments_enabled") == "1"
+    # El comentario es opcional para el miembro, no una función que necesite
+    # activarse manualmente por primera vez. Respetar desactivaciones explícitas.
+    return guild_config_get(guild_id, "exit_comments_enabled") != "0"
 
 
 @_i18n_context
@@ -2905,12 +2907,18 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
 @_i18n_context
 async def heraldo_member_departure(member: discord.Member) -> None:
     guild = member.guild
-    if not any(log_member_event_enabled(guild.id, key) for key in ("member_leave", "member_kick", "member_ban")):
+    survey_enabled = exit_comments_enabled(guild.id) and not member.bot
+    logs_enabled = any(log_member_event_enabled(guild.id, key)
+                       for key in ("member_leave", "member_kick", "member_ban"))
+    print(f"EXIT_COMMENT status=EVENT guild={guild.id} user={member.id} survey_enabled={survey_enabled} logs_enabled={logs_enabled}")
+    if not logs_enabled and not survey_enabled:
         return
     kind, moderator, reason, uncertainty = await classify_member_departure(member)
     if await orientation_departure_has_detailed_log(member, kind, moderator, reason):
         return  # El informe específico de verificación ya explica esta expulsión.
-    if not log_member_event_enabled(guild.id, kind):
+    should_log = log_member_event_enabled(guild.id, kind)
+    if not should_log and not (kind == "member_leave" and survey_enabled):
+        print(f"EXIT_COMMENT status=SKIPPED reason=non_voluntary_or_disabled guild={guild.id} user={member.id} kind={kind}")
         return
     labels = dict(LOG_EVENT_CATALOG["members"])
     kwargs = {"moderator": moderator, "reason": reason, "uncertainty": uncertainty}
@@ -2921,15 +2929,29 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         kwargs.update(ban_duration_known=known, ban_duration_minutes=minutes,
                       ban_expires_at=expires)
     description = member_departure_description(member, kind, **kwargs)
-    original = await log_embed(
-        guild, labels[kind], description,
-        discord.Color.red(),
-        member=member,
-    )
+    original = None
+    if should_log:
+        original = await log_embed(
+            guild, labels[kind], description,
+            discord.Color.red(), member=member,
+        )
+    # Conservar un registro privado para el comentario aunque el registro
+    # general de salidas esté desactivado. No publicar respuestas en canales públicos.
+    if kind == "member_leave" and survey_enabled and original is None:
+        destination = guild.get_channel(log_member_channel_id(guild.id, "member_leave"))
+        if isinstance(destination, discord.TextChannel) and exit_comment_private(destination):
+            try:
+                embed = member_departure_embed(member, kind, **kwargs)
+                original = await destination.send(
+                    embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            except discord.HTTPException as exc:
+                print(f"EXIT_COMMENT status=LOG_FAILED guild={guild.id} user={member.id} error={type(exc).__name__}")
+        else:
+            print(f"EXIT_COMMENT status=SKIPPED reason=private_destination_missing guild={guild.id} user={member.id}")
     # La comprobación de auditoría definitiva se hace dentro de exit_comment_request.
     # No depender del texto localizado de 'uncertainty': las traducciones o variantes
     # no deben impedir que una salida voluntaria reciba su encuesta opcional.
-    if kind == "member_leave" and exit_comments_enabled(guild.id):
+    if kind == "member_leave" and survey_enabled:
         if original is None:
             print(f"EXIT_COMMENT status=SKIPPED reason=departure_log_unavailable guild={guild.id} user={member.id}")
         else:
@@ -12226,8 +12248,7 @@ class ExitCommentSetupView(_SetupDirtySaveView):
             return
         guild = interaction.guild
         channel = guild.get_channel(log_member_channel_id(self.guild_id, "member_leave"))
-        if self.pending and (not log_member_event_enabled(self.guild_id, "member_leave")
-                             or not isinstance(channel, discord.TextChannel)
+        if self.pending and (not isinstance(channel, discord.TextChannel)
                              or not exit_comment_private(channel)
                              or not guild.me.guild_permissions.view_audit_log):
             await interaction.response.send_message(
