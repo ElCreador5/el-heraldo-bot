@@ -50,7 +50,7 @@ def _templates(locale):
             continue
         leading = parts[0][0]
         # Excluir textos genéricos breves y plantillas que comienzan con datos.
-        if len(leading) < 7 or sum(len(part[0]) for part in parts) < 9:
+        if len(leading) < 7 or sum(len(part[0]) for part in parts) < 7:
             continue
         pattern, fields = [], set()
         valid = True
@@ -75,7 +75,7 @@ def _templates(locale):
 
 
 def _translate_exact(value, original, target):
-    if not isinstance(value, str) or len(value) < 9:
+    if not isinstance(value, str) or len(value) < 7:
         return value, False
     group = _templates(original).get(value[:7], ())
     for key, matcher in group:
@@ -283,6 +283,9 @@ async def synchronize(guild, old_locale, new_locale, db_connect, *,
     visited = set()
 
     async def check(message, source_locale):
+        # Un segundo cambio de idioma invalida el trabajo anterior.
+        if i18n._locale_resolver(guild.id) != new_locale:
+            return
         key = (message.channel.id, message.id)
         if key in visited:
             return
