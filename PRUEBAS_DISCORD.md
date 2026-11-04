@@ -876,3 +876,16 @@ Comprobaciones automatizadas agregadas: `tests/test_custodio_rule_actions.py` y 
 - Incidente real: `enzonic_test_host.revision()` abortó en `git diff --quiet HEAD --` con `enzonic_checkout_unverified` tras el arranque desde Enzonic; memoria no agotada.
 - Pruebas de código agregadas: checkout limpio, árbol remoto exacto sobre HEAD antiguo, contenido no autorizado, archivo faltante, manifiesto truncado o manipulado, rama errónea. Se simula Git y el metadato remoto; no se leen credenciales ni se accede a la SQLite real.
 - La comprobación de despliegue y arranque en Enzonic/Discord sigue **pendiente de evidencia real posterior al commit**; no registrar como éxito hasta contar con logs de conexión y ejecución de `/setup`.
+
+
+## 2026-11-04 — Matriz de aceptación idioma retroactivo (Pruebas)
+
+- [ ] En Lab, publicar un registro con causa redactada por moderador, alternar es-419 → en-US → pt-BR → es-419 y confirmar que solo cambia el texto de sistema; causa, menciones y fechas no cambian.
+- [ ] Comprobar que el mismo mensaje ID se edita, sin reposts ni pings, tanto con historial nuevo indexado como histórico reconocible.
+- [ ] Comprobar exclusiones: `/embed` publicado por miembro, anuncio programado y mensaje creado desde cuadro de texto mantienen sus palabras literales.
+- [ ] Confirmar ausencia de fallos cuando hay canales sin permisos, mensajes eliminados o mensajes inaccesibles.
+- [ ] Comprobar que un segundo cambio de idioma interrumpe una conciliación obsoleta.
+- [ ] Confirmar que el guardado no altera la estructura de la SQLite restaurada de Enzonic y no inicia producción.
+- [ ] Ejecutar `python -m unittest -v test_message_locale_sync` y el workflow Lab; distinguir estas pruebas de Discord real.
+
+Cobertura de exploración previa: se inspeccionan hasta 300 mensajes por canal y hasta 40 canales visibles; los mensajes fuera del índice o sin identificación segura pueden seguir en su idioma anterior. No se ha demostrado una migración completa del historial.
