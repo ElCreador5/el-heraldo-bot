@@ -53,7 +53,7 @@ class NavigationTests(unittest.IsolatedAsyncioTestCase):
         await navigation.dismiss_panel(i)
         response.defer.assert_not_awaited()
         i.edit_original_response.assert_awaited_once_with(
-            content="\\u200b", embed=None, view=None)
+            content="\u200b", embed=None, view=None)
 
     async def test_back_returns_actual_previous_panel(self):
         parent, child = ParentPanel(), ParentPanel()
