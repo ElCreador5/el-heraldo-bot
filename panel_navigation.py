@@ -67,8 +67,34 @@ class AdministrativeBack(discord.ui.Button):
             _t("setup.structure.closed"), ephemeral=True)
 
 
+def is_setup_home(view):
+    """The first /setup screen has no previous panel to return to."""
+    return type(view).__name__ == "HeraldoSetupView"
+
+
+def _keep_only_close_on_setup_home(view):
+    """Root navigation is Close only, preserving its original callback."""
+    back_labels = variants("text.ab26ae7bca3621")
+    close_labels = variants("text.aeccae342e4bd0")
+    for item in tuple(view.children):
+        if (isinstance(item, discord.ui.Button)
+                and (isinstance(item, AdministrativeBack) or item.label in back_labels)):
+            view.remove_item(item)
+    closes = [item for item in view.children
+              if isinstance(item, discord.ui.Button)
+              and (isinstance(item, AdministrativeClose) or item.label in close_labels)]
+    if not closes:
+        return
+    close = next((item for item in closes if not isinstance(item, AdministrativeClose)), closes[0])
+    for item in closes:
+        if item is not close:
+            view.remove_item(item)
+    close.style = discord.ButtonStyle.danger
+    view._children[:] = [item for item in view.children if item is not close] + [close]
+
+
 def ensure_back_control(view):
-    if not isinstance(view, discord.ui.View):
+    if not isinstance(view, discord.ui.View) or is_setup_home(view):
         return
     panels = tuple(lineage(view))
     owner = next((panel for panel in panels if getattr(panel, "guild_id", None)
@@ -187,6 +213,10 @@ def ensure_navigation_controls(view):
     panels = tuple(lineage(view))
     owner = next((panel for panel in panels if getattr(panel, "guild_id", None)
                   and getattr(panel, "owner_id", None)), None)
+    if is_setup_home(view):
+        ensure_close_control(view)
+        _keep_only_close_on_setup_home(view)
+        return
     if owner is not None:
         ensure_back_control(view)
         ensure_close_control(view)
