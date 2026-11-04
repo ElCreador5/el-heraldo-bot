@@ -3586,5 +3586,9 @@
   "moderation.warning.pardon_channel": "{p0}, tu advertencia **{p1}** ha sido perdonada.\nMotivo: {p2}\nYa no cuenta como vigente.",
   "moderation.warning.pardon_delivery_dm": "Se notificó al miembro por DM.",
   "moderation.warning.pardon_delivery_channel": "Se notificó en este canal porque no se pudo enviar el DM.",
-  "moderation.warning.pardon_delivery_failed": "No se pudo entregar la notificación al miembro."
+  "moderation.warning.pardon_delivery_failed": "No se pudo entregar la notificación al miembro.",
+  "personality.rejoin.toggle": "Restaurar al reingresar",
+  "personality.rejoin.summary": "Restaurar verificación y personalidad al reingresar: {state}",
+  "personality.rejoin.enabled": "Activado",
+  "personality.rejoin.disabled": "Desactivado"
 }
