@@ -2853,8 +2853,12 @@ class ExitCommentDMView(discord.ui.View):
 async def exit_comment_request(member: discord.Member, message: discord.Message) -> None:
     guild = member.guild
     channel = guild.get_channel(message.channel.id)
-    if (not exit_comments_enabled(guild.id) or not isinstance(channel, discord.TextChannel)
-            or not exit_comment_private(channel) or guild.get_member(member.id) is not None):
+    if not exit_comments_enabled(guild.id):
+        return
+    if not isinstance(channel, discord.TextChannel) or not exit_comment_private(channel):
+        print(f"EXIT_COMMENT status=SKIPPED reason=private_log_unavailable guild={guild.id} user={member.id}")
+        return
+    if guild.get_member(member.id) is not None:
         return
     with closing(db_connect()) as conn:
         if not exit_comments.create_pending(
@@ -2862,7 +2866,10 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
                 channel_id=channel.id, log_message_id=message.id):
             return
     # Segunda comprobación conservadora: las expulsiones pueden aparecer tarde.
-    if not await exit_comment_audit_safe(member) or guild.get_member(member.id) is not None:
+    if not await exit_comment_audit_safe(member):
+        print(f"EXIT_COMMENT status=SKIPPED reason=departure_not_confirmed guild={guild.id} user={member.id}")
+        return
+    if guild.get_member(member.id) is not None:
         return
     if not exit_comments_enabled(guild.id) or not exit_comment_private(channel):
         return
@@ -2870,8 +2877,9 @@ async def exit_comment_request(member: discord.Member, message: discord.Message)
         sent = await member.send(
             embed=stamp_embed(_content_embed(_t('text.ed830162445a73') + discord.utils.escape_mentions(guild.name) + _t('text.177c0a9b213973')), guild),
             view=ExitCommentDMView(), allowed_mentions=discord.AllowedMentions.none())
-    except discord.HTTPException:
-        return  # DM bloqueado: no reintentar una solicitud incierta.
+    except discord.HTTPException as exc:
+        print(f"EXIT_COMMENT status=DM_UNAVAILABLE guild={guild.id} user={member.id} error={type(exc).__name__}")
+        return  # No insistir si Discord rechaza la solicitud.
 
     linked = False
     for retry in range(3):
@@ -2918,11 +2926,14 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         discord.Color.red(),
         member=member,
     )
-    # La auditoría disponible no encontró sanción; no enviar si la causa es incierta.
-    if (kind == "member_leave" and original is not None
-            and uncertainty is not None
-            and uncertainty in i18n.variants('text.a994b56142fdee')):
-        await exit_comment_request(member, original)
+    # La comprobación de auditoría definitiva se hace dentro de exit_comment_request.
+    # No depender del texto localizado de 'uncertainty': las traducciones o variantes
+    # no deben impedir que una salida voluntaria reciba su encuesta opcional.
+    if kind == "member_leave" and exit_comments_enabled(guild.id):
+        if original is None:
+            print(f"EXIT_COMMENT status=SKIPPED reason=departure_log_unavailable guild={guild.id} user={member.id}")
+        else:
+            await exit_comment_request(member, original)
 
 
 @bot.event
