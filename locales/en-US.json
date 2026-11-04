@@ -175,6 +175,7 @@
   "purge.panel.confirm": "Confirm deletion",
   "purge.panel.deleted": "Deleted",
   "purge.panel.done": "Cleanup result",
+  "purge.panel.expired": "The /purge panel expired or the bot restarted. No deletion was performed by this click. Run /purge again and confirm from a new preview.",
   "purge.panel.failed": "Not deleted",
   "purge.panel.finished": "Operation complete",
   "purge.panel.ids": "Add users by ID",
