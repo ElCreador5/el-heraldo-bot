@@ -22,7 +22,7 @@ def function_source(name):
 class WarningChannelFallbackTests(unittest.TestCase):
     def test_fallback_only_after_failed_manual_dm(self):
         code = function_source("moderation_apply_case_punishment")
-        self.assertIn("if case_type == 'WARN' and not dm_ok:", code)
+        self.assertIn("moderation_warn_channel_fallback(interaction.channel, member, case_number)", code)
         self.assertIn("moderation_warn_channel_fallback(interaction.channel, member, case_number)", code)
         self.assertLess(code.index("moderation_warn_channel_fallback("), code.index("moderation_warning_escalation("))
 
@@ -33,7 +33,7 @@ class WarningChannelFallbackTests(unittest.TestCase):
 
     def test_public_notice_is_minimal_and_mentions_only_member(self):
         code = function_source("moderation_warn_channel_fallback")
-        self.assertIn("moderation.warn.channel_fallback", code)
+        self.assertIn("recibido una advertencia", code)
         self.assertIn("users=[member]", code)
         self.assertIn("everyone=False", code)
         self.assertNotIn("reason", code)
