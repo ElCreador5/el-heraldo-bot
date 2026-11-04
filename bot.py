@@ -11196,34 +11196,267 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
 
+class HeraldoWarningPardonModal(discord.ui.Modal, title=_t('moderation.warning.pardon_title')):
+    reason = discord.ui.TextInput(
+        label=_t('moderation.warning.reason_label'),
+        style=discord.TextStyle.paragraph,
+        required=True, max_length=500,
+    )
+
+    @_i18n_context
+    def __init__(self, guild_id: int, case_number: int, owner_id: int):
+        super().__init__()
+        self.guild_id, self.case_number, self.owner_id = guild_id, case_number, owner_id
+
+    @_i18n_context
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.moderate_members):
+            await interaction.response.send_message(
+                _t('moderation.warning.denied'), ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, self.case_number)
+        if row is None or str(row["type"]) != "WARN" or not row["open"]:
+            await interaction.response.send_message(
+                _t('moderation.warning.not_active'), ephemeral=True)
+            return
+        reason = str(self.reason).strip()
+        if not reason:
+            await interaction.response.send_message(
+                _t('moderation.warning.reason_required'), ephemeral=True)
+            return
+        if not moderation_case_close(
+            self.guild_id, self.case_number,
+            closed_by=interaction.user.id, resolution=reason,
+        ):
+            await interaction.response.send_message(
+                _t('moderation.warning.not_active'), ephemeral=True)
+            return
+        code = moderation_case_code(self.case_number, self.guild_id)
+        try:
+            await log_embed(
+                interaction.guild, _t('moderation.warning.pardon_title'),
+                _t('moderation.warning.audit_pardon',
+                   p0=code, p1=f"<@{row['user_id']}>",
+                   p2=interaction.user.mention, p3=reason),
+                discord.Color.green(),
+            )
+        except (discord.HTTPException, sqlite3.Error):
+            traceback.print_exc()
+        notice = _t('moderation.warning.pardoned', p0=code)
+        if interaction.message is not None:
+            view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
+            await interaction.response.edit_message(
+                content=notice + "\n\n" + view._content(interaction.guild),
+                view=view,
+            )
+        else:
+            await interaction.response.send_message(notice, ephemeral=True)
+
+
+class HeraldoWarningDeleteModal(discord.ui.Modal, title=_t('moderation.warning.delete_title')):
+    confirmation = discord.ui.TextInput(
+        label=_t('moderation.warning.confirm_case_label'),
+        required=True, max_length=80,
+    )
+
+    @_i18n_context
+    def __init__(self, guild_id: int, case_number: int, owner_id: int):
+        super().__init__()
+        self.guild_id, self.case_number, self.owner_id = guild_id, case_number, owner_id
+        self.confirmation.placeholder = moderation_case_code(case_number, guild_id)
+
+    @_i18n_context
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if (interaction.guild is None or interaction.guild.id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.administrator):
+            await interaction.response.send_message(
+                _t('moderation.warning.admin_only'), ephemeral=True)
+            return
+        code = moderation_case_code(self.case_number, self.guild_id)
+        if str(self.confirmation).strip() != code:
+            await interaction.response.send_message(
+                _t('moderation.warning.confirm_mismatch'), ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, self.case_number)
+        if row is None or str(row["type"]) != "WARN":
+            await interaction.response.send_message(
+                _t('moderation.warning.not_found'), ephemeral=True)
+            return
+        if not moderation_case_delete(self.guild_id, self.case_number):
+            await interaction.response.send_message(
+                _t('moderation.warning.not_found'), ephemeral=True)
+            return
+        try:
+            await log_embed(
+                interaction.guild, _t('moderation.warning.delete_title'),
+                _t('moderation.warning.audit_delete',
+                   p0=code, p1=f"<@{row['user_id']}>",
+                   p2=interaction.user.mention),
+                discord.Color.red(),
+            )
+        except (discord.HTTPException, sqlite3.Error):
+            traceback.print_exc()
+        notice = _t('moderation.warning.deleted', p0=code)
+        if interaction.message is not None:
+            view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
+            await interaction.response.edit_message(
+                content=notice + "\n\n" + view._content(interaction.guild),
+                view=view,
+            )
+        else:
+            await interaction.response.send_message(notice, ephemeral=True)
+
+
 class HeraldoCasesSetupView(discord.ui.View):
     @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int) -> None:
+    def __init__(self, guild_id: int, owner_id: int, selected_case: int | None = None) -> None:
         super().__init__(timeout=900)
-        self.guild_id = guild_id
-        self.owner_id = owner_id
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.selected_case = selected_case
+        self._rebuild_warning_select()
+
+    @_i18n_context
+    def _rebuild_warning_select(self) -> None:
+        if hasattr(self, "warning_select"):
+            self.remove_item(self.warning_select)
+        rows = moderation_case_list(
+            self.guild_id, case_type="WARN", open_only=True, limit=25,
+        )
+        valid = {int(row["case_number"]) for row in rows}
+        if self.selected_case not in valid:
+            self.selected_case = None
+        if rows:
+            options = [
+                discord.SelectOption(
+                    label=moderation_case_code(int(row["case_number"]), self.guild_id)[:100],
+                    value=str(row["case_number"]),
+                    description=(str(row["reason"])[:85] or str(row["user_id"])),
+                    default=int(row["case_number"]) == self.selected_case,
+                ) for row in rows
+            ]
+            self.warning_select = discord.ui.Select(
+                placeholder=_t('moderation.warning.choose'), options=options,
+                row=0,
+            )
+        else:
+            self.warning_select = discord.ui.Select(
+                placeholder=_t('moderation.warning.no_active'),
+                options=[discord.SelectOption(
+                    label=_t('moderation.warning.no_active'), value="none",
+                )], disabled=True, row=0,
+            )
+        self.warning_select.callback = self.select_warning
+        self.add_item(self.warning_select)
+        self.pardon.disabled = self.selected_case is None
+        self.delete_warning.disabled = self.selected_case is None
+
+    @_i18n_context
+    def _content(self, guild: discord.Guild) -> str:
+        summary = moderation_cases_summary(guild)
+        instructions = _t('moderation.warning.panel_help')
+        if self.selected_case is None:
+            return instructions + "\n\n" + summary
+        row = moderation_case_get(self.guild_id, self.selected_case)
+        if row is None or row["type"] != "WARN" or not row["open"]:
+            return instructions + "\n\n" + summary
+        selected = _t(
+            'moderation.warning.selected',
+            p0=moderation_case_code(self.selected_case, self.guild_id),
+            p1=f"<@{row['user_id']}>",
+            p2=str(row["reason"])[:250],
+        )
+        return instructions + "\n\n" + selected + "\n\n" + summary
 
     @_i18n_context
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
+        if not await configuration_access(
+            interaction, getattr(self, "guild_id", None),
+            getattr(self, "owner_id", None),
+        ):
             return False
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.62876186654ca2'), ephemeral=True)
+            await interaction.response.send_message(
+                _t('text.62876186654ca2'), ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label=_t('text.fe5f6628c7b56b'), style=discord.ButtonStyle.secondary, row=0)
+    @_i18n_context
+    async def select_warning(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", []) if interaction.data else []
+        try:
+            case_number = int(values[0])
+        except (ValueError, TypeError, IndexError):
+            await interaction.response.send_message(
+                _t('moderation.warning.not_found'), ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, case_number)
+        if (row is None or str(row["type"]) != "WARN" or not row["open"]
+                or case_number not in {
+                    int(item["case_number"]) for item in moderation_case_list(
+                        self.guild_id, case_type="WARN", open_only=True, limit=25)
+                }):
+            await interaction.response.send_message(
+                _t('moderation.warning.not_active'), ephemeral=True)
+            return
+        self.selected_case = case_number
+        self._rebuild_warning_select()
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild), view=self)
+
+    @discord.ui.button(label=_t('moderation.warning.pardon'), style=discord.ButtonStyle.success, row=1)
+    @_i18n_context
+    async def pardon(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message(
+                _t('moderation.warning.denied'), ephemeral=True)
+            return
+        if self.selected_case is None:
+            await interaction.response.send_message(
+                _t('moderation.warning.not_active'), ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            HeraldoWarningPardonModal(self.guild_id, self.selected_case, self.owner_id))
+
+    @discord.ui.button(label=_t('moderation.warning.delete'), style=discord.ButtonStyle.danger, row=1)
+    @_i18n_context
+    async def delete_warning(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                _t('moderation.warning.admin_only'), ephemeral=True)
+            return
+        if self.selected_case is None:
+            await interaction.response.send_message(
+                _t('moderation.warning.not_active'), ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            HeraldoWarningDeleteModal(self.guild_id, self.selected_case, self.owner_id))
+
+    @discord.ui.button(label=_t('text.fe5f6628c7b56b'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def refresh(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.edit_message(content=moderation_cases_summary(interaction.guild), view=self)
+        self._rebuild_warning_select()
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=2)
     @_i18n_context
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.edit_message(
             content=_t('text.da10e9d8927c80'),
             view=HeraldoModerationSetupView(self.guild_id, self.owner_id),
         )
+
+    @discord.ui.button(label=_t('moderation.warning.close'), style=discord.ButtonStyle.secondary, row=2)
+    @_i18n_context
+    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content=_t('moderation.warning.closed_panel'), view=None,
+        )
+
 
 class HeraldoCondemnationDurationModal(discord.ui.Modal, title=_t('text.08a1d617293f3e')):
     duration = discord.ui.TextInput(
