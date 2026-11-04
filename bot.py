@@ -6912,7 +6912,7 @@ class HeraldoVerificationSetupView(_SetupDirtySaveView):
         return (_t('text.6e7c0122e9fa57') + verify_config_summary(guild)
                 + "\n\n" + age_time_summary(guild.id)
                 + "\n" + _t("personality.rejoin.summary", state=str(_t(
-                    "personality.rejoin.enabled" if restore_on else "personality.rejoin.disabled"))))
+                    "personality.rejoin.enabled" if restore_on else "personality.rejoin.disabled")))
                 + _pending_config_text(items))
 
     @_i18n_context
