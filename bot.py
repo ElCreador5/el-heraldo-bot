@@ -120,6 +120,7 @@ import evidence_archive
 import setup_interactions
 import heraldo_i18n as i18n
 import message_locale_sync
+import moderation_report_labels
 from honeypot_interactions import honeypot_operation, serialize_honeypot_warning
 import io
 import os
@@ -2262,6 +2263,16 @@ async def on_ready() -> None:
                 # Un panel defectuoso no debe detener el arranque de otros servidores.
                 print(f"Advertencia: no se pudieron sincronizar paneles del servidor {guild.id}:")
                 traceback.print_exc()
+            # Corregir también los recordatorios antiguos si el idioma ya
+            # estaba guardado antes de desplegar esta versión.
+            try:
+                changed, failed = await refresh_report_reminder_publications(guild)
+                if changed or failed:
+                    print(f"REMINDER_LOCALE_STARTUP guild={guild.id} changed={changed} "
+                          f"failed={failed}", flush=True)
+            except Exception as exc:
+                print(f"REMINDER_LOCALE_STARTUP status=FAILED guild={guild.id} "
+                      f"error={type(exc).__name__}", flush=True)
     for guild in bot.guilds:
         with _i18n_guild(guild.id):
             try:
@@ -9771,7 +9782,7 @@ class ModerationCondemnEmojiModal(discord.ui.Modal, title=_t('text.d0327face763e
         conflict = next((item for item in report_mappings if _moderation_emoji_key(item["emoji"]) == _moderation_emoji_key(emoji)), None)
         if conflict:
             await interaction.response.send_message(
-                _t('text.98372568b6db1c', p0=f"{conflict['label']}", p1=f"{moderation_action_label(str(conflict.get('action', 'report')))}", p2=f"{conflict.get('threshold', 1)}"), ephemeral=True)
+                _t('text.98372568b6db1c', p0=f"{moderation_report_labels.report_label(conflict, guild_language(self.parent_view.guild_id))}", p1=f"{moderation_action_label(str(conflict.get('action', 'report')))}", p2=f"{conflict.get('threshold', 1)}"), ephemeral=True)
             return
         self.parent_view.pending_condemn_emoji = emoji
         await interaction.response.edit_message(content=self.parent_view._content(interaction.guild), view=self.parent_view)
@@ -10018,7 +10029,8 @@ def reminder_preview(guild_id):
     for item in moderation_report_reactions(guild_id):
         if item.get("action") == "warn":
             continue
-        lines.append(_t('text.a4b44b483f36fa', p0=f"{item['emoji']}", p1=f"{discord.utils.escape_markdown(str(item['label']))}", p2=f"{item.get('threshold', 1)}"))
+        label = moderation_report_labels.report_label(item, guild_language(guild_id))
+        lines.append(_t('text.a4b44b483f36fa', p0=f"{item['emoji']}", p1=f"{discord.utils.escape_markdown(label)}", p2=f"{item.get('threshold', 1)}"))
     return (_t('text.5d4decf366f299')
             + (_i18n_join("\n", lines) or _t('text.fafc3fe984c376'))
             + _t('text.27ab166caf064d'))[:1900]
@@ -10086,7 +10098,12 @@ async def refresh_report_reminder_publications(guild: discord.Guild) -> tuple[in
         if own_id is None or message.author.id != own_id:
             continue
         try:
-            if message.content != content:
+            # Los recordatorios se envían como embed: comparar su descripción
+            # y no solo message.content (vacío tras el hook global).
+            visible = (message.embeds[0].description
+                       if len(message.embeds) == 1 and not message.content
+                       else message.content)
+            if visible != content:
                 await message.edit(content=content, allowed_mentions=discord.AllowedMentions.none())
                 changed += 1
         except (discord.Forbidden, discord.HTTPException):
@@ -10659,7 +10676,7 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
             for index, item in enumerate(reactions):
                 action = moderation_action_label(str(item.get("action", "report")))
                 options.append(discord.SelectOption(
-                    label=str(item["label"])[:100],
+                    label=moderation_report_labels.report_label(item, guild_language(self.guild_id))[:100],
                     value=str(index),
                     emoji=str(item["emoji"]),
                     description=_t('text.680fbc1439e5d9', p0=f'{action}', p1=f"{item.get('threshold', 1)}")[:100],
@@ -10755,7 +10772,7 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
                 action = str(item.get("action", "report"))
                 count = int(item.get("threshold", 1))
                 selected = (
-                    _t('text.38f433a153bd0c', p0=f"{item['emoji']}", p1=f"{item['label']}", p2=f"{moderation_action_label(str(item.get('action', 'report')))}", p3=f"{item.get('threshold', 1)}", p4=f"{(format_duration(int(duration)) if duration else '—')}", p5=f"{(format_duration(int(purge)) if purge else '—')}")
+                    _t('text.38f433a153bd0c', p0=f"{item['emoji']}", p1=f"{moderation_report_labels.report_label(item, guild_language(self.guild_id))}", p2=f"{moderation_action_label(str(item.get('action', 'report')))}", p3=f"{item.get('threshold', 1)}", p4=f"{(format_duration(int(duration)) if duration else '—')}", p5=f"{(format_duration(int(purge)) if purge else '—')}")
                 )
                 if action in {"kick", "ban", "condemn", "timeout"} and count == 1:
                     selected += (_t('text.56ee47204bd8bb'))
@@ -10783,7 +10800,7 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
             detail = (_t('text.674b76beacb483') if rule_action == "warn" else
                       _t('text.b8ef40b5f3af4b', p0=f'{rule_threshold}'))
             summary += (
-                f"\n• {rule['emoji']} {discord.utils.escape_markdown(str(rule['label'])[:65])}"
+                f"\n• {rule['emoji']} {discord.utils.escape_markdown(moderation_report_labels.report_label(rule, guild_language(self.guild_id))[:65])}"
                 f" — {moderation_action_label(rule_action)}{detail}"
             )
         if missing_warn:
@@ -13760,8 +13777,17 @@ class HeraldoLanguageView(_SetupDirtySaveView):
         if (self.pending != self.original and interaction.guild is not None
                 and bot.is_ready()):
             # Conciliación iniciada solo tras guardar y responder a Discord.
-            # El contenido libre y las publicaciones personales no se traducen.
+            # Los recordatorios registrados se reconstruyen con las reglas
+            # actuales, sin traducir por aproximación el texto personalizado.
             async def _reconcile_language():
+                try:
+                    changed, failed = await refresh_report_reminder_publications(interaction.guild)
+                    if failed:
+                        print(f"LANGUAGE_REMINDER_SYNC status=PARTIAL guild={self.guild_id} "
+                              f"changed={changed} failed={failed}", flush=True)
+                except Exception as exc:
+                    print("LANGUAGE_REMINDER_SYNC status=FAILED "
+                          f"guild={self.guild_id} error={type(exc).__name__}", flush=True)
                 try:
                     await message_locale_sync.synchronize(
                         interaction.guild, self.original, self.pending, db_connect)
@@ -17420,7 +17446,7 @@ def moderation_report_rule_for_emoji(guild_id: int, emoji: str) -> dict[str, obj
 @_i18n_context
 def moderation_report_type_for_emoji(guild_id: int, emoji: str) -> str | None:
     rule = moderation_report_rule_for_emoji(guild_id, emoji)
-    return str(rule["label"]) if rule else None
+    return moderation_report_labels.report_label(rule, guild_language(guild_id)) if rule else None
 
 
 @_i18n_context
@@ -17728,7 +17754,7 @@ def moderation_reports_summary(guild: discord.Guild, *, channel_id=None, mapping
         duration_text = f" · {format_duration(int(duration))}" if duration else ""
         purge = item.get("purge_minutes") if item.get("action") != "report" else None
         purge_text = _t('text.0ad9bd3e1926f0', p0=f'{format_duration(int(purge))}') if purge else ""
-        return _t('text.ac76d4f3e1692c', p0=f"{item['emoji']}", p1=f"{item['label']}", p2=f'{action}', p3=f'{duration_text}', p4=f'{threshold}', p5=f'{purge_text}')
+        return _t('text.ac76d4f3e1692c', p0=f"{item['emoji']}", p1=f"{moderation_report_labels.report_label(item, guild_language(guild.id))}", p2=f'{action}', p3=f'{duration_text}', p4=f'{threshold}', p5=f'{purge_text}')
     mapping_text = _i18n_join("\n", (rule_line(item) for item in mappings)) or _t('text.3b03f2cc14fbbd')
     return (
         _t('text.83beb5900bb693', p0=f"{(channel.mention if isinstance(channel, discord.TextChannel) else _t('text.c92d59d68552b1'))}", p1=f'{mapping_text}', p2=f'{condemn_emoji or get_condemnation_emoji(guild.id)}')
