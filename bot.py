@@ -10558,6 +10558,40 @@ async def before_report_reminders_loop():
     await bot.wait_until_ready()
 
 
+class HeraldoUserReportsMoreOptionsView(discord.ui.View):
+    """Acciones secundarias de Reportes sin perder el borrador principal."""
+
+    @_i18n_context
+    def __init__(self, parent: "HeraldoUserReportsSetupView") -> None:
+        super().__init__(timeout=900)
+        self.parent = parent
+        self.guild_id = parent.guild_id
+        self.owner_id = parent.owner_id
+
+    @_i18n_context
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await self.parent.interaction_check(interaction)
+
+    @discord.ui.button(label=_t('text.19bd5bd18edc40'), style=discord.ButtonStyle.primary, row=0)
+    @_i18n_context
+    async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
+        await interaction.response.send_message(content=view._content(), view=view, ephemeral=True)
+
+    @discord.ui.button(label=_t('text.471b155a597e21'), style=discord.ButtonStyle.primary, row=0)
+    @_i18n_context
+    async def reminders(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = ReportReminderSetupView(self.guild_id, self.owner_id)
+        await interaction.response.send_message(content=view.summary(), view=view, ephemeral=True)
+
+    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=1)
+    @_i18n_context
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=self.parent._content(interaction.guild), view=self.parent,
+        )
+
+
 class HeraldoUserReportsSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int) -> None:
@@ -10840,19 +10874,12 @@ class HeraldoUserReportsSetupView(_SetupDirtySaveView):
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
-    @discord.ui.button(label=_t('text.19bd5bd18edc40'), style=discord.ButtonStyle.primary, row=4)
+    @discord.ui.button(label=_t('text.81db3b5709d0ba'), style=discord.ButtonStyle.primary, row=4)
     @_i18n_context
-    async def configure_warn_limit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        warn_view = HeraldoWarningLimitSelectView(self.guild_id, self.owner_id)
-        await interaction.response.send_message(
-            content=warn_view._content(), view=warn_view, ephemeral=True,
-        )
-
-    @discord.ui.button(label=_t('text.471b155a597e21'), style=discord.ButtonStyle.primary, row=4)
-    @_i18n_context
-    async def reminders(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        view = ReportReminderSetupView(self.guild_id, self.owner_id)
-        await interaction.response.send_message(content=view.summary(), view=view, ephemeral=True)
+    async def extra_settings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        # Al cambiar de vista no se elimina el borrador ni la selección actual.
+        view = HeraldoUserReportsMoreOptionsView(self)
+        await interaction.response.edit_message(content=self._content(interaction.guild), view=view)
 
     @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=4)
     @_i18n_context
