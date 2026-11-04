@@ -143,6 +143,56 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("candidate += timedelta(seconds=steps * seconds)", src)
         self.assertLess(src.index("steps = int("), src.index("while candidate <= local:"))
 
+    def test_reminder_custom_start_respects_exact_minute_and_legacy_dates(self):
+        from datetime import datetime, timezone
+        from test_safety_regressions import b
+        settings = {
+            "report_reminder_frequency": "custom",
+            "report_reminder_hour": "12",
+            "report_reminder_day": "0",
+            "report_reminder_interval": "2m",
+            "report_reminder_start": "2026-11-04 22:30",
+        }
+        # El primer mensaje sale exactamente a las 22:30, hora dominicana.
+        before = datetime(2026, 11, 5, 2, 29, tzinfo=timezone.utc)
+        self.assertEqual(
+            b.reminder_next_due(settings, before),
+            datetime(2026, 11, 5, 2, 30, tzinfo=timezone.utc),
+        )
+        after = datetime(2026, 11, 5, 2, 35, tzinfo=timezone.utc)
+        self.assertEqual(
+            b.reminder_next_due(settings, after),
+            datetime(2026, 11, 5, 2, 36, tzinfo=timezone.utc),
+        )
+        # Los horarios ya guardados como solo fecha siguen funcionando.
+        settings.update(report_reminder_interval="7d", report_reminder_start="2026-11-04")
+        self.assertEqual(
+            b.reminder_next_due(settings, before),
+            datetime(2026, 11, 11, 16, 0, tzinfo=timezone.utc),
+        )
+
+    def test_open_reminder_configuration_has_no_preselected_controls_or_modal_values(self):
+        from test_safety_regressions import b
+        guild = 3819929
+        b.guild_config_set(guild, "report_reminder_frequency", "custom")
+        b.guild_config_set(guild, "report_reminder_interval", "7h")
+        b.guild_config_set(guild, "report_reminder_channel", "12345")
+        b.guild_config_set(guild, "report_reminder_start", "2026-11-04 22:30")
+        view = b.ReportReminderSetupView(guild, 10)
+        self.assertEqual(view.selected_fields, set())
+        self.assertEqual(view.channel_select.default_values, [])
+        self.assertFalse(any(o.default for o in view.selectors["report_reminder_frequency"].options))
+        self.assertFalse(any(o.default for o in view.selectors["report_reminder_hour"].options))
+        modal = b.ReportReminderOptionsModal(view)
+        self.assertFalse(modal.days.default)
+        self.assertFalse(modal.date.default)
+        self.assertFalse(modal.clock.default)
+        self.assertEqual(view.pending["report_reminder_interval"], "7h")
+        view.selected_fields.add("report_reminder_frequency")
+        view._refresh_controls()
+        self.assertEqual(sum(o.default for o in view.selectors["report_reminder_frequency"].options), 1)
+        view.stop()
+
     def test_layout_includes_both_new_views(self):
         src = source_function("validate_setup_view_layouts")
         self.assertIn("ReportReminderSetupView", src)
