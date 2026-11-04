@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import discord
+import message_locale_sync
 from discord import app_commands
 from discord.ext import tasks
 
@@ -281,7 +282,8 @@ class ScheduledMessages:
                     except discord.NotFound:
                         pass
             sending = True
-            sent = await channel.send(**payload)
+            with message_locale_sync.suspend_tracking():
+                sent = await channel.send(**payload)
             next_run = next_occurrence(job, datetime.now(timezone.utc))
             final_status = 'waiting' if job['repeat'] == 'sticky' else 'pending' if next_run else 'done'
             self.finish(guild.id, job, final_status,
@@ -598,7 +600,8 @@ class WebhookTemplateConfirmView(discord.ui.View):
                             and x.name == 'El Heraldo - Mensajes' and x.channel_id == channel.id), None)
             if webhook is None:
                 webhook = await channel.create_webhook(name='El Heraldo - Mensajes', reason=_t('text.a4ed427adb8db3'))
-            sent = await webhook.send(**payload, wait=True)
+            with message_locale_sync.suspend_tracking():
+                sent = await webhook.send(**payload, wait=True)
             result = _t('text.38787c477a079b', p0=f'{guild.id}', p1=f'{channel.id}', p2=f'{sent.id}')
         except ValueError as exc:
             result = str(exc)
