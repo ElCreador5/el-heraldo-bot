@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 _CLOCK = re.compile(r"^(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>AM|PM)?$", re.I)
 _MERIDIEM = re.compile(r"(?i)(?<![a-z])([ap])\s*\.?\s*m\.?(?![a-z])")
-_DATE_CLOCK = re.compile(r"^(?P<date>\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s+(?P<clock>.+)$")
+_DATE_CLOCK = re.compile(r"^(?P<date>\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})[ T]+(?P<clock>.+)$")
 
 
 def clock_style(date_mode: str = "discord", time_mode: str | None = None) -> str:
