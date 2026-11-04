@@ -27,7 +27,7 @@ class WarningChannelFallbackTests(unittest.TestCase):
         self.assertLess(code.index("moderation_warn_channel_fallback("), code.index("moderation_warning_escalation("))
 
     def test_reaction_warn_uses_message_channel(self):
-        code = function_source("moderation_apply_report_action")
+        code = function_source("execute_moderation_report_action")
         self.assertIn("moderation_warn_channel_fallback(message.channel, target, case_number)", code)
         self.assertIn("if not sent:", code)
 
