@@ -3581,5 +3581,10 @@
   "moderation.warning.pardoned": "Advertencia {p0} perdonada. El historial se conserva y ya no cuenta como vigente.",
   "moderation.warning.deleted": "Expediente {p0} eliminado definitivamente.",
   "moderation.warning.close": "Cerrar",
-  "moderation.warning.closed_panel": "Panel de casos cerrado."
+  "moderation.warning.closed_panel": "Panel de casos cerrado.",
+  "moderation.warning.pardon_dm": "**Advertencia perdonada** · Expediente {p0}\nMotivo: {p1}\nLa advertencia ya no cuenta como vigente.",
+  "moderation.warning.pardon_channel": "{p0}, tu advertencia **{p1}** ha sido perdonada.\nMotivo: {p2}\nYa no cuenta como vigente.",
+  "moderation.warning.pardon_delivery_dm": "Se notificó al miembro por DM.",
+  "moderation.warning.pardon_delivery_channel": "Se notificó en este canal porque no se pudo enviar el DM.",
+  "moderation.warning.pardon_delivery_failed": "No se pudo entregar la notificación al miembro."
 }
