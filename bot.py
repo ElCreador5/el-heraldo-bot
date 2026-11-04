@@ -14590,7 +14590,7 @@ def template_last_slot(guild_id: int, mode: str, now: datetime) -> datetime | No
         return slot
     if mode == "weekly":
         days_back = (now.weekday() - get_template_weekday(guild_id)) % 7
-        slot = (now - timedelta(days=days_back)).replace(hour=hour, minute=0, second=0, microsecond=0)
+        slot = (now - timedelta(days=days_back)).replace(hour=hour, minute=minute, second=0, microsecond=0)
         if slot > now:
             slot -= timedelta(days=7)
         return slot
@@ -23214,6 +23214,7 @@ async def purge_command(interaction: discord.Interaction) -> None:
         running=_purge_running,
         audit_channel_id=get_log_channel_id(guild.id),
         date_mode=guild_config_get(guild.id, "display_date_format") or "discord",
+        time_mode=guild_config_get(guild.id, "display_time_format"),
         format_datetime=lambda dt: format_configured_datetime(guild.id, dt),
     )
     await interaction.response.send_message(
