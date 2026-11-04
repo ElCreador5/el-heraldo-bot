@@ -1,3 +1,7 @@
+## 2026-11-04 — Validación pendiente: norma global de actualización de información
+
+Escenario de Reportes en Lab: publicar un recordatorio, cambiar umbral de una reacción de 2 a 3 y guardar; comprobar que el mensaje informativo registrado y el siguiente recordatorio dicen 3. Repetir de 3 a 1. Descartar una modificación debe dejar el mensaje sin cambios. Comprobar ausencia de reescritura de expedientes y logs históricos, aislamiento entre servidores, falta de permisos de edición y mensajes borrados. El código registra solo los últimos 100 avisos activos; mensajes previos sin índice y módulos distintos a Reportes requieren auditoría específica. **Sin aceptación real de Discord todavía; main excluido.**
+
 ## 2026-11-02 — Corrección de sincronización /embed
 
 Log real recibido del propietario el 02/11/2026 a las 17:13 UTC aproximadas: `COMMAND_SYNC status=START local_count=42 embed_present=True` seguido de `FAILED error_type=TranslationUnavailable` por `command_schema_changed:embed.description` en ambos servidores. Se corrigieron esquema y tres catálogos; prueba regresiva añadida, aún no ejecutada en esta sesión. Pendiente nuevo arranque y prueba manual de visibilidad con cuenta común.
