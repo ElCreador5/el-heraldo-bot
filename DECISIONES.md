@@ -45,3 +45,10 @@ Esto no sustituye la recuperación independiente de la clave ni autoriza una
 fusión antes de satisfacer las demás condiciones. El aplazamiento histórico
 de esa comprobación hasta noviembre fue revocado en `Pruebas`, pero sus puertas
 de seguridad permanecen vigentes.
+
+
+## 2026-11-04 — Promoción parcial y segura de etiquetas de reportes a main
+
+Se autorizó promover las correcciones recientes de idiomas. La rama `main` usa `production_panel_text` y todavía NO contiene el selector `/language` ni los recordatorios públicos con referencias editables que existen en `Pruebas`. No se autorizó incorporar indiscriminadamente todos los cambios divergentes.
+
+Se incorporó en `main` `production_report_labels.py` y se integró con los resúmenes, selectores y nombres de reportes existentes. Solo se traducen etiquetas institucionales predeterminadas vinculadas al mismo emoji y al idioma del servidor almacenado en `guild_settings`; cualquier etiqueta personalizada permanece literal. En ausencia de un idioma guardado, español es el predeterminado. No se ha incorporado el historial retroactivo ni el selector pendiente: esta promoción NO constituye internacionalización global completa.

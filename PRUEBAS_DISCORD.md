@@ -101,3 +101,16 @@ La PR continúa en borrador y no se ha desplegado Honeypot en producción.
 `b2426f15-4826-4e22-9cd1-90ff3573d41b` SUCCESS de `main@c6a5c164`, volumen
 `heraldo-data` en `/data`, sin cambios preparados. Test conserva despliegue
 `c447c30d-fcb5-46d8-9908-f29747b69d91` SUCCESS de `Pruebas@b90e3a6`.
+
+
+## 2026-11-04 — Promoción selectiva de etiquetas de reportes en main
+
+- [x] Se añadió fuente independiente de etiquetas de reporte `production_report_labels.py` sin importar componentes extensos de `Pruebas`.
+- [x] Se conservaron traducciones solo para etiquetas oficiales con el mismo emoji; textos libres quedan intactos.
+- [x] Se añadió una prueba unitaria para tres idiomas y etiquetas personalizadas, y se incluyó en CI de `main`.
+- [ ] Validación de visualización en Discord real tras despliegue autorizado.
+- [ ] Incorporar el selector de idioma de servidor de `Pruebas` a `main` con sus dependencias, sin crear una experiencia de idioma engañosamente completa.
+- [ ] Incorporar el módulo de recordatorios publicado y su índice para actualización histórica, con regresiones y prueba de permisos antes de declararlo listo.
+- [ ] Confirmar estado real de Railway tras el próximo despliegue permitido, sin reactivarlo manualmente.
+
+El cambio no despliega el sistema completo de traducción histórica: no trasladar archivos indiscriminadamente de `Pruebas` ni declarar éxito sobre mensajes ya publicados.

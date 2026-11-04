@@ -55,3 +55,10 @@ también contra Discord real con el código final.
 
 Los documentos generales fueron consultados desde `Pruebas@b90e3a6`; no se
 copió su código ni su documentación histórica completa a esta rama selectiva.
+
+
+## 2026-11-04 — Estado de promoción de idiomas a main
+
+Cambios selectivos incorporados: `production_report_labels.py`, conexión en `bot.py` para presentar etiquetas oficiales de reportes mediante `guild_language(guild_id)` leyendo el valor manual ya guardado (fallback es-419), prueba `test_production_report_labels.py` y comprobación CI en `member-logs-checks.yml`. Sin migraciones SQLite, sin cambios a Railway, sin fusión de ramas.
+
+Diferencia estructural verificada: `main` conserva un selector de idioma pendiente y NO dispone del recordatorio `reminder_preview`, `refresh_report_reminder_publications` ni del mecanismo histórico de `Pruebas`. Por tanto los recordatorios anteriores y los demás mensajes de sistema en `main` aún NO se traducen automáticamente; la presentación de reportes sigue dependiendo de que haya idioma guardado. No afirmar finalización del objetivo original ni pruebas Discord reales.
