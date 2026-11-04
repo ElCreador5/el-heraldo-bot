@@ -220,6 +220,9 @@ def ensure_navigation_controls(view):
     if not isinstance(view, discord.ui.View):
         return
     panels = tuple(lineage(view))
+    # The public personal /embed workflow must retain its own navigation.
+    if any(getattr(panel, "personal", False) for panel in panels):
+        return
     owner = next((panel for panel in panels if getattr(panel, "guild_id", None)
                   and getattr(panel, "owner_id", None)), None)
     if is_setup_home(view):
