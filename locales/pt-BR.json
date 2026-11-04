@@ -929,7 +929,7 @@
   "text.2de621923133d5": "Duração não permitida.",
   "text.2e1e396c157975": "Erro: Não tenho permissão para enviar mensagens ou embeds para {p0}.",
   "text.2e2946769ed603": "Sanção ou advertência por reação de moderação.",
-  "text.2e2c1ff499c328": "**Lembretes de denúncias**\n\n{p0}\n\n**Estado salvo:** {p1}\n**Frequência:** {p2}\n**Hora:** {p3}:00 (Santo Domingo)\n**Canal:** {p4}\nOs seletores preparam um rascunho. «Salvar alterações» grava a programação; «Ativar/Desativar» altera imediatamente apenas o estado. «Personalizar» aceita intervalos de 1d–365d e, em Test, a partir de 10s.\n**Próxima publicação estimada:** {p5}",
+  "text.2e2c1ff499c328": "**Lembretes de denúncias**\n\n{p0}\n\n**Estado salvo:** {p1}\n**Frequência:** {p2}\n**Hora:** {p3} (Santo Domingo)\n**Canal:** {p4}\nOs controles de edição começam sem opções marcadas. «Salvar alterações» grava a programação; «Ativar/Desativar» altera imediatamente apenas o estado. «Personalizar» aceita intervalos de 1d–365d e, em Test, a partir de 10s.\n**Próxima publicação estimada:** {p5}",
   "text.2e2ea18f980de9": "Advertência: Conversa privada pendente",
   "text.2eaaf547035da1": "Eliminar as mensagens que os sancionados enviaram desde que entraram",
   "text.2eb03796ac8a31": "**Rascunho não salvo.** Pressione **{p0}** para revisar a configuração antes de confirmar. Cancelar descarta o rascunho.",
@@ -3545,5 +3545,12 @@
   "text.ffb94c3fd3c42b": "Buscar recursos do servidor por nome ou ID",
   "text.ffe4eebf612d10": "`{canal_mencion:reglas}` → mencionar um canal por nome ou ID\n`{rol_mencion:Moderador}` → mencionar um cargo por nome ou ID\n`{usuario_mencion:Nombre}` → mencionar um membro por nome ou ID\n`{emoji:fuego}` → emoji personalizado do servidor\nFormato recomendado para canais: `{#ID_DEL_CANAL}` (substitua ID_DO_CANAL pelo ID numérico).\nAtalhos antigos continuam disponíveis: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nExemplo: `Olá {usuario_mencion}, leia {canal_mencion:reglas}` · imagem: `{servidor_icono_url}`",
   "text.fff331093852fa": "\n\nCargo criado: {p0}. Foi selecionado em **{p1}**. Pressione **Salvar** para aplicar a configuração da reação. O cargo já existe no servidor mesmo que você saia sem salvar.",
-  "text.fff8867b824e73": "Terça-feira"
+  "text.fff8867b824e73": "Terça-feira",
+  "moderation.reminders.interval_hint": "Ex.: 2m, 6h, 14d",
+  "moderation.reminders.start_date": "Data de início (AAAA-MM-DD, opcional)",
+  "moderation.reminders.date_hint": "Ex.: 2026-11-04",
+  "moderation.reminders.start_clock": "Hora de início (12 h ou 24 h, opcional)",
+  "moderation.reminders.clock_hint": "Ex.: 10:30 PM ou 22:30",
+  "moderation.reminders.invalid_start": "Informe um intervalo válido e a data AAAA-MM-DD. Se informar uma hora, inclua também a data. São aceitos 10:30 PM e 22:30.",
+  "moderation.reminders.saved_start": "Início da programação: {when} (Santo Domingo)"
 }
