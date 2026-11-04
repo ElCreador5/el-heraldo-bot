@@ -3590,5 +3590,8 @@
   "personality.rejoin.toggle": "Restaurar ao retornar",
   "personality.rejoin.summary": "Restaurar verificação e personalidade ao retornar: {state}",
   "personality.rejoin.enabled": "Ativado",
-  "personality.rejoin.disabled": "Desativado"
+  "personality.rejoin.disabled": "Desativado",
+  "personality.rejoin.help": "**Restauração de verificação e personalidade**\nMembros que saírem voluntariamente do servidor poderão recuperar a verificação válida e o último cargo de personalidade. Permissões administrativas e cargos após expulsões ou banimentos não são restaurados.",
+  "personality.rejoin.confirm.prompt": "Confirma essa alteração na restauração automática?",
+  "personality.rejoin.confirm.button": "Confirmar alterações"
 }
