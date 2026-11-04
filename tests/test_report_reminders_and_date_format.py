@@ -112,6 +112,30 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("report_reminder_interval", modal)
         self.assertNotIn("guild_config_set", modal)
 
+    def test_next_due_computes_time_without_an_undefined_minute(self):
+        from datetime import datetime, timezone
+        from test_safety_regressions import b
+
+        schedule = {
+            "report_reminder_hour": "12",
+            "report_reminder_day": "1",
+            "report_reminder_frequency": "daily",
+            "report_reminder_interval": "7d",
+            "report_reminder_start": "",
+        }
+        # 18:00 UTC = 14:00 Santo Domingo: next daily reminder is tomorrow noon.
+        now = datetime(2026, 11, 3, 18, 0, tzinfo=timezone.utc)
+        self.assertEqual(
+            b.reminder_next_due(schedule, now),
+            datetime(2026, 11, 4, 16, 0, tzinfo=timezone.utc),
+        )
+        # At the same time on Tuesday, a weekly Tuesday reminder is next week.
+        schedule["report_reminder_frequency"] = "weekly"
+        self.assertEqual(
+            b.reminder_next_due(schedule, now),
+            datetime(2026, 11, 10, 16, 0, tzinfo=timezone.utc),
+        )
+
     def test_custom_schedule_skips_elapsed_intervals(self):
         """Old starts with 10-second cadence must not cause long catch-up loops."""
         src = source_function("reminder_next_due")
