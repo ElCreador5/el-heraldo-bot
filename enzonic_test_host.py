@@ -378,12 +378,12 @@ def require_restored_database():
         # SQLite elimina IF NOT EXISTS del SQL persistido en sqlite_master.
         # Este valor coincide exactamente con TABLE_SQL de member_rejoin_restore.
         expected_rejoin = (
-            "CREATE TABLE verified_rejoin_snapshots (\\n"
-            "    guild_id INTEGER NOT NULL,\\n"
-            "    user_id INTEGER NOT NULL,\\n"
-            "    role_id INTEGER NOT NULL,\\n"
-            "    departed_at TEXT NOT NULL,\\n"
-            "    PRIMARY KEY (guild_id, user_id)\\n"
+            "CREATE TABLE verified_rejoin_snapshots (\n"
+            "    guild_id INTEGER NOT NULL,\n"
+            "    user_id INTEGER NOT NULL,\n"
+            "    role_id INTEGER NOT NULL,\n"
+            "    departed_at TEXT NOT NULL,\n"
+            "    PRIMARY KEY (guild_id, user_id)\n"
             ")"
         )
         if (personal_table is None or personal_table[0] != expected_personal
