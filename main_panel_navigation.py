@@ -1,7 +1,36 @@
 """Cierre, permisos y normalización de respuestas de los paneles administrativos."""
 from functools import wraps
+from contextvars import ContextVar
 
-from panel_navigation import ensure_close_control, lineage
+from panel_navigation import ensure_close_control, ensure_navigation_controls, is_setup_home, lineage
+
+
+
+_source_view = ContextVar("heraldo_navigation_source_view", default=None)
+_source_interaction = ContextVar("heraldo_navigation_source_interaction", default=None)
+
+
+def remember_previous_panel(view):
+    """Record the actual parent while a Discord component opens a new panel."""
+    previous = _source_view.get()
+    if (view is None or previous is None or previous is view
+            or is_setup_home(view) or view in tuple(lineage(previous))):
+        return
+    if getattr(view, "_heraldo_back_target", None) is not None:
+        return
+    owner = next((panel for panel in lineage(view)
+                  if getattr(panel, "guild_id", None) and getattr(panel, "owner_id", None)), None)
+    if owner is None:
+        return
+    view._heraldo_back_target = previous
+    interaction = _source_interaction.get()
+    message = getattr(interaction, "message", None)
+    if message is not None:
+        embeds = getattr(message, "embeds", ()) or ()
+        view._heraldo_back_snapshot = {
+            "content": getattr(message, "content", None),
+            "embed": embeds[0] if embeds else None,
+        }
 
 
 def compact_reaction_editor(discord, view):
@@ -53,13 +82,14 @@ def install(discord):
 
     @wraps(original_components)
     def components(view):
+        remember_previous_panel(view)
         try:
-            ensure_close_control(view)
+            ensure_navigation_controls(view)
         except ValueError as error:
             if str(error) != "administrative_panel_has_no_close_slot":
                 raise
             compact_reaction_editor(discord, view)
-            ensure_close_control(view)
+            ensure_navigation_controls(view)
         return original_components(view)
 
     @wraps(original_task)
@@ -72,7 +102,13 @@ def install(discord):
                     or interaction.user.id != owner.owner_id or not getattr(permissions, "manage_guild", False)):
                 await interaction.response.send_message("Acceso denegado. Se requiere Gestionar servidor y una sesión propia.", ephemeral=True)
                 return
-        return await original_task(view, item, interaction)
+        view_token = _source_view.set(view)
+        interaction_token = _source_interaction.set(interaction)
+        try:
+            return await original_task(view, item, interaction)
+        finally:
+            _source_view.reset(view_token)
+            _source_interaction.reset(interaction_token)
 
     # Omitir None únicamente al ENVIAR. Al editar, None retira los controles.
     for cls, name in ((discord.InteractionResponse, "send_message"), (discord.Webhook, "send")):
