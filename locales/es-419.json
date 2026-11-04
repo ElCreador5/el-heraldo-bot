@@ -175,6 +175,7 @@
   "purge.panel.confirm": "Confirmar eliminación",
   "purge.panel.deleted": "Eliminados",
   "purge.panel.done": "Resultado de la limpieza",
+  "purge.panel.expired": "El panel de /purge caducó o el bot se reinició. No se ejecutó ninguna eliminación al pulsar este botón. Ejecuta /purge y confirma en la nueva vista previa.",
   "purge.panel.failed": "No eliminados",
   "purge.panel.finished": "Operación terminada",
   "purge.panel.ids": "Añadir usuarios por ID",
