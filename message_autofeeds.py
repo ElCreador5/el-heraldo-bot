@@ -51,7 +51,7 @@ STRINGS = {
         "delete": "Eliminar",
         "modal": "Programar mensaje",
         "msg": "Mensaje",
-        "date": "Fecha y hora local (AAAA-MM-DD HH:MM)",
+        "date": "Fecha y hora (12/24 h)",
         "interval_ui": "Intervalo (ej. 6h, 2d)",
         "channel_label": "Canal",
         "frequency_label": "Frecuencia",
@@ -100,7 +100,7 @@ STRINGS = {
         "delete": "Delete",
         "modal": "Schedule a message",
         "msg": "Message",
-        "date": "Local date and time (YYYY-MM-DD HH:MM)",
+        "date": "Date and time (12/24 h)",
         "interval_ui": "Interval (e.g. 6h, 2d)",
         "channel_label": "Channel",
         "frequency_label": "Frequency",
@@ -149,7 +149,7 @@ STRINGS = {
         "delete": "Excluir",
         "modal": "Programar mensagem",
         "msg": "Mensagem",
-        "date": "Data e hora local (AAAA-MM-DD HH:MM)",
+        "date": "Data e hora (12/24 h)",
         "interval_ui": "Intervalo (ex. 6h, 2d)",
         "channel_label": "Canal",
         "frequency_label": "Frequência",
@@ -366,11 +366,11 @@ def persist_schedule(host, guild_id, actor, job, *, snapshot=None, editing=False
         return jobs, job["id"]
     return atomic_change(host, guild_id, apply, expected=snapshot)
 
-def start_from_form(value, zone):
+def start_from_form(value, zone, date_mode="iso", locale="es-419"):
     """Fecha ISO y reloj en formato 12 o 24 horas, sin cambiar las duraciones."""
     from heraldo_datetime import parse_date_time
     try:
-        start = parse_date_time(value, date_mode="iso", zone=zone)
+        start = parse_date_time(value, date_mode=date_mode, locale=locale, zone=zone)
         if start <= datetime.now(timezone.utc) + timedelta(minutes=1):
             raise ValueError("past")
         return start
@@ -495,10 +495,17 @@ class FeedModal(discord.ui.Modal, title=STRINGS["es-419"]["modal"]):
         self.message = discord.ui.TextInput(label=STRINGS["es-419"]["msg"], style=discord.TextStyle.paragraph,
                                             required=not bool((job or {}).get("embed")), max_length=1900,
                                             default=(job or {}).get("text", ""))
+        from heraldo_datetime import format_date_time
+        mode = host["guild_config_get"](guild_id, "display_date_format") or "discord"
+        time_mode = host["guild_config_get"](guild_id, "display_time_format")
+        locale = host.get("guild_language", lambda _: "es-419")(guild_id)
+        self.date_mode, self.date_locale = mode, locale
+        zone = (job or {}).get("zone", "America/Santo_Domingo")
+        when = datetime.fromisoformat(job["start"]) if job else datetime(2026, 10, 30, 18, tzinfo=ZoneInfo(zone))
+        display = format_date_time(when, date_mode=mode, time_mode=time_mode, locale=locale, zone=zone)
         self.date = discord.ui.TextInput(label=STRINGS["es-419"]["date"],
-                                         placeholder="2026-10-30 18:00", max_length=24,
-                                         default=((datetime.fromisoformat(job["start"]).astimezone(
-                                             ZoneInfo(job["zone"])).strftime("%Y-%m-%d %H:%M")) if job else None))
+                                         placeholder=display, max_length=32,
+                                         default=display if job else None)
         self.interval = discord.ui.TextInput(label=STRINGS["es-419"]["interval_ui"], required=False,
                                              max_length=10, default=(job or {}).get("interval", ""))
         self.message.label = tr("msg")
@@ -513,7 +520,7 @@ class FeedModal(discord.ui.Modal, title=STRINGS["es-419"]["modal"]):
         with use_guild(self.guild_id):
             try:
                 zone = (self.job or {}).get("zone", "America/Santo_Domingo")
-                start = start_from_form(str(self.date), zone)
+                start = start_from_form(str(self.date), zone, self.date_mode, self.date_locale)
                 if self.repeat == "intervalo":
                     interval_seconds(str(self.interval))
                 text = str(self.message).strip()
