@@ -3586,5 +3586,9 @@
   "moderation.warning.pardon_channel": "{p0}, your warning **{p1}** has been pardoned.\nReason: {p2}\nIt no longer counts as active.",
   "moderation.warning.pardon_delivery_dm": "The member was notified by DM.",
   "moderation.warning.pardon_delivery_channel": "Notified in this channel because the DM could not be delivered.",
-  "moderation.warning.pardon_delivery_failed": "The member could not be notified."
+  "moderation.warning.pardon_delivery_failed": "The member could not be notified.",
+  "personality.rejoin.toggle": "Restore on rejoin",
+  "personality.rejoin.summary": "Restore verification and personality on rejoin: {state}",
+  "personality.rejoin.enabled": "Enabled",
+  "personality.rejoin.disabled": "Disabled"
 }
