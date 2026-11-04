@@ -46,9 +46,9 @@ def synchronize_dropdown_defaults(view):
     changed = False
     string_select = getattr(discord.ui, "Select", None)
     select_types = (
-        ("ChannelSelect", "channel"),
         ("RoleSelect", "role"),
         ("UserSelect", "user"),
+        ("ChannelSelect", "channel"),
     )
     for item in view.children:
         # discord.py populates _values only when Discord submitted a selection.
