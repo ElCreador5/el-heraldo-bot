@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta, timezone
 import unittest
 from zoneinfo import ZoneInfo
 
-from heraldo_datetime import clock_style, format_clock, format_date_time, parse_clock, parse_date_time
+from heraldo_datetime import clock_style, format_clock, format_date_time, parse_clock, parse_date_time, parse_reminder_start
 from test_safety_regressions import b
 
 
@@ -54,6 +54,32 @@ class GlobalDateTimeTests(unittest.TestCase):
         self.assertEqual(slot.weekday(), 1)
         b.guild_config_set(guild, "template_minute", "0")
         self.assertEqual(b.get_template_minute(guild), 0)
+
+    def test_reminder_start_accepts_iso_and_configured_date_with_12_or_24h(self):
+        now = datetime(2026, 11, 3, 23, 16, tzinfo=ZoneInfo("America/Santo_Domingo"))
+        self.assertEqual(
+            parse_reminder_start("11/04/2026", "10:30 PM", date_mode="mdy12", now=now),
+            "2026-11-04 22:30",
+        )
+        self.assertEqual(
+            parse_reminder_start("04/11/2026", "22:30", date_mode="dmy24", now=now),
+            "2026-11-04 22:30",
+        )
+        self.assertEqual(
+            parse_reminder_start("2026-11-04", "22:30", date_mode="mdy12", now=now),
+            "2026-11-04 22:30",
+        )
+        self.assertEqual(parse_reminder_start("", "", now=now), "")
+        self.assertEqual(parse_reminder_start("2026-11-04", "", now=now), "2026-11-04")
+
+    def test_reminder_start_allows_clock_without_date_using_next_local_occurrence(self):
+        now = datetime(2026, 11, 3, 23, 16, tzinfo=ZoneInfo("America/Santo_Domingo"))
+        self.assertEqual(parse_reminder_start("", "10:30 PM", now=now), "2026-11-04 22:30")
+        self.assertEqual(parse_reminder_start("", "23:30", now=now), "2026-11-03 23:30")
+        for date, clock in (("2026-02-30", "10:30"), ("2026-11-04", "25:00"),
+                            ("31/13/2026", "22:30")):
+            with self.subTest(date=date, clock=clock), self.assertRaises(ValueError):
+                parse_reminder_start(date, clock, now=now)
 
     def test_punishment_duration_is_not_a_clock(self):
         self.assertEqual(b.parse_duration("1d", 1, 10000), 1440)
