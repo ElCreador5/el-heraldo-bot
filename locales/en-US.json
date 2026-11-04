@@ -929,7 +929,7 @@
   "text.2de621923133d5": "Duration not allowed.",
   "text.2e1e396c157975": "Error: I do not have permission to send messages or embeds to {p0}.",
   "text.2e2946769ed603": "Sanction or warning from a moderation reaction.",
-  "text.2e2c1ff499c328": "**Report reminders**\n\n{p0}\n\n**Saved state:** {p1}\n**Frequency:** {p2}\n**Time:** {p3}:00 (Santo Domingo)\n**Channel:** {p4}\nSelectors edit a draft. “Save changes” saves the schedule; “Enable/Disable” immediately changes only the enabled state. “Customize” supports intervals from 1d–365d, or from 10s in Test.\n**Estimated next publication:** {p5}",
+  "text.2e2c1ff499c328": "**Report reminders**\n\n{p0}\n\n**Saved state:** {p1}\n**Frequency:** {p2}\n**Time:** {p3} (Santo Domingo)\n**Channel:** {p4}\nEditing controls start with no options selected. “Save changes” saves the schedule; “Enable/Disable” immediately changes only the enabled state. “Customize” supports intervals from 1d–365d, or from 10s in Test.\n**Estimated next publication:** {p5}",
   "text.2e2ea18f980de9": "Warning: Private conversation pending",
   "text.2eaaf547035da1": "Delete the messages the sanctioned sent since they entered.",
   "text.2eb03796ac8a31": "**Unsaved draft.** Press **{p0}** to review the settings before confirming. Cancel discards the draft.",
@@ -3545,5 +3545,12 @@
   "text.ffb94c3fd3c42b": "Search for server resources by name or ID",
   "text.ffe4eebf612d10": "`{canal_mencion:reglas}` → mention a channel by name or ID\n`{rol_mencion:Moderador}` → mention a role by name or ID\n`{usuario_mencion:Nombre}` → mention a member by name or ID\n`{emoji:fuego}` → custom server emoji\nRecommended channel format: `{#ID_DEL_CANAL}` (replace CHANNEL_ID with the numeric ID).\nLegacy shortcuts remain supported: `{#reglas}` · `{@Moderador}` · `{canal:nombre}` · `{rol:nombre}` · `{usuario:nombre}`\nExample: `Hello {usuario_mencion}, read {canal_mencion:reglas}` · image: `{servidor_icono_url}`",
   "text.fff331093852fa": "\n\nRole created: {p0}. It was selected in **{p1}**. Press **Save** to apply the reaction settings. The role already exists in the server even if you leave without saving.",
-  "text.fff8867b824e73": "Tuesday"
+  "text.fff8867b824e73": "Tuesday",
+  "moderation.reminders.interval_hint": "E.g. 2m, 6h, 14d",
+  "moderation.reminders.start_date": "Start date (YYYY-MM-DD, optional)",
+  "moderation.reminders.date_hint": "E.g. 2026-11-04",
+  "moderation.reminders.start_clock": "Start time (12h or 24h, optional)",
+  "moderation.reminders.clock_hint": "E.g. 10:30 PM or 22:30",
+  "moderation.reminders.invalid_start": "Enter a valid interval and date in YYYY-MM-DD format. If you specify a time, also enter a date. Times such as 10:30 PM and 22:30 are supported.",
+  "moderation.reminders.saved_start": "Schedule begins: {when} (Santo Domingo)"
 }
