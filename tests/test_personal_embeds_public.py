@@ -56,6 +56,33 @@ class PersonalEmbedsTests(unittest.TestCase):
         self.assertTrue(view.confirm.disabled)
         self.assertIsNone(view.channel_id)
 
+    def test_publication_embed_renders_image_author_and_title(self):
+        from personal_publications import publication_embed
+        member = SimpleNamespace(
+            display_name="Miembro creador",
+            display_avatar=SimpleNamespace(url="https://example.com/avatar.png"),
+        )
+        stamp = lambda embed, guild: embed.set_footer(text="El Heraldo") or embed
+        text_payload = {
+            "kind": "text", "text": "Hola",
+            "image_url": "https://example.com/imagen.png",
+        }
+        text_embed = publication_embed(text_payload, stamp, None, member, "Mi anuncio", None)
+        self.assertEqual(text_embed.title, "Mi anuncio")
+        self.assertEqual(text_embed.author.name, "Miembro creador")
+        self.assertEqual(text_embed.image.url, text_payload["image_url"])
+        self.assertEqual(text_embed.footer.text, "El Heraldo")
+
+        visual = {"title": "Título original", "image_url": "https://example.com/foto.png"}
+        renderer = lambda data, stamp_fn, guild: stamp_fn(
+            discord.Embed(title=data["title"]).set_image(url=data["image_url"]) or discord.Embed(),
+            guild,
+        )
+        rendered = publication_embed(visual, stamp, None, member, "Nombre interno", renderer)
+        self.assertEqual(rendered.title, "Título original")
+        self.assertEqual(rendered.author.name, "Miembro creador")
+        self.assertEqual(rendered.image.url, visual["image_url"])
+
     def test_no_personal_scheduler(self):
         from pathlib import Path
         source = (Path(__file__).resolve().parents[1] / "personal_embeds.py").read_text(encoding="utf-8")
