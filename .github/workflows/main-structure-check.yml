@@ -1,0 +1,32 @@
+name: Verificar estructura y fecha/hora en main
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "bot.py"
+      - "server_structure_setup.py"
+      - "date_time_setup.py"
+      - "heraldo_datetime.py"
+      - "production_panel_text.py"
+      - "tests/test_main_structure_promotion.py"
+      - ".github/workflows/main-structure-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile affected modules
+        run: python -m py_compile bot.py server_structure_setup.py date_time_setup.py heraldo_datetime.py production_panel_text.py
+      - name: Check scheduling and datetime panel
+        run: python -m unittest discover -s tests -p test_main_structure_promotion.py -v
