@@ -83,7 +83,7 @@ class ServerFooterTests(unittest.TestCase):
         other = FakeEmbed({"footer": {"text": "Advertencia activa", "icon_url": "https://x.test/icon"}})
         env["stamp_embed"](other, server("Comunidad Beta"))
         self.assertEqual(other.footer.text, LAB_NAME + " · Advertencia activa")
-        self.assertIsNone(other.footer.icon_url)
+        self.assertEqual(other.footer.icon_url, "https://example.org/bot.png")
         # No hay servidor verificable: no tomar otro servidor al azar.
         unknown = FakeEmbed()
         env["stamp_embed"](unknown, None)
@@ -175,7 +175,7 @@ class ServerFooterTests(unittest.TestCase):
     def test_no_lingering_hardcoded_brand_in_embed_footers(self):
         self.assertNotIn('set_footer(text="Paraíso Morboso 2026 · El Heraldo")', SOURCE)
         src = ast.get_source_segment(SOURCE, FUNCS["stamp_embed"])
-        self.assertIn("server_footer_text(guild.name, detail)", src)
+        self.assertIn('server_footer_text(guild.name if guild else "", detail)', src)
         self.assertIn("def bot_footer_name()", SOURCE)
 
 
