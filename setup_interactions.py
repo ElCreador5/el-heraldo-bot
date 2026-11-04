@@ -14,7 +14,7 @@ import inspect
 import time
 
 from setup_save_controls import refresh_save_button
-from panel_navigation import ensure_close_control
+from panel_navigation import ensure_navigation_controls, lineage
 
 
 ACK_KEY = "heraldo_setup_deferred"
@@ -22,6 +22,7 @@ STARTED_KEY = "heraldo_view_started"
 _busy: set[tuple] = set()
 _seen: OrderedDict = OrderedDict()
 source_guild = ContextVar("heraldo_interaction_source_guild", default=None)
+source_view = ContextVar("heraldo_interaction_source_view", default=None)
 
 
 @_i18n_context
@@ -96,6 +97,24 @@ def needs_initial_response(view, item, interaction):
     return bool(values and values[0] in routes)
 
 
+def prepare_navigation(view, interaction=None):
+    """Capture the actual rendered parent and its content before navigation."""
+    origin = source_view.get()
+    if view is not None and origin is not None and view is not origin and is_setup_session(view):
+        # Returning to an ancestor must not create a backwards navigation loop.
+        if view not in tuple(lineage(origin)):
+            if getattr(view, "_heraldo_back_target", None) is None:
+                view._heraldo_back_target = origin
+                message = getattr(interaction, "message", None)
+                if message is not None:
+                    embed = (getattr(message, "embeds", ()) or ())
+                    view._heraldo_back_snapshot = {
+                        "content": getattr(message, "content", None),
+                        "embed": embed[0] if embed else None,
+                    }
+    ensure_navigation_controls(view)
+
+
 def install(discord):
     """Compatibilidad probada con el despacho de discord.py en CI."""
     if getattr(discord.ui.View._scheduled_task, "_heraldo_setup_guard", False):
@@ -113,7 +132,7 @@ def install(discord):
     async def send(response, *args, **kwargs):
         if kwargs.get("view", False) is None:
             kwargs.pop("view")
-        ensure_close_control(kwargs.get("view"))
+        prepare_navigation(kwargs.get("view"), getattr(response, "_parent", None))
         refresh_save_button(kwargs.get("view"))
         interaction = response._parent
         if interaction.extras.get(ACK_KEY) and response.is_done():
@@ -122,7 +141,7 @@ def install(discord):
 
     @wraps(original_edit)
     async def edit(response, **kwargs):
-        ensure_close_control(kwargs.get("view"))
+        prepare_navigation(kwargs.get("view"), getattr(response, "_parent", None))
         refresh_save_button(kwargs.get("view"))
         interaction = response._parent
         if interaction.extras.get(ACK_KEY) and response.is_done():
@@ -131,13 +150,13 @@ def install(discord):
 
     @wraps(original_original_edit)
     async def edit_original(interaction, **kwargs):
-        ensure_close_control(kwargs.get("view"))
+        prepare_navigation(kwargs.get("view"), interaction)
         refresh_save_button(kwargs.get("view"))
         return await original_original_edit(interaction, **kwargs)
 
     @wraps(original_message_edit)
     async def message_edit(message, **kwargs):
-        ensure_close_control(kwargs.get("view"))
+        prepare_navigation(kwargs.get("view"))
         refresh_save_button(kwargs.get("view"))
         return await original_message_edit(message, **kwargs)
 
@@ -225,9 +244,11 @@ def install(discord):
     @_i18n_context
     async def contextual_scheduled(view, item, interaction):
         token = source_guild.set(getattr(interaction, "guild", None))
+        view_token = source_view.set(view)
         try:
             return await scheduled(view, item, interaction)
         finally:
+            source_view.reset(view_token)
             source_guild.reset(token)
 
     contextual_scheduled._heraldo_setup_guard = True
