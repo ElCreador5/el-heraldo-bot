@@ -14657,8 +14657,20 @@ def template_due(guild_id: int, now_utc: datetime) -> bool:
 
 @_i18n_context
 def template_mark_done(guild_id: int, now_utc: datetime) -> None:
-    guild_config_set(guild_id, "template_last_run", now_utc.isoformat())
     mode = get_template_mode(guild_id)
+    if mode == "interval":
+        # Conservar el anclaje horario incluso cuando el worker se retrasa.
+        raw = guild_config_get(guild_id, "template_last_run")
+        if raw:
+            previous = datetime.fromisoformat(raw)
+            duration = timedelta(minutes=get_template_interval_minutes(guild_id))
+            elapsed = now_utc - previous
+            steps = max(1, elapsed // duration)
+            guild_config_set(guild_id, "template_last_run", (previous + steps * duration).isoformat())
+        else:
+            guild_config_set(guild_id, "template_last_run", now_utc.isoformat())
+        return
+    guild_config_set(guild_id, "template_last_run", now_utc.isoformat())
     if mode in ("daily", "weekly", "monthly"):
         slot = template_last_slot(guild_id, mode, now_utc.astimezone(STREAK_TZ))
         if slot is not None:
@@ -14740,7 +14752,7 @@ async def run_scheduled_template_backup(guild: discord.Guild) -> bool:
     return error is None
 
 
-@tasks.loop(minutes=10)
+@tasks.loop(minutes=1)
 @_i18n_context
 async def template_backup_loop() -> None:
     """Revisa cada servidor por separado y solo marca el turno tras una copia correcta."""
