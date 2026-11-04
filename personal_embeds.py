@@ -370,9 +370,13 @@ class PublishChannelView(discord.ui.View):
                 interaction.user, self.panel.name, render,
             )
             content = payload.get("text") or None if payload.get("kind") == "text" else None
-            sent = await channel.send(
-                content=content, embed=embed, allowed_mentions=discord.AllowedMentions.none(),
-            )
+            # Publicaciones creadas por miembros: no registrar ni traducir.
+            import production_message_locale_sync
+            with production_message_locale_sync.suspend_tracking():
+                sent = await channel.send(
+                    content=content, embed=embed,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
         except (ValueError, discord.HTTPException):
             return await interaction.followup.send("No fue posible publicar el embed.", ephemeral=True)
         try:
