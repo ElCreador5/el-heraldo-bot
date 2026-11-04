@@ -10029,7 +10029,7 @@ class HeraldoWarningLimitSelectView(discord.ui.View):
         self.punishment_select = discord.ui.Select(
             placeholder=_t('text.d91694e8816537'),
             options=[
-                discord.SelectOption(label=f"{_t('text.d91694e8816537')}: {label}", value=action, description=hint,
+                discord.SelectOption(label=label, value=action, description=hint,
                                      default=False)
                 for action, label, hint in self.POLICY_ACTIONS
             ],
