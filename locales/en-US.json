@@ -3558,5 +3558,6 @@
   "moderation.reminders.invalid_interval": "Invalid interval. Enter, for example, 2m or 7h. The test environment permits intervals from 10s; outside testing, from 1d up to 365d.",
   "moderation.reminders.summary_custom": "**Report reminders**\n\n{p0}\n\n**Saved state:** {p1}\n**Frequency:** {p2}\n**Start:** {p6}\n**Channel:** {p4}\nEditing controls start with no options selected. “Save changes” saves the schedule; “Enable/Disable” immediately changes only the enabled state. “Customize” supports intervals from 1d–365d, or from 10s in Test.\n**Estimated next publication:** {p5}",
   "moderation.reminders.no_start": "No start date or time specified.",
-  "moderation.reminders.start_defined": "{when} (Santo Domingo)"
+  "moderation.reminders.start_defined": "{when} (Santo Domingo)",
+  "moderation.warn.channel_fallback": "{p0}, you have received a moderation warning (case **{p1}**). We could not deliver your private message. Contact the moderation team if you need details."
 }
