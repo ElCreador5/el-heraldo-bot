@@ -347,7 +347,7 @@
   "setup.structure.confirm": "Confirma el horario mostrado para guardar. Volver conserva el borrador.",
   "setup.structure.confirm_button": "Confirmar cambios",
   "setup.structure.conflict": "La configuración o su programación cambió en otra sesión. Abre nuevamente el panel.",
-  "setup.structure.draft": "Borrador: {mode}\nHora local: {hour}:00 · Día semanal: {weekday} (0 lunes–6 domingo)\nDía del mes: {monthday} · Intervalo: {interval} minutos.\nLa selección solo se guarda al confirmar.",
+  "setup.structure.draft": "Borrador: {mode}\nHora local: {clock} · Día semanal: {weekday} (0 lunes–6 domingo)\nDía del mes: {monthday} · Intervalo: {interval} minutos.\nLa selección solo se guarda al confirmar.",
   "setup.structure.expired": "Este borrador ya cambió o está cerrado. Abre nuevamente el panel.",
   "setup.structure.help.daily": "Una copia al día a la hora local elegida.",
   "setup.structure.help.interval": "Repite la copia cada cierto número de minutos.",
