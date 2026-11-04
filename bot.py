@@ -280,7 +280,6 @@ intents.guilds = True
 intents.message_content = os.environ.get("MESSAGE_CONTENT_INTENT") == "1"
 
 bot = commands.Bot(command_prefix="!heraldo ", intents=intents)
-import member_exit_comments as exit_comments
 
 # invite_cache[guild_id][invite_code] = uses
 invite_cache: dict[int, dict[str, int]] = {}
@@ -2165,12 +2164,6 @@ async def on_ready() -> None:
         return
 
     db_init()
-    with closing(db_connect()) as conn:
-        exit_comments.init_storage(conn)
-        exit_comments.purge_expired(conn)
-    if not any(isinstance(v, ExitCommentDMView) for v in bot.persistent_views):
-        bot.add_view(ExitCommentDMView())
-    await exit_comment_retry()
     honeypot_db_init()
 
     # Vincula la configuración antigua de una sola instancia al servidor que contiene
@@ -2351,8 +2344,6 @@ async def on_ready() -> None:
     message_automation_engine.start()
     if not template_backup_loop.is_running():
         template_backup_loop.start()
-    if not exit_comment_maintenance_loop.is_running():
-        exit_comment_maintenance_loop.start()
     # H-03: diario externo desactivado salvo autorización y preflight productivos.
     # Nunca crea un segundo bot ni accede al Gateway desde el proceso de backup.
     try:
@@ -2667,258 +2658,17 @@ async def orientation_departure_has_detailed_log(
 
 
 
-@_i18n_context
-def exit_comments_enabled(guild_id: int) -> bool:
-    # El comentario es opcional para el miembro, no una función que necesite
-    # activarse manualmente por primera vez. Respetar desactivaciones explícitas.
-    return guild_config_get(guild_id, "exit_comments_enabled") != "0"
-
-
-@_i18n_context
-def exit_comment_private(channel: discord.TextChannel) -> bool:
-    guild = channel.guild
-    if channel.permissions_for(guild.default_role).view_channel:
-        return False
-    for role in guild.roles:
-        if role.is_default() or not channel.permissions_for(role).view_channel:
-            continue
-        if not any(getattr(role.permissions, p, False) for p in
-                   ("administrator", "manage_guild", "manage_messages",
-                    "moderate_members", "kick_members", "ban_members")):
-            return False
-    # Un overwrite individual puede abrir el canal a un usuario que no tiene rol
-    # de moderación. No enviar comentarios privados a un destino así configurado.
-    for target, overwrite in channel.overwrites.items():
-        if overwrite.view_channel is not True or isinstance(target, discord.Role):
-            continue
-        # La caché puede no resolver un usuario con acceso explícito. En caso
-        # de incertidumbre se rechaza este canal para comentarios privados.
-        if not isinstance(target, discord.Member) or not verification_is_exempt(target):
-            return False
-    me = guild.me
-    return bool(me and all((channel.permissions_for(me).view_channel,
-                             channel.permissions_for(me).send_messages,
-                             channel.permissions_for(me).embed_links,
-                             channel.permissions_for(me).read_message_history)))
-
-
-@_i18n_context
-async def exit_comment_audit_safe(member: discord.Member) -> bool:
-    """Segunda lectura tras el evento: no inferir salida voluntaria por un único sondeo.
-
-    Discord no ofrece un evento que pruebe directamente una salida voluntaria;
-    ante cualquier consulta fallida o sanción reciente se cancela la encuesta.
-    """
-    guild = member.guild
-    if not guild.me or not guild.me.guild_permissions.view_audit_log:
-        return False
-    # Dar margen a que Discord publique entradas de auditoría diferidas.
-    await asyncio.sleep(4)
-    observed = datetime.now(timezone.utc)
-    try:
-        for action in (discord.AuditLogAction.ban, discord.AuditLogAction.kick):
-            async for entry in guild.audit_logs(
-                limit=50, action=action, after=observed - timedelta(seconds=95)
-            ):
-                if (getattr(entry.target, "id", None) == member.id
-                        and abs((entry.created_at - observed).total_seconds()) < 95):
-                    return False
-    except (discord.Forbidden, discord.HTTPException):
-        return False
-    return True
-
-
-@_i18n_context
-async def exit_comment_apply(row) -> bool:
-    guild = bot.get_guild(int(row["guild_id"]))
-    channel = guild.get_channel(int(row["log_channel_id"])) if guild else None
-    if not isinstance(channel, discord.TextChannel) or not exit_comment_private(channel):
-        return False
-    try:
-        original = await channel.fetch_message(int(row["log_message_id"]))
-        if not original.embeds:
-            return False
-        embed = original.embeds[0].copy()
-        old = embed.description or ""
-        comment = discord.utils.escape_markdown(
-            discord.utils.escape_mentions(str(row["comment"]))).replace("\n", " ")
-        addition = "\n> **Comentario:** " + comment
-        if len(old) + len(addition) > 4096:
-            return False
-        if addition not in old:
-            # No reemplazar campos existentes ni asumir que otro «Comentario»
-            # pertenece a esta respuesta.
-            if "**Comentario:**" in old:
-                return False
-            embed.description = old + addition
-            await original.edit(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-    except (discord.HTTPException, discord.Forbidden, discord.NotFound):
-        return False
-    with closing(db_connect()) as conn:
-        exit_comments.mark_applied(conn, guild_id=int(row["guild_id"]),
-                                   log_message_id=int(row["log_message_id"]))
-    return True
-
-
-async def exit_comment_retry() -> None:
-    with closing(db_connect()) as conn:
-        rows = exit_comments.pending_edits(conn)
-    for row in rows:
-        try:
-            await exit_comment_apply(row)
-        except Exception:
-            traceback.print_exc()
-
-
-@tasks.loop(minutes=15)
-@_i18n_context
-async def exit_comment_maintenance_loop() -> None:
-    # Ninguna respuesta no aplicada se elimina automáticamente.
-    try:
-        with closing(db_connect()) as conn:
-            exit_comments.purge_expired(conn)
-        await exit_comment_retry()
-    except (sqlite3.Error, discord.HTTPException):
-        print("Advertencia: mantenimiento de comentarios pendiente de reintento.")
-
-
-class ExitCommentModal(discord.ui.Modal, title=_t('text.81fa939a59b76b')):
-    comment = discord.ui.TextInput(
-        label=_t('text.711c0f38255ef5'),
-        style=discord.TextStyle.paragraph, required=True, max_length=500)
-
-    @_i18n_context
-    def __init__(self, dm_message_id: int, guild_id: int | None = None):
-        super().__init__(timeout=300)
-        self.guild_id = guild_id or i18n.current_guild_id()
-        self.dm_message_id = dm_message_id
-
-    @_i18n_context
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        content = str(self.comment.value).strip()
-        if not content or len(content) > exit_comments.COMMENT_LIMIT:
-            await interaction.followup.send(
-                _t('text.fcfac3b0c4823b'), ephemeral=True)
-            return
-        try:
-            with closing(db_connect()) as conn:
-                row = exit_comments.find_by_dm(
-                    conn, dm_message_id=self.dm_message_id, user_id=interaction.user.id)
-                if row is None or not exit_comments.submit_comment(
-                        conn, dm_message_id=self.dm_message_id,
-                        user_id=interaction.user.id, comment=content):
-                    await interaction.followup.send(
-                        _t('text.1878f53c711ce0'), ephemeral=True)
-                    return
-                conn.row_factory = sqlite3.Row
-                saved = conn.execute(
-                    "SELECT * FROM member_exit_comments WHERE dm_message_id=?",
-                    (self.dm_message_id,)).fetchone()
-        except sqlite3.Error:
-            await interaction.followup.send(
-                _t('text.5d08cdf4ecdece'),
-                ephemeral=True)
-            return
-        interaction.extras["heraldo_source_guild"] = bot.get_guild(saved["guild_id"])
-        if interaction.extras["heraldo_source_guild"] is not None:
-            _interaction_guilds[interaction.token] = saved["guild_id"]
-        success = await exit_comment_apply(saved)
-        await interaction.followup.send(
-            _t('text.c9a30d49fce982') if success else
-            _t('text.4a5323a416a108'),
-            ephemeral=True)
-
-
-class ExitCommentDMView(discord.ui.View):
-    @_i18n_context
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label=_t('text.c5d1ed4d04dba8'), style=discord.ButtonStyle.primary,
-                       custom_id="heraldo:exitcomment:v1")
-    @_i18n_context
-    async def respond(self, interaction: discord.Interaction, button: discord.ui.Button):
-        mid = getattr(interaction.message, "id", None)
-        with closing(db_connect()) as conn:
-            row = exit_comments.find_by_dm(
-                conn, dm_message_id=mid, user_id=interaction.user.id) if mid else None
-        if row is None:
-            await interaction.response.send_message(
-                _t('text.1878f53c711ce0'), ephemeral=True)
-            return
-        i18n.set_source(int(row["guild_id"]))
-        await interaction.response.send_modal(ExitCommentModal(mid, int(row["guild_id"])))
-
-
-@_i18n_context
-async def exit_comment_request(member: discord.Member, message: discord.Message) -> None:
-    guild = member.guild
-    channel = guild.get_channel(message.channel.id)
-    if not exit_comments_enabled(guild.id):
-        return
-    if not isinstance(channel, discord.TextChannel) or not exit_comment_private(channel):
-        print(f"EXIT_COMMENT status=SKIPPED reason=private_log_unavailable guild={guild.id} user={member.id}")
-        return
-    if guild.get_member(member.id) is not None:
-        return
-    with closing(db_connect()) as conn:
-        if not exit_comments.create_pending(
-                conn, guild_id=guild.id, user_id=member.id,
-                channel_id=channel.id, log_message_id=message.id):
-            return
-    # Segunda comprobación conservadora: las expulsiones pueden aparecer tarde.
-    if not await exit_comment_audit_safe(member):
-        print(f"EXIT_COMMENT status=SKIPPED reason=departure_not_confirmed guild={guild.id} user={member.id}")
-        return
-    if guild.get_member(member.id) is not None:
-        return
-    if not exit_comments_enabled(guild.id) or not exit_comment_private(channel):
-        return
-    try:
-        sent = await member.send(
-            embed=stamp_embed(_content_embed(_t('text.ed830162445a73') + discord.utils.escape_mentions(guild.name) + _t('text.177c0a9b213973')), guild),
-            view=ExitCommentDMView(), allowed_mentions=discord.AllowedMentions.none())
-    except discord.HTTPException as exc:
-        print(f"EXIT_COMMENT status=DM_UNAVAILABLE guild={guild.id} user={member.id} error={type(exc).__name__}")
-        return  # No insistir si Discord rechaza la solicitud.
-
-    linked = False
-    for retry in range(3):
-        try:
-            with closing(db_connect()) as conn:
-                linked = exit_comments.attach_dm(
-                    conn, guild_id=guild.id, log_message_id=message.id,
-                    dm_message_id=sent.id)
-            break
-        except sqlite3.OperationalError:
-            if retry < 2:
-                await asyncio.sleep(0.4)
-    if not linked:
-        # No dejar un botón visible que inevitablemente no pueda recuperar
-        # la solicitud. No enviar nunca un segundo DM por esta incidencia.
-        try:
-            await sent.edit(view=None)
-        except discord.HTTPException:
-            pass
-
-
 @bot.listen("on_member_remove")
 @_i18n_context
 async def heraldo_member_departure(member: discord.Member) -> None:
     guild = member.guild
-    survey_enabled = exit_comments_enabled(guild.id) and not member.bot
-    logs_enabled = any(log_member_event_enabled(guild.id, key)
-                       for key in ("member_leave", "member_kick", "member_ban"))
-    print(f"EXIT_COMMENT status=EVENT guild={guild.id} user={member.id} survey_enabled={survey_enabled} logs_enabled={logs_enabled}")
-    if not logs_enabled and not survey_enabled:
+    if not any(log_member_event_enabled(guild.id, key)
+               for key in ("member_leave", "member_kick", "member_ban")):
         return
     kind, moderator, reason, uncertainty = await classify_member_departure(member)
     if await orientation_departure_has_detailed_log(member, kind, moderator, reason):
         return  # El informe específico de verificación ya explica esta expulsión.
-    should_log = log_member_event_enabled(guild.id, kind)
-    if not should_log and not (kind == "member_leave" and survey_enabled):
-        print(f"EXIT_COMMENT status=SKIPPED reason=non_voluntary_or_disabled guild={guild.id} user={member.id} kind={kind}")
+    if not log_member_event_enabled(guild.id, kind):
         return
     labels = dict(LOG_EVENT_CATALOG["members"])
     kwargs = {"moderator": moderator, "reason": reason, "uncertainty": uncertainty}
@@ -2929,37 +2679,10 @@ async def heraldo_member_departure(member: discord.Member) -> None:
         kwargs.update(ban_duration_known=known, ban_duration_minutes=minutes,
                       ban_expires_at=expires)
     description = member_departure_description(member, kind, **kwargs)
-    original = None
-    if should_log:
-        original = await log_embed(
-            guild, labels[kind], description,
-            discord.Color.red(), member=member,
-        )
-    # Conservar un registro privado para el comentario aunque el registro
-    # general de salidas esté desactivado. No publicar respuestas en canales públicos.
-    if kind == "member_leave" and survey_enabled and (
-            original is None or not exit_comment_private(original.channel)):
-        # El registro público sigue intacto; la encuesta usa únicamente un
-        # registro privado, para no revelar respuestas personales.
-        original = None
-        destination = guild.get_channel(log_member_channel_id(guild.id, "member_leave"))
-        if isinstance(destination, discord.TextChannel) and exit_comment_private(destination):
-            try:
-                embed = member_departure_embed(member, kind, **kwargs)
-                original = await destination.send(
-                    embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            except discord.HTTPException as exc:
-                print(f"EXIT_COMMENT status=LOG_FAILED guild={guild.id} user={member.id} error={type(exc).__name__}")
-        else:
-            print(f"EXIT_COMMENT status=SKIPPED reason=private_destination_missing guild={guild.id} user={member.id}")
-    # La comprobación de auditoría definitiva se hace dentro de exit_comment_request.
-    # No depender del texto localizado de 'uncertainty': las traducciones o variantes
-    # no deben impedir que una salida voluntaria reciba su encuesta opcional.
-    if kind == "member_leave" and survey_enabled:
-        if original is None:
-            print(f"EXIT_COMMENT status=SKIPPED reason=departure_log_unavailable guild={guild.id} user={member.id}")
-        else:
-            await exit_comment_request(member, original)
+    await log_embed(
+        guild, labels[kind], description,
+        discord.Color.red(), member=member,
+    )
 
 
 @bot.event
@@ -3981,8 +3704,6 @@ def _setup_has_unsaved_changes(view: discord.ui.View) -> bool:
         ))
     if kind == "HeraldoLoggingSetupView":
         return changed("pending_channel_id", get_log_channel_id(guild_id))
-    if kind == "ExitCommentSetupView":
-        return changed("pending", exit_comments_enabled(guild_id))
     if kind == "HeraldoMemberLogSetupView":
         return any((
             changed("pending_channel_id", log_member_channel_id(guild_id, view.event_key)),
@@ -12260,69 +11981,6 @@ def log_member_channel_id(guild_id: int, event_key: str) -> int:
 
 
 
-class ExitCommentSetupView(_SetupDirtySaveView):
-    @_i18n_context
-    def __init__(self, guild_id: int, owner_id: int):
-        super().__init__(timeout=900)
-        self.guild_id, self.owner_id = guild_id, owner_id
-        self.pending: bool | None = None
-
-    @_i18n_context
-    async def interaction_check(self, interaction):
-        if not await configuration_access(interaction, self.guild_id, self.owner_id):
-            return False
-        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
-            await interaction.response.send_message(_t('text.321291a0c8ce78'), ephemeral=True)
-            return False
-        return True
-
-    @_i18n_context
-    def content(self, guild):
-        enabled = self.pending if self.pending is not None else exit_comments_enabled(self.guild_id)
-        channel = guild.get_channel(log_member_channel_id(self.guild_id, "member_leave"))
-        private = isinstance(channel, discord.TextChannel) and exit_comment_private(channel)
-        return (_t('text.5bdf2e75e1c129', p0=f"{(_t('text.14c93a0dfe8ec6') if enabled else _t('text.5a9c65149cd523'))}", p1=f"{(_t('common.yes') if private else _t('common.no'))}"))
-
-    @discord.ui.button(label=_t('text.0cfccadccb64bc'), style=discord.ButtonStyle.primary, row=0)
-    @_i18n_context
-    async def toggle(self, interaction, button):
-        self.pending = not (self.pending if self.pending is not None
-                            else exit_comments_enabled(self.guild_id))
-        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
-
-    @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=1)
-    @_i18n_context
-    async def save(self, interaction, button):
-        if self.pending is None:
-            await interaction.response.send_message(_t('text.ed5c91affb2e42'), ephemeral=True)
-            return
-        guild = interaction.guild
-        channel = guild.get_channel(log_member_channel_id(self.guild_id, "member_leave"))
-        if self.pending and (not isinstance(channel, discord.TextChannel)
-                             or not exit_comment_private(channel)
-                             or not guild.me.guild_permissions.view_audit_log):
-            await interaction.response.send_message(
-                _t('text.9a064584b48c48'),
-                ephemeral=True)
-            return
-        guild_config_set(self.guild_id, "exit_comments_enabled", "1" if self.pending else "0")
-        self.pending = None
-        await interaction.response.edit_message(content=self.content(guild)+_t('text.f1c5938f74bc84'), view=self)
-
-    @discord.ui.button(label=_t('text.80ca383e9c8d3e'), style=discord.ButtonStyle.danger, row=1)
-    @_i18n_context
-    async def discard(self, interaction, button):
-        self.pending = None
-        await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
-
-    @discord.ui.button(label=_t('text.ab26ae7bca3621'), style=discord.ButtonStyle.secondary, row=1)
-    @_i18n_context
-    async def back(self, interaction, button):
-        back_view = HeraldoMemberLogSetupView(self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=back_view.content(interaction.guild),
-                                                view=back_view)
-
-
 class HeraldoMemberLogSetupView(_SetupDirtySaveView):
     @_i18n_context
     def __init__(self, guild_id: int, owner_id: int):
@@ -12344,22 +12002,6 @@ class HeraldoMemberLogSetupView(_SetupDirtySaveView):
             channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
         channel.callback = self.select_channel
         self.add_item(channel)
-        self.exit_comments_button = discord.ui.Button(
-            label=_t('text.f6d509bc854508'), style=discord.ButtonStyle.secondary, row=3)
-        self.exit_comments_button.callback = self.open_exit_comments
-        self.add_item(self.exit_comments_button)
-
-    @_i18n_context
-    async def open_exit_comments(self, interaction):
-        if self.event_key != "member_leave":
-            await interaction.response.send_message(
-                _t('text.31e85c652ac7b2'),
-                ephemeral=True)
-            return
-        view = ExitCommentSetupView(self.guild_id, self.owner_id)
-        await interaction.response.edit_message(content=view.content(interaction.guild),
-                                                view=view)
-
     @_i18n_context
     async def interaction_check(self, interaction):
         if not await configuration_access(interaction, getattr(self, "guild_id", None), getattr(self, "owner_id", None)):
@@ -12388,7 +12030,6 @@ class HeraldoMemberLogSetupView(_SetupDirtySaveView):
             self.event_key = values[0]
             self.pending_enabled = None
             self.pending_channel_id = None
-            self.exit_comments_button.disabled = self.event_key != "member_leave"
             for option in self.event_select.options:
                 option.default = option.value == self.event_key
         await interaction.response.edit_message(content=self.content(interaction.guild), view=self)
