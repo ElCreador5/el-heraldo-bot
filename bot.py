@@ -1766,8 +1766,8 @@ def get_orientation_embed_color(guild_id: int) -> int:
 
 @_i18n_context
 def get_orientation_embed_footer(guild: discord.Guild) -> str:
-    """La personalidad de Test lleva la marca del laboratorio, no el nombre real."""
-    return LAB_FOOTER_TEXT
+    """El pie refleja el usuario actual del bot, no el servidor."""
+    return bot_footer_name()
 
 
 @_i18n_context
@@ -1792,10 +1792,7 @@ def build_orientation_embed(guild: discord.Guild) -> discord.Embed:
     )
     footer_text = get_orientation_embed_footer(guild)
     if footer_text:
-        if guild.icon:
-            embed.set_footer(text=footer_text, icon_url=guild.icon.url)
-        else:
-            embed.set_footer(text=footer_text)
+        embed.set_footer(text=footer_text, icon_url=bot_footer_avatar_url() or None)
     return embed
 
 
@@ -2071,8 +2068,8 @@ def get_verify_dm_field_name(guild_id: int | None = None) -> str:
 
 @_i18n_context
 def get_verify_dm_footer(guild_id: int | None = None) -> str:
-    """Identidad fija del laboratorio; conserva cualquier configuración histórica."""
-    return LAB_FOOTER_TEXT
+    """Identidad del usuario del bot, sin configuración heredada."""
+    return bot_footer_name()
 
 @_i18n_context
 def get_verify_dm_color(guild_id: int | None = None) -> str:
@@ -2107,8 +2104,8 @@ def build_verification_welcome_embed(
         value=render_vars(get_verify_dm_body(guild_id), ctx, 1024),
         inline=False,
     )
-    footer_icon = str(effective_guild.icon.url) if effective_guild is not None and effective_guild.icon else ""
-    footer_text = LAB_FOOTER_TEXT
+    footer_icon = bot_footer_avatar_url()
+    footer_text = bot_footer_name()
     if footer_icon:
         embed.set_footer(text=footer_text, icon_url=footer_icon)
     else:
@@ -2366,6 +2363,13 @@ async def on_ready() -> None:
         print(f"H03_DAILY status=BLOCKED reason={type(exc).__name__}", flush=True)
 
     _startup_done = True
+    # Al arrancar se actualizan los footers de mensajes antiguos, sin republicarlos.
+    try:
+        from bot_footer_reconcile import reconcile_existing_bot_footers
+        asyncio.create_task(reconcile_existing_bot_footers(bot, stamp_embed, db_meta_get, db_meta_set))
+    except Exception:
+        print("FOOTER_RECONCILE status=START_FAILED", flush=True)
+        traceback.print_exc()
     try:
         from test_backup_scheduler import start_if_authorized as start_test_backup
         start_test_backup()
@@ -24641,73 +24645,66 @@ bot.tree.add_command(list_group)
 
 
 # ---------------------------------------------------------------------------
-# 11. RESPUESTAS SIEMPRE EN EMBED, CON FOOTER {servidor}{servericon}
+# 11. EMBEDS CON IDENTIDAD DINÁMICA DEL BOT
 # ---------------------------------------------------------------------------
-# Versión TEST: todos los embeds llevan la marca fija «El Heraldo's Labs 🧪»,
-# nunca el nombre real de la comunidad como identidad del footer. Se conserva
-# el icono real del servidor ({servericon}) y cualquier nota personalizada.
-# Las respuestas, DM con origen conocido, ediciones, plantillas y multimedia
-# comparten el mismo contrato; las variables del resto del mensaje no cambian.
+# Se utiliza el nombre de usuario y avatar actuales de bot.user.
+# La edición retroactiva conserva la nota personalizada del pie.
 
-LAB_FOOTER_TEXT = "El Heraldo's Labs 🧪"
 LAB_FOOTER_EDITOR_HINT = _t('footer.editor_hint')
-GLOBAL_FOOTER_TEXT = LAB_FOOTER_TEXT
-GLOBAL_FOOTER_ICON = "{servericon}"
-EMBED_DEFAULT_COLOR = 0xE7CF7F  # color de los embeds que nacen de texto plano (❌ rojo, ✅ verde, ⚠️ naranja)
+GLOBAL_FOOTER_TEXT = "{botname}"
+GLOBAL_FOOTER_ICON = "{botavatar}"
+EMBED_DEFAULT_COLOR = 0xE7CF7F
 
 _MISSING = discord.utils.MISSING
-_interaction_guilds: dict[str, int] = {}  # token de interacción -> guild_id (para los follow-ups)
+_interaction_guilds: dict[str, int] = {}
+
+
+def bot_footer_name() -> str:
+    """Nombre de usuario de Discord del bot; nunca el nombre del servidor."""
+    user = getattr(bot, "user", None)
+    return str(getattr(user, "name", None) or "El Heraldo").strip()
+
+
+def bot_footer_avatar_url() -> str:
+    """Avatar actual del usuario del bot."""
+    user = getattr(bot, "user", None)
+    asset = getattr(user, "display_avatar", None)
+    return str(getattr(asset, "url", "") or "")
 
 
 @_i18n_context
 def heraldo_footer(guild: discord.Guild | None) -> tuple[str, str]:
-    """(texto, icono) del footer global, resueltos con el sistema de variables."""
-    if guild is None:
-        return LAB_FOOTER_TEXT, ""
-    ctx = VarContext(guild)
-    return render_vars(GLOBAL_FOOTER_TEXT, ctx, 2048, plain=True), render_url_var(GLOBAL_FOOTER_ICON, ctx)
+    return bot_footer_name(), bot_footer_avatar_url()
 
 
 def server_footer_text(server_name: str, detail: str = "") -> str:
-    """Identidad fija de Test; nombre real solo se utiliza para retirar pies antiguos.
-
-    Conserva el detalle de cada embed sin truncamientos silenciosos ni cambios
-    en plantillas persistidas. Es idempotente en envíos y ediciones repetidos.
-    """
-    name = LAB_FOOTER_TEXT
+    """Elimina las antiguas marcas de identidad y conserva los datos del pie."""
+    name = bot_footer_name()
     old_name = str(server_name or "").strip()
-    raw_parts = [part.strip() for part in str(detail or "").split(" · ")]
-    # Evitar que las plantillas antiguas introduzcan el nombre real del servidor.
-    excluded = {name.casefold(), "{servidor}", "${servidor}"}
+    parts = [part.strip() for part in str(detail or "").split(" · ")]
+    excluded = {
+        name.casefold(), "{servidor}", "{botname}", "El Heraldo".casefold(),
+        "El Heraldo's Labs 🧪".casefold(), "El Heraldo Labs 🧪".casefold(),
+    }
     if old_name:
         excluded.add(old_name.casefold())
-    parts = [part for part in raw_parts if part and part.casefold() not in excluded]
-    extra = _i18n_join(" · ", parts)
+    extra = _i18n_join(" · ", [part for part in parts if part and part.casefold() not in excluded])
     if not extra:
         return name
     footer = f"{name} · {extra}"
     if len(footer) > 2048:
-        raise ValueError(
-            _t('text.fdf33446c7e5e5')
-        )
+        raise ValueError(_t('text.fdf33446c7e5e5'))
     return footer
 
 
 @_i18n_context
 def stamp_embed(embed: discord.Embed, guild: discord.Guild | None) -> discord.Embed:
-    """Impone Labs en el texto y el icono de la comunidad real si está disponible."""
+    """Marca todos los embeds con el usuario y avatar del propio bot."""
     detail = embed.footer.text or ""
-    if guild is None:
-        desired = server_footer_text("", detail)
-        if desired != detail or getattr(embed.footer, "icon_url", None):
-            embed.set_footer(text=desired, icon_url=None)
-        return embed
-    desired = server_footer_text(guild.name, detail)
-    guild_icon = getattr(guild, "icon", None)
-    server_icon = str(guild_icon.url) if guild_icon else None
-    # El icono configurado no sustituye al icono del servidor de origen.
-    if desired != detail or getattr(embed.footer, "icon_url", None) != server_icon:
-        embed.set_footer(text=desired, icon_url=server_icon)
+    desired = server_footer_text(guild.name if guild else "", detail)
+    icon = bot_footer_avatar_url() or None
+    if desired != detail or str(getattr(embed.footer, "icon_url", "") or "") != str(icon or ""):
+        embed.set_footer(text=desired, icon_url=icon)
     return embed
 
 

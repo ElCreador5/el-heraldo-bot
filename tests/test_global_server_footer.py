@@ -14,7 +14,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import message_payload
 
-LAB_NAME = "El Heraldo's Labs 🧪"
+LAB_NAME = "El Heraldo Labs 🧪"
 
 SOURCE = _source_text(Path(__file__).resolve().parents[1] / 'bot.py', 'utf-8')
 TREE = ast.parse(SOURCE)
@@ -23,10 +23,17 @@ FUNCS = {n.name: n for n in TREE.body
 
 
 def isolate(*names, env=None):
-    scope = {"LAB_FOOTER_TEXT": LAB_NAME, **(env or {})}
+    scope = {
+        "bot": SimpleNamespace(user=SimpleNamespace(
+            name=LAB_NAME, display_avatar=SimpleNamespace(url="https://example.org/bot.png"))),
+        "_i18n_join": lambda sep, items: sep.join(items),
+        "_t": lambda key: "El footer supera 2048 caracteres",
+        "_i18n_context": lambda fn: fn,
+        **(env or {}),
+    }
     tree = ast.fix_missing_locations(ast.Module(body=[
         ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
-        *(FUNCS[n] for n in names),
+        *(FUNCS[n] for n in ("bot_footer_name", "bot_footer_avatar_url", *names)),
     ], type_ignores=[]))
     exec(compile(tree, "<isolated>", "exec"), scope)
     return scope
@@ -55,14 +62,14 @@ def server(name, icon=None, gid=1):
 class ServerFooterTests(unittest.TestCase):
     def test_existing_operational_footer_preserved_with_server_and_icon(self):
         env = isolate("server_footer_text", "stamp_embed",
-                      env={"bot": SimpleNamespace(), "heraldo_footer": lambda g: ("El Heraldo", "")})
+                      env={"heraldo_footer": lambda g: ("El Heraldo", "")})
         guild = server("Heraldo's Lab", "https://example.org/icon.png")
         embed = FakeEmbed({"footer": {"text": "Resolución 42 · Guardado"}})
         stamped = env["stamp_embed"](embed, guild)
         self.assertIs(stamped, embed)
         self.assertEqual(stamped.footer.text,
-                         "El Heraldo's Labs 🧪 · Resolución 42 · Guardado")
-        self.assertEqual(stamped.footer.icon_url, "https://example.org/icon.png")
+                         LAB_NAME + " · Resolución 42 · Guardado")
+        self.assertEqual(stamped.footer.icon_url, "https://example.org/bot.png")
         self.assertIs(env["stamp_embed"](embed, guild), embed)
         self.assertEqual(stamped.footer.text.count(LAB_NAME), 1)
 
@@ -93,7 +100,7 @@ class ServerFooterTests(unittest.TestCase):
     def test_unknown_dm_does_not_borrow_even_the_only_cached_guild(self):
         env = isolate("heraldo_footer", env={
             "bot": SimpleNamespace(guilds=[server("Comunidad privada")],
-                                   user=SimpleNamespace(name="El Heraldo")),
+                                   user=SimpleNamespace(name=LAB_NAME)),
         })
         self.assertEqual(env["heraldo_footer"](None), (LAB_NAME, ""))
 
@@ -103,8 +110,8 @@ class ServerFooterTests(unittest.TestCase):
         embed.set_footer(text="Expediente 42")
         _, first = b._embedify(None, {"embed": embed}, server("Alfa"), None)
         _, second = b._embedify(None, {"embed": embed}, server("Beta"), None)
-        self.assertEqual(first["embed"].footer.text, LAB_NAME + " · Expediente 42")
-        self.assertEqual(second["embed"].footer.text, LAB_NAME + " · Expediente 42")
+        self.assertEqual(first["embed"].footer.text, "El Heraldo · Expediente 42")
+        self.assertEqual(second["embed"].footer.text, "El Heraldo · Expediente 42")
         self.assertEqual(embed.footer.text, "Expediente 42")
         full = b.discord.Embed(description="x" * 4000)
         full.add_field(name="Campo", value="y" * 1024)
@@ -119,7 +126,7 @@ class ServerFooterTests(unittest.TestCase):
         self.assertIsNone(content)
         self.assertNotIn("embeds", payload)
         self.assertEqual(payload["embed"].description, "Borrador preparado")
-        self.assertEqual(payload["embed"].footer.text, LAB_NAME)
+        self.assertEqual(payload["embed"].footer.text, "El Heraldo")
 
     def test_announcements_stamp_footer_at_publication(self):
         worker = (Path(__file__).resolve().parents[1] / "message_automation.py").read_text(encoding="utf-8")
@@ -154,8 +161,8 @@ class ServerFooterTests(unittest.TestCase):
         content, kw = b._embedify(None, {"files": [attachment]}, guild, None)
         self.assertIsNone(content)
         self.assertEqual(kw["files"], [attachment])
-        self.assertEqual(kw["embed"].footer.text, LAB_NAME)
-        self.assertEqual(kw["embed"].footer.icon_url, "https://example.org/media.png")
+        self.assertEqual(kw["embed"].footer.text, "El Heraldo")
+        self.assertIsNone(kw["embed"].footer.icon_url)
 
     def test_suggestion_direct_dms_and_edits_use_origin_guild(self):
         source = ast.get_source_segment(SOURCE, FUNCS["finalize_suggestion_decision"])
@@ -169,7 +176,7 @@ class ServerFooterTests(unittest.TestCase):
         self.assertNotIn('set_footer(text="Paraíso Morboso 2026 · El Heraldo")', SOURCE)
         src = ast.get_source_segment(SOURCE, FUNCS["stamp_embed"])
         self.assertIn("server_footer_text(guild.name, detail)", src)
-        self.assertIn('LAB_FOOTER_TEXT = "El Heraldo\'s Labs 🧪"', SOURCE)
+        self.assertIn("def bot_footer_name()", SOURCE)
 
 
 if __name__ == "__main__":

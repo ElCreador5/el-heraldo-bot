@@ -16,7 +16,7 @@ NODES = {
     n.name: n for n in TREE.body
     if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
 }
-LAB_NAME = "El Heraldo's Labs 🧪"
+LAB_NAME = "El Heraldo Labs 🧪"
 
 
 def snippet(name):
@@ -29,7 +29,8 @@ def isolate(name, **namespace):
                        names=[ast.alias(name="annotations")], level=0),
         NODES[name],
     ], type_ignores=[])
-    namespace.setdefault("LAB_FOOTER_TEXT", LAB_NAME)
+    namespace.setdefault("bot_footer_name", lambda: LAB_NAME)
+    namespace.setdefault("bot_footer_avatar_url", lambda: "https://example.org/bot.png")
     exec(compile(ast.fix_missing_locations(mod), "<isolated>", "exec"),
          namespace)
     return namespace[name]
@@ -69,10 +70,10 @@ class ServerFooterTests(unittest.TestCase):
             get_verify_dm_footer_icon=lambda gid: "{servericon}",
         )
         self.assertEqual(builder(guild=guild_a).footer, {
-            "text": LAB_NAME, "icon_url": "https://example.org/a.png",
+            "text": LAB_NAME, "icon_url": "https://example.org/bot.png",
         })
         self.assertEqual(builder(guild=guild_b).footer, {
-            "text": LAB_NAME, "icon_url": "https://example.org/b.png",
+            "text": LAB_NAME, "icon_url": "https://example.org/bot.png",
         })
         self.assertEqual(builder().footer["text"], LAB_NAME)
         self.assertNotIn("get_verify_dm_footer(", snippet("build_verification_welcome_embed"))
@@ -124,8 +125,8 @@ class ServerFooterTests(unittest.TestCase):
         self.assertNotIn('("titulo", "campo", "mensaje", "footer", "icono_footer")', SOURCE)
 
     def test_global_brand_footer_still_uses_server_and_preserves_informative_footer(self):
-        self.assertIn('GLOBAL_FOOTER_TEXT = LAB_FOOTER_TEXT', SOURCE)
-        self.assertIn('GLOBAL_FOOTER_ICON = "{servericon}"', SOURCE)
+        self.assertIn('GLOBAL_FOOTER_TEXT = "{botname}"', SOURCE)
+        self.assertIn('GLOBAL_FOOTER_ICON = "{botavatar}"', SOURCE)
         self.assertIn("server_footer_text(guild.name, detail)", snippet("stamp_embed"))
         self.assertIn("if guild is None:", snippet("stamp_embed"))
 
