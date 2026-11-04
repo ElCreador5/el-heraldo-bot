@@ -1045,7 +1045,7 @@
   "text.3799c393778b6e": "**New schedule (unsaved)**\nSelect channel, frequency, and options.",
   "text.37ad1f8c7a9080": "The emoji can't be empty.",
   "text.37ae072b3fc80e": "Register the case for human review.",
-  "text.37dd3fcdb335d9": "**El Heraldo · Moderation · Sanction policy**\n\n**1 · Accumulated warnings**\nLimit: **{p0} warnings** (allowed: 1 to 5).\nWhen the limit is reached: **{p2}**",
+  "text.37dd3fcdb335d9": "**El Heraldo · Moderation · Sanction policy**\n\n**1 · Active warnings**\nLimit: **{p0} warnings** (allowed: 1 to 5).\nWhen the limit is reached: **{p2}**",
   "text.37dddb486c6741": "Name of the author",
   "text.37ff4f395c5382": "Honeypot updated",
   "text.38097d0e042a9f": "Edit personality card",
