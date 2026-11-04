@@ -140,5 +140,75 @@ class ExecutionTests(unittest.TestCase):
         self.assertIn("duración", note)
 
 
+class LiveReminderSyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_saved_threshold_changes_refresh_tracked_messages_in_both_directions(self):
+        """El aviso vigente debe subir y bajar con la regla, nunca con un borrador."""
+        import json
+        from unittest.mock import AsyncMock
+        store = {}
+        current_threshold = {"value": 2}
+        def get(guild, key):
+            return store.get((guild, key))
+        def set_(guild, key, value):
+            store[(guild, key)] = value
+
+        class FakeChannel:
+            def permissions_for(self, member):
+                return SimpleNamespace(view_channel=True, read_message_history=True,
+                                       send_messages=True)
+            async def fetch_message(self, message_id):
+                self.requested = message_id
+                return message
+        chan = FakeChannel()
+        message = SimpleNamespace(author=SimpleNamespace(id=99), content="2 personas",
+                                  edit=AsyncMock())
+        guild = SimpleNamespace(id=48, me=object(), get_channel=lambda id: chan)
+        fake_discord = SimpleNamespace(
+            TextChannel=FakeChannel, NotFound=type("NotFound", (Exception,), {}),
+            Forbidden=type("Forbidden", (Exception,), {}),
+            HTTPException=type("HTTPException", (Exception,), {}),
+            AllowedMentions=SimpleNamespace(none=lambda: None),
+        )
+        ns = {
+            "guild_config_get": get, "guild_config_set": set_, "json": json,
+            "REPORT_REMINDER_ACTIVE_MESSAGE_LIMIT": 100,
+        }
+        refs = isolated("reminder_active_message_refs", ns)
+        remember = isolated("remember_report_reminder_publication",
+                            {**ns, "reminder_active_message_refs": refs})
+        refresh = isolated("refresh_report_reminder_publications", {
+            **ns, "reminder_active_message_refs": refs,
+            "reminder_preview": lambda guild_id: f'{current_threshold["value"]} personas',
+            "bot": SimpleNamespace(user=SimpleNamespace(id=99)),
+            "discord": fake_discord,
+        })
+        remember(48, 12, 777)
+        self.assertEqual(refs(48), [(12, 777)])
+        current_threshold["value"] = 3
+        self.assertEqual(await refresh(guild), (1, 0))
+        message.edit.assert_awaited_once_with(content="3 personas", allowed_mentions=None)
+        message.content = "3 personas"
+        message.edit.reset_mock()
+        current_threshold["value"] = 1
+        self.assertEqual(await refresh(guild), (1, 0))
+        message.edit.assert_awaited_once_with(content="1 personas", allowed_mentions=None)
+        self.assertEqual(chan.requested, 777)
+        self.assertEqual(refs(48), [(12, 777)])
+
+    async def test_no_saved_publications_means_no_unnecessary_discord_edit(self):
+        from unittest.mock import AsyncMock
+        import json
+        ns = {"guild_config_get": lambda guild, key: None, "json": json,
+              "REPORT_REMINDER_ACTIVE_MESSAGE_LIMIT": 100}
+        refs = isolated("reminder_active_message_refs", ns)
+        preview = AsyncMock()
+        refresh = isolated("refresh_report_reminder_publications", {
+            "reminder_active_message_refs": refs,
+            "reminder_preview": preview,
+        })
+        self.assertEqual(await refresh(SimpleNamespace(id=3)), (0, 0))
+        preview.assert_not_awaited()
+
+
 if __name__ == "__main__":
     unittest.main()
