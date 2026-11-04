@@ -199,5 +199,53 @@ class ReminderAndDateFormatTests(unittest.TestCase):
         self.assertIn("HeraldoDateFormatSetupView", src)
 
 
+class ReminderModalInteractionTests(unittest.IsolatedAsyncioTestCase):
+    async def submit(self, *, interval, date="", clock=""):
+        from types import SimpleNamespace as NS
+        from unittest.mock import AsyncMock, patch
+        from test_safety_regressions import b
+
+        guild_id = 12880994
+        b.guild_config_set(guild_id, "display_date_format", "mdy12")
+        panel = b.ReportReminderSetupView(guild_id, 10)
+        modal = b.ReportReminderOptionsModal(panel)
+        modal.days._value = interval
+        modal.date._value = date
+        modal.clock._value = clock
+        interaction = NS(response=NS(edit_message=AsyncMock(), send_message=AsyncMock()))
+        with (patch.object(panel, "interaction_check", new=AsyncMock(return_value=True)),
+              patch.object(b, "heraldo_is_test", return_value=True)):
+            await modal.on_submit(interaction)
+        return panel, interaction
+
+    async def test_accepts_server_displayed_date_and_twelve_hour_clock(self):
+        panel, response = await self.submit(
+            interval="2m", date="11/04/2026", clock="10:30 PM")
+        self.assertEqual(panel.pending["report_reminder_start"], "2026-11-04 22:30")
+        self.assertEqual(panel.pending["report_reminder_interval"], "2m")
+        self.assertIn("report_reminder_frequency", panel.selected_fields)
+        response.response.send_message.assert_not_awaited()
+        response.response.edit_message.assert_awaited_once()
+        panel.stop()
+
+    async def test_validation_error_updates_same_panel_without_a_second_message(self):
+        panel, response = await self.submit(
+            interval="2m", date="11/44/2026", clock="10:30 PM")
+        response.response.send_message.assert_not_awaited()
+        response.response.edit_message.assert_awaited_once()
+        self.assertIs(response.response.edit_message.call_args.kwargs["view"], panel)
+        self.assertFalse(any(o.default for o in panel.selectors["report_reminder_frequency"].options))
+        self.assertNotIn("report_reminder_frequency", panel.selected_fields)
+        panel.stop()
+
+    async def test_invalid_interval_shows_specific_inline_error(self):
+        panel, response = await self.submit(interval="seven hours")
+        response.response.send_message.assert_not_awaited()
+        response.response.edit_message.assert_awaited_once()
+        self.assertIn("Intervalo no válido", str(response.response.edit_message.call_args.kwargs["content"]))
+        self.assertEqual(panel.selected_fields, set())
+        panel.stop()
+
+
 if __name__ == "__main__":
     unittest.main()
