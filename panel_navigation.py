@@ -13,6 +13,18 @@ def lineage(view):
                      if getattr(view, name, None) is not None), None)
 
 
+async def dismiss_panel(interaction):
+    """Dismiss a transient administrative panel without a confirmation card."""
+    if not interaction.response.is_done():
+        await interaction.response.defer()
+    try:
+        await interaction.delete_original_response()
+    except discord.NotFound:
+        return
+    except discord.HTTPException:
+        await interaction.edit_original_response(content="\u200b", embed=None, view=None)
+
+
 class AdministrativeClose(discord.ui.Button):
     def __init__(self, guild_id, owner_id):
         self.guild_id, self.owner_id = guild_id, owner_id
@@ -29,7 +41,7 @@ class AdministrativeClose(discord.ui.Button):
             return
         for panel in lineage(self.view):
             panel.stop()
-        await interaction.response.edit_message(content=_t("setup.structure.closed"), embed=None, view=None)
+        await dismiss_panel(interaction)
 
 
 def ensure_close_control(view):
