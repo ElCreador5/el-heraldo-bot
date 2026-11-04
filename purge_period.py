@@ -97,7 +97,7 @@ def parse_purge_period(
     tz = ZoneInfo(tz_name)
     instant = now or datetime.now(timezone.utc)
     if instant.tzinfo is None:
-        raise ValueError("now debe incluir zona horaria")
+        raise ValueError("naive_now")
     today = instant.astimezone(tz).date()
     start, start_kind = _boundary(raw_from, mode, locale, today, tz)
     end, end_kind = _boundary(raw_to, mode, locale, today, tz)
