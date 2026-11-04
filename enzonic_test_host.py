@@ -341,10 +341,10 @@ def require_restored_database():
         blocked("enzonic_database_not_private")
     actual = inspect_database(DATABASE)
     if actual["schema_sha256"] != record.get("schema_sha256"):
-        # La biblioteca personal de /embed añade una tabla propia después de
-        # restaurar la SQLite. El recibo antiguo sigue siendo válido SOLO si
-        # todo el esquema original permanece idéntico al excluir esa tabla.
-        # inspect_database ya ejecutó integrity_check y foreign_key_check.
+        # La biblioteca /embed y las capturas de reingreso agregan tablas
+        # exactas y conocidas tras la restauración histórica. El recibo solo
+        # sigue siendo válido si el resto del esquema coincide byte por byte.
+        # inspect_database ya comprobó integridad y claves foráneas.
         from contextlib import closing
         from sqlite_recovery import readonly
         with closing(readonly(DATABASE)) as conn:
@@ -359,9 +359,14 @@ def require_restored_database():
             published_table = conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name='personal_publications'"
             ).fetchone()
+            rejoin_table = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='verified_rejoin_snapshots'"
+            ).fetchone()
             original_schema = conn.execute(
                 "SELECT type,name,tbl_name,sql FROM sqlite_master "
-                "WHERE sql IS NOT NULL AND name NOT IN ('personal_embeds','personal_publications') "
+                "WHERE sql IS NOT NULL AND name NOT IN "
+                "('personal_embeds','personal_publications','verified_rejoin_snapshots') "
                 "ORDER BY type,name"
             ).fetchall()
         baseline_sha = hashlib.sha256(json.dumps(original_schema).encode()).hexdigest()
@@ -370,15 +375,28 @@ def require_restored_database():
             "        guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,\n"
             "        message_id INTEGER NOT NULL, author_id INTEGER NOT NULL,\n"
             "        PRIMARY KEY (guild_id,channel_id,message_id))")
+        # SQLite elimina IF NOT EXISTS del SQL persistido en sqlite_master.
+        # Este valor coincide exactamente con TABLE_SQL de member_rejoin_restore.
+        expected_rejoin = (
+            "CREATE TABLE verified_rejoin_snapshots (\\n"
+            "    guild_id INTEGER NOT NULL,\\n"
+            "    user_id INTEGER NOT NULL,\\n"
+            "    role_id INTEGER NOT NULL,\\n"
+            "    departed_at TEXT NOT NULL,\\n"
+            "    PRIMARY KEY (guild_id, user_id)\\n"
+            ")"
+        )
         if (personal_table is None or personal_table[0] != expected_personal
                 or (published_table is not None and published_table[0] != expected_publications)
+                or (rejoin_table is not None and rejoin_table[0] != expected_rejoin)
                 or baseline_sha != record.get("schema_sha256")):
             print("ENZONIC_DATABASE status=BLOCKED reason=schema_diff_not_expected "
                   f"personal_table={personal_table is not None} "
+                  f"rejoin_table={rejoin_table is not None} "
                   f"baseline_matches={baseline_sha == record.get('schema_sha256')}",
                   flush=True)
             blocked("enzonic_restored_schema_mismatch")
-        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds,personal_publications "
+        print("ENZONIC_DATABASE status=VERIFIED migration=personal_embeds,personal_publications,verified_rejoin_snapshots "
               "baseline_schema=UNCHANGED integrity=OK", flush=True)
 
 
