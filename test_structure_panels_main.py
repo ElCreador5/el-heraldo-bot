@@ -10,7 +10,7 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.guild_id=445566
         self.host=vars(b)
-        self.original={"template_mode":"weekly","template_hour":"9","template_weekday":"3",
+        self.original={"template_mode":"weekly","template_hour":"9","template_minute":"0","template_weekday":"3",
                        "template_monthday":"1","template_interval_minutes":"1440",
                        "template_last_run":"2026-10-01T09:00:00+00:00","template_last_slot":"2026-10-01T09:00:00-04:00"}
         for key,value in self.original.items():b.guild_config_set(self.guild_id,key,value)
@@ -27,10 +27,11 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
         i=interaction(guild_id=self.guild_id); i.data={"values":["daily"]}
         await view.choose(i)
         modal=StructureScheduleModal(view)
-        for field,value in (("hour","11"),("weekday","2"),("monthday","14"),("interval","120")):
-            getattr(modal,field)._value=value
+        self.assertEqual(len(modal.children),1)
+        modal.clock._value="11:15 AM"
         await modal.on_submit(i)
         self.assertEqual(view.values["template_hour"],"11")
+        self.assertEqual(view.values["template_minute"],"15")
         self.assertEqual([x.value for x in view.chooser.options if x.default],["daily"])
         self.assertEqual(self.snapshot(),self.original)
         self.assertFalse(view.save.disabled)
@@ -58,7 +59,7 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(view.values["template_mode"],"daily")
         await view.discard.callback(i)
         self.assertEqual(view.values,view.initial)
-        view.values["template_mode"]="interval"
+        view.values["template_mode"]="monthly"
         await view.close.callback(i)
         self.assertEqual(self.snapshot(),self.original)
 
@@ -71,7 +72,7 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_schedule_tick_or_edit_cannot_be_overwritten(self):
         for key in ("template_last_run","template_hour"):
             self.setUp()
-            view=self.view(); view.values["template_mode"]="interval"
+            view=self.view(); view.values["template_mode"]="daily"
             confirmation=StructureSaveConfirmView(view)
             b.guild_config_set(self.guild_id,key,"15" if key=="template_hour" else "2026-11-02T12:00:00+00:00")
             expected=self.snapshot()
@@ -80,11 +81,11 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_late_modal_and_invalid_ranges_do_not_change_settings(self):
         view=self.view(); modal=StructureScheduleModal(view)
-        modal.hour._value="24"
+        modal.clock._value="25:00"
         i=interaction(guild_id=self.guild_id)
         await modal.on_submit(i)
         self.assertEqual(self.snapshot(),self.original)
-        modal.hour._value="12"; view.stop()
+        modal.clock._value="12:00 PM"; view.stop()
         await modal.on_submit(i)
         self.assertEqual(view.values,view.initial)
 
