@@ -37,12 +37,16 @@ jobs:
         env:
           PYTHONPATH: "tests:."
         run: python -m unittest -v test_command_consolidation test_server_structure_setup test_embed_manual_only test_setup_interaction_runtime
+      - name: Regresión de historial de idiomas con protección de texto libre
+        env:
+          PYTHONPATH: "tests:."
+        run: python -m unittest -v test_message_locale_sync
       - name: Internacionalización por servidor y detección de textos sin catálogo
         env:
           PYTHONPATH: "tests:."
         run: |
           python tools/i18n_audit.py
-          python -m unittest -v test_i18n_catalog test_language_contract test_i18n_runtime test_i18n_commands test_message_locale_sync
+          python -m unittest -v test_i18n_catalog test_language_contract test_i18n_runtime test_i18n_commands
       - name: Contrato y matriz dinámica de todos los módulos visibles de setup
         env:
           PYTHONPATH: "tests:."
