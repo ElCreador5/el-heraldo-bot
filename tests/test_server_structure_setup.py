@@ -90,6 +90,19 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
         await modal.on_submit(i)
         self.assertEqual(view.values,view.initial)
 
+    async def test_interval_starts_at_selected_clock_not_save_time(self):
+        view=self.view()
+        view.values.update({
+            "template_mode":"interval", "template_hour":"18",
+            "template_minute":"15", "template_interval_minutes":"360",
+        })
+        i=interaction(guild_id=self.guild_id)
+        await StructureSaveConfirmView(view).confirm.callback(i)
+        first=b.template_next_run(self.guild_id, datetime.now(timezone.utc))
+        local=first.astimezone(b.STREAK_TZ)
+        self.assertEqual((local.hour,local.minute),(18,15))
+        self.assertFalse(i.response.send_message.await_count)
+
     async def test_sync_confirm_sends_link_to_owner_without_saving_schedule(self):
         guild_id = self.guild_id
         view = self.view()
