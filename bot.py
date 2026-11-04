@@ -2563,8 +2563,6 @@ def member_departure_description(
                 lines.append(_t('text.7b42fea6d7378e', p0=f"{discord.utils.format_dt(ban_expires_at, 'R')}"))
         else:
             lines.append(_t('text.a628ac7e8ba302'))
-    if kind == "member_leave" and uncertainty:
-        lines.append(_t('text.6e39e7feb39194', p0=f'{discord.utils.escape_markdown(uncertainty[:220])}'))
     for label, value in (extra or []):
         lines.append(f"> **{label}:** {value}")
     return _i18n_join("\n", lines)
