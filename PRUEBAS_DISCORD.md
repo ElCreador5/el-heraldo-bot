@@ -955,3 +955,14 @@ Pruebas automatizadas cubren motivos específicos, rechazo antes de confirmació
 - [ ] Verificar las etiquetas y los estilos en es-419, en-US y pt-BR.
 
 Regresión automatizada de color añadida a `tests/test_role_connections_ui.py`. Prueba interactiva en Discord pendiente.
+
+
+## 2026-11-05 — Matriz visual del rediseño inspirado en Sapphire
+
+- [ ] Ver tres conexiones en `/conexiones`, cada una con rol principal, estado y condición/resumen, sin texto cortado inesperadamente.
+- [ ] Seleccionar una: comprobar bloque de rol principal, condiciones numeradas 1/2 y rótulos AND/OR, selector de condición accesible.
+- [ ] Comprobar grupos avanzados (2+ grupos), navegación Volver/Cerrar sin duplicados y borrador persistente.
+- [ ] Revisar listado con 20 conexiones, nombres largos de roles y pantallas móviles (límite de longitud de Discord).
+- [ ] Verificar es-419, en-US, pt-BR, colores de Confirmar sincronización/guardado/eliminación.
+
+Pruebas de formato automatizadas agregadas a `tests/test_role_connections_ui.py`. Sin ensayo real de Discord todavía.

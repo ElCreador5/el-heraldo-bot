@@ -287,5 +287,62 @@ class RoleConnectionsUITests(unittest.TestCase):
 
 
 
+    def test_sapphire_inspired_discord_summary_hierarchy(self):
+        for lang in ("es-419", "en-US", "pt-BR"):
+            self.host["guild_language"] = lambda gid, lang=lang: lang
+            ctx = ui.Context(self.host, 10, 20)
+            draft = ui.new_draft()
+            draft["name"] = "Chico + Hétero"
+            draft["target_role_id"] = 40
+            draft["groups"][0]["conditions"] = [
+                {"role_id": 10, "op": "has"},
+                {"role_id": 20, "op": "has"},
+            ]
+            editor = ui.ConnectionEditor(ctx, draft)
+            text = editor.summary(self.guild)
+            self.assertIn(ctx.t("main_role"), text)
+            self.assertIn(ctx.t("conditions_header") + " · 2/10 · AND", text)
+            self.assertIn("> 1. ", text)
+            self.assertIn("> 2. ", text)
+            self.assertIn("<@&40>", text)
+            self.assertIn("<@&10>", text)
+            self.assertIn("<@&20>", text)
+            self.assertLessEqual(len(text), 3900)
+            draft["groups"].append({
+                "mode": "any",
+                "conditions": [{"role_id": 30, "op": "lacks"}],
+            })
+            advanced = ui.AdvancedGroups(ctx, draft)
+            text = advanced.summary(self.guild)
+            self.assertIn(ctx.t("group_overview"), text)
+            self.assertIn("**OR**", text)
+            self.assertIn("> 1. ", text)
+
+    def test_list_renders_active_paused_and_compact_conditions(self):
+        first = role_connections.Rule(
+            "one", "Chico + Hétero", 40,
+            ({"mode": "all", "conditions": [
+                {"role_id": 10, "op": "has"}, {"role_id": 20, "op": "has"}
+            ]},),
+            "any", True, "rev1",
+        )
+        second = role_connections.Rule(
+            "two", "Chica + Hétero", 41,
+            ({"mode": "all", "conditions": [{"role_id": 11, "op": "has"}]},),
+            "any", False, "rev2",
+        )
+        with unittest.mock.patch.object(self.ctx, "rules", return_value=[first, second]):
+            panel = ui.ConnectionsList(self.ctx)
+            body = panel.summary(self.guild)
+        self.assertIn(self.ctx.t("list_total", count=2, limit=20), body)
+        self.assertIn(self.ctx.t("enabled"), body)
+        self.assertIn(self.ctx.t("disabled"), body)
+        self.assertIn("**AND**", body)
+        self.assertIn("<@&40>", body)
+        self.assertIn("<@&41>", body)
+        self.assertLessEqual(len(body), 3900)
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -75,6 +75,16 @@ LABELS = {
         "group_overview": "Grupos de condiciones",
         "group_hint": "Usa grupos para combinar alternativas. AND exige todos; OR exige al menos uno.",
         "no_changes": "Guarda o descarta los cambios antes de activar o pausar.",
+        "list_intro": "Asigna o retira automáticamente el rol principal cuando se cumplen sus condiciones.",
+        "list_total": "Conexiones guardadas: {count}/{limit}",
+        "list_hint": "Selecciona una conexión en el menú para editarla.",
+        "role_hint": "Se asignará o retirará según las condiciones configuradas.",
+        "conditions_empty": "Añade una condición para comenzar.",
+        "editor_create": "Crear conexión",
+        "editor_edit": "Editar conexión",
+        "advanced_count": "Grupos: {count}/{limit}",
+        "rule_count": "{count} condiciones · {op}",
+        "groups_brief": "{count} grupos · {op} entre grupos",
     },
     "en-US": {
         "title": "Role connections", "main_role": "Main role", "empty": "No saved connections.",
@@ -137,6 +147,16 @@ LABELS = {
         "group_overview": "Condition groups",
         "group_hint": "Use groups to combine alternatives. AND requires all; OR requires at least one.",
         "no_changes": "Save or discard changes before activating or pausing.",
+        "list_intro": "Automatically assign or remove a main role when its conditions are met.",
+        "list_total": "Saved connections: {count}/{limit}",
+        "list_hint": "Select a connection in the menu to edit it.",
+        "role_hint": "Automatically assigned or removed according to the conditions.",
+        "conditions_empty": "Add a condition to get started.",
+        "editor_create": "Create connection",
+        "editor_edit": "Edit connection",
+        "advanced_count": "Groups: {count}/{limit}",
+        "rule_count": "{count} conditions · {op}",
+        "groups_brief": "{count} groups · {op} between groups",
     },
     "pt-BR": {
         "title": "Conexões de cargos", "main_role": "Cargo principal", "empty": "Não há conexões salvas.",
@@ -199,6 +219,16 @@ LABELS = {
         "group_overview": "Grupos de condições",
         "group_hint": "Use grupos para combinar alternativas. AND exige todas; OR exige ao menos uma.",
         "no_changes": "Salve ou descarte as alterações antes de ativar ou pausar.",
+        "list_intro": "Atribua ou remova automaticamente o cargo principal ao cumprir as condições.",
+        "list_total": "Conexões salvas: {count}/{limit}",
+        "list_hint": "Selecione uma conexão no menu para editá-la.",
+        "role_hint": "Será atribuído ou removido conforme as condições configuradas.",
+        "conditions_empty": "Adicione uma condição para começar.",
+        "editor_create": "Criar conexão",
+        "editor_edit": "Editar conexão",
+        "advanced_count": "Grupos: {count}/{limit}",
+        "rule_count": "{count} condições · {op}",
+        "groups_brief": "{count} grupos · {op} entre grupos",
     },
 
 }
@@ -258,24 +288,32 @@ def _operator(mode):
 
 
 def _format_groups(ctx, guild, groups, mode):
-    """Show every condition, with operators and group boundaries visible."""
-    output = []
+    """Compact hierarchy: group header, numbered conditions, clear operators."""
+    lines = []
     for index, group in enumerate(groups, 1):
         if index > 1:
-            output.append(f"**{_operator(mode)}**")
-        heading = (
-            f"{ctx.t('conditions_header')} · {_operator(group['mode'])}"
-            if len(groups) == 1
-            else ctx.t("group_status", n=index, mode=_operator(group["mode"]),
-                       count=len(group["conditions"]))
-        )
-        output.append(f"**{heading}**")
+            lines.append(f"**{_operator(mode)}**")
+        count = len(group["conditions"])
+        if len(groups) == 1:
+            heading = (
+                f"{ctx.t('conditions_header')} · {count}/{engine.MAX_CONDITIONS}"
+                f" · {_operator(group['mode'])}"
+            )
+        else:
+            heading = ctx.t(
+                "group_status", n=index, mode=_operator(group["mode"]), count=count
+            )
+        lines.append(f"**{heading}**")
+        if not group["conditions"]:
+            lines.append(f"> *{ctx.t('conditions_empty')}*")
         for number, condition in enumerate(group["conditions"], 1):
             expression = ctx.t("has" if condition["op"] == "has" else "lacks")
-            output.append(f"{number}. {expression} {_role(guild, condition.get('role_id'))}")
-        if not group["conditions"]:
-            output.append("—")
-    return "\n" + "\n".join(output)
+            lines.append(
+                f"> {number}. {expression} {_role(guild, condition.get('role_id'))}"
+            )
+        if index != len(groups):
+            lines.append("")
+    return "\n" + "\n".join(lines)
 
 
 def _draft_values(draft):
@@ -404,29 +442,44 @@ class ConnectionsList(Base):
 
     def summary(self, guild):
         rules = self.ctx.rules()
-        output = [f"**{self.ctx.t('title')}**", self.ctx.t("instructions"), ""]
+        ctx = self.ctx
+        out = [
+            f"**{ctx.t('title')}**",
+            ctx.t("list_intro"),
+            "",
+            f"**{ctx.t('list_total', count=len(rules), limit=engine.MAX_RULES)}**",
+        ]
         if not rules:
-            output.append(self.ctx.t("empty"))
+            out.append(f"*{ctx.t('empty')}*")
         for index, rule in enumerate(rules, 1):
-            output.append(
-                f"**{index}. {_role(guild, rule.target_role_id)} · "
-                f"{self.ctx.t('enabled' if rule.enabled else 'disabled')}**"
+            out.append(
+                f"\n**{index}. {_role(guild, rule.target_role_id)}** "
+                f"· {ctx.t('enabled' if rule.enabled else 'disabled')}"
             )
             if len(rule.groups) == 1:
                 group = rule.groups[0]
                 terms = [
-                    self.ctx.t("has" if c["op"] == "has" else "lacks") + " "
-                    + _role(guild, c["role_id"])
-                    for c in group["conditions"]
+                    ctx.t("has" if c["op"] == "has" else "lacks")
+                    + " " + _role(guild, c["role_id"])
+                    for c in group["conditions"][:2]
                 ]
-                output.append(f"   {(' ' + _operator(group['mode']) + ' ').join(terms)}")
-            else:
-                output.append(
-                    f"   {len(rule.groups)} {self.ctx.t('group_overview').lower()}"
-                    f" · {_operator(rule.groups_mode)}"
+                separator = " **" + _operator(group["mode"]) + "** "
+                text = separator.join(terms)
+                remaining = len(group["conditions"]) - 2
+                if remaining > 0:
+                    text += f" · +{remaining}"
+                out.append(
+                    f"> **{_operator(group['mode'])}** · {text}"
                 )
-        output.append(f"\n{len(rules)}/{engine.MAX_RULES}")
-        return "\n".join(output)[:3900]
+            else:
+                out.append(
+                    "> " + ctx.t(
+                        "groups_brief", count=len(rule.groups),
+                        op=_operator(rule.groups_mode)
+                    )
+                )
+        out.append(f"\n*{ctx.t('list_hint')}*")
+        return "\n".join(out)[:3900]
 
     async def create(self, interaction):
         await _render(interaction, ConnectionEditor(self.ctx, new_draft()))
@@ -528,19 +581,31 @@ class ConnectionEditor(Base):
         return bool(rule is not None and rule.enabled)
 
     def summary(self, guild):
-        rule_name = self.draft["name"] or self.ctx.t("title")
-        note = f"\n\n*{self.ctx.t('draft')}*" if draft_changed(self.draft) else ""
+        ctx = self.ctx
+        rule_name = self.draft["name"] or ctx.t("title")
+        action = ctx.t("editor_edit" if self.draft["rule_id"] else "editor_create")
         warning = (
-            f"\n\n**{self.ctx.t('attention')}** {self.ctx.t(self.target_warning)}"
+            f"\n\n**{ctx.t('attention')}** {ctx.t(self.target_warning)}"
             if self.target_warning else ""
         )
-        return (
-            f"**{self.ctx.t('title')} · {discord.utils.escape_markdown(rule_name)}**\n"
-            f"**{self.ctx.t('main_role')}:** {_role(guild, self.draft['target_role_id'])}\n"
-            f"*{self.ctx.t('preview')}*"
-            f"{_format_groups(self.ctx, guild, self.draft['groups'], self.draft['groups_mode'])}"
-            f"{warning}{note}"
-        )[:3900]
+        note = (
+            f"\n\n*{ctx.t('draft')}*"
+            if draft_changed(self.draft) else ""
+        )
+        groups = self.draft["groups"]
+        summary = (
+            f"**{ctx.t('title')} · {action}**\n"
+            f"*{discord.utils.escape_markdown(rule_name)}*\n\n"
+            f"**{ctx.t('main_role')}**\n"
+            f"{_role(guild, self.draft['target_role_id'])}\n"
+            f"*{ctx.t('role_hint')}*\n"
+            f"{_format_groups(ctx, guild, groups, self.draft['groups_mode'])}"
+        )
+        if len(groups) > 1:
+            summary += (
+                f"\n\n*{ctx.t('advanced_count', count=len(groups), limit=engine.MAX_GROUPS)}*"
+            )
+        return (summary + warning + note)[:3900]
 
     async def add_condition(self, interaction):
         if len(self.draft["groups"][0]["conditions"]) >= engine.MAX_CONDITIONS:
@@ -636,11 +701,15 @@ class AdvancedGroups(Base):
         self.navigation(self.back, row=2)
 
     def summary(self, guild):
+        ctx = self.ctx
+        groups = self.draft["groups"]
+        note = f"\n\n*{ctx.t('draft')}*" if draft_changed(self.draft) else ""
         return (
-            f"**{self.ctx.t('title')} · {self.ctx.t('group_overview')}**\n"
-            f"{self.ctx.t('group_hint')}"
-            f"{_format_groups(self.ctx, guild, self.draft['groups'], self.draft['groups_mode'])}"
-            f"\n\n*{self.ctx.t('draft')}*"
+            f"**{ctx.t('title')} · {ctx.t('group_overview')}**\n"
+            f"*{ctx.t('advanced_count', count=len(groups), limit=engine.MAX_GROUPS)}*\n"
+            f"{ctx.t('group_hint')}"
+            f"{_format_groups(ctx, guild, groups, self.draft['groups_mode'])}"
+            f"{note}"
         )[:3900]
 
     async def edit_group(self, interaction):
@@ -699,12 +768,12 @@ class GroupEditor(Base):
 
     def summary(self, guild):
         group = self.draft["groups"][self.index]
-        details = _format_groups(self.ctx, guild, [group], self.draft["groups_mode"])
+        ctx = self.ctx
+        details = _format_groups(ctx, guild, [group], self.draft["groups_mode"])
         return (
-            f"**{self.ctx.t('title')} — "
-            f"{self.ctx.t('group_status', n=self.index+1, mode=_operator(group['mode']), count=len(group['conditions']))}**"
-            f"\n{details}\n\n*{self.ctx.t('draft')}*"
-        )
+            f"**{ctx.t('title')} · {ctx.t('group_status', n=self.index+1, mode=_operator(group['mode']), count=len(group['conditions']))}**"
+            f"{details}\n\n*{ctx.t('draft')}*"
+        )[:3900]
 
     async def add_condition(self, interaction):
         if len(self.draft["groups"][self.index]["conditions"]) >= engine.MAX_CONDITIONS:

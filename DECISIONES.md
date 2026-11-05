@@ -618,3 +618,8 @@ Se conserva la protección estricta de roles controlados por verificación de pe
 ## 2026-11-05 — Colores de confirmación en Conexiones de roles
 
 Las confirmaciones de Guardar y Sincronizar miembros usan botón verde (éxito), mientras que Eliminar conexión utiliza rojo (peligro). Sincronizar puede añadir o retirar roles, por lo que mantiene confirmación explícita; el ajuste cambia únicamente la presentación. Solo rama `Pruebas`.
+
+
+## 2026-11-05 — Presentación compacta y jerárquica de Conexiones en Discord
+
+Referente visual: listado de conexiones desplegables tipo Sapphire, adaptado a componentes nativos de Discord (menú de selección y panel dedicado, no tarjetas web interactuables). El listado prioriza rol principal, estado y resumen de condiciones AND/OR; el editor enseña rol principal, condiciones numeradas y grupos avanzados claramente separados. Mantener navegación, confirmaciones, permisos, motor y persistencia existentes. Aplicar es-419, en-US y pt-BR, sin cambios en `main`.

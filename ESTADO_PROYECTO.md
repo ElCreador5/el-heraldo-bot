@@ -925,3 +925,8 @@ El fallo «El rol principal no puede ser administrado ...» se desglosa en razon
 ## 2026-11-05 — Botón de confirmación de sincronización (Pruebas)
 
 Corregido el estilo en `role_connections_setup.py`: Confirmar sincronización cambia de rojo a verde, en coherencia con Confirmar guardado. Confirmar eliminación permanece en rojo. No se modifican los roles, condiciones, persistencia ni el motor. Añadida regresión de estilos para es-419, en-US y pt-BR.
+
+
+## 2026-11-05 — Pulido de presentación del panel Conexiones (`Pruebas`)
+
+Se revisaron los resúmenes de `role_connections_setup.py`: lista compacta por rol principal/estado, condiciones claras con AND/OR, encabezados de grupo, recuento de condiciones y separación del editor avanzado. No se añadieron controles web incompatibles con Discord, ni se cambió motor SQLite, guardado, permisos o roles. Se añadieron pruebas de resumen y traducciones; comprobar en Discord Lab antes de declarar UX validada.
