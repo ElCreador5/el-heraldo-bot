@@ -141,15 +141,34 @@ def _ordered(rules):
     return result
 
 
-def target_is_safe(guild, role, protected_ids=()):
-    if role is None or role.id in set(protected_ids) or role.guild.id != guild.id:
-        return False
+def target_safety_reason(guild, role, protected_ids=()):
+    """Return a precise, localizable reason when a main role is unsafe.
+
+    Role connections never administer personality, verification, condemnation,
+    privileged, managed, or higher-priority roles.
+    """
+    if role is None or role.guild.id != guild.id:
+        return "missing_role"
+    if role.id in set(protected_ids):
+        return "unsafe_protected"
+    if role.is_default():
+        return "unsafe_default"
+    if role.managed:
+        return "unsafe_managed"
     me = getattr(guild, "me", None)
-    if me is None or not me.guild_permissions.manage_roles:
-        return False
-    if role.is_default() or role.managed or role >= me.top_role:
-        return False
-    return not any(getattr(role.permissions, name, False) for name in PRIVILEGED)
+    if me is None:
+        return "unsafe_bot_member"
+    if not me.guild_permissions.manage_roles:
+        return "unsafe_bot_permissions"
+    if role >= me.top_role:
+        return "unsafe_hierarchy"
+    if any(getattr(role.permissions, name, False) for name in PRIVILEGED):
+        return "unsafe_privileged"
+    return None
+
+
+def target_is_safe(guild, role, protected_ids=()):
+    return target_safety_reason(guild, role, protected_ids) is None
 
 
 def save_rule(connect, guild, *, name, target_role_id, groups, groups_mode="all",
@@ -160,8 +179,11 @@ def save_rule(connect, guild, *, name, target_role_id, groups, groups_mode="all"
         raise ValueError("invalid_name")
     if any(guild.get_role(i) is None for i in dependencies | {target_id}):
         raise ValueError("missing_role")
-    if not target_is_safe(guild, guild.get_role(target_id), protected_ids):
-        raise ValueError("unsafe_target")
+    unsafe_reason = target_safety_reason(
+        guild, guild.get_role(target_id), protected_ids
+    )
+    if unsafe_reason is not None:
+        raise ValueError(unsafe_reason)
     ensure_schema(connect)
     new = Rule(rule_id or uuid4().hex, name.strip(), target_id, tuple(clean),
                groups_mode, True, uuid4().hex)

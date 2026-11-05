@@ -34,6 +34,14 @@ LABELS = {
         "missing_role": "Debes seleccionar roles existentes.",
         "invalid_groups": "Crea al menos un grupo con una condición válida.",
         "invalid_conditions": "Completa las condiciones y comprueba sus operadores.",
+        "unsafe_protected": "Ese rol está reservado para verificación, personalidad o moderación. Úsalo como condición y selecciona un rol principal diferente.",
+        "unsafe_default": "El rol @everyone no puede administrarse mediante conexiones.",
+        "unsafe_managed": "Ese rol lo administra una integración de Discord y no puede asignarse automáticamente.",
+        "unsafe_bot_member": "No se pudo comprobar la posición de El Heraldo en la lista de roles. Revisa que esté conectado e inténtalo nuevamente.",
+        "unsafe_bot_permissions": "El Heraldo necesita el permiso Gestionar roles para asignar el rol principal.",
+        "unsafe_hierarchy": "El rol principal está al mismo nivel o por encima del rol más alto de El Heraldo. Mueve el rol de El Heraldo por encima de ese rol en Configuración del servidor → Roles.",
+        "unsafe_privileged": "Este rol tiene permisos administrativos o de gestión. Por seguridad, las conexiones no pueden asignarlo.",
+        "attention": "No se puede guardar esta conexión:",
         "unsafe_target": "El rol principal no puede ser administrado de forma segura por El Heraldo.",
         "circular_rule": "Las conexiones no pueden depender circularmente unas de otras.",
         "duplicate_target": "Ese rol principal ya tiene una conexión.",
@@ -88,6 +96,14 @@ LABELS = {
         "missing_role": "Select existing roles.",
         "invalid_groups": "Create at least one group with a valid condition.",
         "invalid_conditions": "Complete the conditions and check the operators.",
+        "unsafe_protected": "This role is reserved for verification, personality, or moderation. Use it as a condition and choose a different main role.",
+        "unsafe_default": "The @everyone role cannot be managed through connections.",
+        "unsafe_managed": "A Discord integration manages this role; it cannot be assigned automatically.",
+        "unsafe_bot_member": "El Heraldo could not verify its own role position. Ensure the bot is connected and try again.",
+        "unsafe_bot_permissions": "El Heraldo needs the Manage Roles permission to assign the main role.",
+        "unsafe_hierarchy": "The main role is at or above El Heraldo's highest role. Move El Heraldo's role above it in Server Settings → Roles.",
+        "unsafe_privileged": "This role grants administrative or management permissions. Role connections cannot assign it for security reasons.",
+        "attention": "Cannot save this connection:",
         "unsafe_target": "El Heraldo cannot safely manage the main role.",
         "circular_rule": "Role connections cannot have circular dependencies.",
         "duplicate_target": "That main role already has a connection.",
@@ -142,6 +158,14 @@ LABELS = {
         "missing_role": "Selecione cargos existentes.",
         "invalid_groups": "Crie ao menos um grupo com uma condição válida.",
         "invalid_conditions": "Preencha as condições e confira os operadores.",
+        "unsafe_protected": "Este cargo é reservado para verificação, personalidade ou moderação. Use-o como condição e escolha outro cargo principal.",
+        "unsafe_default": "O cargo @everyone não pode ser gerenciado por conexões.",
+        "unsafe_managed": "Uma integração do Discord gerencia este cargo; ele não pode ser atribuído automaticamente.",
+        "unsafe_bot_member": "Não foi possível verificar a posição do cargo de El Heraldo. Confira se o bot está conectado e tente novamente.",
+        "unsafe_bot_permissions": "El Heraldo precisa da permissão Gerenciar cargos para atribuir o cargo principal.",
+        "unsafe_hierarchy": "O cargo principal está no mesmo nível ou acima do cargo mais alto de El Heraldo. Mova o cargo de El Heraldo para cima em Configurações do servidor → Cargos.",
+        "unsafe_privileged": "Este cargo possui permissões administrativas ou de gerenciamento. Por segurança, as conexões não podem atribuí-lo.",
+        "attention": "Não é possível salvar esta conexão:",
         "unsafe_target": "El Heraldo não pode gerenciar o cargo principal com segurança.",
         "circular_rule": "As conexões não podem ter dependências circulares.",
         "duplicate_target": "Esse cargo principal já tem uma conexão.",
@@ -267,7 +291,7 @@ def draft_changed(draft):
     return _draft_values(draft) != draft["original"]
 
 
-def draft_can_save(draft):
+def draft_can_save(draft, *, guild=None, protected_ids=()):
     if not draft_changed(draft) or not draft["target_role_id"]:
         return False
     try:
@@ -275,6 +299,10 @@ def draft_can_save(draft):
             draft["groups"], draft["groups_mode"], draft["target_role_id"]
         )
     except (ValueError, TypeError):
+        return False
+    if guild is not None and engine.target_safety_reason(
+        guild, guild.get_role(draft["target_role_id"]), protected_ids
+    ):
         return False
     return True
 
@@ -422,6 +450,13 @@ class ConnectionEditor(Base):
         super().__init__(ctx)
         self.draft = draft
         guild = ctx.host["bot"].get_guild(ctx.guild_id)
+        protected_ids = ctx.protected()
+        self.target_warning = (
+            engine.target_safety_reason(
+                guild, guild.get_role(draft["target_role_id"]), protected_ids
+            )
+            if guild is not None and draft["target_role_id"] else None
+        )
         self.target = discord.ui.RoleSelect(
             placeholder=ctx.t("target") + (
                 f": {_option_role(guild, draft['target_role_id'])}"
@@ -476,7 +511,9 @@ class ConnectionEditor(Base):
                     style=discord.ButtonStyle.secondary)
 
         self.button("save", self.save, row=3, style=discord.ButtonStyle.success,
-                    disabled=not draft_can_save(draft))
+                    disabled=not draft_can_save(
+                        draft, guild=guild, protected_ids=protected_ids
+                    ))
         self.button("discard", self.discard, row=3, style=discord.ButtonStyle.secondary,
                     disabled=not draft_changed(draft))
         if draft["rule_id"]:
@@ -493,12 +530,16 @@ class ConnectionEditor(Base):
     def summary(self, guild):
         rule_name = self.draft["name"] or self.ctx.t("title")
         note = f"\n\n*{self.ctx.t('draft')}*" if draft_changed(self.draft) else ""
+        warning = (
+            f"\n\n**{self.ctx.t('attention')}** {self.ctx.t(self.target_warning)}"
+            if self.target_warning else ""
+        )
         return (
             f"**{self.ctx.t('title')} · {discord.utils.escape_markdown(rule_name)}**\n"
             f"**{self.ctx.t('main_role')}:** {_role(guild, self.draft['target_role_id'])}\n"
             f"*{self.ctx.t('preview')}*"
             f"{_format_groups(self.ctx, guild, self.draft['groups'], self.draft['groups_mode'])}"
-            f"{note}"
+            f"{warning}{note}"
         )[:3900]
 
     async def add_condition(self, interaction):
@@ -521,6 +562,12 @@ class ConnectionEditor(Base):
             return await _error(interaction, self.ctx.t("error"))
         if self.draft["target_role_id"] is None:
             return await _error(interaction, self.ctx.t("no_target"))
+        guild = interaction.guild
+        safety_reason = engine.target_safety_reason(
+            guild, guild.get_role(self.draft["target_role_id"]), self.ctx.protected()
+        )
+        if safety_reason:
+            return await _error(interaction, self.ctx.t(safety_reason))
         try:
             engine.validate_groups(
                 self.draft["groups"], self.draft["groups_mode"], self.draft["target_role_id"]

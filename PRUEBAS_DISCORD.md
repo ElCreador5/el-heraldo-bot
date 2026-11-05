@@ -934,3 +934,14 @@ Regresiones unitarias añadidas en `tests/test_role_connections_ui.py`. No regis
 - [ ] Comprobar que las reglas guardadas con `all/any` internos se siguen evaluando correctamente y no requieren migración.
 
 Las pruebas unitarias se comprobarán mediante CI; la validación interactiva en Discord permanece separada.
+
+
+## 2026-11-05 — Aceptación: rechazo explicativo de roles principales
+
+- [ ] En `/conexiones`, seleccionar un rol de personalidad protegido como principal y comprobar aviso específico inmediato (no error genérico), botón Guardar inactivo y borrador conservado.
+- [ ] Utilizar ese mismo rol como condición y elegir un rol ordinario y administrable como principal; confirmar que Guardar se habilita y persiste.
+- [ ] Verificar mensajes de falta de «Gestionar roles», jerarquía demasiado alta e integración, manteniendo protecciones.
+- [ ] Repetir textos y estado de controles en es-419, en-US y pt-BR; revisar Volver y Cerrar.
+- [ ] Validar con bot de pruebas conectado; no afirmar despliegue ni funcionamiento real sin evidencia.
+
+Pruebas automatizadas cubren motivos específicos, rechazo antes de confirmación y ausencia de persistencia accidental. No se toca `main`.

@@ -110,9 +110,9 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(asyncio.run(rc.reconcile_member(member, connect=self.connect)), (1, 0))
 
     def test_no_unsafe_privileged_protected_or_cycles(self):
-        with self.assertRaisesRegex(ValueError, "unsafe_target"):
+        with self.assertRaisesRegex(ValueError, "unsafe_privileged"):
             self.save(90, [group("all", ("has", 1))])
-        with self.assertRaisesRegex(ValueError, "unsafe_target"):
+        with self.assertRaisesRegex(ValueError, "unsafe_protected"):
             self.save(20, [group("all", ("has", 1))], protected_ids={20})
         with self.assertRaisesRegex(ValueError, "circular_rule"):
             self.save(20, [group("all", ("has", 20))])
@@ -167,6 +167,46 @@ class ConnectionTests(unittest.TestCase):
             rc.synchronize(self.guild, connect=self.connect, limit=1000)
         )
         self.assertEqual((checked, added, removed, exceeded), (1, 1, 0, False))
+
+
+    def test_unsafe_target_diagnostics_are_specific(self):
+        role = self.guild.get_role(20)
+        self.assertIsNone(rc.target_safety_reason(self.guild, role))
+        self.assertEqual(
+            rc.target_safety_reason(self.guild, role, protected_ids={20}),
+            "unsafe_protected"
+        )
+        self.assertEqual(
+            rc.target_safety_reason(self.guild, self.guild.get_role(90)),
+            "unsafe_privileged"
+        )
+        self.assertEqual(
+            rc.target_safety_reason(self.guild, None), "missing_role"
+        )
+        role.managed = True
+        self.assertEqual(rc.target_safety_reason(self.guild, role), "unsafe_managed")
+        role.managed = False
+        self.guild.me.top_role = self.guild.get_role(10)
+        self.assertEqual(rc.target_safety_reason(self.guild, role), "unsafe_hierarchy")
+        self.guild.me.top_role = FakeRole(self.guild, 200)
+        self.guild.me.guild_permissions.manage_roles = False
+        self.assertEqual(
+            rc.target_safety_reason(self.guild, role), "unsafe_bot_permissions"
+        )
+        self.guild.me.guild_permissions.manage_roles = True
+        self.guild.me = None
+        self.assertEqual(rc.target_safety_reason(self.guild, role), "unsafe_bot_member")
+
+    def test_unsafe_target_does_not_persist_or_override_existing_rule(self):
+        rule = self.save(20, [group("all", ("has", 1))])
+        with self.assertRaisesRegex(ValueError, "unsafe_protected"):
+            self.save(
+                20, [group("all", ("has", 2))], rule_id=rule.rule_id,
+                expected_revision=rule.revision, protected_ids={20}
+            )
+        current = rc.get_rule(self.connect, self.guild.id, rule.rule_id)
+        self.assertEqual(current.revision, rule.revision)
+        self.assertEqual(current.groups[0]["conditions"][0]["role_id"], 1)
 
 
 if __name__ == "__main__":

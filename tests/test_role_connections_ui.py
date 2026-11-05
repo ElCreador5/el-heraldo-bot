@@ -190,5 +190,66 @@ class RoleConnectionsUITests(unittest.TestCase):
 
 
 
+    def test_protected_personality_main_role_is_explained_before_saving(self):
+        class TargetRole:
+            def __init__(self, guild, role_id):
+                self.guild, self.id, self.managed = guild, role_id, False
+                self.name = f"Role-{role_id}"
+                self.mention = f"<@&{role_id}>"
+                self.permissions = SimpleNamespace(**{
+                    name: False for name in role_connections.PRIVILEGED
+                })
+
+            def is_default(self):
+                return False
+
+            def __ge__(self, other):
+                return self.id >= other.id
+
+        guild = SimpleNamespace(id=10)
+        roles = {i: TargetRole(guild, i) for i in (11, 20, 21, 100)}
+        guild.get_role = roles.get
+        guild.me = SimpleNamespace(
+            guild_permissions=SimpleNamespace(manage_roles=True),
+            top_role=roles[100],
+        )
+        self.guild = guild
+        self.host["bot"] = SimpleNamespace(get_guild=lambda gid: guild)
+        self.host["get_eval_role_ids"] = lambda gid: {20}
+
+        draft = ui.new_draft()
+        draft["target_role_id"] = 20
+        draft["name"] = "Personality"
+        draft["groups"][0]["conditions"].append({"role_id": 11, "op": "has"})
+        for language in ("es-419", "en-US", "pt-BR"):
+            self.host["guild_language"] = lambda gid, language=language: language
+            ctx = ui.Context(self.host, 10, 20)
+            editor = ui.ConnectionEditor(ctx, draft)
+            self.assertIn(ctx.t("unsafe_protected"), editor.summary(guild))
+            save_button = next(
+                item for item in editor.children
+                if getattr(item, "label", None) == ctx.t("save")
+            )
+            self.assertTrue(save_button.disabled)
+            self.assertFalse(ui.draft_can_save(
+                draft, guild=guild, protected_ids=ctx.protected()
+            ))
+
+        # A regular, assignable destination role remains allowed; the
+        # personality role can still be used as a *condition*.
+        draft["target_role_id"] = 21
+        draft["groups"][0]["conditions"][0]["role_id"] = 20
+        ctx = ui.Context(self.host, 10, 20)
+        editor = ui.ConnectionEditor(ctx, draft)
+        self.assertIsNone(editor.target_warning)
+        self.assertTrue(ui.draft_can_save(
+            draft, guild=guild, protected_ids=ctx.protected()
+        ))
+        self.assertFalse(next(
+            item.disabled for item in editor.children
+            if getattr(item, "label", None) == ctx.t("save")
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()

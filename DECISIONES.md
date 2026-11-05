@@ -608,3 +608,8 @@ Se prioriza la edición de condiciones desde el propio editor de conexión, sin 
 ## 2026-11-05 — Operadores visibles de conexiones de roles
 
 La interfaz de Conexiones mostrará siempre AND / OR (no ALL / ANY) en los resúmenes, selectores y botones de estado; los botones mostrarán cuál está activo. El motor seguirá guardando internamente `all` / `any` para preservar la SQLite y las conexiones existentes. Cambio solo en `Pruebas`.
+
+
+## 2026-11-05 — Diagnóstico preciso al guardar roles principales en Conexiones
+
+Se conserva la protección estricta de roles controlados por verificación de personalidad, verificación de edad y moderación, roles privilegiados o de integración y jerarquía de Discord. El rechazo del rol principal debe explicar la razón concreta (rol protegido, jerarquía, permiso Gestionar roles, rol de integración, rol privilegiado o bot no disponible) y sugerir solución sin suprimir controles. Un rol de personalidad puede servir como **condición**, pero no como rol principal automatizado. Sin cambios de esquema ni permisos ampliados; solo `Pruebas`.

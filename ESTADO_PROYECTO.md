@@ -915,3 +915,8 @@ Actualizado `role_connections_setup.py`: el editor muestra rol principal, condic
 ## 2026-11-05 — Corrección de AND / OR en Conexiones (Pruebas)
 
 En `role_connections_setup.py` se unificó el formato visible de operadores con `_operator`: `all` → `AND`, `any` → `OR`. La selección actual se muestra en botones de condiciones y grupos, y las opciones/resúmenes se localizan igual. Sin modificación del motor, datos ni `main`. Se amplió `tests/test_role_connections_ui.py` para cubrir los tres idiomas.
+
+
+## 2026-11-05 — Error explicativo de rol principal incompatible (Pruebas)
+
+El fallo «El rol principal no puede ser administrado ...» se desglosa en razones específicas con `target_safety_reason` en `role_connections.py`. El editor `role_connections_setup.py` muestra el motivo junto al rol elegido, deshabilita Guardar ante un destino no seguro y vuelve a validar en la confirmación. Causas contempladas: roles reservados a personalidad/verificación/moderación, permisos, jerarquía, integración, privilegios, @everyone o bot no detectable. Mensajes localizados es-419, en-US y pt-BR. No se alteran las conexiones ya guardadas, la SQLite, ni `main`; quedan pendientes ensayos en Discord Lab.
