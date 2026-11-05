@@ -395,7 +395,7 @@ class ConnectionsList(Base):
             else:
                 output.append(
                     f"   {len(rule.groups)} {self.ctx.t('group_overview').lower()}"
-                    f" · {rule.groups__operator(mode)}"
+                    f" · {_operator(rule.groups_mode)}"
                 )
         output.append(f"\n{len(rules)}/{engine.MAX_RULES}")
         return "\n".join(output)[:3900]
@@ -739,7 +739,7 @@ class ConditionEditor(Base):
 
     def summary(self, guild):
         return (
-            f"**{self.ctx.t('title')} — {self.ctx.t('group_status', n=self.group_index+1, mode=self.draft['groups'][self.group_index]['mode'].upper(), count=len(self.draft['groups'][self.group_index]['conditions']))}**"
+            f"**{self.ctx.t('title')} — {self.ctx.t('group_status', n=self.group_index+1, mode=_operator(self.draft['groups'][self.group_index]['mode']), count=len(self.draft['groups'][self.group_index]['conditions']))}**"
             f"\n{self.ctx.t('has' if self.pending['op'] == 'has' else 'lacks')}: "
             f"{_role(guild, self.pending['role_id'])}\n\n*{self.ctx.t('draft')}*"
         )
