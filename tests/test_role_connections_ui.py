@@ -187,9 +187,17 @@ class RoleConnectionsUITests(unittest.TestCase):
                 [getattr(item, "label", "") for item in advanced.children],
             )
             group_editor = views[2]
-            self.assertIn(
-                f"{ctx.t('group_mode')}: AND",
-                [getattr(item, "label", "") for item in group_editor.children],
+            mode_selector = next(
+                item for item in group_editor.children
+                if isinstance(item, discord.ui.Select)
+                and item.placeholder == ctx.t("group_mode")
+            )
+            self.assertEqual(
+                [opt.value for opt in mode_selector.options if opt.default], ["all"]
+            )
+            self.assertEqual(
+                next(opt.label for opt in mode_selector.options if opt.default),
+                ctx.t("mode_all"),
             )
             draft["groups"][0]["mode"] = "any"
             self.assertIn("OR", ui.ConnectionEditor(ctx, draft).summary(self.guild))
