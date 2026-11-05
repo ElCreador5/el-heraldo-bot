@@ -72,7 +72,7 @@ class RoleConnectionsUITests(unittest.TestCase):
         editor = ui.ConnectionEditor(self.ctx, draft)
         labels = [getattr(item, "label", "") for item in editor.children]
         self.assertIn(self.ctx.t("add_condition"), labels)
-        self.assertIn(self.ctx.t("condition_operator"), labels)
+        self.assertIn(f"{self.ctx.t('conditions_header')}: AND", labels)
         self.assertIn(self.ctx.t("advanced_groups"), labels)
         self.assertFalse(any(getattr(item, "placeholder", "") ==
                              self.ctx.t("group") for item in editor.children))
