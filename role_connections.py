@@ -90,8 +90,14 @@ def validate_groups(groups, groups_mode, target_id):
     for group in groups:
         mode = group.get("mode")
         conditions = group.get("conditions", [])
-        if mode not in ("all", "any") or not 1 <= len(conditions) <= MAX_CONDITIONS:
+        if mode not in ("all", "any", "xor", "not", "at_least") or not 1 <= len(conditions) <= MAX_CONDITIONS:
             raise ValueError("invalid_conditions")
+        minimum = None
+        if mode == "at_least":
+            minimum = group.get("min_required")
+            if (isinstance(minimum, bool) or not isinstance(minimum, int)
+                    or not 1 <= minimum <= len(conditions)):
+                raise ValueError("invalid_minimum")
         normalized = []
         seen = set()
         for item in conditions:
@@ -109,7 +115,10 @@ def validate_groups(groups, groups_mode, target_id):
             seen.add(pair)
             dependencies.add(role_id)
             normalized.append({"role_id": role_id, "op": op})
-        clean.append({"mode": mode, "conditions": normalized})
+        normalized_group = {"mode": mode, "conditions": normalized}
+        if minimum is not None:
+            normalized_group["min_required"] = minimum
+        clean.append(normalized_group)
     return clean, dependencies
 
 
@@ -250,17 +259,40 @@ def switch_rule(connect, guild_id, rule_id, revision, enabled):
         return result.rowcount == 1
 
 
+def _group_matches(group, held):
+    """Evaluate validated group modes without changing existing AND/OR semantics."""
+    values = [
+        (int(c["role_id"]) in held) if c["op"] == "has"
+        else (int(c["role_id"]) not in held)
+        for c in group["conditions"]
+    ]
+    mode = group["mode"]
+    if mode == "all":
+        return all(values)
+    if mode == "any":
+        return any(values)
+    if mode == "xor":
+        # Exactly one, NOT odd-number parity.
+        return sum(values) == 1
+    if mode == "not":
+        # Negate the entire AND-group, not each condition individually.
+        return not all(values)
+    if mode == "at_least":
+        minimum = group.get("min_required")
+        return (type(minimum) is int and 1 <= minimum <= len(values)
+                and sum(values) >= minimum)
+    # Fail closed for unsupported or corrupted stored modes.
+    return False
+
+
 def matches(rule, held):
     held = set(held)
-    groups = []
-    for group in rule.groups:
-        results = [
-            (int(c["role_id"]) in held) if c["op"] == "has"
-            else (int(c["role_id"]) not in held)
-            for c in group["conditions"]
-        ]
-        groups.append(all(results) if group["mode"] == "all" else any(results))
-    return all(groups) if rule.groups_mode == "all" else any(groups)
+    groups = [_group_matches(group, held) for group in rule.groups]
+    if rule.groups_mode == "all":
+        return all(groups)
+    if rule.groups_mode == "any":
+        return any(groups)
+    return False
 
 
 async def reconcile_member(member, *, connect, protected_ids=(), blocked=None):

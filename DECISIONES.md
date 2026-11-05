@@ -623,3 +623,8 @@ Las confirmaciones de Guardar y Sincronizar miembros usan botón verde (éxito),
 ## 2026-11-05 — Presentación compacta y jerárquica de Conexiones en Discord
 
 Referente visual: listado de conexiones desplegables tipo Sapphire, adaptado a componentes nativos de Discord (menú de selección y panel dedicado, no tarjetas web interactuables). El listado prioriza rol principal, estado y resumen de condiciones AND/OR; el editor enseña rol principal, condiciones numeradas y grupos avanzados claramente separados. Mantener navegación, confirmaciones, permisos, motor y persistencia existentes. Aplicar es-419, en-US y pt-BR, sin cambios en `main`.
+
+
+## 2026-11-05 — Operadores avanzados para Conexiones de roles (Pruebas)
+
+Se incorporan tres operadores nuevos exclusivamente a la evaluación **interna de cada grupo** en el editor avanzado, manteniendo AND y OR como atajos del editor principal y como unión entre grupos: `xor` significa **exactamente una** condición verdadera (no paridad impar), `not` significa **NOT (AND de todas las condiciones)** y `at_least` significa al menos `min_required` condiciones verdaderas (1..n). El mínimo es editable y visible; cada modo se selecciona con un desplegable persistente. Las conexiones existentes con `all`/`any` conservan la evaluación y el formato de datos. Solo se amplía el JSON almacenado en `groups_json`; **no se modifica el esquema de SQLite ni `groups_mode`**. No tocar `main` ni alterar roles protegidos.

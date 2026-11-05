@@ -209,5 +209,69 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(current.groups[0]["conditions"][0]["role_id"], 1)
 
 
+    def test_advanced_xor_exactly_one_and_not_negated_all(self):
+        xor_rule = self.save(25, [group("xor", ("has", 1), ("has", 2), ("has", 3))])
+        self.assertFalse(rc.matches(xor_rule, set()))
+        self.assertTrue(rc.matches(xor_rule, {1}))
+        self.assertTrue(rc.matches(xor_rule, {3}))
+        self.assertFalse(rc.matches(xor_rule, {1, 2}))
+        self.assertFalse(rc.matches(xor_rule, {1, 2, 3}))
+        not_rule = self.save(26, [group("not", ("has", 1), ("has", 2))])
+        self.assertTrue(rc.matches(not_rule, set()))
+        self.assertTrue(rc.matches(not_rule, {1}))
+        self.assertFalse(rc.matches(not_rule, {1, 2}))
+
+    def test_advanced_minimum_validation_persistence_and_reconcile(self):
+        grp = group("at_least", ("has", 1), ("has", 2), ("has", 3))
+        grp["min_required"] = 2
+        rule = self.save(27, [grp])
+        loaded = rc.get_rule(self.connect, self.guild.id, rule.rule_id)
+        self.assertEqual(loaded.groups[0]["min_required"], 2)
+        self.assertFalse(rc.matches(loaded, {1}))
+        self.assertTrue(rc.matches(loaded, {1, 2}))
+        self.assertTrue(rc.matches(loaded, {1, 2, 3}))
+        member = FakeMember(self.guild, held=[1])
+        self.assertEqual(asyncio.run(rc.reconcile_member(
+            member, connect=self.connect
+        )), (0, 0))
+        member.roles.append(self.guild.get_role(2))
+        self.assertEqual(asyncio.run(rc.reconcile_member(
+            member, connect=self.connect
+        )), (1, 0))
+        member.roles.remove(self.guild.get_role(1))
+        self.assertEqual(asyncio.run(rc.reconcile_member(
+            member, connect=self.connect
+        )), (0, 1))
+
+        for bad in (None, 0, -1, 4, True, 1.5, "2"):
+            invalid = dict(grp, min_required=bad)
+            with self.subTest(bad=bad), self.assertRaisesRegex(
+                ValueError, "invalid_minimum"
+            ):
+                self.save(28, [invalid])
+        with self.assertRaisesRegex(ValueError, "invalid_conditions"):
+            self.save(28, [{"mode": "unknown", "conditions": grp["conditions"]}])
+
+    def test_backward_compatibility_and_advanced_group_combination(self):
+        self.assertEqual(rc.SCHEMA.count("groups_json TEXT NOT NULL"), 1)
+        base = self.save(30, [group("all", ("has", 1), ("lacks", 2))])
+        original = rc.get_rule(self.connect, self.guild.id, base.rule_id)
+        self.assertEqual(original.groups[0], {
+            "mode": "all", "conditions": [
+                {"op": "has", "role_id": 1},
+                {"op": "lacks", "role_id": 2},
+            ]
+        })
+        xor_grp = group("xor", ("has", 1), ("has", 2))
+        min_grp = group("at_least", ("has", 3), ("has", 4))
+        min_grp["min_required"] = 2
+        combined = self.save(31, [xor_grp, min_grp], mode="any")
+        self.assertTrue(rc.matches(combined, {1}))
+        self.assertTrue(rc.matches(combined, {3, 4}))
+        self.assertFalse(rc.matches(combined, {1, 2, 3}))
+        self.assertFalse(rc.matches(combined, set()))
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -966,3 +966,16 @@ Regresión automatizada de color añadida a `tests/test_role_connections_ui.py`.
 - [ ] Verificar es-419, en-US, pt-BR, colores de Confirmar sincronización/guardado/eliminación.
 
 Pruebas de formato automatizadas agregadas a `tests/test_role_connections_ui.py`. Sin ensayo real de Discord todavía.
+
+
+## 2026-11-05 — Aceptación operadores avanzados de Conexiones
+
+- [ ] En Conexiones → Grupos avanzados → Editar grupo, seleccionar AND, OR, XOR, NOT y Al menos N, verificando la selección persistente durante el panel.
+- [ ] XOR (exactamente una): con roles A/B/C, uno true activa la conexión; dos y tres true no la activan.
+- [ ] NOT de grupo: NOT (A AND B) activa cuando falta A o B, y desactiva cuando se cumplen ambos.
+- [ ] Al menos N: elegir 2 de 3 condiciones, guardar, confirmar, sincronizar miembros y verificar asignaciones/retiros al cambiar el número de condiciones cumplidas.
+- [ ] Intentar N mayor al total y verificar bloqueo; modificar/retirar condiciones y confirmar coherencia del umbral.
+- [ ] Cambiar idioma es-419 / en-US / pt-BR y probar AND/OR básicos, desplegables y navegación Volver/Cerrar.
+- [ ] Confirmar compatibilidad con reglas preexistentes, persistencia Enzonic, protección de roles de personalidad y sin cambios en producción.
+
+Pruebas unitarias se ejecutan mediante workflow Role connections lab. No declarar validación real en Discord sin completar la matriz.

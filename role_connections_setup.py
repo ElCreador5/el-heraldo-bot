@@ -85,6 +85,17 @@ LABELS = {
         "advanced_count": "Grupos: {count}/{limit}",
         "rule_count": "{count} condiciones · {op}",
         "groups_brief": "{count} grupos · {op} entre grupos",
+        "mode_all": "AND · Todas las condiciones",
+        "mode_any": "OR · Al menos una condición",
+        "mode_xor": "XOR · Exactamente una condición",
+        "mode_not": "NOT · Negar el conjunto AND",
+        "mode_at_least": "Al menos N · Mínimo de condiciones",
+        "minimum_select": "Selecciona cuántas condiciones exige el grupo",
+        "minimum_option": "Al menos {count} de {total} condiciones",
+        "at_least_label": "Al menos {count}",
+        "invalid_minimum": "El mínimo debe estar entre 1 y el número de condiciones del grupo.",
+        "advanced_operator_note": "XOR exige exactamente una; NOT significa que no se cumplen todas; Al menos N exige el mínimo seleccionado.",
+        "advanced_edit_hint": "Los operadores avanzados se cambian desde Editar grupo.",
     },
     "en-US": {
         "title": "Role connections", "main_role": "Main role", "empty": "No saved connections.",
@@ -157,6 +168,17 @@ LABELS = {
         "advanced_count": "Groups: {count}/{limit}",
         "rule_count": "{count} conditions · {op}",
         "groups_brief": "{count} groups · {op} between groups",
+        "mode_all": "AND · All conditions",
+        "mode_any": "OR · At least one condition",
+        "mode_xor": "XOR · Exactly one condition",
+        "mode_not": "NOT · Negate the AND group",
+        "mode_at_least": "At least N · Minimum conditions",
+        "minimum_select": "Choose how many conditions the group requires",
+        "minimum_option": "At least {count} of {total} conditions",
+        "at_least_label": "At least {count}",
+        "invalid_minimum": "Minimum must be between 1 and the number of conditions in the group.",
+        "advanced_operator_note": "XOR requires exactly one; NOT means not all are met; At least N requires the selected minimum.",
+        "advanced_edit_hint": "Advanced operators can be changed in Edit group.",
     },
     "pt-BR": {
         "title": "Conexões de cargos", "main_role": "Cargo principal", "empty": "Não há conexões salvas.",
@@ -229,6 +251,17 @@ LABELS = {
         "advanced_count": "Grupos: {count}/{limit}",
         "rule_count": "{count} condições · {op}",
         "groups_brief": "{count} grupos · {op} entre grupos",
+        "mode_all": "AND · Todas as condições",
+        "mode_any": "OR · Pelo menos uma condição",
+        "mode_xor": "XOR · Exatamente uma condição",
+        "mode_not": "NOT · Negar o grupo AND",
+        "mode_at_least": "Pelo menos N · Mínimo de condições",
+        "minimum_select": "Escolha quantas condições o grupo exige",
+        "minimum_option": "Pelo menos {count} de {total} condições",
+        "at_least_label": "Pelo menos {count}",
+        "invalid_minimum": "O mínimo deve estar entre 1 e o número de condições do grupo.",
+        "advanced_operator_note": "XOR exige exatamente uma; NOT significa que nem todas são atendidas; Pelo menos N exige o mínimo selecionado.",
+        "advanced_edit_hint": "Operadores avançados podem ser alterados em Editar grupo.",
     },
 
 }
@@ -283,8 +316,15 @@ def _option_role(guild, role_id):
 
 
 def _operator(mode):
-    """Human-facing AND/OR; internal SQLite keeps all/any unchanged."""
-    return {"all": "AND", "any": "OR"}[mode]
+    """Human-facing labels: internal values remain stable in groups_json."""
+    return {"all": "AND", "any": "OR", "xor": "XOR",
+            "not": "NOT", "at_least": "N"}[mode]
+
+
+def _group_operator(ctx, group):
+    if group["mode"] == "at_least":
+        return ctx.t("at_least_label", count=group.get("min_required", 1))
+    return _operator(group["mode"])
 
 
 def _format_groups(ctx, guild, groups, mode):
@@ -297,11 +337,11 @@ def _format_groups(ctx, guild, groups, mode):
         if len(groups) == 1:
             heading = (
                 f"{ctx.t('conditions_header')} · {count}/{engine.MAX_CONDITIONS}"
-                f" · {_operator(group['mode'])}"
+                f" · {_group_operator(ctx, group)}"
             )
         else:
             heading = ctx.t(
-                "group_status", n=index, mode=_operator(group["mode"]), count=count
+                "group_status", n=index, mode=_group_operator(ctx, group), count=count
             )
         lines.append(f"**{heading}**")
         if not group["conditions"]:
@@ -463,13 +503,13 @@ class ConnectionsList(Base):
                     + " " + _role(guild, c["role_id"])
                     for c in group["conditions"][:2]
                 ]
-                separator = " **" + _operator(group["mode"]) + "** "
+                separator = " **" + _group_operator(ctx, group) + "** "
                 text = separator.join(terms)
                 remaining = len(group["conditions"]) - 2
                 if remaining > 0:
                     text += f" · +{remaining}"
                 out.append(
-                    f"> **{_operator(group['mode'])}** · {text}"
+                    f"> **{_group_operator(ctx, group)}** · {text}"
                 )
             else:
                 out.append(
@@ -559,7 +599,8 @@ class ConnectionEditor(Base):
                     disabled=len(primary["conditions"]) >= engine.MAX_CONDITIONS)
         self.button("condition_operator", self.toggle_conditions, row=2,
                     style=discord.ButtonStyle.secondary,
-                    label=f"{ctx.t('conditions_header')}: {_operator(primary['mode'])}")
+                    label=f"{ctx.t('conditions_header')}: {_group_operator(ctx, primary)}",
+                    disabled=primary["mode"] not in ("all", "any"))
         self.button("advanced_groups", self.advanced, row=2,
                     style=discord.ButtonStyle.secondary)
 
@@ -616,6 +657,8 @@ class ConnectionEditor(Base):
 
     async def toggle_conditions(self, interaction):
         group = self.draft["groups"][0]
+        if group["mode"] not in ("all", "any"):
+            return await _error(interaction, self.ctx.t("advanced_edit_hint"))
         group["mode"] = "any" if group["mode"] == "all" else "all"
         await _render(interaction, ConnectionEditor(self.ctx, self.draft))
 
@@ -678,7 +721,7 @@ class AdvancedGroups(Base):
         opts = [
             discord.SelectOption(
                 label=ctx.t("group_status", n=i + 1,
-                            mode=_operator(g["mode"]), count=len(g["conditions"])),
+                            mode=_group_operator(ctx, g), count=len(g["conditions"])),
                 value=str(i), default=(i == draft["group_index"]),
             )
             for i, g in enumerate(draft["groups"])
@@ -731,59 +774,105 @@ class AdvancedGroups(Base):
 
 
 class GroupEditor(Base):
+    """Advanced group editor with a persistent mode and numeric threshold."""
     def __init__(self, ctx, draft):
         super().__init__(ctx)
         self.draft = draft
         self.index = draft["group_index"]
         group = draft["groups"][self.index]
+        guild = ctx.host["bot"].get_guild(ctx.guild_id)
+
         if group["conditions"]:
-            guild = ctx.host["bot"].get_guild(ctx.guild_id)
-            selector = discord.ui.Select(
+            conditions = discord.ui.Select(
                 placeholder=ctx.t("condition"), row=0,
                 options=[
                     discord.SelectOption(
-                        label=f"{i+1}. {ctx.t('has' if c['op'] == 'has' else 'lacks')}: "
-                              f"{_option_role(guild, c['role_id'])}"[:100],
-                        value=str(i)
-                    ) for i, c in enumerate(group["conditions"])
+                        label=(f"{i+1}. "
+                               f"{ctx.t('has' if c['op'] == 'has' else 'lacks')}: "
+                               f"{_option_role(guild, c['role_id'])}")[:100],
+                        value=str(i),
+                    )
+                    for i, c in enumerate(group["conditions"])
                 ],
             )
 
-            async def selected(interaction):
+            async def selected_condition(interaction):
                 await _render(interaction, ConditionEditor(
-                    ctx, draft, self.index, int(selector.values[0])
+                    ctx, draft, self.index, int(conditions.values[0])
                 ))
 
-            selector.callback = selected
-            self.add_item(selector)
-            row = 1
-        else:
-            row = 0
-        self.button("add_condition", self.add_condition, row=row)
-        self.button("group_mode", self.toggle, row=row, style=discord.ButtonStyle.secondary,
-                    label=f"{ctx.t('group_mode')}: {_operator(group['mode'])}")
-        self.button("delete_group", self.delete, row=row, style=discord.ButtonStyle.danger,
+            conditions.callback = selected_condition
+            self.add_item(conditions)
+
+        operator_row = 1 if group["conditions"] else 0
+        mode_selector = discord.ui.Select(
+            placeholder=ctx.t("group_mode"), row=operator_row,
+            options=[
+                discord.SelectOption(
+                    label=ctx.t(f"mode_{mode}"),
+                    value=mode, default=group["mode"] == mode,
+                )
+                for mode in ("all", "any", "xor", "not", "at_least")
+            ],
+        )
+
+        async def mode_changed(interaction):
+            selected = mode_selector.values[0]
+            group["mode"] = selected
+            if selected == "at_least":
+                group["min_required"] = min(
+                    max(1, int(group.get("min_required", 1))),
+                    max(1, len(group["conditions"])),
+                )
+            else:
+                group.pop("min_required", None)
+            await _render(interaction, GroupEditor(ctx, draft))
+
+        mode_selector.callback = mode_changed
+        self.add_item(mode_selector)
+
+        if group["mode"] == "at_least":
+            count = max(1, len(group["conditions"]))
+            minimum = group.get("min_required", 1)
+            minimum_select = discord.ui.Select(
+                placeholder=ctx.t("minimum_select"), row=operator_row + 1,
+                options=[
+                    discord.SelectOption(
+                        label=ctx.t("minimum_option", count=n, total=len(group["conditions"])),
+                        value=str(n), default=n == minimum,
+                    )
+                    for n in range(1, count + 1)
+                ],
+            )
+
+            async def minimum_changed(interaction):
+                group["min_required"] = int(minimum_select.values[0])
+                await _render(interaction, GroupEditor(ctx, draft))
+
+            minimum_select.callback = minimum_changed
+            self.add_item(minimum_select)
+
+        actions_row = operator_row + (2 if group["mode"] == "at_least" else 1)
+        self.button("add_condition", self.add_condition, row=actions_row,
+                    disabled=len(group["conditions"]) >= engine.MAX_CONDITIONS)
+        self.button("delete_group", self.delete, row=actions_row,
+                    style=discord.ButtonStyle.danger,
                     disabled=len(draft["groups"]) == 1)
-        self.navigation(self.back, row=row+1)
+        self.navigation(self.back, row=actions_row+1)
 
     def summary(self, guild):
         group = self.draft["groups"][self.index]
         ctx = self.ctx
         details = _format_groups(ctx, guild, [group], self.draft["groups_mode"])
         return (
-            f"**{ctx.t('title')} · {ctx.t('group_status', n=self.index+1, mode=_operator(group['mode']), count=len(group['conditions']))}**"
-            f"{details}\n\n*{ctx.t('draft')}*"
+            f"**{ctx.t('title')} · {ctx.t('group_status', n=self.index+1, mode=_group_operator(ctx, group), count=len(group['conditions']))}**"
+            f"{details}\n{ctx.t('advanced_operator_note')}\n\n*{ctx.t('draft')}*"
         )[:3900]
 
     async def add_condition(self, interaction):
         if len(self.draft["groups"][self.index]["conditions"]) >= engine.MAX_CONDITIONS:
             return await _error(interaction, self.ctx.t("limit_conditions"))
         await _render(interaction, ConditionEditor(self.ctx, self.draft, self.index, None))
-
-    async def toggle(self, interaction):
-        group = self.draft["groups"][self.index]
-        group["mode"] = "any" if group["mode"] == "all" else "all"
-        await _render(interaction, GroupEditor(self.ctx, self.draft))
 
     async def delete(self, interaction):
         if len(self.draft["groups"]) <= 1:
@@ -855,7 +944,7 @@ class ConditionEditor(Base):
 
     def summary(self, guild):
         return (
-            f"**{self.ctx.t('title')} — {self.ctx.t('group_status', n=self.group_index+1, mode=_operator(self.draft['groups'][self.group_index]['mode']), count=len(self.draft['groups'][self.group_index]['conditions']))}**"
+            f"**{self.ctx.t('title')} — {self.ctx.t('group_status', n=self.group_index+1, mode=_group_operator(self.ctx, self.draft['groups'][self.group_index]), count=len(self.draft['groups'][self.group_index]['conditions']))}**"
             f"\n{self.ctx.t('has' if self.pending['op'] == 'has' else 'lacks')}: "
             f"{_role(guild, self.pending['role_id'])}\n\n*{self.ctx.t('draft')}*"
         )
@@ -885,7 +974,12 @@ class ConditionEditor(Base):
         await self._return(interaction)
 
     async def delete(self, interaction):
-        self.draft["groups"][self.group_index]["conditions"].pop(self.index)
+        group = self.draft["groups"][self.group_index]
+        group["conditions"].pop(self.index)
+        if group["mode"] == "at_least":
+            group["min_required"] = min(
+                group["min_required"], max(1, len(group["conditions"]))
+            )
         await self._return(interaction)
 
     async def back(self, interaction):

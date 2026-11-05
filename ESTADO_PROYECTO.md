@@ -930,3 +930,8 @@ Corregido el estilo en `role_connections_setup.py`: Confirmar sincronización ca
 ## 2026-11-05 — Pulido de presentación del panel Conexiones (`Pruebas`)
 
 Se revisaron los resúmenes de `role_connections_setup.py`: lista compacta por rol principal/estado, condiciones claras con AND/OR, encabezados de grupo, recuento de condiciones y separación del editor avanzado. No se añadieron controles web incompatibles con Discord, ni se cambió motor SQLite, guardado, permisos o roles. Se añadieron pruebas de resumen y traducciones; comprobar en Discord Lab antes de declarar UX validada.
+
+
+## 2026-11-05 — XOR / NOT / Al menos N en grupos avanzados (Pruebas)
+
+Implementado soporte de validación, guardado y evaluación en `role_connections.py` con tres modos adicionales de grupo: `xor`, `not` y `at_least`. El editor `role_connections_setup.py` expone selector de operador y selector numérico para el umbral; no sustituye de forma silenciosa operadores avanzados desde el botón AND/OR básico. Se conservan las validaciones de permisos y ciclo, el guardado con confirmación, y la compatibilidad de SQLite Enzonic (misma tabla `heraldo_role_connections`). Pruebas unitarias añadidas para modos, traducciones y límites; falta validación Discord Lab. `main` sin cambios.

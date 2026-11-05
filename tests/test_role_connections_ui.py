@@ -344,5 +344,84 @@ class RoleConnectionsUITests(unittest.TestCase):
 
 
 
+    def test_advanced_operator_controls_threshold_and_translations(self):
+        for lang in ("es-419", "en-US", "pt-BR"):
+            self.host["guild_language"] = lambda gid, lang=lang: lang
+            ctx = ui.Context(self.host, 10, 20)
+            draft = ui.new_draft()
+            draft["target_role_id"] = 20
+            draft["groups"][0]["conditions"] = [
+                {"role_id": 1, "op": "has"},
+                {"role_id": 2, "op": "has"},
+                {"role_id": 3, "op": "lacks"},
+            ]
+            for mode in ("all", "any", "xor", "not", "at_least"):
+                group = draft["groups"][0]
+                group["mode"] = mode
+                if mode == "at_least":
+                    group["min_required"] = 2
+                else:
+                    group.pop("min_required", None)
+                view = ui.GroupEditor(ctx, draft)
+                selectors = [
+                    item for item in view.children if isinstance(item, discord.ui.Select)
+                ]
+                mode_selector = next(item for item in selectors
+                                     if item.placeholder == ctx.t("group_mode"))
+                self.assertEqual(
+                    [option.value for option in mode_selector.options],
+                    ["all", "any", "xor", "not", "at_least"],
+                )
+                self.assertEqual(
+                    [option.value for option in mode_selector.options if option.default],
+                    [mode],
+                )
+                expected_min = sum(
+                    item.placeholder == ctx.t("minimum_select") for item in selectors
+                )
+                self.assertEqual(expected_min, int(mode == "at_least"))
+                self.assertLessEqual(max(item.row for item in view.children), 4)
+                self.assertEqual(
+                    sum(getattr(item, "label", None) == ctx.t("close")
+                        for item in view.children), 1
+                )
+                if mode == "at_least":
+                    threshold_select = next(
+                        item for item in selectors
+                        if item.placeholder == ctx.t("minimum_select")
+                    )
+                    self.assertEqual(
+                        [option.value for option in threshold_select.options], ["1", "2", "3"]
+                    )
+                    self.assertEqual(
+                        [option.value for option in threshold_select.options if option.default],
+                        ["2"],
+                    )
+                    self.assertIn(ctx.t("at_least_label", count=2), view.summary(self.guild))
+                    self.assertTrue(ui.draft_can_save(draft))
+            # Ordinary editor must not silently overwrite advanced modes.
+            simple = ui.ConnectionEditor(ctx, draft)
+            button = next(item for item in simple.children
+                          if getattr(item, "label", "").startswith(ctx.t("conditions_header") + ":"))
+            self.assertTrue(button.disabled)
+            self.assertIn(ctx.t("at_least_label", count=2), simple.summary(self.guild))
+            self.assertIn(ctx.t("at_least_label", count=2),
+                          ui.AdvancedGroups(ctx, draft).summary(self.guild))
+
+    def test_invalid_advanced_minimum_cannot_be_saved(self):
+        draft = ui.new_draft()
+        draft["target_role_id"] = 30
+        group = draft["groups"][0]
+        group["mode"] = "at_least"
+        group["conditions"] = [{"role_id": 1, "op": "has"}]
+        group["min_required"] = 2
+        self.assertFalse(ui.draft_can_save(draft))
+        group["min_required"] = 1
+        self.assertTrue(ui.draft_can_save(draft))
+        group.pop("min_required")
+        self.assertFalse(ui.draft_can_save(draft))
+
+
+
 if __name__ == "__main__":
     unittest.main()
