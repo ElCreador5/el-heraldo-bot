@@ -905,3 +905,8 @@ Límites pendientes de comprobación en Discord: permisos y alcance real de hist
 En `Pruebas` se incorporó `moderation_report_labels.py` y se adaptó `bot.py` para resolver etiquetas predeterminadas desde los catálogos `es-419`, `en-US` y `pt-BR`. La captura mostraba encabezado del recordatorio en inglés con categorías españolas almacenadas en la configuración. Ahora se localizan al presentar recordatorios, opciones y resúmenes sin alterar reglas guardadas ni textos personalizados. Los recordatorios con ID conocido se reconstruyen en cambio de idioma o arranque; se conserva la identificación del mensaje. Se incorporaron regresiones `tests/test_moderation_report_language.py`.
 
 `main` no se ha modificado. Pruebas de Discord reales y casos de recordatorios sin ID conocido pendientes de validar. La auditoría global de idiomas sigue detectando cadenas no traducidas ajenas a este fallo.
+
+
+## 2026-11-05 — Conexiones de roles: interfaz simplificada en Pruebas
+
+Actualizado `role_connections_setup.py`: el editor muestra rol principal, condiciones del grupo base y su operador en el panel principal, con acciones directas para añadir/editar. La gestión de varios grupos se desplaza a «Grupos avanzados», conservando el borrador, el guardado con confirmación, estados activar/pausar y traducciones es-419/en-US/pt-BR. Se añadió cobertura unitaria para navegación y botones de guardado, y se mantienen los límites de cinco filas de Discord. Persistencia y reconciliación de roles sin cambios; `main` no se tocó. Queda validar con interacciones reales en Enzonic Lab.

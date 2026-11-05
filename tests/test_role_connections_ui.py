@@ -67,5 +67,73 @@ class RoleConnectionsUITests(unittest.TestCase):
         self.assertEqual(blank["groups"][0]["conditions"], [])
 
 
+    def test_direct_conditions_and_advanced_group_navigation(self):
+        draft = ui.new_draft()
+        editor = ui.ConnectionEditor(self.ctx, draft)
+        labels = [getattr(item, "label", "") for item in editor.children]
+        self.assertIn(self.ctx.t("add_condition"), labels)
+        self.assertIn(self.ctx.t("condition_operator"), labels)
+        self.assertIn(self.ctx.t("advanced_groups"), labels)
+        self.assertFalse(any(getattr(item, "placeholder", "") ==
+                             self.ctx.t("group") for item in editor.children))
+        advanced = ui.AdvancedGroups(self.ctx, draft)
+        self.assertTrue(any(getattr(item, "placeholder", "") ==
+                            self.ctx.t("group") for item in advanced.children))
+        self.assertIn(self.ctx.t("group_overview"), advanced.summary(self.guild))
+        for view in (editor, advanced):
+            self.assertLessEqual(max(item.row for item in view.children), 4)
+            self.assertEqual(
+                1, sum(getattr(item, "label", "") == self.ctx.t("close")
+                       for item in view.children)
+            )
+
+    def test_save_and_discard_only_enabled_for_valid_edits(self):
+        draft = ui.new_draft()
+        def disabled(view, key):
+            return next(item.disabled for item in view.children
+                        if getattr(item, "label", "") == self.ctx.t(key))
+        self.assertTrue(disabled(ui.ConnectionEditor(self.ctx, draft), "save"))
+        self.assertTrue(disabled(ui.ConnectionEditor(self.ctx, draft), "discard"))
+        draft["target_role_id"] = 10
+        self.assertTrue(disabled(ui.ConnectionEditor(self.ctx, draft), "save"))
+        self.assertFalse(disabled(ui.ConnectionEditor(self.ctx, draft), "discard"))
+        draft["groups"][0]["conditions"].append({"role_id": 11, "op": "has"})
+        self.assertFalse(disabled(ui.ConnectionEditor(self.ctx, draft), "save"))
+        self.assertIn(self.ctx.t("conditions_header"),
+                      ui.ConnectionEditor(self.ctx, draft).summary(self.guild))
+        self.assertIn("<@&11>", ui.ConnectionEditor(self.ctx, draft).summary(self.guild))
+        draft["groups"][0]["conditions"].clear()
+        draft["target_role_id"] = None
+        self.assertFalse(ui.draft_changed(draft))
+        self.assertTrue(disabled(ui.ConnectionEditor(self.ctx, draft), "discard"))
+
+    def test_advanced_groups_preview_and_dirty_navigation(self):
+        draft = ui.new_draft()
+        draft["target_role_id"] = 20
+        draft["groups"] = [
+            {"mode": "all", "conditions": [
+                {"role_id": 1, "op": "has"}, {"role_id": 2, "op": "lacks"}
+            ]},
+            {"mode": "any", "conditions": [{"role_id": 3, "op": "has"}]},
+        ]
+        draft["groups_mode"] = "any"
+        panel = ui.AdvancedGroups(self.ctx, draft)
+        self.assertIn("OR", panel.summary(self.guild))
+        self.assertIn("<@&1>", panel.summary(self.guild))
+        self.assertIn("<@&2>", panel.summary(self.guild))
+        self.assertIn("<@&3>", panel.summary(self.guild))
+        self.assertFalse(ui.draft_can_save(ui.new_draft()))
+        self.assertTrue(ui.draft_can_save(draft))
+
+    def test_open_panel_does_not_create_sqlite_table(self):
+        ui.ConnectionEditor(self.ctx, ui.new_draft())
+        ui.AdvancedGroups(self.ctx, ui.new_draft())
+        with self.conn() as connection:
+            tables = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        self.assertNotIn(("heraldo_role_connections",), tables)
+
+
 if __name__ == "__main__":
     unittest.main()

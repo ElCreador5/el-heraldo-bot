@@ -911,3 +911,16 @@ Cobertura de exploración previa: se inspeccionan hasta 300 mensajes por canal y
 - [ ] Verificar logs de inicio `REMINDER_LOCALE_STARTUP` y de cambio `LANGUAGE_REMINDER_SYNC`.
 
 Verificación CI: `test_moderation_report_language` se ejecuta de forma independiente antes de la auditoría global de textos sin catálogo. No declarar éxito completo del contrato global mientras persista el problema previo de cadenas no catalogadas.
+
+
+## 2026-11-05 — Aceptación del nuevo panel de Conexiones de roles (Pruebas)
+
+- [ ] Crear una conexión desde `/conexiones` eligiendo rol principal, añadir dos condiciones desde el editor sin abrir grupos; guardar y confirmar. Comprobar persistencia.
+- [ ] Cambiar AND/OR del grupo base y comprobar que el resumen y las reglas corresponden.
+- [ ] Abrir «Grupos avanzados», añadir un segundo grupo, editar sus condiciones y alternar operador entre grupos. Volver sin perder el borrador.
+- [ ] Guardar y descartar: «Guardar cambios» permanece deshabilitado sin cambios válidos; «Descartar cambios» se deshabilita sin cambios; confirmar guardado explícitamente.
+- [ ] Comprobar botones Volver/Cerrar sin duplicados y máximo cinco filas por vista; verificar permisos y restricciones de roles.
+- [ ] Comprobar textos y opciones seleccionadas en es-419/en-US/pt-BR y funcionamiento en móvil.
+- [ ] Validar en Lab que asignaciones/retiros automáticos siguen funcionando y que no se altera SQLite ni producción.
+
+Regresiones unitarias añadidas en `tests/test_role_connections_ui.py`. No registrar el comportamiento de Discord real como validado mientras estas casillas permanezcan pendientes.

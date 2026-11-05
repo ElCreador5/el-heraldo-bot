@@ -1,7 +1,7 @@
-"""Panel nativo para conexiones de roles; la navegación conserva el borrador.
+"""Panel nativo de conexiones: condiciones directas y grupos avanzados.
 
-Una conexión tiene un rol principal, grupos AND/OR y condiciones tiene/no tiene.
-No necesita un panel web. Las selecciones no escriben en SQLite.
+El panel edita un borrador en memoria. Guardar requiere confirmación y
+el motor de reglas existente sigue siendo la única fuente de persistencia.
 """
 from __future__ import annotations
 
@@ -60,6 +60,13 @@ LABELS = {
         "no_connection": "No se encontró la conexión.", "not_applicable": "No hay reglas activas.",
         "limit_groups": "Máximo de cinco grupos.",
         "limit_conditions": "Máximo de diez condiciones por grupo.",
+        "conditions_header": "Condiciones",
+        "preview": "Vista previa de la regla (no modifica roles)",
+        "advanced_groups": "Grupos avanzados",
+        "condition_operator": "Cambiar AND/OR",
+        "group_overview": "Grupos de condiciones",
+        "group_hint": "Usa grupos para combinar alternativas. AND exige todos; OR exige al menos uno.",
+        "no_changes": "Guarda o descarta los cambios antes de activar o pausar.",
     },
     "en-US": {
         "title": "Role connections", "main_role": "Main role", "empty": "No saved connections.",
@@ -107,6 +114,13 @@ LABELS = {
         "no_connection": "Connection not found.", "not_applicable": "No active rules.",
         "limit_groups": "Maximum of five groups.",
         "limit_conditions": "Maximum of ten conditions per group.",
+        "conditions_header": "Conditions",
+        "preview": "Rule preview (does not change roles)",
+        "advanced_groups": "Advanced groups",
+        "condition_operator": "Toggle AND/OR",
+        "group_overview": "Condition groups",
+        "group_hint": "Use groups to combine alternatives. AND requires all; OR requires at least one.",
+        "no_changes": "Save or discard changes before activating or pausing.",
     },
     "pt-BR": {
         "title": "Conexões de cargos", "main_role": "Cargo principal", "empty": "Não há conexões salvas.",
@@ -154,7 +168,15 @@ LABELS = {
         "no_connection": "Conexão não encontrada.", "not_applicable": "Não há regras ativas.",
         "limit_groups": "Máximo de cinco grupos.",
         "limit_conditions": "Máximo de dez condições por grupo.",
+        "conditions_header": "Condições",
+        "preview": "Prévia da regra (não altera cargos)",
+        "advanced_groups": "Grupos avançados",
+        "condition_operator": "Alternar AND/OR",
+        "group_overview": "Grupos de condições",
+        "group_hint": "Use grupos para combinar alternativas. AND exige todas; OR exige ao menos uma.",
+        "no_changes": "Salve ou descarte as alterações antes de ativar ou pausar.",
     },
+
 }
 
 
@@ -207,33 +229,67 @@ def _option_role(guild, role_id):
 
 
 def _format_groups(ctx, guild, groups, mode):
+    """Show every condition, with operators and group boundaries visible."""
     output = []
     for index, group in enumerate(groups, 1):
-        expressions = [
-            (ctx.t("has") if c["op"] == "has" else ctx.t("lacks"))
-            + " " + _role(guild, c.get("role_id"))
-            for c in group["conditions"]
-        ]
-        output.append(
-            f"**{index}. {group['mode'].upper()}**: "
-            + (f" {group['mode'].upper()} ".join(expressions) if expressions else "—")
+        if index > 1:
+            output.append(f"**{mode.upper()}**")
+        heading = (
+            f"{ctx.t('conditions_header')} · {group['mode'].upper()}"
+            if len(groups) == 1
+            else ctx.t("group_status", n=index, mode=group["mode"].upper(),
+                       count=len(group["conditions"]))
         )
-    return f"\n**{ctx.t('group_operator')}: {mode.upper()}**\n" + "\n".join(output)
+        output.append(f"**{heading}**")
+        for number, condition in enumerate(group["conditions"], 1):
+            expression = ctx.t("has" if condition["op"] == "has" else "lacks")
+            output.append(f"{number}. {expression} {_role(guild, condition.get('role_id'))}")
+        if not group["conditions"]:
+            output.append("—")
+    return "\n" + "\n".join(output)
+
+
+def _draft_values(draft):
+    """Only persisted values count as changes, never the selected UI group."""
+    return {
+        "target_role_id": draft["target_role_id"], "name": draft["name"],
+        "groups": copy.deepcopy(draft["groups"]),
+        "groups_mode": draft["groups_mode"],
+    }
+
+
+def draft_changed(draft):
+    return _draft_values(draft) != draft["original"]
+
+
+def draft_can_save(draft):
+    if not draft_changed(draft) or not draft["target_role_id"]:
+        return False
+    try:
+        engine.validate_groups(
+            draft["groups"], draft["groups_mode"], draft["target_role_id"]
+        )
+    except (ValueError, TypeError):
+        return False
+    return True
 
 
 def new_draft(rule=None):
     if rule is None:
-        return {
+        draft = {
             "rule_id": None, "revision": None, "target_role_id": None, "name": "",
             "groups": [{"mode": "all", "conditions": []}],
             "groups_mode": "any", "group_index": 0,
         }
-    return {
-        "rule_id": rule.rule_id, "revision": rule.revision,
-        "target_role_id": rule.target_role_id, "name": rule.name,
-        "groups": copy.deepcopy(list(rule.groups)), "groups_mode": rule.groups_mode,
-        "group_index": 0,
-    }
+    else:
+        draft = {
+            "rule_id": rule.rule_id, "revision": rule.revision,
+            "target_role_id": rule.target_role_id, "name": rule.name,
+            "groups": copy.deepcopy(list(rule.groups)), "groups_mode": rule.groups_mode,
+            "group_index": 0,
+        }
+    draft["original"] = _draft_values(draft)
+    return draft
 
 
 async def _error(interaction, message):
@@ -320,8 +376,20 @@ class ConnectionsList(Base):
             output.append(
                 f"**{index}. {_role(guild, rule.target_role_id)} · "
                 f"{self.ctx.t('enabled' if rule.enabled else 'disabled')}**"
-                f" · {len(rule.groups)} {self.ctx.t('group_mode').lower()}"
             )
+            if len(rule.groups) == 1:
+                group = rule.groups[0]
+                terms = [
+                    self.ctx.t("has" if c["op"] == "has" else "lacks") + " "
+                    + _role(guild, c["role_id"])
+                    for c in group["conditions"]
+                ]
+                output.append(f"   {(' ' + group['mode'].upper() + ' ').join(terms)}")
+            else:
+                output.append(
+                    f"   {len(rule.groups)} {self.ctx.t('group_overview').lower()}"
+                    f" · {rule.groups_mode.upper()}"
+                )
         output.append(f"\n{len(rules)}/{engine.MAX_RULES}")
         return "\n".join(output)[:3900]
 
@@ -342,6 +410,7 @@ class ConnectionsList(Base):
 
 
 class ConnectionEditor(Base):
+    """Everyday editor: main role and first group directly on this screen."""
     def __init__(self, ctx, draft):
         super().__init__(ctx)
         self.draft = draft
@@ -352,7 +421,7 @@ class ConnectionEditor(Base):
                 if draft["target_role_id"] else ""),
             row=0, min_values=1, max_values=1,
         )
-        if (draft["rule_id"] is not None and draft["target_role_id"]
+        if (draft["target_role_id"]
                 and "default_values" in inspect.signature(discord.ui.RoleSelect).parameters
                 and guild is not None and guild.get_role(draft["target_role_id"]) is not None):
             self.target.default_values = [guild.get_role(draft["target_role_id"])]
@@ -367,27 +436,41 @@ class ConnectionEditor(Base):
         self.target.callback = target_changed
         self.add_item(self.target)
 
-        opts = []
-        for i, group in enumerate(draft["groups"]):
-            opts.append(discord.SelectOption(
-                label=ctx.t("group_status", n=i+1,
-                            mode=group["mode"].upper(), count=len(group["conditions"])),
-                value=str(i), default=i == draft["group_index"],
-            ))
-        select = discord.ui.Select(placeholder=ctx.t("group"), row=1, options=opts)
+        primary = draft["groups"][0]
+        if primary["conditions"]:
+            selector = discord.ui.Select(
+                placeholder=ctx.t("condition"), row=1,
+                options=[
+                    discord.SelectOption(
+                        label=(f"{i + 1}. "
+                               f"{ctx.t('has' if condition['op'] == 'has' else 'lacks')}: "
+                               f"{_option_role(guild, condition['role_id'])}")[:100],
+                        value=str(i),
+                    )
+                    for i, condition in enumerate(primary["conditions"])
+                ],
+            )
 
-        async def picked(interaction):
-            self.draft["group_index"] = int(select.values[0])
-            await _render(interaction, ConnectionEditor(ctx, self.draft))
+            async def picked(interaction):
+                await _render(interaction, ConditionEditor(
+                    ctx, self.draft, 0, int(selector.values[0]),
+                    return_to="connection",
+                ))
 
-        select.callback = picked
-        self.add_item(select)
-        self.button("edit_group", self.edit_group, row=2)
-        self.button("new_group", self.new_group, row=2)
-        self.button("group_operator", self.toggle_group_mode, row=2,
+            selector.callback = picked
+            self.add_item(selector)
+
+        self.button("add_condition", self.add_condition, row=2,
+                    disabled=len(primary["conditions"]) >= engine.MAX_CONDITIONS)
+        self.button("condition_operator", self.toggle_conditions, row=2,
                     style=discord.ButtonStyle.secondary)
-        self.button("save", self.save, row=3, style=discord.ButtonStyle.success)
-        self.button("discard", self.discard, row=3, style=discord.ButtonStyle.danger)
+        self.button("advanced_groups", self.advanced, row=2,
+                    style=discord.ButtonStyle.secondary)
+
+        self.button("save", self.save, row=3, style=discord.ButtonStyle.success,
+                    disabled=not draft_can_save(draft))
+        self.button("discard", self.discard, row=3, style=discord.ButtonStyle.secondary,
+                    disabled=not draft_changed(draft))
         if draft["rule_id"]:
             self.button("delete", self.delete, row=3, style=discord.ButtonStyle.danger)
             self.button("pause" if self._is_enabled() else "resume",
@@ -401,28 +484,33 @@ class ConnectionEditor(Base):
 
     def summary(self, guild):
         rule_name = self.draft["name"] or self.ctx.t("title")
+        note = f"\n\n*{self.ctx.t('draft')}*" if draft_changed(self.draft) else ""
         return (
             f"**{self.ctx.t('title')} · {discord.utils.escape_markdown(rule_name)}**\n"
-            f"**{self.ctx.t('main_role')}:** {_role(guild, self.draft['target_role_id'])}"
+            f"**{self.ctx.t('main_role')}:** {_role(guild, self.draft['target_role_id'])}\n"
+            f"*{self.ctx.t('preview')}*"
             f"{_format_groups(self.ctx, guild, self.draft['groups'], self.draft['groups_mode'])}"
-            f"\n\n*{self.ctx.t('draft')}*"
+            f"{note}"
         )[:3900]
 
-    async def edit_group(self, interaction):
-        await _render(interaction, GroupEditor(self.ctx, self.draft))
+    async def add_condition(self, interaction):
+        if len(self.draft["groups"][0]["conditions"]) >= engine.MAX_CONDITIONS:
+            return await _error(interaction, self.ctx.t("limit_conditions"))
+        await _render(interaction, ConditionEditor(
+            self.ctx, self.draft, 0, None, return_to="connection"
+        ))
 
-    async def new_group(self, interaction):
-        if len(self.draft["groups"]) >= engine.MAX_GROUPS:
-            return await _error(interaction, self.ctx.t("limit_groups"))
-        self.draft["groups"].append({"mode": "all", "conditions": []})
-        self.draft["group_index"] = len(self.draft["groups"]) - 1
-        await _render(interaction, GroupEditor(self.ctx, self.draft))
-
-    async def toggle_group_mode(self, interaction):
-        self.draft["groups_mode"] = ("any" if self.draft["groups_mode"] == "all" else "all")
+    async def toggle_conditions(self, interaction):
+        group = self.draft["groups"][0]
+        group["mode"] = "any" if group["mode"] == "all" else "all"
         await _render(interaction, ConnectionEditor(self.ctx, self.draft))
 
+    async def advanced(self, interaction):
+        await _render(interaction, AdvancedGroups(self.ctx, self.draft))
+
     async def save(self, interaction):
+        if not draft_changed(self.draft):
+            return await _error(interaction, self.ctx.t("error"))
         if self.draft["target_role_id"] is None:
             return await _error(interaction, self.ctx.t("no_target"))
         try:
@@ -445,6 +533,8 @@ class ConnectionEditor(Base):
         await _render(interaction, Confirmation(self.ctx, "delete", self.draft))
 
     async def toggle_enabled(self, interaction):
+        if draft_changed(self.draft):
+            return await _error(interaction, self.ctx.t("no_changes"))
         rule = engine.get_rule(self.ctx.host["db_connect"], self.guild_id, self.draft["rule_id"])
         if rule is None or rule.revision != self.draft["revision"]:
             return await _error(interaction, self.ctx.t("stale_rule"))
@@ -458,6 +548,61 @@ class ConnectionEditor(Base):
 
     async def back(self, interaction):
         await _render(interaction, ConnectionsList(self.ctx))
+
+
+class AdvancedGroups(Base):
+    """Only this advanced screen exposes group selection and cross-group AND/OR."""
+    def __init__(self, ctx, draft):
+        super().__init__(ctx)
+        self.draft = draft
+        opts = [
+            discord.SelectOption(
+                label=ctx.t("group_status", n=i + 1,
+                            mode=g["mode"].upper(), count=len(g["conditions"])),
+                value=str(i), default=(i == draft["group_index"]),
+            )
+            for i, g in enumerate(draft["groups"])
+        ]
+        selector = discord.ui.Select(placeholder=ctx.t("group"), row=0, options=opts)
+
+        async def picked(interaction):
+            self.draft["group_index"] = int(selector.values[0])
+            await _render(interaction, AdvancedGroups(ctx, self.draft))
+
+        selector.callback = picked
+        self.add_item(selector)
+        self.button("edit_group", self.edit_group, row=1)
+        self.button("new_group", self.new_group, row=1,
+                    disabled=len(draft["groups"]) >= engine.MAX_GROUPS)
+        self.button("group_operator", self.toggle_group_mode, row=1,
+                    style=discord.ButtonStyle.secondary,
+                    disabled=len(draft["groups"]) < 2)
+        self.navigation(self.back, row=2)
+
+    def summary(self, guild):
+        return (
+            f"**{self.ctx.t('title')} · {self.ctx.t('group_overview')}**\n"
+            f"{self.ctx.t('group_hint')}"
+            f"{_format_groups(self.ctx, guild, self.draft['groups'], self.draft['groups_mode'])}"
+            f"\n\n*{self.ctx.t('draft')}*"
+        )[:3900]
+
+    async def edit_group(self, interaction):
+        await _render(interaction, GroupEditor(self.ctx, self.draft))
+
+    async def new_group(self, interaction):
+        if len(self.draft["groups"]) >= engine.MAX_GROUPS:
+            return await _error(interaction, self.ctx.t("limit_groups"))
+        self.draft["groups"].append({"mode": "all", "conditions": []})
+        self.draft["group_index"] = len(self.draft["groups"]) - 1
+        await _render(interaction, GroupEditor(self.ctx, self.draft))
+
+    async def toggle_group_mode(self, interaction):
+        self.draft["groups_mode"] = ("any" if self.draft["groups_mode"] == "all" else "all")
+        await _render(interaction, AdvancedGroups(self.ctx, self.draft))
+
+    async def back(self, interaction):
+        await _render(interaction, ConnectionEditor(self.ctx, self.draft))
 
 
 class GroupEditor(Base):
@@ -519,16 +664,17 @@ class GroupEditor(Base):
             return await _error(interaction, self.ctx.t("no_group_delete"))
         self.draft["groups"].pop(self.index)
         self.draft["group_index"] = max(0, self.index - 1)
-        await _render(interaction, ConnectionEditor(self.ctx, self.draft))
+        await _render(interaction, AdvancedGroups(self.ctx, self.draft))
 
     async def back(self, interaction):
-        await _render(interaction, ConnectionEditor(self.ctx, self.draft))
+        await _render(interaction, AdvancedGroups(self.ctx, self.draft))
 
 
 class ConditionEditor(Base):
-    def __init__(self, ctx, draft, group_index, index):
+    def __init__(self, ctx, draft, group_index, index, *, return_to="group"):
         super().__init__(ctx)
         self.draft, self.group_index, self.index = draft, group_index, index
+        self.return_to = return_to
         group = draft["groups"][group_index]
         self.pending = copy.deepcopy(
             group["conditions"][index] if index is not None
@@ -577,7 +723,8 @@ class ConditionEditor(Base):
     def _refresh(self):
         # Update UI select placeholder/default from the pending draft.
         return ConditionEditorWithPending(
-            self.ctx, self.draft, self.group_index, self.index, self.pending
+            self.ctx, self.draft, self.group_index, self.index, self.pending,
+            return_to=self.return_to,
         )
 
     def summary(self, guild):
@@ -609,20 +756,26 @@ class ConditionEditor(Base):
         if self.pending["role_id"] == self.draft["target_role_id"]:
             return await _error(interaction, self.ctx.t("circular_rule"))
         conditions[:] = proposed
-        await _render(interaction, GroupEditor(self.ctx, self.draft))
+        await self._return(interaction)
 
     async def delete(self, interaction):
         self.draft["groups"][self.group_index]["conditions"].pop(self.index)
-        await _render(interaction, GroupEditor(self.ctx, self.draft))
+        await self._return(interaction)
 
     async def back(self, interaction):
-        await _render(interaction, GroupEditor(self.ctx, self.draft))
+        await self._return(interaction)
+
+    async def _return(self, interaction):
+        view = (ConnectionEditor(self.ctx, self.draft)
+                if self.return_to == "connection"
+                else GroupEditor(self.ctx, self.draft))
+        await _render(interaction, view)
 
 
 class ConditionEditorWithPending(ConditionEditor):
     """Rebuild from temporary selection without silently writing it to the rule."""
-    def __init__(self, ctx, draft, group_index, index, pending):
-        super().__init__(ctx, draft, group_index, index)
+    def __init__(self, ctx, draft, group_index, index, pending, *, return_to="group"):
+        super().__init__(ctx, draft, group_index, index, return_to=return_to)
         self.pending = copy.deepcopy(pending)
         for item in self.children:
             if isinstance(item, discord.ui.RoleSelect):
@@ -644,7 +797,6 @@ class Confirmation(Base):
         self.button(key, self.confirm, row=0,
                     style=discord.ButtonStyle.danger if action in ("delete", "sync")
                     else discord.ButtonStyle.success)
-        self.button("cancel", self.cancel, row=0, style=discord.ButtonStyle.danger)
         self.navigation(self.cancel, row=1)
 
     def summary(self, guild):

@@ -598,3 +598,8 @@ La primera conciliación inspecciona un historial limitado (300 mensajes por can
 Las etiquetas predeterminadas para reacciones de reporte deben mostrarse en el idioma MANUAL del servidor, incluso si se guardaron en otro idioma al crear el módulo. Se reconocen únicamente rótulos del catálogo de El Heraldo correspondientes al mismo emoji; etiquetas personalizadas permanecen literales y la base no se reescribe por el cambio de idioma. El aviso público de colaboración de moderación también debe localizarse por completo sin presentar la acción reservada a moderadores.
 
 La sincronización debe editar los recordatorios publicados de los que el bot conserva referencias en `report_reminder_active_messages`: tras guardar el idioma, después de actualizar reacciones y en el primer arranque, sin duplicaciones ni menciones. La comprobación compara el texto visible del embed para no editar de forma innecesaria.
+
+
+## 2026-11-05 — Rediseño de Conexiones de roles en Pruebas
+
+Se prioriza la edición de condiciones desde el propio editor de conexión, sin pasar por el selector de grupos. La primera agrupación es la configuración sencilla (roles tiene/no tiene y AND/OR); «Grupos avanzados» expone grupos adicionales y su operador AND/OR. El resumen muestra todos los requisitos. Guardar y descartar solo se activan ante cambios, y el guardado requiere confirmación. El motor de reglas y su SQLite no cambian; `main` permanece sin modificar. La comprobación real de navegación en Discord queda pendiente de aceptación de Lab.
