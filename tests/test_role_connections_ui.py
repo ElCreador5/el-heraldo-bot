@@ -3,7 +3,10 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace
+
+import discord
 
 import role_connections
 import role_connections_setup as ui
@@ -98,7 +101,10 @@ class RoleConnectionsUITests(unittest.TestCase):
         self.assertTrue(disabled(ui.ConnectionEditor(self.ctx, draft), "save"))
         self.assertFalse(disabled(ui.ConnectionEditor(self.ctx, draft), "discard"))
         draft["groups"][0]["conditions"].append({"role_id": 11, "op": "has"})
-        self.assertFalse(disabled(ui.ConnectionEditor(self.ctx, draft), "save"))
+        # This case tests the dirty draft only; a separate test checks
+        # actual Discord role safety for the chosen target.
+        with patch.object(role_connections, "target_safety_reason", return_value=None):
+            self.assertFalse(disabled(ui.ConnectionEditor(self.ctx, draft), "save"))
         self.assertIn(self.ctx.t("conditions_header"),
                       ui.ConnectionEditor(self.ctx, draft).summary(self.guild))
         self.assertIn("<@&11>", ui.ConnectionEditor(self.ctx, draft).summary(self.guild))
@@ -191,9 +197,10 @@ class RoleConnectionsUITests(unittest.TestCase):
 
 
     def test_protected_personality_main_role_is_explained_before_saving(self):
-        class TargetRole:
+        class TargetRole(discord.Object):
             def __init__(self, guild, role_id):
-                self.guild, self.id, self.managed = guild, role_id, False
+                super().__init__(id=role_id, type=discord.Role)
+                self.guild, self.managed = guild, False
                 self.name = f"Role-{role_id}"
                 self.mention = f"<@&{role_id}>"
                 self.permissions = SimpleNamespace(**{
