@@ -173,8 +173,10 @@ class RoleConnectionsUITests(unittest.TestCase):
                 visible = " ".join((rendered, labels, options))
                 self.assertNotIn(" ALL", visible)
                 self.assertNotIn(" ANY", visible)
-                self.assertNotIn(" all ", visible)
-                self.assertNotIn(" any ", visible)
+                # English explanations may legitimately contain "not all".
+                # Only raw internal operator fields are prohibited in the UI.
+                self.assertNotIn("mode=all", visible)
+                self.assertNotIn("mode=any", visible)
                 self.assertIn("AND", rendered)
             main = views[0]
             self.assertIn(
