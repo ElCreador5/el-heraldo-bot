@@ -930,8 +930,3 @@ Corregido el estilo en `role_connections_setup.py`: Confirmar sincronización ca
 ## 2026-11-05 — Pulido de presentación del panel Conexiones (`Pruebas`)
 
 Se revisaron los resúmenes de `role_connections_setup.py`: lista compacta por rol principal/estado, condiciones claras con AND/OR, encabezados de grupo, recuento de condiciones y separación del editor avanzado. No se añadieron controles web incompatibles con Discord, ni se cambió motor SQLite, guardado, permisos o roles. Se añadieron pruebas de resumen y traducciones; comprobar en Discord Lab antes de declarar UX validada.
-
-
-## 2026-11-05 — Condiciones con operadores en ubicación lógica
-
-En `role_connections_setup.py`, los resúmenes del listado, editor y grupos avanzados colocan AND/OR antes de cada condición posterior; el primer requisito no tiene prefijo. En el segundo grupo se inserta el operador intergrupo antes de su primera condición. Se mantienen las opciones de botones como indicadores de modo; no cambian esquema, persistencia ni asignación de roles. Se agregan regresiones en `tests/test_role_connections_ui.py`. `main` no cambia; prueba en Discord pendiente.

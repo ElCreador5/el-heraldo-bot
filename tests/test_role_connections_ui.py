@@ -175,8 +175,7 @@ class RoleConnectionsUITests(unittest.TestCase):
                 self.assertNotIn(" ANY", visible)
                 self.assertNotIn(" all ", visible)
                 self.assertNotIn(" any ", visible)
-                if not isinstance(panel, ui.ConditionEditor):
-                    self.assertIn("AND", visible)
+                self.assertIn("AND", rendered)
             main = views[0]
             self.assertIn(
                 f"{ctx.t('conditions_header')}: AND",
@@ -302,9 +301,9 @@ class RoleConnectionsUITests(unittest.TestCase):
             editor = ui.ConnectionEditor(ctx, draft)
             text = editor.summary(self.guild)
             self.assertIn(ctx.t("main_role"), text)
-            self.assertIn(ctx.t("conditions_header") + " · 2/10", text)
+            self.assertIn(ctx.t("conditions_header") + " · 2/10 · AND", text)
             self.assertIn("> 1. ", text)
-            self.assertIn("> **AND** 2. ", text)
+            self.assertIn("> 2. ", text)
             self.assertIn("<@&40>", text)
             self.assertIn("<@&10>", text)
             self.assertIn("<@&20>", text)
@@ -342,58 +341,6 @@ class RoleConnectionsUITests(unittest.TestCase):
         self.assertIn("<@&40>", body)
         self.assertIn("<@&41>", body)
         self.assertLessEqual(len(body), 3900)
-
-
-
-    def test_operators_precede_the_condition_they_connect(self):
-        for lang in ("es-419", "en-US", "pt-BR"):
-            self.host["guild_language"] = lambda gid, lang=lang: lang
-            ctx = ui.Context(self.host, 10, 20)
-            first = {"role_id": 10, "op": "has"}
-            second = {"role_id": 20, "op": "lacks"}
-            third = {"role_id": 30, "op": "has"}
-            for mode, word in (("all", "AND"), ("any", "OR")):
-                draft = ui.new_draft()
-                draft["groups"][0] = {
-                    "mode": mode, "conditions": [first, second, third]
-                }
-                output = ui._format_groups(
-                    ctx, self.guild, draft["groups"], "any"
-                )
-                self.assertIn("> 1. ", output)
-                self.assertNotIn("> **" + word + "** 1.", output)
-                self.assertIn(f"> **{word}** 2. ", output)
-                self.assertIn(f"> **{word}** 3. ", output)
-                self.assertNotIn(f"{word} ·", output)
-            draft["groups"] = [
-                {"mode": "all", "conditions": [first, second]},
-                {"mode": "all", "conditions": [third, first]},
-            ]
-            draft["groups_mode"] = "any"
-            advanced = ui.AdvancedGroups(ctx, draft)
-            summary = advanced.summary(self.guild)
-            self.assertIn("> **AND** 2. ", summary)
-            self.assertIn("> **OR** 1. ", summary)
-            self.assertNotIn("\\n**OR**\\n", summary)
-            self.assertLessEqual(len(summary), 3900)
-
-    def test_list_places_operator_before_second_condition_not_first(self):
-        for mode, op in (("all", "AND"), ("any", "OR")):
-            rule = role_connections.Rule(
-                "demo", "example", 40,
-                ({"mode": mode, "conditions": [
-                    {"role_id": 10, "op": "has"},
-                    {"role_id": 20, "op": "has"},
-                ]},),
-                "any", True, "rev",
-            )
-            with unittest.mock.patch.object(
-                self.ctx, "rules", return_value=[rule]
-            ):
-                summary = ui.ConnectionsList(self.ctx).summary(self.guild)
-            self.assertIn("> Tiene el rol <@&10>", summary)
-            self.assertIn(f"> **{op}** Tiene el rol <@&20>", summary)
-            self.assertNotIn(f"> **{op}** ·", summary)
 
 
 
