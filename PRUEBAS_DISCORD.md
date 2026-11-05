@@ -924,3 +924,13 @@ Verificación CI: `test_moderation_report_language` se ejecuta de forma independ
 - [ ] Validar en Lab que asignaciones/retiros automáticos siguen funcionando y que no se altera SQLite ni producción.
 
 Regresiones unitarias añadidas en `tests/test_role_connections_ui.py`. No registrar el comportamiento de Discord real como validado mientras estas casillas permanezcan pendientes.
+
+
+## 2026-11-05 — Verificación de etiquetas AND / OR en conexiones
+
+- [ ] Abrir una conexión simple en Discord Lab: comprobar `Condiciones: AND` o `Condiciones: OR` y que el botón alterna el estado.
+- [ ] Abrir grupos avanzados: comprobar `Entre grupos: AND/OR`, nombres de grupos y condiciones sin `all/any` visibles.
+- [ ] Cambiar el idioma a es-419, en-US y pt-BR y verificar el mismo comportamiento.
+- [ ] Comprobar que las reglas guardadas con `all/any` internos se siguen evaluando correctamente y no requieren migración.
+
+Las pruebas unitarias se comprobarán mediante CI; la validación interactiva en Discord permanece separada.

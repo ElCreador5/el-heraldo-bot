@@ -603,3 +603,8 @@ La sincronización debe editar los recordatorios publicados de los que el bot co
 ## 2026-11-05 — Rediseño de Conexiones de roles en Pruebas
 
 Se prioriza la edición de condiciones desde el propio editor de conexión, sin pasar por el selector de grupos. La primera agrupación es la configuración sencilla (roles tiene/no tiene y AND/OR); «Grupos avanzados» expone grupos adicionales y su operador AND/OR. El resumen muestra todos los requisitos. Guardar y descartar solo se activan ante cambios, y el guardado requiere confirmación. El motor de reglas y su SQLite no cambian; `main` permanece sin modificar. La comprobación real de navegación en Discord queda pendiente de aceptación de Lab.
+
+
+## 2026-11-05 — Operadores visibles de conexiones de roles
+
+La interfaz de Conexiones mostrará siempre AND / OR (no ALL / ANY) en los resúmenes, selectores y botones de estado; los botones mostrarán cuál está activo. El motor seguirá guardando internamente `all` / `any` para preservar la SQLite y las conexiones existentes. Cambio solo en `Pruebas`.

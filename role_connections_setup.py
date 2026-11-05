@@ -228,16 +228,21 @@ def _option_role(guild, role_id):
     return str(role.name) if role else str(role_id or "—")
 
 
+def _operator(mode):
+    """Human-facing AND/OR; internal SQLite keeps all/any unchanged."""
+    return {"all": "AND", "any": "OR"}[mode]
+
+
 def _format_groups(ctx, guild, groups, mode):
     """Show every condition, with operators and group boundaries visible."""
     output = []
     for index, group in enumerate(groups, 1):
         if index > 1:
-            output.append(f"**{mode.upper()}**")
+            output.append(f"**{_operator(mode)}**")
         heading = (
-            f"{ctx.t('conditions_header')} · {group['mode'].upper()}"
+            f"{ctx.t('conditions_header')} · {_operator(group['mode'])}"
             if len(groups) == 1
-            else ctx.t("group_status", n=index, mode=group["mode"].upper(),
+            else ctx.t("group_status", n=index, mode=_operator(group["mode"]),
                        count=len(group["conditions"]))
         )
         output.append(f"**{heading}**")
@@ -316,8 +321,10 @@ class Base(discord.ui.View):
             interaction, self.guild_id, self.owner_id
         )
 
-    def button(self, key, callback, *, row, style=discord.ButtonStyle.primary, disabled=False):
-        item = discord.ui.Button(label=self.ctx.t(key), row=row, style=style, disabled=disabled)
+    def button(self, key, callback, *, row, style=discord.ButtonStyle.primary,
+               disabled=False, label=None):
+        item = discord.ui.Button(label=label or self.ctx.t(key), row=row,
+                                 style=style, disabled=disabled)
         item.callback = callback
         self.add_item(item)
 
@@ -384,11 +391,11 @@ class ConnectionsList(Base):
                     + _role(guild, c["role_id"])
                     for c in group["conditions"]
                 ]
-                output.append(f"   {(' ' + group['mode'].upper() + ' ').join(terms)}")
+                output.append(f"   {(' ' + _operator(group['mode']) + ' ').join(terms)}")
             else:
                 output.append(
                     f"   {len(rule.groups)} {self.ctx.t('group_overview').lower()}"
-                    f" · {rule.groups_mode.upper()}"
+                    f" · {rule.groups__operator(mode)}"
                 )
         output.append(f"\n{len(rules)}/{engine.MAX_RULES}")
         return "\n".join(output)[:3900]
@@ -463,7 +470,8 @@ class ConnectionEditor(Base):
         self.button("add_condition", self.add_condition, row=2,
                     disabled=len(primary["conditions"]) >= engine.MAX_CONDITIONS)
         self.button("condition_operator", self.toggle_conditions, row=2,
-                    style=discord.ButtonStyle.secondary)
+                    style=discord.ButtonStyle.secondary,
+                    label=f"{ctx.t('conditions_header')}: {_operator(primary['mode'])}")
         self.button("advanced_groups", self.advanced, row=2,
                     style=discord.ButtonStyle.secondary)
 
@@ -558,7 +566,7 @@ class AdvancedGroups(Base):
         opts = [
             discord.SelectOption(
                 label=ctx.t("group_status", n=i + 1,
-                            mode=g["mode"].upper(), count=len(g["conditions"])),
+                            mode=_operator(g["mode"]), count=len(g["conditions"])),
                 value=str(i), default=(i == draft["group_index"]),
             )
             for i, g in enumerate(draft["groups"])
@@ -576,7 +584,8 @@ class AdvancedGroups(Base):
                     disabled=len(draft["groups"]) >= engine.MAX_GROUPS)
         self.button("group_operator", self.toggle_group_mode, row=1,
                     style=discord.ButtonStyle.secondary,
-                    disabled=len(draft["groups"]) < 2)
+                    disabled=len(draft["groups"]) < 2,
+                    label=f"{ctx.t('group_operator')}: {_operator(draft['groups_mode'])}")
         self.navigation(self.back, row=2)
 
     def summary(self, guild):
@@ -635,7 +644,8 @@ class GroupEditor(Base):
         else:
             row = 0
         self.button("add_condition", self.add_condition, row=row)
-        self.button("group_mode", self.toggle, row=row, style=discord.ButtonStyle.secondary)
+        self.button("group_mode", self.toggle, row=row, style=discord.ButtonStyle.secondary,
+                    label=f"{ctx.t('group_mode')}: {_operator(group['mode'])}")
         self.button("delete_group", self.delete, row=row, style=discord.ButtonStyle.danger,
                     disabled=len(draft["groups"]) == 1)
         self.navigation(self.back, row=row+1)
@@ -645,7 +655,7 @@ class GroupEditor(Base):
         details = _format_groups(self.ctx, guild, [group], self.draft["groups_mode"])
         return (
             f"**{self.ctx.t('title')} — "
-            f"{self.ctx.t('group_status', n=self.index+1, mode=group['mode'].upper(), count=len(group['conditions']))}**"
+            f"{self.ctx.t('group_status', n=self.index+1, mode=_operator(group['mode']), count=len(group['conditions']))}**"
             f"\n{details}\n\n*{self.ctx.t('draft')}*"
         )
 

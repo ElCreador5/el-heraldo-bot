@@ -910,3 +910,8 @@ En `Pruebas` se incorporó `moderation_report_labels.py` y se adaptó `bot.py` p
 ## 2026-11-05 — Conexiones de roles: interfaz simplificada en Pruebas
 
 Actualizado `role_connections_setup.py`: el editor muestra rol principal, condiciones del grupo base y su operador en el panel principal, con acciones directas para añadir/editar. La gestión de varios grupos se desplaza a «Grupos avanzados», conservando el borrador, el guardado con confirmación, estados activar/pausar y traducciones es-419/en-US/pt-BR. Se añadió cobertura unitaria para navegación y botones de guardado, y se mantienen los límites de cinco filas de Discord. Persistencia y reconciliación de roles sin cambios; `main` no se tocó. Queda validar con interacciones reales en Enzonic Lab.
+
+
+## 2026-11-05 — Corrección de AND / OR en Conexiones (Pruebas)
+
+En `role_connections_setup.py` se unificó el formato visible de operadores con `_operator`: `all` → `AND`, `any` → `OR`. La selección actual se muestra en botones de condiciones y grupos, y las opciones/resúmenes se localizan igual. Sin modificación del motor, datos ni `main`. Se amplió `tests/test_role_connections_ui.py` para cubrir los tres idiomas.

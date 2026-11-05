@@ -135,5 +135,60 @@ class RoleConnectionsUITests(unittest.TestCase):
         self.assertNotIn(("heraldo_role_connections",), tables)
 
 
+    def test_operator_labels_are_and_or_in_every_panel(self):
+        for lang in ("es-419", "en-US", "pt-BR"):
+            self.host["guild_language"] = lambda gid, code=lang: code
+            ctx = ui.Context(self.host, 10, 20)
+            draft = ui.new_draft()
+            self.assertEqual(ui._operator("all"), "AND")
+            self.assertEqual(ui._operator("any"), "OR")
+            draft["groups"][0]["conditions"] = [{"role_id": 1, "op": "has"}]
+            draft["groups"].append(
+                {"mode": "any", "conditions": [{"role_id": 2, "op": "lacks"}]}
+            )
+            draft["groups_mode"] = "any"
+
+            views = [
+                ui.ConnectionEditor(ctx, draft),
+                ui.AdvancedGroups(ctx, draft),
+                ui.GroupEditor(ctx, draft),
+                ui.ConditionEditor(ctx, draft, 0, 0),
+            ]
+            for panel in views:
+                rendered = panel.summary(self.guild)
+                labels = " ".join(
+                    str(getattr(item, "label", "") or "") for item in panel.children
+                )
+                options = " ".join(
+                    option.label
+                    for item in panel.children
+                    for option in getattr(item, "options", [])
+                )
+                visible = " ".join((rendered, labels, options))
+                self.assertNotIn(" ALL", visible)
+                self.assertNotIn(" ANY", visible)
+                self.assertNotIn(" all ", visible)
+                self.assertNotIn(" any ", visible)
+                self.assertIn("AND", rendered)
+            main = views[0]
+            self.assertIn(
+                f"{ctx.t('conditions_header')}: AND",
+                [getattr(item, "label", "") for item in main.children],
+            )
+            advanced = views[1]
+            self.assertIn(
+                f"{ctx.t('group_operator')}: OR",
+                [getattr(item, "label", "") for item in advanced.children],
+            )
+            group_editor = views[2]
+            self.assertIn(
+                f"{ctx.t('group_mode')}: AND",
+                [getattr(item, "label", "") for item in group_editor.children],
+            )
+            draft["groups"][0]["mode"] = "any"
+            self.assertIn("OR", ui.ConnectionEditor(ctx, draft).summary(self.guild))
+
+
+
 if __name__ == "__main__":
     unittest.main()
