@@ -64,6 +64,7 @@ LABELS = {
         "no_condition": "Selecciona el rol de esta condición.",
         "no_target": "Selecciona el rol principal.",
         "disabled": "Pausada", "enabled": "Activa",
+        "group_heading": "Grupo {n} ({count}/10)",
         "group_status": "Grupo {n} — {mode} ({count}/10)",
         "no_connection": "No se encontró la conexión.", "not_applicable": "No hay reglas activas.",
         "limit_groups": "Máximo de cinco grupos.",
@@ -136,6 +137,7 @@ LABELS = {
         "no_condition": "Choose a role for this condition.",
         "no_target": "Choose the main role.",
         "disabled": "Paused", "enabled": "Active",
+        "group_heading": "Group {n} ({count}/10)",
         "group_status": "Group {n} — {mode} ({count}/10)",
         "no_connection": "Connection not found.", "not_applicable": "No active rules.",
         "limit_groups": "Maximum of five groups.",
@@ -208,6 +210,7 @@ LABELS = {
         "no_condition": "Selecione o cargo da condição.",
         "no_target": "Escolha o cargo principal.",
         "disabled": "Pausada", "enabled": "Ativa",
+        "group_heading": "Grupo {n} ({count}/10)",
         "group_status": "Grupo {n} — {mode} ({count}/10)",
         "no_connection": "Conexão não encontrada.", "not_applicable": "Não há regras ativas.",
         "limit_groups": "Máximo de cinco grupos.",
@@ -287,30 +290,36 @@ def _operator(mode):
     return {"all": "AND", "any": "OR"}[mode]
 
 
+def _condition_line(ctx, guild, condition, *, operator=None, number=None):
+    """An operator qualifies the next condition, never the preceding one."""
+    keyword = ctx.t("has" if condition["op"] == "has" else "lacks")
+    prefix = f"**{_operator(operator)}** " if operator else ""
+    numbered = f"{number}. " if number is not None else ""
+    return f"> {prefix}{numbered}{keyword} {_role(guild, condition.get('role_id'))}"
+
+
 def _format_groups(ctx, guild, groups, mode):
-    """Compact hierarchy: group header, numbered conditions, clear operators."""
+    """Display AND/OR before each following condition with group boundaries."""
     lines = []
     for index, group in enumerate(groups, 1):
-        if index > 1:
-            lines.append(f"**{_operator(mode)}**")
         count = len(group["conditions"])
         if len(groups) == 1:
-            heading = (
-                f"{ctx.t('conditions_header')} · {count}/{engine.MAX_CONDITIONS}"
-                f" · {_operator(group['mode'])}"
-            )
+            heading = f"{ctx.t('conditions_header')} · {count}/{engine.MAX_CONDITIONS}"
         else:
-            heading = ctx.t(
-                "group_status", n=index, mode=_operator(group["mode"]), count=count
-            )
+            heading = ctx.t("group_heading", n=index, count=count)
         lines.append(f"**{heading}**")
         if not group["conditions"]:
-            lines.append(f"> *{ctx.t('conditions_empty')}*")
+            boundary = f"**{_operator(mode)}** " if index > 1 else ""
+            lines.append(f"> {boundary}*{ctx.t('conditions_empty')}*")
         for number, condition in enumerate(group["conditions"], 1):
-            expression = ctx.t("has" if condition["op"] == "has" else "lacks")
-            lines.append(
-                f"> {number}. {expression} {_role(guild, condition.get('role_id'))}"
+            # A new group uses the inter-group operator on its first
+            # condition; subsequent ones use the selected group operator.
+            op = mode if index > 1 and number == 1 else (
+                group["mode"] if number > 1 else None
             )
+            lines.append(_condition_line(
+                ctx, guild, condition, operator=op, number=number
+            ))
         if index != len(groups):
             lines.append("")
     return "\n" + "\n".join(lines)
@@ -458,19 +467,15 @@ class ConnectionsList(Base):
             )
             if len(rule.groups) == 1:
                 group = rule.groups[0]
-                terms = [
-                    ctx.t("has" if c["op"] == "has" else "lacks")
-                    + " " + _role(guild, c["role_id"])
-                    for c in group["conditions"][:2]
-                ]
-                separator = " **" + _operator(group["mode"]) + "** "
-                text = separator.join(terms)
+                for number, condition in enumerate(group["conditions"][:2], 1):
+                    op = group["mode"] if number > 1 else None
+                    out.append(_condition_line(
+                        ctx, guild, condition, operator=op
+                    ))
                 remaining = len(group["conditions"]) - 2
                 if remaining > 0:
-                    text += f" · +{remaining}"
-                out.append(
-                    f"> **{_operator(group['mode'])}** · {text}"
-                )
+                    out.append(f"> +{remaining}")
+
             else:
                 out.append(
                     "> " + ctx.t(
@@ -771,7 +776,7 @@ class GroupEditor(Base):
         ctx = self.ctx
         details = _format_groups(ctx, guild, [group], self.draft["groups_mode"])
         return (
-            f"**{ctx.t('title')} · {ctx.t('group_status', n=self.index+1, mode=_operator(group['mode']), count=len(group['conditions']))}**"
+            f"**{ctx.t('title')} · {ctx.t('group_heading', n=self.index+1, count=len(group['conditions']))}**"
             f"{details}\n\n*{ctx.t('draft')}*"
         )[:3900]
 
@@ -855,7 +860,7 @@ class ConditionEditor(Base):
 
     def summary(self, guild):
         return (
-            f"**{self.ctx.t('title')} — {self.ctx.t('group_status', n=self.group_index+1, mode=_operator(self.draft['groups'][self.group_index]['mode']), count=len(self.draft['groups'][self.group_index]['conditions']))}**"
+            f"**{self.ctx.t('title')} — {self.ctx.t('group_heading', n=self.group_index+1, count=len(self.draft['groups'][self.group_index]['conditions']))}**"
             f"\n{self.ctx.t('has' if self.pending['op'] == 'has' else 'lacks')}: "
             f"{_role(guild, self.pending['role_id'])}\n\n*{self.ctx.t('draft')}*"
         )

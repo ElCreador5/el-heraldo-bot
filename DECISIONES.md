@@ -623,3 +623,8 @@ Las confirmaciones de Guardar y Sincronizar miembros usan botón verde (éxito),
 ## 2026-11-05 — Presentación compacta y jerárquica de Conexiones en Discord
 
 Referente visual: listado de conexiones desplegables tipo Sapphire, adaptado a componentes nativos de Discord (menú de selección y panel dedicado, no tarjetas web interactuables). El listado prioriza rol principal, estado y resumen de condiciones AND/OR; el editor enseña rol principal, condiciones numeradas y grupos avanzados claramente separados. Mantener navegación, confirmaciones, permisos, motor y persistencia existentes. Aplicar es-419, en-US y pt-BR, sin cambios en `main`.
+
+
+## 2026-11-05 — Posición lógica de AND/OR en Conexiones
+
+Los operadores se expresan delante del requisito al que conectan y nunca antes del primer requisito de un grupo simple: «Tiene A», «AND Tiene B»; las alternativas indican «OR Tiene B». En grupos avanzados, el operador entre grupos precede a la primera condición del grupo siguiente, y los requisitos internos usan su operador. Se conserva el motor de evaluación `all/any`, las opciones guardadas y las configuraciones existentes. Solo presentación de `Pruebas`.

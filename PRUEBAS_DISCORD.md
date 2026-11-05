@@ -966,3 +966,13 @@ Regresión automatizada de color añadida a `tests/test_role_connections_ui.py`.
 - [ ] Verificar es-419, en-US, pt-BR, colores de Confirmar sincronización/guardado/eliminación.
 
 Pruebas de formato automatizadas agregadas a `tests/test_role_connections_ui.py`. Sin ensayo real de Discord todavía.
+
+
+## 2026-11-05 — Validación de posición de AND/OR en el panel
+
+- [ ] Una conexión con dos condiciones AND muestra «Tiene A» y «AND Tiene B»; no coloca AND delante de la primera condición.
+- [ ] Cambiar a OR produce «Tiene A» y «OR Tiene B», también en el resumen del listado.
+- [ ] En dos grupos, verificar que el operador entre grupos aparece antes de la primera condición del segundo grupo; las restantes conservan el operador interno.
+- [ ] Repetir con el idioma manual es-419, en-US y pt-BR, sin alterar reglas guardadas ni permisos.
+
+Pruebas unitarias incorporadas. La comprobación visual en Discord Lab sigue pendiente.
