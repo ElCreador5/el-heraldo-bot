@@ -852,8 +852,8 @@ class Confirmation(Base):
         key = {"save": "confirm_save", "delete": "confirm_delete",
                "sync": "confirm_sync"}[action]
         self.button(key, self.confirm, row=0,
-                    style=discord.ButtonStyle.danger if action in ("delete", "sync")
-                    else discord.ButtonStyle.success)
+                    style=(discord.ButtonStyle.danger if action == "delete"
+                           else discord.ButtonStyle.success))
         self.navigation(self.cancel, row=1)
 
     def summary(self, guild):

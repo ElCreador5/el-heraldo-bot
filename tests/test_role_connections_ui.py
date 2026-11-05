@@ -258,5 +258,34 @@ class RoleConnectionsUITests(unittest.TestCase):
         ))
 
 
+    def test_confirmation_colors_match_action(self):
+        import discord
+
+        for lang in ("es-419", "en-US", "pt-BR"):
+            self.host["guild_language"] = lambda gid, lang=lang: lang
+            ctx = ui.Context(self.host, 10, 20)
+            for action, expected in (
+                ("save", discord.ButtonStyle.success),
+                ("sync", discord.ButtonStyle.success),
+                ("delete", discord.ButtonStyle.danger),
+            ):
+                view = ui.Confirmation(ctx, action, ui.new_draft())
+                button = next(
+                    item for item in view.children
+                    if getattr(item, "label", None) == ctx.t({
+                        "save": "confirm_save",
+                        "sync": "confirm_sync",
+                        "delete": "confirm_delete",
+                    }[action])
+                )
+                self.assertEqual(button.style, expected)
+                self.assertEqual(
+                    sum(getattr(item, "label", "") == ctx.t("close")
+                        for item in view.children),
+                    1,
+                )
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -920,3 +920,8 @@ En `role_connections_setup.py` se unificó el formato visible de operadores con 
 ## 2026-11-05 — Error explicativo de rol principal incompatible (Pruebas)
 
 El fallo «El rol principal no puede ser administrado ...» se desglosa en razones específicas con `target_safety_reason` en `role_connections.py`. El editor `role_connections_setup.py` muestra el motivo junto al rol elegido, deshabilita Guardar ante un destino no seguro y vuelve a validar en la confirmación. Causas contempladas: roles reservados a personalidad/verificación/moderación, permisos, jerarquía, integración, privilegios, @everyone o bot no detectable. Mensajes localizados es-419, en-US y pt-BR. No se alteran las conexiones ya guardadas, la SQLite, ni `main`; quedan pendientes ensayos en Discord Lab.
+
+
+## 2026-11-05 — Botón de confirmación de sincronización (Pruebas)
+
+Corregido el estilo en `role_connections_setup.py`: Confirmar sincronización cambia de rojo a verde, en coherencia con Confirmar guardado. Confirmar eliminación permanece en rojo. No se modifican los roles, condiciones, persistencia ni el motor. Añadida regresión de estilos para es-419, en-US y pt-BR.

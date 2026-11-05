@@ -945,3 +945,13 @@ Las pruebas unitarias se comprobarán mediante CI; la validación interactiva en
 - [ ] Validar con bot de pruebas conectado; no afirmar despliegue ni funcionamiento real sin evidencia.
 
 Pruebas automatizadas cubren motivos específicos, rechazo antes de confirmación y ausencia de persistencia accidental. No se toca `main`.
+
+
+## 2026-11-05 — Comprobación del botón Confirmar sincronización
+
+- [ ] En `/conexiones` de Lab, entrar en Sincronizar miembros: botón Confirmar sincronización verde y Volver/Cerrar presentes.
+- [ ] Verificar que Confirmar eliminación de conexión permanece rojo y Confirmar guardado verde.
+- [ ] Confirmar que la sincronización sigue solicitando confirmación y muestra los recuentos de miembros y roles.
+- [ ] Verificar las etiquetas y los estilos en es-419, en-US y pt-BR.
+
+Regresión automatizada de color añadida a `tests/test_role_connections_ui.py`. Prueba interactiva en Discord pendiente.

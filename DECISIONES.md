@@ -613,3 +613,8 @@ La interfaz de Conexiones mostrará siempre AND / OR (no ALL / ANY) en los resú
 ## 2026-11-05 — Diagnóstico preciso al guardar roles principales en Conexiones
 
 Se conserva la protección estricta de roles controlados por verificación de personalidad, verificación de edad y moderación, roles privilegiados o de integración y jerarquía de Discord. El rechazo del rol principal debe explicar la razón concreta (rol protegido, jerarquía, permiso Gestionar roles, rol de integración, rol privilegiado o bot no disponible) y sugerir solución sin suprimir controles. Un rol de personalidad puede servir como **condición**, pero no como rol principal automatizado. Sin cambios de esquema ni permisos ampliados; solo `Pruebas`.
+
+
+## 2026-11-05 — Colores de confirmación en Conexiones de roles
+
+Las confirmaciones de Guardar y Sincronizar miembros usan botón verde (éxito), mientras que Eliminar conexión utiliza rojo (peligro). Sincronizar puede añadir o retirar roles, por lo que mantiene confirmación explícita; el ajuste cambia únicamente la presentación. Solo rama `Pruebas`.
