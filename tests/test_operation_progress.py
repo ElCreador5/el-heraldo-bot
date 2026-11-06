@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import AsyncMock
 
-from operation_progress import ProgressReporter, compact_progress_bar, progress_bar, status_text
+from operation_progress import ProgressReporter, compact_operation_status, compact_progress_bar, progress_bar, status_text
 
 
 class OperationProgressTests(unittest.IsolatedAsyncioTestCase):
@@ -45,6 +45,29 @@ class OperationProgressTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(percent)
             self.assertEqual(len(bar.strip("`")), 10)
             self.assertIn("▌", bar)
+
+    async def test_operation_status_is_compact_and_contextual(self):
+        cases = {
+            "purge_scan": {"examined": 245, "found": 17},
+            "purge_delete": {"deleted": 15, "failed": 2},
+            "fusion": {"migrated": 15, "failed": 2, "attachments": 1},
+            "join_roles": {"assigned": 12, "skipped": 3, "failed": 2},
+            "verification": {"verified": 5, "expelled": 2, "failed": 0},
+        }
+        for locale in ("es-419", "en-US", "pt-BR"):
+            for action, counters in cases.items():
+                result = compact_operation_status(
+                    locale, action, 17, 30, **counters
+                )
+                self.assertEqual(result.count("\n"), 3)
+                self.assertIn("17 / 30", result)
+                self.assertIn("56%", result)
+                self.assertIn("`█████▌····`", result)
+                self.assertLess(len(result), 220)
+                no_total = compact_operation_status(
+                    locale, action, 17, None, **counters
+                )
+                self.assertNotIn("%", no_total)
 
     async def test_statuses_are_localized_without_inventing_percentages(self):
         for locale in ("es-419", "en-US", "pt-BR"):
