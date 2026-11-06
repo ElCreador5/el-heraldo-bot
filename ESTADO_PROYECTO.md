@@ -935,3 +935,10 @@ Se revisaron los resúmenes de `role_connections_setup.py`: lista compacta por r
 ## 2026-11-05 — XOR / NOT / Al menos N en grupos avanzados (Pruebas)
 
 Implementado soporte de validación, guardado y evaluación en `role_connections.py` con tres modos adicionales de grupo: `xor`, `not` y `at_least`. El editor `role_connections_setup.py` expone selector de operador y selector numérico para el umbral; no sustituye de forma silenciosa operadores avanzados desde el botón AND/OR básico. Se conservan las validaciones de permisos y ciclo, el guardado con confirmación, y la compatibilidad de SQLite Enzonic (misma tabla `heraldo_role_connections`). Pruebas unitarias añadidas para modos, traducciones y límites; falta validación Discord Lab. `main` sin cambios.
+
+
+## 2026-11-06 — Duplicado de logs de verificación (Pruebas)
+
+Captura del bot Beta: aparecían juntos «Expulsión por falta de verificación» (resumen breve, descartado) y «Miembro expulsado» (registro detallado, conservar). Causa en `_evaluate_verify_timeout_inner`: tras `heraldo_kick` la función `log_embed` emitía el breve, mientras `heraldo_member_departure` emitía el registro completo en `on_member_remove`. Ajustado `bot.py` para registrar explícitamente solo BAN en esa ruta; las expulsiones exitosas quedan a cargo del registro de salidas. No cambia configuración, DB, sanciones, permisos ni lógica de expiración. Se actualizó `tests/test_verification_expiry.py` y se añadió check dedicado al workflow de Lab.
+
+No se modificó `main`: su ruta de expulsión por timeout ya carecía del segundo log. Pendiente comprobar comportamiento con salida real en Discord Beta; tests automatizados sin Gateway no prueban llegada de auditoría.

@@ -979,3 +979,15 @@ Pruebas de formato automatizadas agregadas a `tests/test_role_connections_ui.py`
 - [ ] Confirmar compatibilidad con reglas preexistentes, persistencia Enzonic, protección de roles de personalidad y sin cambios en producción.
 
 Pruebas unitarias se ejecutan mediante workflow Role connections lab. No declarar validación real en Discord sin completar la matriz.
+
+
+## 2026-11-06 — Registro detallado único por vencimiento de verificación de edad
+
+- [x] Inspección del origen de ambas tarjetas: `_evaluate_verify_timeout_inner` y `heraldo_member_departure`.
+- [x] Se eliminó exclusivamente la publicación abreviada tras expulsión exitosa en `Pruebas`.
+- [x] Ajustadas regresiones de expiración: kick sin log redundante; simulación de `on_member_remove` conserva «Miembro expulsado»; ban, solo registrar y errores mantienen sus respectivos avisos.
+- [ ] En Discord Beta, permitir que venza una verificación de edad de prueba y comprobar que se publique una sola tarjeta «Miembro expulsado», con su motivo, rol y responsable.
+- [ ] Confirmar que no se publica la tarjeta «Expulsión por falta de verificación» y que la acción real de kick mantiene el plazo y controles previstos.
+- [ ] Probar fallo de permisos: no debe mostrar «Miembro expulsado» si no hubo expulsión y sí debe preservar el aviso de error.
+
+El registro histórico previo de la captura no se borra automáticamente. `main` ya contaba con esta supresión y no recibe cambios.
