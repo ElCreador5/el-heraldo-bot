@@ -40,7 +40,6 @@ class SyncProgressCardTests(unittest.TestCase):
         self.assertLess(len(data), 250_000)
         image = Image.open(BytesIO(data)).convert("RGB")
         self.assertEqual(image.size, (WIDTH, HEIGHT))
-        self.assertEqual(image.format if False else "PNG", "PNG")
         # Rounded track has a blue fill on the left and gray on the right.
         self.assertEqual(image.getpixel((100, 194)), (104, 117, 247))
         self.assertEqual(image.getpixel((891, 194)), (60, 62, 76))
@@ -63,7 +62,7 @@ class SyncProgressCardTests(unittest.TestCase):
             ("Sincronizando membros", "Conexões de cargos"),
         ]:
             data = card(title=title, state=state, checked=0)
-            self.assertTrue(data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+            self.assertTrue(data.startswith(bytes.fromhex("89504e470d0a1a0a")))
 
 
 if __name__ == "__main__":
