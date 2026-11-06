@@ -14702,11 +14702,16 @@ async def _evaluate_verify_timeout_inner(guild_id: int, user_id: int) -> None:
         return
     clear_verification_expiry(guild_id, user_id)
     db_clear_tentado(guild_id, user_id)
-    await log_embed(
-        guild, _t('text.39a13bd1b27820') if action == "ban" else _t('text.fbf00252ef659d'),
-        _t('text.e75b4271c14d5b', p0=f'{member.mention}', p1=f'{member.id}'),
-        discord.Color.red(),
-    )
+    # Las expulsiones se registran en on_member_remove como «Miembro expulsado»,
+    # con rol, motivo, responsable y datos del miembro. No crear una segunda
+    # tarjeta abreviada «Expulsión por falta de verificación».
+    # Mantener el registro de BAN y los avisos de fallos / acción «solo registrar».
+    if action == "ban":
+        await log_embed(
+            guild, _t('text.39a13bd1b27820'),
+            _t('text.e75b4271c14d5b', p0=f'{member.mention}', p1=f'{member.id}'),
+            discord.Color.red(),
+        )
 
 
 @_i18n_context
