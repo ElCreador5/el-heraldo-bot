@@ -12,6 +12,7 @@ import secrets
 
 import discord
 from heraldo_datetime import clock_style
+from operation_progress import ProgressReporter, compact_operation_status, status_text
 
 # Etiquetas exclusivas de /purge, sin dependencia del sistema global de idiomas.
 PURGE_LABELS = {
@@ -315,6 +316,7 @@ class PurgePanel(discord.ui.View):
         self.snapshot: list[tuple[int, int, int]] | None = None
         self.scanned = self.skipped = 0
         self.busy = self.closed = False
+        self._progress: str | None = None
         self._build()
 
     def t(self, key: str) -> str:
@@ -330,6 +332,7 @@ class PurgePanel(discord.ui.View):
         return f"{date} {clock} · {clock}"
 
     def invalidate(self) -> None:
+        self._progress = None
         self.snapshot = None
         self.scanned = self.skipped = 0
         self.scanned_channels = {}
@@ -448,9 +451,13 @@ class PurgePanel(discord.ui.View):
         return await self.authorize(interaction)
 
     async def refresh(self) -> None:
-        await self.origin.edit_original_response(embed=self.embed(), view=self)
+        await self.origin.edit_original_response(
+            embed=self.embed(), view=None if self.busy else self
+        )
 
     def embed(self) -> discord.Embed:
+        if self.busy and self._progress:
+            return self.operation_embed()
         guild = self.origin.guild
         review = self.snapshot is not None
         result = discord.Embed(
@@ -484,7 +491,23 @@ class PurgePanel(discord.ui.View):
             )
         else:
             result.description = self.t("mode_note")
+        if self._progress:
+            result.add_field(
+                name=status_text(self.language, "heading"),
+                value=self._progress[:1024],
+                inline=False,
+            )
         footer_text, footer_icon = self.footer(guild)
+        result.set_footer(text=footer_text, icon_url=footer_icon or None)
+        return result
+
+    def operation_embed(self) -> discord.Embed:
+        """Show only the running destructive action, not an editable preview."""
+        result = discord.Embed(
+            description=self._progress or "",
+            color=discord.Color.blurple(),
+        )
+        footer_text, footer_icon = self.footer(self.origin.guild)
         result.set_footer(text=footer_text, icon_url=footer_icon or None)
         return result
 
@@ -591,15 +614,36 @@ class PurgePanel(discord.ui.View):
             return
         self.busy = True
         await interaction.response.defer()
+        self.scanned = self.skipped = 0
+        self.scanned_channels = {}
+        examined = found_count = 0
+        total = "?"
+        reporter = ProgressReporter(lambda _text: self.refresh())
+
+        async def report(*, force=False):
+            self._progress = compact_operation_status(
+                self.language, "purge_scan", self.scanned + self.skipped,
+                total if isinstance(total, int) else None,
+                examined=examined, found=found_count,
+            )
+            await reporter.publish(self._progress, force=force)
+
+        # Show immediate acknowledgement and prevent a second action until
+        # the preview finishes (including selection and confirmation).
+        self._build()
+        for item in self.children:
+            item.disabled = True
+        await report(force=True)
         try:
             guild = interaction.guild
-            target_channels = await self.targets(guild, self._channel(), self.after)
+            target_channels = list(await self.targets(guild, self._channel(), self.after))
+            total = len(target_channels)
             found: dict[int, list[tuple[int, int, int]]] = {uid: [] for uid in self.user_ids}
-            self.scanned = self.skipped = 0
-            self.scanned_channels = {}
+            await report(force=True)
             for channel in target_channels:
                 if not self._channel_available(channel, interaction.user):
                     self.skipped += 1
+                    await report()
                     continue
                 try:
                     # newest first even when 'after' is set. Per-channel early stop
@@ -608,12 +652,16 @@ class PurgePanel(discord.ui.View):
                     async for msg in channel.history(
                         limit=None, after=self.after, before=self.before, oldest_first=False
                     ):
+                        examined += 1
+                        if examined % 100 == 0:
+                            await report()
                         uid = msg.author.id
                         if uid not in found or not self.matches(msg, self.kind):
                             continue
                         if self.limit is not None and counts[uid] >= self.limit:
                             continue
                         counts[uid] += 1
+                        found_count += 1
                         found[uid].append((channel.id, msg.id, uid))
                         if self.limit is not None and all(
                             counts[chosen] >= self.limit for chosen in self.user_ids
@@ -623,7 +671,9 @@ class PurgePanel(discord.ui.View):
                     self.scanned_channels[channel.id] = channel
                 except (discord.Forbidden, discord.HTTPException):
                     self.skipped += 1
+                await report()
             if self.scanned == 0:
+                self._progress = None
                 self.snapshot = None
                 self._build()
                 await self.refresh()
@@ -636,17 +686,22 @@ class PurgePanel(discord.ui.View):
                 )),
                 key=lambda row: row[1], reverse=True,
             )
+            self._progress = None
             self._build()
             await self.refresh()
             if not self.snapshot:
                 await interaction.followup.send(self.t("no_messages"), ephemeral=True)
-        except Exception:
+        except Exception as exc:
+            print(f"PURGE status=PREVIEW_FAILED guild={self.guild_id} error={type(exc).__name__}", flush=True)
             self.snapshot = None
+            self._progress = status_text(self.language, "scan_failed")
             self._build()
             await self.refresh()
-            await interaction.followup.send(self.t("unexpected"), ephemeral=True)
         finally:
             self.busy = False
+            if not self.closed:
+                self._build()
+                await self.refresh()
 
     async def confirm(self, interaction: discord.Interaction) -> None:
         if self.snapshot is None or not self.snapshot:
@@ -671,8 +726,23 @@ class PurgePanel(discord.ui.View):
         self.closed = True
         self._build()
         await interaction.response.defer()
-        deleted = failed = 0
+        deleted = failed = processed = 0
+        interrupted = False
         per_user = Counter()
+        reporter = ProgressReporter(
+            lambda _text: self.origin.edit_original_response(
+                embed=self.operation_embed(), view=None
+            )
+        )
+
+        async def report(*, force=False):
+            self._progress = compact_operation_status(
+                self.language, "purge_delete", processed, len(frozen),
+                deleted=deleted, failed=failed,
+            )
+            await reporter.publish(self._progress, force=force)
+
+        await report(force=True)
         try:
             guild = interaction.guild
             for channel_id, message_id, uid in frozen:
@@ -680,19 +750,25 @@ class PurgePanel(discord.ui.View):
                            or guild.get_channel(channel_id) or guild.get_thread(channel_id))
                 if channel is None or not self._channel_available(channel, interaction.user) or not self._permissions(interaction):
                     failed += 1
-                    continue
-                try:
-                    ok = await self.delete(
-                        channel, message_id, expected_author_id=uid,
-                        after=self.after, before=self.before, content_type=self.kind,
-                    )
-                except Exception:
-                    ok = False
-                if ok:
-                    deleted += 1
-                    per_user[uid] += 1
                 else:
-                    failed += 1
+                    try:
+                        ok = await self.delete(
+                            channel, message_id, expected_author_id=uid,
+                            after=self.after, before=self.before, content_type=self.kind,
+                        )
+                    except Exception:
+                        ok = False
+                    if ok:
+                        deleted += 1
+                        per_user[uid] += 1
+                    else:
+                        failed += 1
+                processed += 1
+                await report()
+        except Exception as exc:
+            interrupted = True
+            print(f"PURGE status=DELETE_INTERRUPTED guild={self.guild_id} "
+                  f"error={type(exc).__name__}", flush=True)
         finally:
             self.running.difference_update(keys)
         summary = (
@@ -701,6 +777,11 @@ class PurgePanel(discord.ui.View):
             f"{self.t('scanned')}: {self.scanned}\n{self.t('skipped')}: {self.skipped}\n"
             + "\n".join(f"<@{uid}>: {per_user[uid]}" for uid in self.user_ids)
         )
+        if interrupted:
+            summary += ("\n" + status_text(self.language, "delete_failed")
+                        + "\n" + status_text(
+                            self.language, "remaining", count=len(frozen) - processed
+                        ))
         # Exactly one audit entry per confirmed operation (success or partial failure).
         try:
             await self.log(
@@ -709,11 +790,15 @@ class PurgePanel(discord.ui.View):
                 f"{f'<#{self.channel_id}>' if self.channel_id else self.t('whole')}\n"
                 f"{self.t('kind')}: {self.t({'all':'all_kind','links':'links','text':'text'}[self.kind])}\n"
                 + summary,
-                discord.Color.green() if not failed else discord.Color.orange(),
+                discord.Color.green() if not failed and not interrupted else discord.Color.orange(),
             )
         except Exception:
             summary += "\n⚠️ " + self.t("audit_missing")
-        result = discord.Embed(title=self.t("done"), description=summary[:4096], color=discord.Color.green() if not failed else discord.Color.orange())
+        result = discord.Embed(
+            title=(status_text(self.language, "interrupted") if interrupted else self.t("done")),
+            description=summary[:4096],
+            color=discord.Color.green() if not failed and not interrupted else discord.Color.orange(),
+        )
         ft, fi = self.footer(interaction.guild)
         result.set_footer(text=ft, icon_url=fi or None)
         try:

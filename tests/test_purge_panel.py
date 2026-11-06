@@ -97,6 +97,34 @@ class PurgePanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(running)
         self.assertTrue(panel.closed)
 
+    async def test_compact_live_purge_status_in_same_panel(self):
+        panel, interaction, _, _, _, _ = self.make_panel()
+        panel.user_ids = (1, 2)
+        panel.limit = 1
+        await panel.continue_scan(interaction)
+        previews = [
+            call.kwargs["embed"] for call in interaction.edit_original_response.await_args_list
+            if "embed" in call.kwargs
+        ]
+        self.assertTrue(any(
+            "Purga · Revisando mensajes" in (embed.description or "")
+            for embed in previews
+        ))
+        self.assertTrue(any(
+            call.kwargs.get("view") is None
+            for call in interaction.edit_original_response.await_args_list
+        ))
+        await panel.confirm(interaction)
+        results = [
+            call.kwargs["embed"] for call in interaction.edit_original_response.await_args_list
+            if "embed" in call.kwargs
+        ]
+        self.assertTrue(any(
+            "Purga · Eliminando mensajes" in (embed.description or "")
+            for embed in results
+        ))
+        self.assertEqual(results[-1].title, panel.t("done"))
+
     async def test_changing_any_filter_invalidates_preview(self):
         panel, interaction, _, _, _, _ = self.make_panel()
         panel.user_ids = (1,)

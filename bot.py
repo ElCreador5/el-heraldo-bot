@@ -1295,14 +1295,18 @@ def approximate_missing_join_roles(guild: discord.Guild) -> int:
     return missing
 
 
-async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
+async def sync_join_roles(guild: discord.Guild, *, progress=None) -> tuple[int, int, list[str]]:
     assigned = 0
     skipped = 0
     errors: list[str] = []
     pending_ids = _join_verify_pending_ids(guild.id)
+    reviewed = 0
 
     async for member in guild.fetch_members(limit=None):
+        reviewed += 1
         if member.bot:
+            if progress is not None:
+                await progress(reviewed, assigned, skipped, len(errors))
             continue
         ok, note = await _assign_join_roles_now(
             member,
@@ -1316,6 +1320,8 @@ async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
                 skipped += 1
         else:
             errors.append(f"{member}: {note}")
+        if progress is not None:
+            await progress(reviewed, assigned, skipped, len(errors))
         await asyncio.sleep(0.15)
 
     set_join_sync_last(guild.id)
@@ -10574,16 +10580,31 @@ async def heraldo_check_error(interaction: discord.Interaction, error: discord.a
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
 async def heraldo_check_all(interaction: discord.Interaction) -> None:
-    guild = interaction.guild
-    await interaction.response.send_message("Revisando a todos los miembros con Tentad@... esto puede tardar un poco.", ephemeral=True)
-    await log_embed(guild, "Chequeo masivo iniciado", f"Solicitado por {interaction.user.mention}.", discord.Color.blurple())
+    from operation_progress import ProgressReporter, compact_operation_status
 
-    verified = 0
+    guild = interaction.guild
+    locale = guild_language(guild.id)
+    reviewed = verified = failed = 0
     expelled: list[discord.Member] = []
     expelled_sin_verificar: list[discord.Member] = []
 
+    def progress_status():
+        return compact_operation_status(
+            locale, "verification", reviewed, getattr(guild, "member_count", None),
+            verified=verified, expelled=len(expelled) + len(expelled_sin_verificar),
+            failed=failed,
+        )
+
+    await interaction.response.send_message(progress_status(), ephemeral=True)
+    reporter = ProgressReporter(
+        lambda content: interaction.edit_original_response(content=content)
+    )
+    await log_embed(guild, "Chequeo masivo iniciado", f"Solicitado por {interaction.user.mention}.", discord.Color.blurple())
+
     async for member in guild.fetch_members(limit=None):
+        reviewed += 1
         if member.bot or condemnation_get(member.guild.id, member.id) is not None:
+            await reporter.publish(progress_status())
             continue  # los condenados quedan fuera de toda evaluación
         role_ids = {r.id for r in member.roles}
         if get_tentado_role_id(guild.id) in role_ids:
@@ -10605,6 +10626,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
                     discord.Color.dark_red(),
                 )
             await asyncio.sleep(1)
+        await reporter.publish(progress_status())
 
     embed = discord.Embed(
         title="Chequeo masivo completado",
@@ -10643,10 +10665,11 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
         except discord.Forbidden:
             print("Sin permisos para escribir en el canal de logs")
 
-    await interaction.followup.send(
-        f"Listo — {verified} verificado(s), {len(expelled)} expulsado(s) (orientación), "
-        f"{len(expelled_sin_verificar)} expulsado(s) (Sin Verificar).",
-        ephemeral=True,
+    await interaction.edit_original_response(
+        content=(
+            f"Listo — {verified} verificado(s), {len(expelled)} expulsado(s) (orientación), "
+            f"{len(expelled_sin_verificar)} expulsado(s) (Sin Verificar)."
+        ),
     )
 
 
@@ -11389,18 +11412,59 @@ async def joinroles_status(interaction: discord.Interaction) -> None:
     )
 
 
+_JOIN_ROLES_MANUAL_ACTIVE: set[int] = set()
+
+
 @joinroles_group.command(name="sync", description="Asignar ahora los Roles de ingreso a los miembros elegibles.")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def joinroles_sync_command(interaction: discord.Interaction) -> None:
-    await interaction.response.defer(ephemeral=True, thinking=True)
-    assigned, skipped, errors = await sync_join_roles(interaction.guild)
-    text = (
-        f"Sync terminado. **{assigned}** miembro(s) recibieron Roles de ingreso; "
-        f"**{skipped}** no necesitaron cambios."
-    )
-    if errors:
-        text += f"\nAdvertencia: **{len(errors)}** errores por permisos o jerarquía."
-    await interaction.followup.send(text, ephemeral=True)
+    from operation_progress import ProgressReporter, compact_operation_status, status_text
+
+    guild = interaction.guild
+    locale = guild_language(guild.id)
+    if guild.id in _JOIN_ROLES_MANUAL_ACTIVE:
+        await interaction.response.send_message(
+            status_text(locale, "join_roles_busy"), ephemeral=True,
+        )
+        return
+    _JOIN_ROLES_MANUAL_ACTIVE.add(guild.id)
+    reviewed = assigned = skipped = failed = 0
+
+    def progress_status():
+        return compact_operation_status(
+            locale, "join_roles", reviewed, getattr(guild, "member_count", None),
+            assigned=assigned, skipped=skipped, failed=failed,
+        )
+
+    try:
+        await interaction.response.defer(ephemeral=True)
+        reporter = ProgressReporter(
+            lambda content: interaction.edit_original_response(content=content)
+        )
+        await reporter.publish(progress_status(), force=True)
+
+        async def update_progress(count, new_assigned, new_skipped, new_failed):
+            nonlocal reviewed, assigned, skipped, failed
+            reviewed, assigned = count, new_assigned
+            skipped, failed = new_skipped, new_failed
+            await reporter.publish(progress_status())
+
+        assigned, skipped, errors = await sync_join_roles(guild, progress=update_progress)
+        text = (
+            f"Sync terminado. **{assigned}** miembro(s) recibieron Roles de ingreso; "
+            f"**{skipped}** no necesitaron cambios."
+        )
+        if errors:
+            text += f"\nAdvertencia: **{len(errors)}** errores por permisos o jerarquía."
+        await interaction.edit_original_response(content=text)
+    except Exception as exc:
+        print(f"JOIN_ROLES_SYNC status=FAILED guild={guild.id} "
+              f"error={type(exc).__name__}", flush=True)
+        await interaction.edit_original_response(
+            content=progress_status() + "\n" + status_text(locale, "join_roles_interrupted")
+        )
+    finally:
+        _JOIN_ROLES_MANUAL_ACTIVE.discard(guild.id)
 
 
 @joinroles_group.command(name="add", description="Añadir uno o varios Roles de ingreso generales.")
@@ -16948,7 +17012,7 @@ class FusionChannelsView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(
             content="Fusión confirmada. Estoy migrando los mensajes; el canal origen no se tocará hasta terminar correctamente.",
-            view=self,
+            embed=None, view=None,
         )
         asyncio.create_task(
             execute_channel_merge(
@@ -17135,38 +17199,38 @@ async def execute_channel_merge(
     # Volver a validar antes de tocar nada: el estado/permisos pueden haber cambiado
     # mientras el administrador tenía abierta la confirmación.
     if origen.id == destino.id:
-        await interaction.followup.send("Error: La fusión fue cancelada: origen y destino son el mismo canal.", ephemeral=True)
+        await interaction.edit_original_response(content="Error: La fusión fue cancelada: origen y destino son el mismo canal.")
         return
 
     me = guild.me
     if me is None:
-        await interaction.followup.send("Error: No pude identificar al Heraldo en el servidor.", ephemeral=True)
+        await interaction.edit_original_response(content="Error: No pude identificar al Heraldo en el servidor.")
         return
 
     dest_perms = destino.permissions_for(me)
     src_perms = origen.permissions_for(me)
     if not (src_perms.view_channel and src_perms.read_message_history):
-        await interaction.followup.send("Error: No tengo permisos para leer el canal origen.", ephemeral=True)
+        await interaction.edit_original_response(content="Error: No tengo permisos para leer el canal origen.")
         return
     if not (dest_perms.view_channel and dest_perms.send_messages and dest_perms.embed_links):
-        await interaction.followup.send("Error: No tengo permisos suficientes para escribir embeds en el canal destino.", ephemeral=True)
+        await interaction.edit_original_response(content="Error: No tengo permisos suficientes para escribir embeds en el canal destino.")
         return
 
     try:
         messages = await collect_fusion_messages(origen)
     except discord.HTTPException as e:
-        await interaction.followup.send(f"Error: No pude leer los mensajes del canal origen: `{e}`", ephemeral=True)
+        await interaction.edit_original_response(content=f"Error: No pude leer los mensajes del canal origen: `{e}`")
         return
 
     if not messages:
-        await interaction.followup.send("Advertencia: El canal origen no contiene mensajes migrables. No hice cambios.", ephemeral=True)
+        await interaction.edit_original_response(content="Advertencia: El canal origen no contiene mensajes migrables. No hice cambios.")
         return
 
     if len(messages) >= FUSION_MAX_MESSAGES:
-        await interaction.followup.send(
+        await interaction.edit_original_response(content=
             f"Error: La fusión fue detenida porque el origen tiene al menos {FUSION_MAX_MESSAGES:,} mensajes. "
             "Para evitar una migración incompleta, primero divide el trabajo en una migración por partes.",
-            ephemeral=True,
+            
         )
         return
 
@@ -17175,28 +17239,34 @@ async def execute_channel_merge(
         try:
             await destino.edit(name=final_name, reason=f"Fusión de canales solicitada por {interaction.user}")
         except discord.Forbidden:
-            await interaction.followup.send(
+            await interaction.edit_original_response(content=
                 "Error: No pude cambiar el nombre del canal destino. Revisa Gestionar canales y la jerarquía del bot.",
-                ephemeral=True,
+                
             )
             return
         except discord.HTTPException as e:
-            await interaction.followup.send(f"Error: No pude cambiar el nombre del canal destino: `{e}`", ephemeral=True)
+            await interaction.edit_original_response(content=f"Error: No pude cambiar el nombre del canal destino: `{e}`")
             return
+
+    from operation_progress import ProgressReporter, compact_operation_status
 
     migrated = 0
     failed = 0
     attachment_failures = 0
-    progress_message = None
-    try:
-        progress_message = await interaction.followup.send(
-            f"Migrando **{len(messages):,}** mensajes de {origen.mention} → {destino.mention}…\n"
-            "Esto puede tardar si el canal es grande.",
-            ephemeral=True,
-            wait=True,
+    locale = guild_language(guild.id)
+
+    def merge_status():
+        return compact_operation_status(
+            locale, "fusion", migrated + failed, len(messages),
+            migrated=migrated, failed=failed, attachments=attachment_failures,
         )
-    except discord.HTTPException:
-        pass
+
+    reporter = ProgressReporter(
+        lambda content: interaction.edit_original_response(
+            content=content, embed=None, view=None
+        )
+    )
+    await reporter.publish(merge_status(), force=True)
 
     for message in messages:
         try:
@@ -17209,16 +17279,7 @@ async def execute_channel_merge(
             failed += 1
         # Mantener una cadencia conservadora para no golpear los rate limits.
         await asyncio.sleep(0.35)
-        if progress_message is not None and (migrated + failed) % 25 == 0:
-            try:
-                await progress_message.edit(
-                    content=(
-                        f"Migrando canales… **{migrated + failed:,}/{len(messages):,}** procesados. "
-                        f"Correctos: {migrated:,} · Fallidos: {failed:,}."
-                    )
-                )
-            except discord.HTTPException:
-                pass
+        await reporter.publish(merge_status())
 
     # Nunca borrar el origen si hubo errores de migración.
     deleted_source = False
@@ -17258,13 +17319,12 @@ async def execute_channel_merge(
         )
         color = discord.Color.green()
 
-    if progress_message is not None:
-        try:
-            await progress_message.edit(content=result)
-        except discord.HTTPException:
-            pass
-    else:
-        await interaction.followup.send(result, ephemeral=True)
+    try:
+        await interaction.edit_original_response(
+            content=result, embed=None, view=None
+        )
+    except discord.HTTPException:
+        pass
 
     await log_embed(
         guild,

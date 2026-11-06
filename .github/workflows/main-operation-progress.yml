@@ -1,0 +1,38 @@
+name: Main - progreso de operaciones (solo CI)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bot.py'
+      - 'purge_panel.py'
+      - 'server_structure_setup.py'
+      - 'operation_progress.py'
+      - 'tests/test_main_operation_progress.py'
+      - 'tests/test_purge_panel.py'
+      - '.github/workflows/main-operation-progress.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile affected runtime
+        run: python -m py_compile bot.py purge_panel.py server_structure_setup.py operation_progress.py
+      - name: Progress and purge regressions (no Discord connection)
+        env:
+          PYTHONPATH: ".:tests"
+        run: |
+          python -m unittest discover -s tests -p 'test_main_operation_progress.py' -v
+          python -m unittest discover -s tests -p 'test_purge_panel.py' -v
+          python -m unittest discover -s tests -p 'test_main_structure_promotion.py' -v
