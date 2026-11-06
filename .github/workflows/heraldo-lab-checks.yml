@@ -37,6 +37,10 @@ jobs:
         env:
           PYTHONPATH: "tests:."
         run: python -m unittest -v test_command_consolidation test_server_structure_setup test_embed_manual_only test_setup_interaction_runtime
+      - name: Verificación de edad sin doble registro de expulsión
+        env:
+          PYTHONPATH: "tests:."
+        run: python -m unittest -v test_verification_expiry
       - name: Regresión de historial de idiomas con protección de texto libre
         env:
           PYTHONPATH: "tests:."
