@@ -6,6 +6,10 @@ on:
       - 'bot.py'
       - 'role_connections.py'
       - 'role_connections_setup.py'
+      - 'sync_progress_card.py'
+      - 'operation_progress.py'
+      - 'tests/test_sync_progress_card.py'
+      - 'tests/test_operation_progress.py'
       - 'enzonic_test_host.py'
       - 'tests/test_role_connections.py'
       - 'tests/test_role_connections_ui.py'
@@ -19,6 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
-      - run: python -m compileall -q bot.py role_connections.py role_connections_setup.py enzonic_test_host.py
+      - run: pip install -r requirements.txt -r custodio_image_deps.in
+      - run: python -m compileall -q bot.py role_connections.py role_connections_setup.py sync_progress_card.py operation_progress.py enzonic_test_host.py
       - run: python -m unittest discover -s tests -p 'test_role_connections*.py' -v
+      - run: PYTHONPATH=tests:. python -m unittest -v test_sync_progress_card test_operation_progress
