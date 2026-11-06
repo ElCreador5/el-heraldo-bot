@@ -67,6 +67,28 @@ def progress_bar(checked: int, total: int | None = None, *,
     return "`" + "█" * filled + "░" * (width - filled) + "`", percent
 
 
+
+def compact_progress_bar(checked: int, total: int | None) -> tuple[str, int | None]:
+    """Ten-character Discord text bar; no percentage for an unreliable total.
+
+    The cached guild member count is approximate, so 100% is reserved for
+    the final result rather than the running progress panel.
+    """
+    width = 10
+    checked = max(0, int(checked))
+    valid = (isinstance(total, int) and not isinstance(total, bool)
+             and total > 0 and checked <= total)
+    if not valid:
+        offset = (checked // 20) % width
+        return "`" + "·" * offset + "▌" + "·" * (width - offset - 1) + "`", None
+    percent = min(99, checked * 100 // total)
+    full = min(width - 1, checked * width // total)
+    fractional = (checked * width) % total > 0
+    half = 1 if fractional and full < width else 0
+    bar = "█" * full + "▌" * half + "·" * (width - full - half)
+    return f"`{bar}`", percent
+
+
 class ProgressReporter:
     """Updates an existing panel at most once per interval (unless forced)."""
 
