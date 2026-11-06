@@ -181,6 +181,7 @@ class FusionExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.followup = SimpleNamespace(send=AsyncMock(return_value=self.progress))
         self.interaction = SimpleNamespace(
             guild=self.guild, user=self.user, followup=self.followup,
+            edit_original_response=AsyncMock(),
         )
         self.collect = AsyncMock()
         self.migrate = AsyncMock(return_value=(0, 0))
@@ -197,6 +198,7 @@ class FusionExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
             "FusionChannelsView": lambda *args: "confirmación-renovada",
             "FUSION_MAX_MESSAGES": 10000,
             "log_embed": self.audit,
+            "guild_language": lambda gid: "es-419",
             "asyncio": SimpleNamespace(sleep=AsyncMock()),
         }
         self.run_merge = isolated_executor(self.env)
@@ -215,7 +217,26 @@ class FusionExecutionSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.origin.delete.assert_not_awaited()
         self.migrate.assert_not_awaited()
         self.audit.assert_not_awaited()
-        self.assertIn("2", self.followup.send.await_args.args[0])
+        self.followup.send.assert_not_awaited()
+        self.assertIn("2", self.interaction.edit_original_response.await_args.kwargs["content"])
+
+    async def test_merge_progress_edits_same_panel_without_extra_messages(self):
+        messages = [SimpleNamespace(id=31, edited_at=None),
+                    SimpleNamespace(id=32, edited_at=None)]
+        self.collect.return_value = messages
+        await self.run_merge(
+            self.interaction, self.origin, self.destination,
+            "archivo", False, 2, "destino", None, self.user.id,
+        )
+        self.assertEqual(self.migrate.await_count, 2)
+        self.audit.assert_awaited_once()
+        self.followup.send.assert_not_awaited()
+        content = [call.kwargs["content"]
+                   for call in self.interaction.edit_original_response.await_args_list
+                   if "content" in call.kwargs]
+        self.assertTrue(any("Fusión · Migrando mensajes" in value for value in content))
+        self.assertTrue(any("0 / 2 mensajes procesados" in value for value in content))
+        self.assertNotIn("Fusión · Migrando mensajes", content[-1])
 
     async def test_revoked_admin_permissions_before_write_block_merge(self):
         async def collect_and_revoke(_):
