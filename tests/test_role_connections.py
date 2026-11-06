@@ -99,6 +99,24 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(result, (1, 1, 0, False))
         self.assertEqual(updates, [(1, 1, 0)])
 
+    def test_manual_sync_tracks_roles_rejected_by_discord(self):
+        self.save(20, [group("all", ("has", 1))])
+        member = FakeMember(self.guild, held=[1])
+        failures = []
+
+        async def reject(*args, **kwargs):
+            raise PermissionError("simulated Discord role denial")
+
+        async def on_failure():
+            failures.append(True)
+
+        member.add_roles = reject
+        result = asyncio.run(rc.synchronize(
+            self.guild, connect=self.connect, on_failure=on_failure
+        ))
+        self.assertEqual(result, (1, 0, 0, False))
+        self.assertEqual(len(failures), 1)
+
     def test_and_requires_both_and_removes_when_role_lost(self):
         self.save(20, [group("all", ("has", 1), ("has", 2))])
         member = FakeMember(self.guild, held=[1])
