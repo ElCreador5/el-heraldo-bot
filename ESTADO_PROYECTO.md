@@ -947,3 +947,7 @@ No se modificó `main`: su ruta de expulsión por timeout ya carecía del segund
 ## 2026-11-06 — Progreso de acciones largas en Pruebas
 Implementación en `role_connections.py`, `role_connections_setup.py`, `purge_panel.py` y el módulo nuevo `operation_progress.py`. Las sincronizaciones y purgas muestran inicio inmediato, contadores reales actualizados con limitación de frecuencia y estado final. Se bloquean acciones repetidas durante el trabajo. Si una sincronización se interrumpe, se indica que pueden existir cambios parciales; la purga informa fallos, no procesados y conserva el registro de auditoría.
 Pruebas automatizadas añadidas en `tests/test_operation_progress.py`, `tests/test_role_connections.py` y `tests/test_purge_panel.py`. **Pendiente**: verificar con el servidor Beta el renderizado y la recepción de mensajes bajo operaciones reales. Sin cambios en `main` ni en datos persistidos.
+
+
+### 2026-11-06 — Indicador gráfico para sincronización de miembros
+Agregada la función reutilizable `progress_bar` en `operation_progress.py` y su visualización en `role_connections_setup.py`. La interfaz presenta indicador de avance aproximado en la misma tarjeta durante la ejecución, actividad indeterminada cuando el total no es fiable y 100 % solo al concluir. `tests/test_operation_progress.py` cubre ambos modos y el fin. Cambios únicamente en `Pruebas`; pendiente verificación manual en Discord Beta de un proceso con suficiente duración para observar la actualización intermedia.
