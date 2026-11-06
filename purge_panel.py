@@ -13,7 +13,7 @@ import secrets
 import discord
 import heraldo_i18n as i18n
 from heraldo_datetime import clock_style
-from operation_progress import ProgressReporter, status_text
+from operation_progress import ProgressReporter, compact_operation_status, status_text
 
 
 class PurgeRangeModal(discord.ui.Modal):
@@ -274,9 +274,13 @@ class PurgePanel(discord.ui.View):
         return await self.authorize(interaction)
 
     async def refresh(self) -> None:
-        await self.origin.edit_original_response(embed=self.embed(), view=self)
+        await self.origin.edit_original_response(
+            embed=self.embed(), view=None if self.busy else self
+        )
 
     def embed(self) -> discord.Embed:
+        if self.busy and self._progress:
+            return self.operation_embed()
         guild = self.origin.guild
         review = self.snapshot is not None
         result = discord.Embed(
@@ -323,9 +327,8 @@ class PurgePanel(discord.ui.View):
     def operation_embed(self) -> discord.Embed:
         """Show only the running destructive action, not an editable preview."""
         result = discord.Embed(
-            title=status_text(self.language, "heading"),
             description=self._progress or "",
-            color=discord.Color.orange(),
+            color=discord.Color.blurple(),
         )
         footer_text, footer_icon = self.footer(self.origin.guild)
         result.set_footer(text=footer_text, icon_url=footer_icon or None)
@@ -441,9 +444,10 @@ class PurgePanel(discord.ui.View):
         reporter = ProgressReporter(lambda _text: self.refresh())
 
         async def report(*, force=False):
-            self._progress = status_text(
-                self.language, "scan", channels=self.scanned + self.skipped,
-                total=total, examined=examined, found=found_count,
+            self._progress = compact_operation_status(
+                self.language, "purge_scan", self.scanned + self.skipped,
+                total if isinstance(total, int) else None,
+                examined=examined, found=found_count,
             )
             await reporter.publish(self._progress, force=force)
 
@@ -518,6 +522,9 @@ class PurgePanel(discord.ui.View):
             await self.refresh()
         finally:
             self.busy = False
+            if not self.closed:
+                self._build()
+                await self.refresh()
 
     async def confirm(self, interaction: discord.Interaction) -> None:
         if self.snapshot is None or not self.snapshot:
@@ -552,8 +559,8 @@ class PurgePanel(discord.ui.View):
         )
 
         async def report(*, force=False):
-            self._progress = status_text(
-                self.language, "delete", processed=processed, total=len(frozen),
+            self._progress = compact_operation_status(
+                self.language, "purge_delete", processed, len(frozen),
                 deleted=deleted, failed=failed,
             )
             await reporter.publish(self._progress, force=force)
