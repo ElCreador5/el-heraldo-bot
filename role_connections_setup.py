@@ -7,14 +7,12 @@ from __future__ import annotations
 
 import copy
 import inspect
-from io import BytesIO
 
 import discord
 
 import role_connections as engine
 from panel_navigation import dismiss_panel
-from operation_progress import ProgressReporter, progress_bar
-from sync_progress_card import render_sync_card
+from operation_progress import ProgressReporter, compact_progress_bar
 
 _SYNC_IN_PROGRESS: set[int] = set()
 
@@ -59,20 +57,14 @@ LABELS = {
         "deleted": "Conexión eliminada. Los roles existentes no se retiran al borrarla.",
         "changed": "Estado actualizado. Sincroniza para aplicarlo a miembros existentes.",
         "synced": "Miembros revisados: {checked}. Roles agregados: {added}. Roles retirados: {removed}.",
-        "sync_running": "**Conexiones de roles · Sincronizando**\nMiembros revisados: {checked} · Roles agregados: {added} · Roles retirados: {removed} · Errores: {failed}\nLa operación sigue en curso. Los botones estarán disponibles al finalizar.",
+        "sync_running": "**Conexiones de roles**\nSincronizando miembros\n{bar}{percent}\n{members}\n+{added} agregados · -{removed} retirados · {failed} errores",
         "sync_failed": "Sincronización interrumpida. Último avance registrado: {checked} miembros, {added} roles agregados, {removed} retirados. Algunos cambios pueden haberse aplicado.",
         "sync_busy": "Ya existe una sincronización de roles en curso en este servidor.",
         "progress_estimated": "Progreso estimado: {percent} % · {checked} de ~{total} miembros",
         "progress_unknown": "Revisando miembros · Total no disponible o desactualizado",
         "progress_complete": "100 % · Revisión completada",
-        "graphic_state": "Sincronizando miembros",
-        "graphic_count": "{checked} / {total} miembros revisados",
-        "graphic_unknown_count": "{checked} miembros revisados",
-        "graphic_estimated": "Progreso estimado",
-        "graphic_unknown": "Total no disponible",
-        "graphic_added": "agregados",
-        "graphic_removed": "retirados",
-        "graphic_failed": "errores",
+        "progress_members": "{checked} / {total} miembros revisados",
+        "progress_members_unknown": "{checked} miembros revisados",
         "sync_errors": "Cambios de roles fallidos: {failed}. Comprueba los permisos y la jerarquía de roles.",
         "sync_partial": "Se alcanzó el máximo de 1000 miembros por revisión. El resto requiere una sincronización adicional.",
         "sync_info": "Se revisarán todos los miembros. Esto puede agregar o retirar roles según las conexiones activas.",
@@ -157,20 +149,14 @@ LABELS = {
         "deleted": "Connection deleted. Existing member roles are not removed.",
         "changed": "Status updated. Sync to apply it to existing members.",
         "synced": "Members checked: {checked}. Roles added: {added}. Roles removed: {removed}.",
-        "sync_running": "**Role connections · Syncing**\nMembers checked: {checked} · Roles added: {added} · Roles removed: {removed} · Errors: {failed}\nThe operation is still running. Controls return when it finishes.",
+        "sync_running": "**Role connections**\nSyncing members\n{bar}{percent}\n{members}\n+{added} added · -{removed} removed · {failed} errors",
         "sync_failed": "Sync interrupted. Last recorded progress: {checked} members, {added} roles added, {removed} removed. Some changes may already have been applied.",
         "sync_busy": "A role synchronization is already running in this server.",
         "progress_estimated": "Estimated progress: {percent}% · {checked} of ~{total} members",
         "progress_unknown": "Reviewing members · Total unavailable or outdated",
         "progress_complete": "100% · Review completed",
-        "graphic_state": "Syncing members",
-        "graphic_count": "{checked} / {total} members checked",
-        "graphic_unknown_count": "{checked} members checked",
-        "graphic_estimated": "Estimated progress",
-        "graphic_unknown": "Total unavailable",
-        "graphic_added": "added",
-        "graphic_removed": "removed",
-        "graphic_failed": "errors",
+        "progress_members": "{checked} / {total} members checked",
+        "progress_members_unknown": "{checked} members checked",
         "sync_errors": "Failed role changes: {failed}. Check role permissions and hierarchy.",
         "sync_partial": "The 1000-member review limit was reached. Additional members require another sync.",
         "sync_info": "All server members will be reviewed. Roles may be added or removed according to active connections.",
@@ -255,20 +241,14 @@ LABELS = {
         "deleted": "Conexão excluída. Os cargos existentes foram preservados.",
         "changed": "Estado atualizado. Sincronize para aplicar aos membros existentes.",
         "synced": "Membros revisados: {checked}. Cargos adicionados: {added}. Cargos removidos: {removed}.",
-        "sync_running": "**Conexões de cargos · Sincronizando**\nMembros revisados: {checked} · Cargos adicionados: {added} · Cargos removidos: {removed} · Falhas: {failed}\nA operação continua em andamento. Os botões voltarão ao final.",
+        "sync_running": "**Conexões de cargos**\nSincronizando membros\n{bar}{percent}\n{members}\n+{added} adicionados · -{removed} removidos · {failed} falhas",
         "sync_failed": "Sincronização interrompida. Último avanço registrado: {checked} membros, {added} cargos adicionados, {removed} removidos. Algumas alterações podem ter sido aplicadas.",
         "sync_busy": "Uma sincronização de cargos já está em andamento neste servidor.",
         "progress_estimated": "Progresso estimado: {percent}% · {checked} de ~{total} membros",
         "progress_unknown": "Analisando membros · Total indisponível ou desatualizado",
         "progress_complete": "100% · Análise concluída",
-        "graphic_state": "Sincronizando membros",
-        "graphic_count": "{checked} / {total} membros analisados",
-        "graphic_unknown_count": "{checked} membros analisados",
-        "graphic_estimated": "Progresso estimado",
-        "graphic_unknown": "Total indisponível",
-        "graphic_added": "adicionados",
-        "graphic_removed": "removidos",
-        "graphic_failed": "falhas",
+        "progress_members": "{checked} / {total} membros analisados",
+        "progress_members_unknown": "{checked} membros analisados",
         "sync_errors": "Alterações de cargos com falha: {failed}. Verifique as permissões e a hierarquia dos cargos.",
         "sync_partial": "Limite de 1000 membros atingido. Outros membros precisam de outra sincronização.",
         "sync_info": "Todos os membros serão revisados. Cargos poderão ser adicionados ou removidos conforme as conexões ativas.",
@@ -1096,71 +1076,27 @@ class Confirmation(Base):
             # Guild member_count is approximate; do not call it an exact total.
             estimated_total = getattr(guild, "member_count", None)
 
-            def progress_text(*, complete=False):
-                bar, percent = progress_bar(checked, estimated_total, complete=complete)
-                if complete:
-                    detail = ctx.t("progress_complete")
-                elif percent is None:
-                    detail = ctx.t("progress_unknown")
-                else:
-                    detail = ctx.t(
-                        "progress_estimated", percent=percent,
-                        checked=checked, total=estimated_total,
-                    )
-                return f"{bar} {detail}"
-
             def running_text():
-                heading, _, body = ctx.t(
-                    "sync_running", checked=checked, added=added,
-                    removed=removed, failed=failed,
-                ).partition("\n")
-                return f"{heading}\n{progress_text()}\n{body}"
-
-            async def edit_progress(status):
-                """Edit the SAME ephemeral panel, replacing the previous PNG."""
-                try:
-                    png = render_sync_card(
-                        title=ctx.t("title"),
-                        state=ctx.t("graphic_state"),
-                        checked=checked, total=estimated_total,
-                        added=added, removed=removed, failed=failed,
-                        labels={
-                            "count": ctx.t("graphic_count", checked="{checked}", total="{total}"),
-                            "unknown_count": ctx.t("graphic_unknown_count", checked="{checked}"),
-                            "estimated": ctx.t("graphic_estimated"),
-                            "unknown": ctx.t("graphic_unknown"),
-                            "added": ctx.t("graphic_added"),
-                            "removed": ctx.t("graphic_removed"),
-                            "failed": ctx.t("graphic_failed"),
-                        },
-                    )
-                except Exception as exc:
-                    # The moderation operation must survive missing fonts/Pillow.
-                    print(f"ROLE_CONNECTIONS status=IMAGE_FALLBACK guild={guild.id} "
-                          f"error={type(exc).__name__}", flush=True)
-                    return await interaction.edit_original_response(
-                        content=status, embed=None, view=None, attachments=[]
-                    )
-                embed = discord.Embed(color=discord.Color.blurple())
-                embed.set_image(url="attachment://heraldo-role-progress.png")
-                embed.set_footer(text=getattr(guild, "name", ctx.t("title")))
-                attachment = discord.File(
-                    BytesIO(png), filename="heraldo-role-progress.png",
-                    description=status[:1024],
+                bar, percent = compact_progress_bar(checked, estimated_total)
+                members = (ctx.t("progress_members", checked=checked, total=estimated_total)
+                           if percent is not None
+                           else ctx.t("progress_members_unknown", checked=checked))
+                return ctx.t(
+                    "sync_running", bar=bar,
+                    percent=f" **{percent}%**" if percent is not None else "",
+                    members=members, added=added, removed=removed, failed=failed,
                 )
-                try:
-                    return await interaction.edit_original_response(
-                        content=None, embed=embed, attachments=[attachment], view=None
-                    )
-                finally:
-                    attachment.close()
 
             try:
-                # Defer first to avoid a 3-second interaction timeout while
-                # preparing a PNG. The running panel has no actionable buttons.
+                # Acknowledge promptly and keep the same panel without controls;
+                # no PNGs or new messages are created while syncing.
                 if not interaction.response.is_done():
                     await interaction.response.defer()
-                progress_panel = ProgressReporter(edit_progress)
+                progress_panel = ProgressReporter(
+                    lambda content: interaction.edit_original_response(
+                        content=content, embed=None, attachments=[], view=None
+                    )
+                )
                 await progress_panel.publish(running_text(), force=True)
 
                 async def report(count, count_added, count_removed):
