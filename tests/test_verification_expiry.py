@@ -36,13 +36,28 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(row['verify_pending_at'])
         self.assertIsNone(row['sin_verificado_at'])
 
-    async def test_primary_expels_and_logs_only_once(self):
+    async def test_primary_kick_uses_only_detailed_member_departure_card(self):
         await b.evaluate_verify_timeout(self.guild_id, self.user_id)
         await b.evaluate_verify_timeout(self.guild_id, self.user_id)
         self.member.kick.assert_awaited_once()
         self.member.ban.assert_not_awaited()
-        self.log.assert_awaited_once()
+        # No publicar un segundo aviso abreviado de verificación.
+        self.log.assert_not_awaited()
         self.assert_resolved()
+
+        # Discord emite on_member_remove: esta es la tarjeta completa que se conserva.
+        with (patch.object(b, 'log_member_event_enabled', return_value=True),
+              patch.object(b, 'classify_member_departure',
+                           new=AsyncMock(return_value=('member_kick', None,
+                                                      'No se verificó dentro del tiempo límite',
+                                                      None))),
+              patch.object(b, 'orientation_departure_has_detailed_log',
+                           new=AsyncMock(return_value=False)),
+              patch.object(b, 'member_departure_description',
+                           return_value='Usuario, rol, motivo y responsable')):
+            await b.heraldo_member_departure(self.member)
+        self.log.assert_awaited_once()
+        self.assertIn("Miembro expulsado", str(self.log.await_args.args[1]))
 
     async def test_primary_respects_configured_ban(self):
         self.action.return_value = 'ban'
@@ -103,7 +118,7 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
             finish.set()
             await first
         self.member.kick.assert_awaited_once()
-        self.log.assert_awaited_once()
+        self.log.assert_not_awaited()
 
     async def test_http_failure_preserves_primary_for_retry(self):
         self.member.kick.side_effect = b.discord.HTTPException(
@@ -114,6 +129,8 @@ class VerificationExpiryTests(unittest.IsolatedAsyncioTestCase):
         self.member.kick.side_effect = None
         await b.evaluate_verify_timeout(self.guild_id, self.user_id)
         self.assertEqual(self.member.kick.await_count, 2)
+        # Solo el error se registra aquí; la expulsión exitosa pertenece a salidas.
+        self.log.assert_awaited_once()
         self.assert_resolved()
 
     async def test_owner_exempt_from_expiry(self):
