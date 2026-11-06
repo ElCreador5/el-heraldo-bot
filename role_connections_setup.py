@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import copy
 import inspect
+from io import BytesIO
 
 import discord
 
 import role_connections as engine
 from panel_navigation import dismiss_panel
 from operation_progress import ProgressReporter, progress_bar
+from sync_progress_card import render_sync_card
 
 _SYNC_IN_PROGRESS: set[int] = set()
 
@@ -63,6 +65,14 @@ LABELS = {
         "progress_estimated": "Progreso estimado: {percent} % · {checked} de ~{total} miembros",
         "progress_unknown": "Revisando miembros · Total no disponible o desactualizado",
         "progress_complete": "100 % · Revisión completada",
+        "graphic_state": "Sincronizando miembros",
+        "graphic_count": "{checked} / {total} miembros revisados",
+        "graphic_unknown_count": "{checked} miembros revisados",
+        "graphic_estimated": "Progreso estimado",
+        "graphic_unknown": "Total no disponible",
+        "graphic_added": "agregados",
+        "graphic_removed": "retirados",
+        "graphic_failed": "errores",
         "sync_errors": "Cambios de roles fallidos: {failed}. Comprueba los permisos y la jerarquía de roles.",
         "sync_partial": "Se alcanzó el máximo de 1000 miembros por revisión. El resto requiere una sincronización adicional.",
         "sync_info": "Se revisarán todos los miembros. Esto puede agregar o retirar roles según las conexiones activas.",
@@ -153,6 +163,14 @@ LABELS = {
         "progress_estimated": "Estimated progress: {percent}% · {checked} of ~{total} members",
         "progress_unknown": "Reviewing members · Total unavailable or outdated",
         "progress_complete": "100% · Review completed",
+        "graphic_state": "Syncing members",
+        "graphic_count": "{checked} / {total} members checked",
+        "graphic_unknown_count": "{checked} members checked",
+        "graphic_estimated": "Estimated progress",
+        "graphic_unknown": "Total unavailable",
+        "graphic_added": "added",
+        "graphic_removed": "removed",
+        "graphic_failed": "errors",
         "sync_errors": "Failed role changes: {failed}. Check role permissions and hierarchy.",
         "sync_partial": "The 1000-member review limit was reached. Additional members require another sync.",
         "sync_info": "All server members will be reviewed. Roles may be added or removed according to active connections.",
@@ -243,6 +261,14 @@ LABELS = {
         "progress_estimated": "Progresso estimado: {percent}% · {checked} de ~{total} membros",
         "progress_unknown": "Analisando membros · Total indisponível ou desatualizado",
         "progress_complete": "100% · Análise concluída",
+        "graphic_state": "Sincronizando membros",
+        "graphic_count": "{checked} / {total} membros analisados",
+        "graphic_unknown_count": "{checked} membros analisados",
+        "graphic_estimated": "Progresso estimado",
+        "graphic_unknown": "Total indisponível",
+        "graphic_added": "adicionados",
+        "graphic_removed": "removidos",
+        "graphic_failed": "falhas",
         "sync_errors": "Alterações de cargos com falha: {failed}. Verifique as permissões e a hierarquia dos cargos.",
         "sync_partial": "Limite de 1000 membros atingido. Outros membros precisam de outra sincronização.",
         "sync_info": "Todos os membros serão revisados. Cargos poderão ser adicionados ou removidos conforme as conexões ativas.",
@@ -1090,22 +1116,52 @@ class Confirmation(Base):
                 ).partition("\n")
                 return f"{heading}\n{progress_text()}\n{body}"
 
-            try:
-                # Acknowledge immediately and remove the confirmation buttons while
-                # Discord is processing members. Never run the batch twice.
-                if interaction.response.is_done():
-                    await interaction.edit_original_response(
-                        content=running_text(), embed=None, view=None
+            async def edit_progress(status):
+                """Edit the SAME ephemeral panel, replacing the previous PNG."""
+                try:
+                    png = render_sync_card(
+                        title=ctx.t("title"),
+                        state=ctx.t("graphic_state"),
+                        checked=checked, total=estimated_total,
+                        added=added, removed=removed, failed=failed,
+                        labels={
+                            "count": ctx.t("graphic_count", checked="{checked}", total="{total}"),
+                            "unknown_count": ctx.t("graphic_unknown_count", checked="{checked}"),
+                            "estimated": ctx.t("graphic_estimated"),
+                            "unknown": ctx.t("graphic_unknown"),
+                            "added": ctx.t("graphic_added"),
+                            "removed": ctx.t("graphic_removed"),
+                            "failed": ctx.t("graphic_failed"),
+                        },
                     )
-                else:
-                    await interaction.response.edit_message(
-                        content=running_text(), embed=None, view=None
+                except Exception as exc:
+                    # The moderation operation must survive missing fonts/Pillow.
+                    print(f"ROLE_CONNECTIONS status=IMAGE_FALLBACK guild={guild.id} "
+                          f"error={type(exc).__name__}", flush=True)
+                    return await interaction.edit_original_response(
+                        content=status, embed=None, view=None, attachments=[]
                     )
-                progress_panel = ProgressReporter(
-                    lambda content: interaction.edit_original_response(
-                        content=content, embed=None, view=None
-                    )
+                embed = discord.Embed(color=discord.Color.blurple())
+                embed.set_image(url="attachment://heraldo-role-progress.png")
+                embed.set_footer(text=getattr(guild, "name", ctx.t("title")))
+                attachment = discord.File(
+                    BytesIO(png), filename="heraldo-role-progress.png",
+                    description=status[:1024],
                 )
+                try:
+                    return await interaction.edit_original_response(
+                        content=None, embed=embed, attachments=[attachment], view=None
+                    )
+                finally:
+                    attachment.close()
+
+            try:
+                # Defer first to avoid a 3-second interaction timeout while
+                # preparing a PNG. The running panel has no actionable buttons.
+                if not interaction.response.is_done():
+                    await interaction.response.defer()
+                progress_panel = ProgressReporter(edit_progress)
+                await progress_panel.publish(running_text(), force=True)
 
                 async def report(count, count_added, count_removed):
                     nonlocal checked, added, removed
@@ -1120,7 +1176,7 @@ class Confirmation(Base):
                     guild, connect=ctx.host["db_connect"], protected_ids=ctx.protected(),
                     blocked=ctx.blocked, progress=report, on_failure=record_failure,
                 )
-                result = progress_text(complete=True) + "\n" + ctx.t(
+                result = ctx.t("progress_complete") + "\n" + ctx.t(
                     "synced", checked=checked, added=added, removed=removed
                 )
                 if failed:
@@ -1130,7 +1186,7 @@ class Confirmation(Base):
             except Exception as exc:
                 print(f"ROLE_CONNECTIONS status=SYNC_FAILED guild={guild.id} "
                       f"exception={type(exc).__name__}", flush=True)
-                result = progress_text() + "\n" + ctx.t(
+                result = ctx.t(
                     "sync_failed", checked=checked, added=added, removed=removed
                 )
                 if failed:
@@ -1145,7 +1201,7 @@ class Confirmation(Base):
             heading = view.summary(guild)
             content = heading[:max(0, 2000 - len(result) - 2)] + "\n\n" + result
             return await interaction.edit_original_response(
-                content=content, embed=None, view=view
+                content=content, embed=None, attachments=[], view=view
             )
         if self.action == "delete":
             result = engine.delete_rule(
