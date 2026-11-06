@@ -2183,6 +2183,25 @@ async def on_member_join(member: discord.Member) -> None:
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         asyncio.create_task(assign_join_roles(member))
 
+    # Restauración opt-in tras una salida voluntaria verificada: nunca salta
+    # sanciones activas ni habilita roles privilegiados.
+    if guild_config_get(member.guild.id, "verified_rejoin_restore_enabled") == "1":
+        try:
+            from member_rejoin_restore import restore_join
+            restored = await restore_join(
+                member, connect=db_connect,
+                enabled=lambda gid: guild_config_get(gid, "verified_rejoin_restore_enabled") == "1",
+                personality_ids=get_eval_role_ids,
+                verify_role_id=get_verify_role_id,
+                sin_role_id=get_sin_verificado_role_id,
+            )
+            if restored:
+                db_clear_verify_pending(member.guild.id, member.id)
+                db_clear_sin_verificado(member.guild.id, member.id)
+                return
+        except (sqlite3.Error, discord.HTTPException) as exc:
+            print(f"REJOIN_RESTORE status=FAILED reason={type(exc).__name__}", flush=True)
+
     if verify_enabled(member.guild.id):
         waiting_screening = (
             join_roles_wait_screening(member.guild.id)
@@ -2364,6 +2383,35 @@ async def orientation_departure_has_detailed_log(
     orientation_prune_kick_log_markers(now)
     logged_at = _orientation_kick_log_sent.pop(key, None)
     return logged_at is not None and 0 <= now - logged_at <= _ORIENTATION_LOG_WINDOW
+
+
+@bot.listen("on_member_ban")
+async def heraldo_invalidate_banned_role_snapshot(guild: discord.Guild, user: discord.User) -> None:
+    try:
+        from member_rejoin_restore import forget
+        forget(db_connect, guild.id, user.id)
+    except sqlite3.Error as exc:
+        print(f"REJOIN_SNAPSHOT status=BAN_INVALIDATE_FAILED reason={type(exc).__name__}", flush=True)
+
+
+@bot.listen("on_member_remove")
+async def heraldo_capture_verified_departure(member: discord.Member) -> None:
+    if member.bot:
+        return
+    if guild_config_get(member.guild.id, "verified_rejoin_restore_enabled") != "1":
+        return
+    try:
+        from member_rejoin_restore import capture_departure
+        await capture_departure(
+            member, connect=db_connect,
+            enabled=lambda gid: guild_config_get(gid, "verified_rejoin_restore_enabled") == "1",
+            personality_ids=get_eval_role_ids, verify_role_id=get_verify_role_id,
+            is_verified=lambda target: get_sin_verificado_role_id(target.guild.id)
+                not in {role.id for role in target.roles},
+            audit_action=discord.AuditLogAction,
+        )
+    except (sqlite3.Error, discord.HTTPException) as exc:
+        print(f"REJOIN_SNAPSHOT status=FAILED reason={type(exc).__name__}", flush=True)
 
 
 @bot.listen("on_member_remove")
@@ -9013,6 +9061,13 @@ class HeraldoCasesSetupView(discord.ui.View):
         await interaction.response.send_modal(
             HeraldoWarningDeleteModal(self.guild_id, self.selected_case, self.owner_id))
 
+    @discord.ui.button(label="Gestionar casos", style=discord.ButtonStyle.primary, row=3)
+    async def manage_cases(self, interaction, button):
+        from main_case_management import open_panel
+        content, panel = open_panel(globals(), self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=content, embed=None, view=panel)
+
     @discord.ui.button(label="Actualizar", style=discord.ButtonStyle.secondary, row=2)
     async def refresh(self, interaction, button):
         self._rebuild()
@@ -9358,6 +9413,12 @@ class HeraldoVerificationHubView(discord.ui.View):
     @discord.ui.button(label="Tiempos", style=discord.ButtonStyle.secondary, row=1)
     async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
+
+    @discord.ui.button(label="Restaurar roles al reingresar", style=discord.ButtonStyle.primary, row=1)
+    async def rejoin_settings(self, interaction, button):
+        from main_rejoin_setup import create_panel
+        content, view = create_panel(globals(), self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=content, embed=None, view=view)
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -15234,13 +15295,14 @@ async def release_condemned_member(
 
     saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.guild.id, member.id) or [])
     restore: list[discord.Role] = []
-    lost = 0
+    missing_role_ids: list[int] = []
     for rid in saved:
         role = member.guild.get_role(rid)
         if role is not None and role.is_assignable() and not role.managed:
             restore.append(role)
         else:
-            lost += 1
+            missing_role_ids.append(rid)
+    lost = len(missing_role_ids)
 
     current = [
         r for r in member.roles
@@ -15254,6 +15316,14 @@ async def release_condemned_member(
         return False, f"No pude cambiar sus roles: `{e}`"
     finally:
         _condemn_sync_busy.discard(member.id)
+
+    # Persist only the roles that were not assignable during a successful
+    # release. A moderator can retry them with a separate confirmation.
+    from main_pending_roles import pending_get, pending_set
+    previous_pending = pending_get(globals(), member.guild.id, member.id)
+    assigned_ids = {role.id for role in new_roles}
+    pending_set(globals(), member.guild.id, member.id,
+                (set(previous_pending) | set(missing_role_ids)) - assigned_ids)
 
     linked_case_number = (
         int(row["moderation_case_number"])
@@ -15773,6 +15843,31 @@ async def condenar_error(interaction: discord.Interaction, error: discord.app_co
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+@bot.tree.command(
+    name="restaurar_roles_pendientes",
+    description="Reintentar los roles pendientes de una condena levantada.",
+)
+@app_commands.describe(miembro="Miembro cuyos roles no pudieron restaurarse")
+@app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+@app_commands.guild_only()
+async def restaurar_roles_pendientes(
+    interaction: discord.Interaction, miembro: discord.Member,
+) -> None:
+    if not await configuration_access(interaction):
+        return
+    if not interaction.user.guild_permissions.manage_roles:
+        return await interaction.response.send_message(
+            "Debes tener el permiso Gestionar roles.", ephemeral=True)
+    if condemnation_get(interaction.guild.id, miembro.id) is not None:
+        return await interaction.response.send_message(
+            "Primero debe levantarse la condena activa.", ephemeral=True)
+    from main_pending_roles import create_confirmation
+    content, view = create_confirmation(
+        globals(), interaction.guild.id, interaction.user.id, miembro.id)
+    await interaction.response.send_message(
+        content, view=view, ephemeral=True)
 
 
 @bot.tree.command(name="liberar", description="Levantar una condena y devolver los roles guardados.")
