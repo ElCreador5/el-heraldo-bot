@@ -184,7 +184,10 @@ class ServerStructureTests(unittest.IsolatedAsyncioTestCase):
             fetch.assert_awaited_once_with(999)
             sent.assert_awaited_once()
             self.assertEqual(baseline, self.snapshot())
-            self.assertIn("sincronizada", i.followup.send.call_args.args[0].lower())
+            i.followup.send.assert_not_awaited()
+            self.assertIn("sincronizada", i.edit_original_response.call_args.kwargs["content"].lower())
+            self.assertIn("Sincronizando con Discord",
+                          str(i.response.edit_message.call_args_list[-1].kwargs["content"]))
 
     async def test_sync_with_unsaved_schedule_is_blocked(self):
         view = self.view()
