@@ -52,7 +52,7 @@ class RoleConnectionsUITests(unittest.TestCase):
             )
             self.assertIn("`██████▌···` **62%**", text)
             self.assertIn("575 / 923", text)
-            self.assertEqual(text.count("\\n"), 4)
+            self.assertEqual(text.count("\n"), 4)
             self.assertLess(len(text), 180)
 
     def test_full_creation_navigation_under_five_rows(self):
