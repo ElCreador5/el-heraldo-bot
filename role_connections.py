@@ -295,7 +295,7 @@ def matches(rule, held):
     return False
 
 
-async def reconcile_member(member, *, connect, protected_ids=(), blocked=None):
+async def reconcile_member(member, *, connect, protected_ids=(), blocked=None, on_failure=None):
     """Idempotente: ordena dependencias y limita cambios a roles seguros."""
     if member.bot or (blocked is not None and blocked(member)):
         return 0, 0
@@ -331,10 +331,12 @@ async def reconcile_member(member, *, connect, protected_ids=(), blocked=None):
             except Exception as exc:
                 print(f"ROLE_CONNECTIONS status=UPDATE_FAILED guild={guild.id} "
                       f"exception={type(exc).__name__}", flush=True)
+                if on_failure is not None:
+                    await on_failure()
         return added, removed
 
 
-async def synchronize(guild, *, connect, protected_ids=(), blocked=None, limit=None, progress=None):
+async def synchronize(guild, *, connect, protected_ids=(), blocked=None, limit=None, progress=None, on_failure=None):
     """Barrido explícito completo; nunca se ejecuta al guardar una regla."""
     checked = added = removed = 0
     exceeded = False
@@ -344,7 +346,8 @@ async def synchronize(guild, *, connect, protected_ids=(), blocked=None, limit=N
             break
         checked += 1
         a, r = await reconcile_member(
-            member, connect=connect, protected_ids=protected_ids, blocked=blocked
+            member, connect=connect, protected_ids=protected_ids, blocked=blocked,
+            on_failure=on_failure,
         )
         added += a
         removed += r
