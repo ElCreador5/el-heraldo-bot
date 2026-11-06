@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import AsyncMock
 
-from operation_progress import ProgressReporter, progress_bar, status_text
+from operation_progress import ProgressReporter, compact_progress_bar, progress_bar, status_text
 
 
 class OperationProgressTests(unittest.IsolatedAsyncioTestCase):
@@ -32,6 +32,19 @@ class OperationProgressTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(percent)
             self.assertIn("█", bar)
             self.assertIn("░", bar)
+
+    async def test_compact_progress_has_ten_blocks_and_no_false_completion(self):
+        bar, percent = compact_progress_bar(575, 923)
+        self.assertEqual((bar, percent), ("`██████▌···`", 62))
+        self.assertEqual(compact_progress_bar(923, 923)[1], 99)
+        self.assertEqual(compact_progress_bar(0, 923)[1], 0)
+
+    async def test_compact_indeterminate_does_not_claim_percentage(self):
+        for total in (None, 0, -1, 300):
+            bar, percent = compact_progress_bar(575, total)
+            self.assertIsNone(percent)
+            self.assertEqual(len(bar.strip("`")), 10)
+            self.assertIn("▌", bar)
 
     async def test_statuses_are_localized_without_inventing_percentages(self):
         for locale in ("es-419", "en-US", "pt-BR"):
