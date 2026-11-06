@@ -18,6 +18,27 @@ STATUS_TEXT = {
         "delete_failed": "La eliminación se interrumpió. Comprueba el resultado parcial y el registro.",
         "remaining": "Sin procesar: {count}.",
         "interrupted": "Operación interrumpida",
+        "purge_scan_title": "Purga · Revisando mensajes",
+        "purge_scan_count": "{done} / {total} canales revisados",
+        "purge_scan_unknown": "{done} canales revisados",
+        "purge_scan_metrics": "{examined} examinados · {found} coincidencias",
+        "purge_delete_title": "Purga · Eliminando mensajes",
+        "purge_delete_count": "{done} / {total} mensajes procesados",
+        "purge_delete_unknown": "{done} mensajes procesados",
+        "purge_delete_metrics": "{deleted} eliminados · {failed} fallidos",
+        "fusion_title": "Fusión · Migrando mensajes",
+        "fusion_count": "{done} / {total} mensajes procesados",
+        "fusion_unknown": "{done} mensajes procesados",
+        "fusion_metrics": "{migrated} migrados · {failed} fallidos · {attachments} adjuntos fallidos",
+        "join_roles_title": "Sincronizando roles de ingreso",
+        "join_roles_count": "{done} / {total} miembros revisados",
+        "join_roles_unknown": "{done} miembros revisados",
+        "join_roles_metrics": "{assigned} asignados · {skipped} omitidos · {failed} errores",
+        "verification_title": "Revisando verificaciones",
+        "verification_count": "{done} / {total} miembros revisados",
+        "verification_unknown": "{done} miembros revisados",
+        "verification_metrics": "{verified} verificados · {expelled} expulsados · {failed} errores",
+        "template_running": "**Plantilla del servidor**\nSincronizando con Discord…",
     },
     "en-US": {
         "heading": "Operation status",
@@ -27,6 +48,27 @@ STATUS_TEXT = {
         "delete_failed": "Deletion was interrupted. Check the partial result and the audit log.",
         "remaining": "Not processed: {count}.",
         "interrupted": "Operation interrupted",
+        "purge_scan_title": "Purge · Reviewing messages",
+        "purge_scan_count": "{done} / {total} channels reviewed",
+        "purge_scan_unknown": "{done} channels reviewed",
+        "purge_scan_metrics": "{examined} examined · {found} matches",
+        "purge_delete_title": "Purge · Deleting messages",
+        "purge_delete_count": "{done} / {total} messages processed",
+        "purge_delete_unknown": "{done} messages processed",
+        "purge_delete_metrics": "{deleted} deleted · {failed} failed",
+        "fusion_title": "Channel merge · Migrating messages",
+        "fusion_count": "{done} / {total} messages processed",
+        "fusion_unknown": "{done} messages processed",
+        "fusion_metrics": "{migrated} migrated · {failed} failed · {attachments} failed attachments",
+        "join_roles_title": "Syncing entry roles",
+        "join_roles_count": "{done} / {total} members reviewed",
+        "join_roles_unknown": "{done} members reviewed",
+        "join_roles_metrics": "{assigned} assigned · {skipped} skipped · {failed} errors",
+        "verification_title": "Reviewing verifications",
+        "verification_count": "{done} / {total} members reviewed",
+        "verification_unknown": "{done} members reviewed",
+        "verification_metrics": "{verified} verified · {expelled} expelled · {failed} errors",
+        "template_running": "**Server template**\nSyncing with Discord…",
     },
     "pt-BR": {
         "heading": "Status da operação",
@@ -36,6 +78,27 @@ STATUS_TEXT = {
         "delete_failed": "A exclusão foi interrompida. Confira o resultado parcial e o registro.",
         "remaining": "Não processadas: {count}.",
         "interrupted": "Operação interrompida",
+        "purge_scan_title": "Limpeza · Analisando mensagens",
+        "purge_scan_count": "{done} / {total} canais analisados",
+        "purge_scan_unknown": "{done} canais analisados",
+        "purge_scan_metrics": "{examined} analisadas · {found} correspondências",
+        "purge_delete_title": "Limpeza · Excluindo mensagens",
+        "purge_delete_count": "{done} / {total} mensagens processadas",
+        "purge_delete_unknown": "{done} mensagens processadas",
+        "purge_delete_metrics": "{deleted} excluídas · {failed} falhas",
+        "fusion_title": "Fusão · Migrando mensagens",
+        "fusion_count": "{done} / {total} mensagens processadas",
+        "fusion_unknown": "{done} mensagens processadas",
+        "fusion_metrics": "{migrated} migradas · {failed} falhas · {attachments} anexos com falha",
+        "join_roles_title": "Sincronizando cargos de entrada",
+        "join_roles_count": "{done} / {total} membros analisados",
+        "join_roles_unknown": "{done} membros analisados",
+        "join_roles_metrics": "{assigned} atribuídos · {skipped} ignorados · {failed} erros",
+        "verification_title": "Analisando verificações",
+        "verification_count": "{done} / {total} membros analisados",
+        "verification_unknown": "{done} membros analisados",
+        "verification_metrics": "{verified} verificados · {expelled} expulsos · {failed} erros",
+        "template_running": "**Modelo do servidor**\nSincronizando com o Discord…",
     },
 }
 
@@ -87,6 +150,20 @@ def compact_progress_bar(checked: int, total: int | None) -> tuple[str, int | No
     half = 1 if fractional and full < width else 0
     bar = "█" * full + "▌" * half + "·" * (width - full - half)
     return f"`{bar}`", percent
+
+
+def compact_operation_status(locale: str, action: str, done: int,
+                             total: int | None, **counters: int) -> str:
+    """Five-line, context-specific status with an honest ten-cell progress bar."""
+    if action not in {"purge_scan", "purge_delete", "fusion", "join_roles", "verification"}:
+        raise ValueError("unsupported_progress_action")
+    bar, percent = compact_progress_bar(done, total)
+    title = status_text(locale, action + "_title")
+    label = (status_text(locale, action + "_count", done=done, total=total)
+             if percent is not None
+             else status_text(locale, action + "_unknown", done=done))
+    metrics = status_text(locale, action + "_metrics", **counters)
+    return f"**{title}**\\n{bar}{f' **{percent}%**' if percent is not None else ''}\\n{label}\\n{metrics}"
 
 
 class ProgressReporter:
