@@ -42,6 +42,7 @@ jobs:
           PYTHONPATH: ".:tests"
         run: |
           python -m unittest discover -s tests -p 'test_main_selected_settings.py' -v
-          python -m unittest discover -s tests -p 'test_main_selected_behavior.py' -v
-          python -m unittest discover -s tests -p 'test_main_operation_progress.py' -v
-          python -m unittest discover -s tests -p 'test_main_structure_promotion.py' -v
+          python -m unittest discover -s tests -p 'test_main*.py' -v
+          python -m unittest discover -s tests -p 'test_ux_main_release.py' -v
+          python -m unittest discover -s tests -p 'test_purge_panel.py' -v
+          python -m unittest discover -s tests -p 'test_personal_embeds_public.py' -v
