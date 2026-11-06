@@ -951,3 +951,7 @@ Pruebas automatizadas añadidas en `tests/test_operation_progress.py`, `tests/te
 
 ### 2026-11-06 — Indicador gráfico para sincronización de miembros
 Agregada la función reutilizable `progress_bar` en `operation_progress.py` y su visualización en `role_connections_setup.py`. La interfaz presenta indicador de avance aproximado en la misma tarjeta durante la ejecución, actividad indeterminada cuando el total no es fiable y 100 % solo al concluir. `tests/test_operation_progress.py` cubre ambos modos y el fin. Cambios únicamente en `Pruebas`; pendiente verificación manual en Discord Beta de un proceso con suficiente duración para observar la actualización intermedia.
+
+
+### 2026-11-06 — Conexiones con tarjeta gráfica de progreso en Pruebas
+Archivo nuevo `sync_progress_card.py`: dibuja en memoria una imagen PNG oscura de 960 × 286 px con barra redondeada de progreso estimado y conteos de agregados/retirados/errores. Integrado en `role_connections_setup.py` mediante `edit_original_response(embed=..., attachments=[discord.File(...)])`, reemplazando el adjunto anterior en el mismo mensaje. No se crean imágenes en disco ni se altera la operación de sincronización. Se libera el adjunto al regresar al panel. `tests/test_sync_progress_card.py` cubre color/barra/formato, ausencia de total y los tres idiomas; el workflow `role-connections-lab.yml` instala Pillow y ejecuta compilación y pruebas (resultado SUCCESS verificado). Falta prueba manual de apariencia y actualización real dentro de Discord Beta. Actualización exclusiva de `Pruebas`.
