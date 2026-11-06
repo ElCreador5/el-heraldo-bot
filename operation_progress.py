@@ -45,6 +45,28 @@ def status_text(locale: str, key: str, **values) -> str:
     return catalog[key].format(**values)
 
 
+def progress_bar(checked: int, total: int | None = None, *,
+                 complete: bool = False, width: int = 16) -> tuple[str, int | None]:
+    """Text-only Discord progress indicator.
+
+    Guild.member_count is an estimate, not a verified fetch total. Do not
+    announce 100% before completion. When the estimate is missing or stale,
+    use an indeterminate activity indicator without claiming a percentage.
+    """
+    width = max(6, min(24, int(width)))
+    checked = max(0, int(checked))
+    if complete:
+        return "`" + "█" * width + "`", 100
+    if not isinstance(total, int) or isinstance(total, bool) or total <= 0 or checked > total:
+        pulse = 3
+        offset = (checked // 20) % (width - pulse + 1)
+        bar = "░" * offset + "█" * pulse + "░" * (width - pulse - offset)
+        return "`" + bar + "`", None
+    percent = min(99, checked * 100 // total)
+    filled = min(width - 1, checked * width // total)
+    return "`" + "█" * filled + "░" * (width - filled) + "`", percent
+
+
 class ProgressReporter:
     """Updates an existing panel at most once per interval (unless forced)."""
 
