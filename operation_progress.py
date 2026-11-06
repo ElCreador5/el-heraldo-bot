@@ -17,6 +17,7 @@ STATUS_TEXT = {
         "scan_failed": "La revisión se interrumpió. No se eliminaron mensajes.",
         "delete_failed": "La eliminación se interrumpió. Comprueba el resultado parcial y el registro.",
         "remaining": "Sin procesar: {count}.",
+        "interrupted": "Operación interrumpida",
     },
     "en-US": {
         "heading": "Operation status",
@@ -25,6 +26,7 @@ STATUS_TEXT = {
         "scan_failed": "The review was interrupted. No messages were deleted.",
         "delete_failed": "Deletion was interrupted. Check the partial result and the audit log.",
         "remaining": "Not processed: {count}.",
+        "interrupted": "Operation interrupted",
     },
     "pt-BR": {
         "heading": "Status da operação",
@@ -33,6 +35,7 @@ STATUS_TEXT = {
         "scan_failed": "A análise foi interrompida. Nenhuma mensagem foi excluída.",
         "delete_failed": "A exclusão foi interrompida. Confira o resultado parcial e o registro.",
         "remaining": "Não processadas: {count}.",
+        "interrupted": "Operação interrompida",
     },
 }
 
