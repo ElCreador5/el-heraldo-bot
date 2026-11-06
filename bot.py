@@ -1509,14 +1509,18 @@ def approximate_missing_join_roles(guild: discord.Guild) -> int:
 
 
 @_i18n_context
-async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
+async def sync_join_roles(guild: discord.Guild, *, progress=None) -> tuple[int, int, list[str]]:
     assigned = 0
     skipped = 0
     errors: list[str] = []
     pending_ids = _join_verify_pending_ids(guild.id)
+    reviewed = 0
 
     async for member in guild.fetch_members(limit=None):
+        reviewed += 1
         if member.bot:
+            if progress is not None:
+                await progress(reviewed, assigned, skipped, len(errors))
             continue
         ok, note = await _assign_join_roles_now(
             member,
@@ -1530,6 +1534,8 @@ async def sync_join_roles(guild: discord.Guild) -> tuple[int, int, list[str]]:
                 skipped += 1
         else:
             errors.append(f"{member}: {note}")
+        if progress is not None:
+            await progress(reviewed, assigned, skipped, len(errors))
         await asyncio.sleep(0.15)
 
     set_join_sync_last(guild.id)
@@ -14278,17 +14284,31 @@ async def heraldo_check_error(interaction: discord.Interaction, error: discord.a
 @discord.app_commands.guild_only()
 @_i18n_context
 async def heraldo_check_all(interaction: discord.Interaction) -> None:
-    guild = interaction.guild
-    await interaction.response.send_message(_t('text.e95a42b428fdad'), ephemeral=True)
-    await log_embed(guild, _t('text.2d424960a80787'), _t('text.97f96d90d7f442', p0=f'{interaction.user.mention}'), discord.Color.blurple())
+    from operation_progress import ProgressReporter, compact_operation_status, status_text
 
-    verified = 0
+    guild = interaction.guild
+    locale = guild_language(guild.id)
+    reviewed = verified = failed = 0
     expelled: list[discord.Member] = []
     expelled_sin_verificar: list[discord.Member] = []
 
+    def progress_status():
+        return compact_operation_status(
+            locale, "verification", reviewed, getattr(guild, "member_count", None),
+            verified=verified, expelled=len(expelled), failed=failed,
+        )
+
+    await interaction.response.send_message(progress_status(), ephemeral=True)
+    reporter = ProgressReporter(
+        lambda content: interaction.edit_original_response(content=content)
+    )
+    await log_embed(guild, _t('text.2d424960a80787'), _t('text.97f96d90d7f442', p0=f'{interaction.user.mention}'), discord.Color.blurple())
+
     async for member in guild.fetch_members(limit=None):
+        reviewed += 1
         if (member.bot or member.id == getattr(guild, 'owner_id', None)
                 or condemnation_get(member.guild.id, member.id) is not None):
+            await reporter.publish(progress_status())
             continue  # propietario y condenados exentos de esta evaluación
         role_ids = {r.id for r in member.roles}
         if get_tentado_role_id(guild.id) in role_ids:
@@ -14303,6 +14323,7 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
             # Solo el evaluador principal consulta el plazo y la acción vigente.
             await evaluate_verify_timeout(guild.id, member.id)
             await asyncio.sleep(1)
+        await reporter.publish(progress_status())
 
     embed = discord.Embed(
         title=_t('text.72b864e711b9bc'),
@@ -14339,9 +14360,8 @@ async def heraldo_check_all(interaction: discord.Interaction) -> None:
         except discord.Forbidden:
             print("Sin permisos para escribir en el canal de logs")
 
-    await interaction.followup.send(
-        _t('text.6c47b9a839572f', p0=f'{verified}', p1=f'{len(expelled)}', p2=f'{len(expelled_sin_verificar)}'),
-        ephemeral=True,
+    await interaction.edit_original_response(
+        content=_t('text.6c47b9a839572f', p0=f'{verified}', p1=f'{len(expelled)}', p2=f'{len(expelled_sin_verificar)}'),
     )
 
 
@@ -15148,18 +15168,59 @@ async def joinroles_status(interaction: discord.Interaction) -> None:
     )
 
 
+_JOIN_ROLES_MANUAL_ACTIVE: set[int] = set()
+
+
 @joinroles_group.command(name="sync", description="Asignar ahora los Roles de ingreso a los miembros elegibles.")
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @_i18n_context
 async def joinroles_sync_command(interaction: discord.Interaction) -> None:
-    await interaction.response.defer(ephemeral=True, thinking=True)
-    assigned, skipped, errors = await sync_join_roles(interaction.guild)
-    text = (
-        _t('text.d64d9ae4cb8b1c', p0=f'{assigned}', p1=f'{skipped}')
-    )
-    if errors:
-        text += _t('text.19ba789dbe1f99', p0=f'{len(errors)}')
-    await interaction.followup.send(text, ephemeral=True)
+    from operation_progress import ProgressReporter, compact_operation_status, status_text
+
+    guild = interaction.guild
+    locale = guild_language(guild.id)
+    if guild.id in _JOIN_ROLES_MANUAL_ACTIVE:
+        await interaction.response.send_message(
+            status_text(locale, "join_roles_busy"), ephemeral=True,
+        )
+        return
+    _JOIN_ROLES_MANUAL_ACTIVE.add(guild.id)
+    reviewed = assigned = skipped = failed = 0
+
+    def progress_status():
+        return compact_operation_status(
+            locale, "join_roles", reviewed, getattr(guild, "member_count", None),
+            assigned=assigned, skipped=skipped, failed=failed,
+        )
+
+    try:
+        await interaction.response.defer(ephemeral=True)
+        reporter = ProgressReporter(
+            lambda content: interaction.edit_original_response(content=content)
+        )
+        await reporter.publish(progress_status(), force=True)
+
+        async def update_progress(count, new_assigned, new_skipped, new_failed):
+            nonlocal reviewed, assigned, skipped, failed
+            reviewed, assigned = count, new_assigned
+            skipped, failed = new_skipped, new_failed
+            await reporter.publish(progress_status())
+
+        assigned, skipped, errors = await sync_join_roles(
+            guild, progress=update_progress,
+        )
+        result = _t('text.d64d9ae4cb8b1c', p0=f'{assigned}', p1=f'{skipped}')
+        if errors:
+            result += _t('text.19ba789dbe1f99', p0=f'{len(errors)}')
+        await interaction.edit_original_response(content=result)
+    except Exception as exc:
+        print(f"JOIN_ROLES_SYNC status=FAILED guild={guild.id} "
+              f"error={type(exc).__name__}", flush=True)
+        await interaction.edit_original_response(
+            content=progress_status() + "\n" + status_text(locale, "join_roles_interrupted"),
+        )
+    finally:
+        _JOIN_ROLES_MANUAL_ACTIVE.discard(guild.id)
 
 
 @joinroles_group.command(name="add", description="Añadir uno o varios Roles de ingreso generales.")
