@@ -97,6 +97,32 @@ class PurgePanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(running)
         self.assertTrue(panel.closed)
 
+    async def test_scan_and_deletion_display_live_progress_on_original_panel(self):
+        panel, interaction, _, _, _, _ = self.make_panel()
+        panel.user_ids = (1, 2)
+        panel.limit = 1
+        await panel.continue_scan(interaction)
+        preview_embeds = [
+            call.kwargs["embed"] for call in interaction.edit_original_response.await_args_list
+            if "embed" in call.kwargs
+        ]
+        self.assertTrue(any(
+            any(field.name == "Estado de la operación"
+                and "Revisando mensajes" in field.value for field in embed.fields)
+            for embed in preview_embeds
+        ))
+        await panel.confirm(interaction)
+        deletion_embeds = [
+            call.kwargs["embed"] for call in interaction.edit_original_response.await_args_list
+            if "embed" in call.kwargs
+        ]
+        self.assertTrue(any(
+            embed.title == "Estado de la operación"
+            and "Procesados: 0/2" in (embed.description or "")
+            for embed in deletion_embeds
+        ))
+        self.assertEqual(deletion_embeds[-1].title, panel.t("done"))
+
     async def test_changing_any_filter_invalidates_preview(self):
         panel, interaction, _, _, _, _ = self.make_panel()
         panel.user_ids = (1,)
