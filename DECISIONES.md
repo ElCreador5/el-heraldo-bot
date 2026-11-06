@@ -641,3 +641,7 @@ Cuando expira la verificación de edad y la acción es expulsar, El Heraldo NO p
 - Purga: mostrar progreso durante la revisión de canales/mensajes y durante la eliminación, preservando la confirmación, el conjunto congelado de mensajes y un único registro de auditoría.
 - El componente de actualización `operation_progress.py` limita ediciones de Discord y ofrece textos es-419, en-US y pt-BR; sirve de base para ampliar el patrón a otras tareas largas.
 - Cambios solo en `Pruebas`, sin modificar `main`, SQLite, seguridad ni permisos. Los tests sin Gateway no equivalen a confirmación en Discord Beta.
+
+
+### 2026-11-06 — Barra de progreso de conexiones de roles
+El panel de sincronización de roles en `Pruebas` muestra una barra textual de 16 segmentos que se actualiza junto a sus contadores. El porcentaje se deriva de `guild.member_count` y se rotula como **estimado**, nunca llega al 100 % antes de completar el barrido. Si Discord no informa un total utilizable o el recuento lo supera, se muestra una barra indeterminada sin porcentaje. Una revisión completada muestra 100 % y conserva avisos de cambios parciales fallidos; una revisión interrumpida nunca declara 100 %. Se traduce al idioma configurado (es-419/en-US/pt-BR) y no modifica `main` ni la DB.
