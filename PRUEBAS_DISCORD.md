@@ -991,3 +991,12 @@ Pruebas unitarias se ejecutan mediante workflow Role connections lab. No declara
 - [ ] Probar fallo de permisos: no debe mostrar «Miembro expulsado» si no hubo expulsión y sí debe preservar el aviso de error.
 
 El registro histórico previo de la captura no se borra automáticamente. `main` ya contaba con esta supresión y no recibe cambios.
+
+
+## 2026-11-06 — Validación pendiente: seguimiento de operaciones en la misma tarjeta
+- [ ] `/conexiones` → Sincronizar miembros → Confirmar: la confirmación desaparece inmediatamente, aparece «Sincronizando», aumentan los contadores y al terminar se muestra el resultado y reaparecen controles normales.
+- [ ] Intentar una segunda sincronización mientras continúa la primera: debe impedirse, sin duplicar roles ni ejecutar dos barridos.
+- [ ] `/purge` → Continuar: ver cantidad de canales, mensajes examinados y coincidencias mientras se construye la vista previa, con botones temporalmente inactivos; al finalizar, revisión normal.
+- [ ] `/purge` → Confirmar: mostrar mensajes procesados/eliminados/fallidos hasta el resultado final; no repetir borrados ni emitir más de una auditoría por ejecución.
+- [ ] Probar error de permisos/red y las interfaces en es-419, en-US y pt-BR; verificar que no se informe éxito falso ni se conserven controles de confirmación después del inicio.
+Los tests automatizados no sustituyen la comprobación de Discord Beta. Alcance exclusivamente `Pruebas`.
