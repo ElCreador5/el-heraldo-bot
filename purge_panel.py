@@ -606,11 +606,15 @@ class PurgePanel(discord.ui.View):
                 f"{f'<#{self.channel_id}>' if self.channel_id else self.t('whole')}\n"
                 f"{self.t('kind')}: {self.t({'all':'all_kind','links':'links','text':'text'}[self.kind])}\n"
                 + summary,
-                discord.Color.green() if not failed else discord.Color.orange(),
+                discord.Color.green() if not failed and not interrupted else discord.Color.orange(),
             )
         except Exception:
             summary += "\n⚠️ " + self.t("audit_missing")
-        result = discord.Embed(title=self.t("done"), description=summary[:4096], color=discord.Color.green() if not failed else discord.Color.orange())
+        result = discord.Embed(
+            title=(status_text(self.language, "interrupted") if interrupted else self.t("done")),
+            description=summary[:4096],
+            color=discord.Color.green() if not failed and not interrupted else discord.Color.orange(),
+        )
         ft, fi = self.footer(interaction.guild)
         result.set_footer(text=ft, icon_url=fi or None)
         try:
