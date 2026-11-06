@@ -10,6 +10,7 @@ on:
       - 'server_structure_setup.py'
       - 'tests/test_operation_progress.py'
       - 'tests/test_purge_panel.py'
+      - 'tests/test_bulk_operation_progress.py'
       - 'tests/test_fusion_preview.py'
       - 'tests/test_server_structure_setup.py'
       - 'tests/test_role_connections.py'
@@ -39,6 +40,7 @@ jobs:
         run: |
           python -m unittest -v \
             test_operation_progress \
+            test_bulk_operation_progress \
             test_purge_panel \
             test_fusion_preview \
             test_server_structure_setup \
