@@ -1,0 +1,47 @@
+name: Long operations - compact progress (Lab)
+
+on:
+  push:
+    branches: [Pruebas]
+    paths:
+      - 'bot.py'
+      - 'operation_progress.py'
+      - 'purge_panel.py'
+      - 'server_structure_setup.py'
+      - 'tests/test_operation_progress.py'
+      - 'tests/test_purge_panel.py'
+      - 'tests/test_fusion_preview.py'
+      - 'tests/test_server_structure_setup.py'
+      - 'tests/test_role_connections.py'
+      - 'tests/test_role_connections_ui.py'
+      - '.github/workflows/operation-progress-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compact-progress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-ci.txt -r requirements-backup.txt
+      - name: Compile changed runtime
+        run: python -m py_compile bot.py operation_progress.py purge_panel.py server_structure_setup.py
+      - name: Regression tests without Discord Gateway
+        env:
+          PYTHONPATH: "tests:."
+        run: |
+          python -m unittest -v \
+            test_operation_progress \
+            test_purge_panel \
+            test_fusion_preview \
+            test_server_structure_setup \
+            test_role_connections \
+            test_role_connections_ui \
+            test_reliability_startup_roles
