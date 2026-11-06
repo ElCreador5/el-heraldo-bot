@@ -1007,3 +1007,12 @@ Los tests automatizados no sustituyen la comprobación de Discord Beta. Alcance 
 - [ ] Al completar: barra completa con 100 % y controles restaurados, incluso si hay errores de asignación identificados como parciales.
 - [ ] Simular recuento de miembros no disponible o desactualizado: barra de actividad sin porcentaje inventado.
 - [ ] Interrupción por permisos o Gateway: progreso retenido sin 100 % y explicación del error. Verificar idiomas es-419, en-US y pt-BR.
+
+
+### 2026-11-06 — Validar tarjeta PNG gráfica de sincronización en Beta
+- [ ] Ejecutar `/conexiones` y confirmar sincronización: debe reemplazar inmediatamente la confirmación por tarjeta oscura con título, porcentaje grande, barra violeta fina y conteos compactos.
+- [ ] Comprobar que el mismo mensaje recibe imágenes actualizadas cada ~2.5 s, sin mensajes adicionales ni adjuntos acumulados, y que el porcentaje estimado no llega al 100 % hasta terminar.
+- [ ] Verificar acceso al texto alternativo de la imagen, idioma del servidor y barra de actividad indeterminada cuando falta el número de miembros o quedó obsoleto.
+- [ ] Finalizar: la tarjeta se retira, desaparece el adjunto y vuelven el resumen y los controles normales. Ante un fallo parcial, el resultado no anuncia éxito completo sin advertencia.
+- [ ] Verificar que el despliegue Enzonic tenga todos los archivos de la misma revisión de `Pruebas`, incluidos documentos, para no provocar `enzonic_checkout_unverified`.
+Compilación y pruebas aisladas de `Role connections lab` correctas; prueba real del bot pendiente.
