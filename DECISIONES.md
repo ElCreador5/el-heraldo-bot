@@ -633,3 +633,11 @@ Se incorporan tres operadores nuevos exclusivamente a la evaluación **interna d
 ## 2026-11-06 — Registro único de expulsión por vencimiento de verificación de edad (Pruebas)
 
 Cuando expira la verificación de edad y la acción es expulsar, El Heraldo NO publicará el aviso secundario abreviado «Expulsión por falta de verificación»; se conserva exclusivamente la tarjeta completa «Miembro expulsado» creada por `heraldo_member_departure` al observar `on_member_remove`. Esa tarjeta ya incluye miembro, roles, fecha de ingreso, miembros, motivo y responsable cuando están disponibles. No modificar la expulsión, plazo, sanción ni clasificación de salida. Tampoco suprimir el aviso de **error** si el bot no consigue expulsar, la acción **solo registrar** cuando no hay sanción ni la ruta separada de **ban**. No eliminar registros históricos ya publicados por el bot. El alcance de esta corrección es `Pruebas`; `main` ya contenía la supresión del aviso abreviado para kick.
+
+
+## 2026-11-06 — Estado visible de operaciones administrativas prolongadas (Pruebas)
+- Tras confirmar una operación por lotes, el mismo panel debe acusar recepción inmediatamente, ocultar los controles que podrían duplicar la ejecución y reflejar el avance real sin porcentajes ni tiempos estimados sin datos.
+- Sincronización de conexiones de roles: miembros examinados, roles agregados y roles retirados, con estado final de éxito o interrupción parcial. No lanzar una segunda sincronización concurrente del mismo servidor.
+- Purga: mostrar progreso durante la revisión de canales/mensajes y durante la eliminación, preservando la confirmación, el conjunto congelado de mensajes y un único registro de auditoría.
+- El componente de actualización `operation_progress.py` limita ediciones de Discord y ofrece textos es-419, en-US y pt-BR; sirve de base para ampliar el patrón a otras tareas largas.
+- Cambios solo en `Pruebas`, sin modificar `main`, SQLite, seguridad ni permisos. Los tests sin Gateway no equivalen a confirmación en Discord Beta.
