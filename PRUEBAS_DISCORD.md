@@ -1025,3 +1025,15 @@ Compilación y pruebas aisladas de `Role connections lab` correctas; prueba real
 - [ ] Al finalizar, presentar resultado y recuperar panel y navegación. Revisar fallos parciales, concurrencia e idiomas es-419/en-US/pt-BR.
 - [ ] Tras actualizar Enzonic, verificar despliegue íntegro de todos los archivos de `Pruebas` para evitar `enzonic_checkout_unverified`.
 La anterior prueba de la tarjeta PNG queda reemplazada por esta lista de aceptación.
+
+
+## 2026-11-06 — Matriz de aceptación: seguimiento compacto transversal
+- [ ] `/purge` → revisión previa: ver barra por **canales** con canales procesados, mensajes examinados y coincidencias, sin permitir acciones durante el análisis. Al terminar debe recuperarse la vista previa normal y la confirmación destructiva.
+- [ ] `/purge` → confirmar: ver barra por **mensajes**, procesados/eliminados/fallidos; finalizar con auditoría única y conservar el mensaje final sin reportar verde ante errores.
+- [ ] `/fusionar_canales` → confirmar fusión de varios mensajes: ver progreso en **la misma tarjeta**, conteo de migrados, fallidos y adjuntos fallidos, sin tarjetas de avance nuevas. Probar cambio de historial, revocación de permisos y fallo parcial: el origen debe conservarse.
+- [ ] Sincronización manual de roles de ingreso: ver miembros revisados, asignados/omitidos/errores; evitar una segunda ejecución manual simultánea en el mismo servidor.
+- [ ] `/heraldo_check_all`: el mensaje de operación avanza conforme se recorren miembros; al terminar muestra resultados y mantiene sus registros/sanciones previas.
+- [ ] Plantilla del servidor → Sincronizar ahora: ver estado inmediato sin porcentaje inventado; al terminar se actualiza **la misma tarjeta**, se recuperan sus controles y se muestra envío al propietario o error.
+- [ ] Verificar los cinco flujos en es-419, en-US y pt-BR y comprobar que no se anuncie 100 % mientras falten elementos; cuando Discord no proporcione un recuento fiable se muestra barra indeterminada.
+- [ ] Reiniciar Enzonic únicamente con la revisión íntegra del árbol de `Pruebas`, evitando archivos desfasados y `enzonic_checkout_unverified`; no modificar el volumen persistente.
+Las pruebas de GitHub no acreditan pruebas reales de Gateway. Acciones individuales inmediatas y automatizaciones sin panel quedan fuera del patrón.
