@@ -7,6 +7,7 @@ from heraldo_datetime import format_clock, parse_clock
 import discord
 
 from heraldo_i18n import guild_context, text as t
+from operation_progress import status_text
 
 
 FIELDS = {
@@ -275,8 +276,14 @@ class StructureSyncConfirmView(discord.ui.View):
         if self.editor.is_finished() or self.editor._has_pending_changes():
             return await interaction.response.send_message(t("setup.structure.expired"), ephemeral=True)
         self.running = True
-        await interaction.response.defer()
         host, guild = self.editor.host, interaction.guild
+        locale = host["guild_language"](guild.id)
+        # This is a multi-request API operation, not a counted batch.
+        # Acknowledge its active state without inventing a percentage.
+        await interaction.response.edit_message(
+            content=status_text(locale, "template_running"),
+            embed=None, view=None,
+        )
         try:
             template, dirty, error = await host["sync_server_template"](guild)
             if error:
@@ -296,11 +303,18 @@ class StructureSyncConfirmView(discord.ui.View):
                 )
         except discord.HTTPException as exc:
             outcome = t("setup.structure.sync_error", error=str(exc))
+        except Exception as exc:
+            print(f"STRUCTURE_SYNC status=FAILED guild={guild.id} "
+                  f"error={type(exc).__name__}", flush=True)
+            outcome = t("setup.structure.sync_error", error=type(exc).__name__)
         finally:
             self.stop()
         view = ServerStructureSetupView(host, self.guild_id, self.owner_id)
-        await interaction.edit_original_response(content=view.summary(), embed=None, view=view)
-        await interaction.followup.send(outcome, ephemeral=True)
+        summary = view.summary()
+        await interaction.edit_original_response(
+            content=summary[:max(0, 1998 - len(outcome))] + "\n\n" + outcome,
+            embed=None, view=view,
+        )
 
     @discord.ui.button(label=t("text.ab26ae7bca3621"), style=discord.ButtonStyle.secondary)
     @guild_context
