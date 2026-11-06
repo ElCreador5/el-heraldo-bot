@@ -595,7 +595,9 @@ class PurgePanel(discord.ui.View):
         )
         if interrupted:
             summary += ("\n" + status_text(self.language, "delete_failed")
-                        + f" ({len(frozen) - processed} sin procesar).")
+                        + "\n" + status_text(
+                            self.language, "remaining", count=len(frozen) - processed
+                        ))
         # Exactly one audit entry per confirmed operation (success or partial failure).
         try:
             await self.log(
