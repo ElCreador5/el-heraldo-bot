@@ -453,7 +453,7 @@ class AutoFeedsHomeView(discord.ui.View):
     async def member_of_week(self, interaction, button):
         """Abrir la configuración existente, sin crear un editor duplicado."""
         view = self.host["HeraldoMotwSetupView"](
-            self.guild_id, self.owner_id)
+            self.guild_id, self.owner_id, from_announcements=True)
         await interaction.response.edit_message(
             content=view._content(interaction.guild), embed=None, view=view)
 

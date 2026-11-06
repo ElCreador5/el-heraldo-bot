@@ -4533,10 +4533,11 @@ class HeraldoMotwScheduleModal(discord.ui.Modal, title="Miembro de la Semana · 
 
 
 class HeraldoMotwSetupView(discord.ui.View):
-    def __init__(self, guild_id: int, owner_id: int) -> None:
+    def __init__(self, guild_id: int, owner_id: int, *, from_announcements=False) -> None:
         super().__init__(timeout=900)
         self.guild_id = guild_id
         self.owner_id = owner_id
+        self.from_announcements = bool(from_announcements)
         self.pending_channel_id: int | None = None
         channel = discord.ui.ChannelSelect(
             placeholder="Seleccionar canal de Miembro de la Semana",
@@ -4609,7 +4610,16 @@ class HeraldoMotwSetupView(discord.ui.View):
 
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+        if self.pending_channel_id is not None:
+            await interaction.response.send_message(
+                "Guarda o descarta los cambios pendientes antes de volver.", ephemeral=True)
+            return
+        if self.from_announcements:
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(globals(), self.guild_id, self.owner_id)
+            await interaction.response.edit_message(content=content, embed=None, view=view)
+        else:
+            await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
 
 
 
