@@ -334,7 +334,7 @@ async def reconcile_member(member, *, connect, protected_ids=(), blocked=None):
         return added, removed
 
 
-async def synchronize(guild, *, connect, protected_ids=(), blocked=None, limit=None):
+async def synchronize(guild, *, connect, protected_ids=(), blocked=None, limit=None, progress=None):
     """Barrido explícito completo; nunca se ejecuta al guardar una regla."""
     checked = added = removed = 0
     exceeded = False
@@ -348,4 +348,6 @@ async def synchronize(guild, *, connect, protected_ids=(), blocked=None, limit=N
         )
         added += a
         removed += r
+        if progress is not None:
+            await progress(checked, added, removed)
     return checked, added, removed, exceeded
