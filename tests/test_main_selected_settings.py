@@ -85,11 +85,15 @@ class MainSelectedSettingsTests(unittest.IsolatedAsyncioTestCase):
         perms = NS(administrator=False, manage_guild=False,
                    manage_roles=False, ban_members=False, kick_members=False,
                    moderate_members=False)
-        role = NS(
-            id=20, managed=False, permissions=perms,
-            is_default=lambda: False,
-        )
-        role.__class__.__ge__ = lambda self, other: False
+        class Role:
+            id = 20
+            managed = False
+            permissions = perms
+            def is_default(self):
+                return False
+            def __ge__(self, other):
+                return False
+        role = Role()
         guild = NS(me=NS(top_role=NS(position=50),
                           guild_permissions=NS(manage_roles=True)))
         self.assertTrue(member_rejoin_restore._safe_role(guild, role))
@@ -101,7 +105,6 @@ class MainSelectedSettingsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('action == "warn"', code)
         self.assertIn("moderation_is_staff(actor)", code)
         self.assertIn("moderation_warning_limit(guild.id)", code)
-        self.assertIn("moderation_report_case", SOURCE) if False else None
         self.assertIn("actor=actor", SOURCE)
         self.assertIn("self._rebuild_action_select()", SOURCE)
 
