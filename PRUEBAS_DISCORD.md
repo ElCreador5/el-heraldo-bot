@@ -1000,3 +1000,10 @@ El registro histórico previo de la captura no se borra automáticamente. `main`
 - [ ] `/purge` → Confirmar: mostrar mensajes procesados/eliminados/fallidos hasta el resultado final; no repetir borrados ni emitir más de una auditoría por ejecución.
 - [ ] Probar error de permisos/red y las interfaces en es-419, en-US y pt-BR; verificar que no se informe éxito falso ni se conserven controles de confirmación después del inicio.
 Los tests automatizados no sustituyen la comprobación de Discord Beta. Alcance exclusivamente `Pruebas`.
+
+
+### 2026-11-06 — Verificar barra de progreso en conexiones de roles
+- [ ] Confirmar sincronización con `member_count` disponible: aparece de inmediato una barra de 16 segmentos con porcentaje **estimado** y recuentos que avanzan; no aparece 100 % mientras queda trabajo.
+- [ ] Al completar: barra completa con 100 % y controles restaurados, incluso si hay errores de asignación identificados como parciales.
+- [ ] Simular recuento de miembros no disponible o desactualizado: barra de actividad sin porcentaje inventado.
+- [ ] Interrupción por permisos o Gateway: progreso retenido sin 100 % y explicación del error. Verificar idiomas es-419, en-US y pt-BR.
