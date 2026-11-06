@@ -40,6 +40,21 @@ class RoleConnectionsUITests(unittest.TestCase):
         for code in ("en-US", "pt-BR"):
             self.assertEqual(base, set(ui.LABELS[code]))
 
+    def test_compact_sync_panel_is_localized_without_long_status_paragraph(self):
+        for locale in ("es-419", "en-US", "pt-BR"):
+            self.host["guild_language"] = lambda gid, locale=locale: locale
+            ctx = ui.Context(self.host, 10, 20)
+            text = ctx.t(
+                "sync_running", bar="`██████▌···`",
+                percent=" **62%**",
+                members=ctx.t("progress_members", checked=575, total=923),
+                added=0, removed=0, failed=0,
+            )
+            self.assertIn("`██████▌···` **62%**", text)
+            self.assertIn("575 / 923", text)
+            self.assertEqual(text.count("\\n"), 4)
+            self.assertLess(len(text), 180)
+
     def test_full_creation_navigation_under_five_rows(self):
         views = (
             ui.ConnectionsList(self.ctx),
