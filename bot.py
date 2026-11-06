@@ -1898,11 +1898,12 @@ async def detect_used_invite(guild: discord.Guild) -> str | None:
 
 
 _startup_done = False
+_announcements_engine = None
 
 
 @bot.event
 async def on_ready() -> None:
-    global _startup_done
+    global _startup_done, _announcements_engine
 
     if not any(isinstance(view, VerifyView) for view in bot.persistent_views):
         try:
@@ -1925,6 +1926,20 @@ async def on_ready() -> None:
 
     db_init()
     honeypot_db_init()
+
+    # Anuncios persistentes: inicializar el estado transaccional y activar
+    # el worker una sola vez. Los fallos no desconectan al bot.
+    if _announcements_engine is None:
+        try:
+            from message_automation import ScheduledMessages
+            engine = ScheduledMessages(globals())
+            engine.start()
+            _announcements_engine = engine
+            print("ANNOUNCEMENTS_WORKER status=STARTED provider=main", flush=True)
+        except Exception as exc:
+            print(f"ANNOUNCEMENTS_WORKER status=FAILED "
+                  f"error={type(exc).__name__}", flush=True)
+
 
     # Vincula la configuración antigua de una sola instancia al servidor que contiene
     # el panel de verificación, evitando que otro servidor herede esos textos.
@@ -2889,10 +2904,10 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
     return "\n".join(lines)
 
 
-def heraldo_setup_home_content() -> str:
+def heraldo_setup_home_content(guild_id: int | None = None) -> str:
     return (
         "**El Heraldo · Configuración**\n\n"
-        "Selecciona un módulo en el menú desplegable y pulsa **Configurar** para abrirlo.\n"
+        "Selecciona un módulo en el menú desplegable para abrirlo directamente.\n"
         "Puedes volver a este menú desde las opciones de navegación de cada módulo."
     )
 
@@ -10371,6 +10386,8 @@ class HeraldoSetupView(discord.ui.View):
         self.guild_id = guild_id
         self.owner_id = owner_id
         self.selected_module: str | None = None
+        # Los módulos se abren al seleccionar; no mostrar botón redundante.
+        self.remove_item(self.configure)
 
         select = discord.ui.Select(
             placeholder="Selecciona el módulo que deseas configurar",
@@ -10416,7 +10433,7 @@ class HeraldoSetupView(discord.ui.View):
         # guarde correctamente la selección.
         for option in self.module_select.options:
             option.default = option.value == selected
-        await interaction.response.edit_message(view=self)
+        await self.open_module(interaction)
 
     @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button, *, direct: bool = False) -> None:
@@ -10492,8 +10509,10 @@ class HeraldoSetupView(discord.ui.View):
             view = SuggestionsSetupView(globals(), self.guild_id, self.owner_id)
             content = view.summary(interaction.guild)
         elif selected == "announcements":
-            view = HeraldoMotwSetupView(self.guild_id, self.owner_id)
-            content = view._content(interaction.guild)
+            from autofeed_setup import setup_panel as announcements_setup_panel
+            content, view = announcements_setup_panel(
+                globals(), self.guild_id, self.owner_id
+            )
         elif selected == "server_structure":
             view = ServerStructureSetupView(globals(), self.guild_id, self.owner_id)
             content = view.summary()
