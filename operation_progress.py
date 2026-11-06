@@ -164,7 +164,7 @@ def compact_operation_status(locale: str, action: str, done: int,
              else status_text(locale, action + "_unknown", done=done))
     metrics = status_text(locale, action + "_metrics", **counters)
     percentage = f" **{percent}%**" if percent is not None else ""
-    return f"**{title}**\n{"{bar}{percentage}"}\n{label}\n{metrics}"
+    return f"**{title}**\n{bar}{percentage}\n{label}\n{metrics}"
 
 
 class ProgressReporter:
