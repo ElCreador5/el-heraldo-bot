@@ -39,7 +39,7 @@ def localized_catalog_constants(tree):
     for statement in tree.body:
         if not (isinstance(statement, ast.Assign) and len(statement.targets) == 1
                 and isinstance(statement.targets[0], ast.Name)
-                and statement.targets[0].id in {'COPY', 'LANG', 'STRINGS'}
+                and statement.targets[0].id in {'COPY', 'LANG', 'STRINGS', 'LABELS', 'STATUS_TEXT'}
                 and isinstance(statement.value, ast.Dict)):
             continue
         mapping = statement.value
