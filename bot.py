@@ -23155,7 +23155,7 @@ class FusionChannelsView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(
             content=_t('text.8442048bd96409'),
-            embed=None, view=self,
+            embed=None, view=None,
         )
         asyncio.create_task(
             execute_channel_merge(
@@ -23364,47 +23364,47 @@ async def execute_channel_merge(
     # Volver a validar antes de tocar nada: el estado/permisos pueden haber cambiado
     # mientras el administrador tenía abierta la confirmación.
     if origen.id == destino.id:
-        await interaction.followup.send(_t('text.fa6f19425c22eb'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.fa6f19425c22eb'))
         return
     if (executor_id is not None and interaction.user.id != executor_id) or not interaction.user.guild_permissions.manage_channels:
-        await interaction.followup.send(
+        await interaction.edit_original_response(content=
             _t('text.ce49f46af717e4'),
-            ephemeral=True,
+            
         )
         return
     if (guild.get_channel(origen.id) is None or guild.get_channel(destino.id) is None
             or origen.guild.id != guild.id or destino.guild.id != guild.id):
-        await interaction.followup.send(_t('text.eff8e676bcb60f'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.eff8e676bcb60f'))
         return
 
     me = guild.me
     if me is None:
-        await interaction.followup.send(_t('text.03e9421c463364'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.03e9421c463364'))
         return
 
     dest_perms = destino.permissions_for(me)
     src_perms = origen.permissions_for(me)
     if not (src_perms.view_channel and src_perms.read_message_history):
-        await interaction.followup.send(_t('text.64ca5222d9053d'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.64ca5222d9053d'))
         return
     if not (dest_perms.view_channel and dest_perms.send_messages and dest_perms.embed_links):
-        await interaction.followup.send(_t('text.c71ee943e8ea82'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.c71ee943e8ea82'))
         return
 
     try:
         messages = await collect_fusion_messages(origen)
     except discord.HTTPException as e:
-        await interaction.followup.send(_t('text.d79ce668c0c28b', p0=f'{e}'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.d79ce668c0c28b', p0=f'{e}'))
         return
 
     if not messages:
-        await interaction.followup.send(_t('text.6a7eaed32866f6'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.6a7eaed32866f6'))
         return
 
     if len(messages) >= FUSION_MAX_MESSAGES:
-        await interaction.followup.send(
+        await interaction.edit_original_response(content=
             _t('text.fccfffb00e11b1', p0=f'{FUSION_MAX_MESSAGES:,}'),
-            ephemeral=True,
+            
         )
         return
     if len(messages) != expected_count:
@@ -23412,61 +23412,68 @@ async def execute_channel_merge(
             interaction.user.id, origen, destino, final_name, eliminar_origen,
             len(messages), name_mode, custom_name,
         )
-        await interaction.followup.send(
+        await interaction.edit_original_response(content=
             _t('text.f5b2a6341e92f7', p0=f'{expected_count:,}', p1=f'{len(messages):,}'),
             embed=fusion_preview_embed(origen, destino, final_name, eliminar_origen, len(messages)),
-            view=refreshed, ephemeral=True,
+            view=refreshed,
         )
         return
     if not interaction.user.guild_permissions.manage_channels:
-        await interaction.followup.send(
-            _t('text.8f9de6b899f99e'), ephemeral=True,
+        await interaction.edit_original_response(content=
+            _t('text.8f9de6b899f99e'),
         )
         return
     # Revisar nuevamente los permisos tras descargar el historial.
     me = guild.me
     if me is None:
-        await interaction.followup.send(_t('text.67f81107e89ab9'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.67f81107e89ab9'))
         return
     src_perms = origen.permissions_for(me)
     dest_perms = destino.permissions_for(me)
     if not (src_perms.view_channel and src_perms.read_message_history
             and dest_perms.view_channel and dest_perms.send_messages and dest_perms.embed_links):
-        await interaction.followup.send(_t('text.34145dd7282a09'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.34145dd7282a09'))
         return
 
     final_name = fusion_clean_name(final_name)
     if final_name != destino.name and not dest_perms.manage_channels:
-        await interaction.followup.send(_t('text.8fcad11be00e89'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.8fcad11be00e89'))
         return
     if eliminar_origen and not src_perms.manage_channels:
-        await interaction.followup.send(_t('text.968bcb1d3401a3'), ephemeral=True)
+        await interaction.edit_original_response(content=_t('text.968bcb1d3401a3'))
         return
     if final_name != destino.name:
         try:
             await destino.edit(name=final_name, reason=_t('text.724af3b0f20644', p0=f'{interaction.user}'))
         except discord.Forbidden:
-            await interaction.followup.send(
+            await interaction.edit_original_response(content=
                 _t('text.56a2f654e88782'),
-                ephemeral=True,
+                
             )
             return
         except discord.HTTPException as e:
-            await interaction.followup.send(_t('text.e8eeb6a1a367f6', p0=f'{e}'), ephemeral=True)
+            await interaction.edit_original_response(content=_t('text.e8eeb6a1a367f6', p0=f'{e}'))
             return
+
+    from operation_progress import ProgressReporter, compact_operation_status
 
     migrated = 0
     failed = 0
     attachment_failures = 0
-    progress_message = None
-    try:
-        progress_message = await interaction.followup.send(
-            _t('text.b9dd6f109b28c7', p0=f'{len(messages):,}', p1=f'{origen.mention}', p2=f'{destino.mention}'),
-            ephemeral=True,
-            wait=True,
+    locale = guild_language(guild.id)
+
+    def merge_status():
+        return compact_operation_status(
+            locale, "fusion", migrated + failed, len(messages),
+            migrated=migrated, failed=failed, attachments=attachment_failures,
         )
-    except discord.HTTPException:
-        pass
+
+    reporter = ProgressReporter(
+        lambda content: interaction.edit_original_response(
+            content=content, embed=None, view=None
+        )
+    )
+    await reporter.publish(merge_status(), force=True)
 
     for message in messages:
         try:
@@ -23479,15 +23486,7 @@ async def execute_channel_merge(
             failed += 1
         # Mantener una cadencia conservadora para no golpear los rate limits.
         await asyncio.sleep(0.35)
-        if progress_message is not None and (migrated + failed) % 25 == 0:
-            try:
-                await progress_message.edit(
-                    content=(
-                        _t('text.4980269ca49bd3', p0=f'{migrated + failed:,}', p1=f'{len(messages):,}', p2=f'{migrated:,}', p3=f'{failed:,}')
-                    )
-                )
-            except discord.HTTPException:
-                pass
+        await reporter.publish(merge_status())
 
     # Conservar el origen si cambió el historial durante la migración o no se puede
     # volver a comprobar; una copia parcial nunca autoriza su eliminación.
@@ -23547,13 +23546,14 @@ async def execute_channel_merge(
         )
         color = discord.Color.green()
 
-    if progress_message is not None:
-        try:
-            await progress_message.edit(content=result)
-        except discord.HTTPException:
-            pass
-    else:
-        await interaction.followup.send(result, ephemeral=True)
+    # The confirmation and progress remain on one interaction message.
+    try:
+        await interaction.edit_original_response(
+            content=result, embed=None, view=None
+        )
+    except discord.HTTPException:
+        # Presentation failures never retry migration or authorize source deletion.
+        pass
 
     await log_embed(
         guild,
