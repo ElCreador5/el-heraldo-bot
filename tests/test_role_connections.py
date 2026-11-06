@@ -85,6 +85,20 @@ class ConnectionTests(unittest.TestCase):
             groups=groups, groups_mode=mode, **kwargs
         )
 
+    def test_manual_sync_reports_incremental_role_counts(self):
+        self.save(20, [group("all", ("has", 1))])
+        FakeMember(self.guild, held=[1])
+        updates = []
+
+        async def record(checked, added, removed):
+            updates.append((checked, added, removed))
+
+        result = asyncio.run(rc.synchronize(
+            self.guild, connect=self.connect, progress=record
+        ))
+        self.assertEqual(result, (1, 1, 0, False))
+        self.assertEqual(updates, [(1, 1, 0)])
+
     def test_and_requires_both_and_removes_when_role_lost(self):
         self.save(20, [group("all", ("has", 1), ("has", 2))])
         member = FakeMember(self.guild, held=[1])
