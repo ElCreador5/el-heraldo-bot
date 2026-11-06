@@ -12,7 +12,7 @@ import discord
 
 import role_connections as engine
 from panel_navigation import dismiss_panel
-from operation_progress import ProgressReporter
+from operation_progress import ProgressReporter, progress_bar
 
 _SYNC_IN_PROGRESS: set[int] = set()
 
@@ -60,6 +60,9 @@ LABELS = {
         "sync_running": "**Conexiones de roles · Sincronizando**\nMiembros revisados: {checked} · Roles agregados: {added} · Roles retirados: {removed} · Errores: {failed}\nLa operación sigue en curso. Los botones estarán disponibles al finalizar.",
         "sync_failed": "Sincronización interrumpida. Último avance registrado: {checked} miembros, {added} roles agregados, {removed} retirados. Algunos cambios pueden haberse aplicado.",
         "sync_busy": "Ya existe una sincronización de roles en curso en este servidor.",
+        "progress_estimated": "Progreso estimado: {percent} % · {checked} de ~{total} miembros",
+        "progress_unknown": "Revisando miembros · Total no disponible o desactualizado",
+        "progress_complete": "100 % · Revisión completada",
         "sync_errors": "Cambios de roles fallidos: {failed}. Comprueba los permisos y la jerarquía de roles.",
         "sync_partial": "Se alcanzó el máximo de 1000 miembros por revisión. El resto requiere una sincronización adicional.",
         "sync_info": "Se revisarán todos los miembros. Esto puede agregar o retirar roles según las conexiones activas.",
@@ -147,6 +150,9 @@ LABELS = {
         "sync_running": "**Role connections · Syncing**\nMembers checked: {checked} · Roles added: {added} · Roles removed: {removed} · Errors: {failed}\nThe operation is still running. Controls return when it finishes.",
         "sync_failed": "Sync interrupted. Last recorded progress: {checked} members, {added} roles added, {removed} removed. Some changes may already have been applied.",
         "sync_busy": "A role synchronization is already running in this server.",
+        "progress_estimated": "Estimated progress: {percent}% · {checked} of ~{total} members",
+        "progress_unknown": "Reviewing members · Total unavailable or outdated",
+        "progress_complete": "100% · Review completed",
         "sync_errors": "Failed role changes: {failed}. Check role permissions and hierarchy.",
         "sync_partial": "The 1000-member review limit was reached. Additional members require another sync.",
         "sync_info": "All server members will be reviewed. Roles may be added or removed according to active connections.",
@@ -234,6 +240,9 @@ LABELS = {
         "sync_running": "**Conexões de cargos · Sincronizando**\nMembros revisados: {checked} · Cargos adicionados: {added} · Cargos removidos: {removed} · Falhas: {failed}\nA operação continua em andamento. Os botões voltarão ao final.",
         "sync_failed": "Sincronização interrompida. Último avanço registrado: {checked} membros, {added} cargos adicionados, {removed} removidos. Algumas alterações podem ter sido aplicadas.",
         "sync_busy": "Uma sincronização de cargos já está em andamento neste servidor.",
+        "progress_estimated": "Progresso estimado: {percent}% · {checked} de ~{total} membros",
+        "progress_unknown": "Analisando membros · Total indisponível ou desatualizado",
+        "progress_complete": "100% · Análise concluída",
         "sync_errors": "Alterações de cargos com falha: {failed}. Verifique as permissões e a hierarquia dos cargos.",
         "sync_partial": "Limite de 1000 membros atingido. Outros membros precisam de outra sincronização.",
         "sync_info": "Todos os membros serão revisados. Cargos poderão ser adicionados ou removidos conforme as conexões ativas.",
@@ -1058,9 +1067,28 @@ class Confirmation(Base):
                 return await _error(interaction, ctx.t("sync_busy"))
             _SYNC_IN_PROGRESS.add(guild.id)
             checked = added = removed = failed = 0
+            # Guild member_count is approximate; do not call it an exact total.
+            estimated_total = getattr(guild, "member_count", None)
+
+            def progress_text(*, complete=False):
+                bar, percent = progress_bar(checked, estimated_total, complete=complete)
+                if complete:
+                    detail = ctx.t("progress_complete")
+                elif percent is None:
+                    detail = ctx.t("progress_unknown")
+                else:
+                    detail = ctx.t(
+                        "progress_estimated", percent=percent,
+                        checked=checked, total=estimated_total,
+                    )
+                return f"{bar} {detail}"
 
             def running_text():
-                return ctx.t("sync_running", checked=checked, added=added, removed=removed, failed=failed)
+                heading, _, body = ctx.t(
+                    "sync_running", checked=checked, added=added,
+                    removed=removed, failed=failed,
+                ).partition("\n")
+                return f"{heading}\n{progress_text()}\n{body}"
 
             try:
                 # Acknowledge immediately and remove the confirmation buttons while
@@ -1092,7 +1120,9 @@ class Confirmation(Base):
                     guild, connect=ctx.host["db_connect"], protected_ids=ctx.protected(),
                     blocked=ctx.blocked, progress=report, on_failure=record_failure,
                 )
-                result = ctx.t("synced", checked=checked, added=added, removed=removed)
+                result = progress_text(complete=True) + "\n" + ctx.t(
+                    "synced", checked=checked, added=added, removed=removed
+                )
                 if failed:
                     result += "\n" + ctx.t("sync_errors", failed=failed)
                 if exceeded:
@@ -1100,7 +1130,9 @@ class Confirmation(Base):
             except Exception as exc:
                 print(f"ROLE_CONNECTIONS status=SYNC_FAILED guild={guild.id} "
                       f"exception={type(exc).__name__}", flush=True)
-                result = ctx.t("sync_failed", checked=checked, added=added, removed=removed)
+                result = progress_text() + "\n" + ctx.t(
+                    "sync_failed", checked=checked, added=added, removed=removed
+                )
                 if failed:
                     result += "\n" + ctx.t("sync_errors", failed=failed)
                 if not interaction.response.is_done():
