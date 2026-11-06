@@ -1016,3 +1016,12 @@ Los tests automatizados no sustituyen la comprobación de Discord Beta. Alcance 
 - [ ] Finalizar: la tarjeta se retira, desaparece el adjunto y vuelven el resumen y los controles normales. Ante un fallo parcial, el resultado no anuncia éxito completo sin advertencia.
 - [ ] Verificar que el despliegue Enzonic tenga todos los archivos de la misma revisión de `Pruebas`, incluidos documentos, para no provocar `enzonic_checkout_unverified`.
 Compilación y pruebas aisladas de `Role connections lab` correctas; prueba real del bot pendiente.
+
+
+### 2026-11-06 — Aceptación de barra compacta de sincronización
+- [ ] Confirmar `/conexiones` → Sincronizar miembros: se presenta **Conexiones de roles**, «Sincronizando miembros», barra de diez posiciones, porcentaje, cantidad revisada y una línea con `+ agregados`, `- retirados`, `errores`.
+- [ ] Verificar que el mismo mensaje actualiza sus contadores sin generar PNGs, archivos adjuntos ni mensajes nuevos; los controles de ejecución permanecen ocultos mientras corre.
+- [ ] Al llegar al recuento estimado, no anunciar 100 % hasta finalizar de verdad; si la estimación no es fiable, ocultar el porcentaje y mostrar actividad.
+- [ ] Al finalizar, presentar resultado y recuperar panel y navegación. Revisar fallos parciales, concurrencia e idiomas es-419/en-US/pt-BR.
+- [ ] Tras actualizar Enzonic, verificar despliegue íntegro de todos los archivos de `Pruebas` para evitar `enzonic_checkout_unverified`.
+La anterior prueba de la tarjeta PNG queda reemplazada por esta lista de aceptación.
