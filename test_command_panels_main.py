@@ -57,7 +57,7 @@ class ProductionCommandPanelsTests(unittest.IsolatedAsyncioTestCase):
                   (b.shortcut_roles_reaccion,b.HeraldoReactionRolesSetupView),
                   (b.shortcut_registros,b.HeraldoLoggingSetupView),
                   (b.shortcut_verificacion,b.HeraldoVerificationHubView),
-                  (b.shortcut_anuncios,b.HeraldoMotwSetupView),
+                  (b.shortcut_anuncios,__import__("autofeed_setup").AutoFeedsHomeView),
                   (b.shortcut_sugerencias,b.SuggestionsSetupView),
                   (b.shortcut_estructura_servidor,b.ServerStructureSetupView),
                   (b.mensajes_command,b.HeraldoMessagesSetupView)]
@@ -66,6 +66,10 @@ class ProductionCommandPanelsTests(unittest.IsolatedAsyncioTestCase):
             i=interaction();await command.callback(i)
             view=i.response.send_message.call_args.kwargs["view"]
             self.assertIsInstance(view,kind);self.assertTrue(view.to_components())
+            if command is b.shortcut_anuncios:
+                labels = {getattr(child, "label", None) for child in view.children}
+                self.assertIn("Miembro de la semana", labels)
+
             self.assertEqual(snapshot(),before)
             denied=interaction(False);await command.callback(denied)
             self.assertNotIn("view",denied.response.send_message.call_args.kwargs)
