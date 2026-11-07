@@ -15950,7 +15950,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         position_label = _t(("motw.first_place", "motw.second_place", "motw.third_place")[position])
         noun = _t("noun.message.one") if count == 1 else _t("noun.message.many")
         podium.append(f"{position_label} · {member.mention} — {count:,} {noun}")
-    embed.add_field(name=_t("motw.podium_title"), value="\\n".join(podium), inline=False)
+    embed.add_field(name=_t("motw.podium_title"), value="\n".join(podium), inline=False)
     embed.set_thumbnail(url=winner.display_avatar.url)
     embed.set_footer(text=_t('text.270cbae6be9b8a', p0=f'{guild.name}'))
     try:
