@@ -1,0 +1,47 @@
+name: Main - siete configuraciones selectivas (CI)
+
+on:
+  push:
+    branches:
+      - main
+      - main-selected-features-20261106
+    paths:
+      - 'bot.py'
+      - 'autofeed_setup.py'
+      - 'message_autofeeds.py'
+      - 'message_publish.py'
+      - 'message_payload.py'
+      - 'main_announcement_scheduler.py'
+      - 'member_rejoin_restore.py'
+      - 'tests/test_main_selected_features.py'
+      - '.github/workflows/main-selected-features.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runtime requirements
+        run: python -m pip install -r requirements.txt
+      - name: Compile selected production modules
+        run: |
+          python -m py_compile bot.py autofeed_setup.py message_autofeeds.py \
+            message_publish.py message_payload.py main_announcement_scheduler.py \
+            member_rejoin_restore.py
+      - name: Selected features, navigation, existing moderation regressions
+        env:
+          PYTHONPATH: ".:tests"
+        run: |
+          python -m unittest discover -s tests -p test_main_selected_features.py -v
+          python -m unittest discover -s tests -p test_main_structure_promotion.py -v
+          python -m unittest discover -s tests -p test_main_navigation_order.py -v
+          python -m unittest discover -s tests -p test_purge_panel.py -v
+          python -m unittest discover -s tests -p test_main_operation_progress.py -v

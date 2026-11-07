@@ -1925,6 +1925,12 @@ async def on_ready() -> None:
 
     db_init()
     honeypot_db_init()
+    try:
+        # Initialize message_schedule_state after SQLite startup, then start
+        # the announcements-only worker. This does not deploy Railway.
+        _main_announcement_engine.start()
+    except Exception as exc:
+        print(f"ANNOUNCEMENTS status=START_FAILED reason={type(exc).__name__}", flush=True)
 
     # Vincula la configuración antigua de una sola instancia al servidor que contiene
     # el panel de verificación, evitando que otro servidor herede esos textos.
@@ -2168,6 +2174,24 @@ async def on_member_join(member: discord.Member) -> None:
     if join_roles_enabled(member.guild.id) or member.id in get_join_specific_roles(member.guild.id):
         asyncio.create_task(assign_join_roles(member))
 
+    # Restore a previously verified personality only after a voluntary
+    # departure. Condemnations and raid enforcement have already run above.
+    try:
+        from member_rejoin_restore import restore_join
+        restored = await restore_join(
+            member, connect=db_connect,
+            enabled=lambda gid: guild_config_get(gid, "verified_rejoin_restore_enabled") == "1",
+            personality_ids=get_eval_role_ids,
+            verify_role_id=get_verify_role_id,
+            sin_role_id=get_sin_verificado_role_id,
+        )
+        if restored:
+            db_clear_verify_pending(member.guild.id, member.id)
+            db_clear_sin_verificado(member.guild.id, member.id)
+            return
+    except (sqlite3.Error, discord.HTTPException) as exc:
+        print(f"REJOIN_RESTORE status=FAILED reason={type(exc).__name__}", flush=True)
+
     if verify_enabled(member.guild.id):
         waiting_screening = (
             join_roles_wait_screening(member.guild.id)
@@ -2349,6 +2373,23 @@ async def orientation_departure_has_detailed_log(
     orientation_prune_kick_log_markers(now)
     logged_at = _orientation_kick_log_sent.pop(key, None)
     return logged_at is not None and 0 <= now - logged_at <= _ORIENTATION_LOG_WINDOW
+
+
+@bot.listen("on_member_remove")
+async def heraldo_capture_verified_departure(member: discord.Member) -> None:
+    """Capture only verified, safe personality-role snapshots on voluntary exits."""
+    try:
+        from member_rejoin_restore import capture_departure
+        await capture_departure(
+            member, connect=db_connect,
+            enabled=lambda gid: guild_config_get(gid, "verified_rejoin_restore_enabled") == "1",
+            personality_ids=get_eval_role_ids, verify_role_id=get_verify_role_id,
+            is_verified=lambda m: get_sin_verificado_role_id(m.guild.id)
+                not in {role.id for role in m.roles},
+            audit_action=discord.AuditLogAction,
+        )
+    except (sqlite3.Error, discord.HTTPException) as exc:
+        print(f"REJOIN_SNAPSHOT status=FAILED reason={type(exc).__name__}", flush=True)
 
 
 @bot.listen("on_member_remove")
@@ -2889,10 +2930,10 @@ def heraldo_channels_summary(guild: discord.Guild) -> str:
     return "\n".join(lines)
 
 
-def heraldo_setup_home_content() -> str:
+def heraldo_setup_home_content(guild_id=None) -> str:
     return (
         "**El Heraldo · Configuración**\n\n"
-        "Selecciona un módulo en el menú desplegable y pulsa **Configurar** para abrirlo.\n"
+        "Selecciona un módulo en el menú desplegable para abrirlo directamente.\n"
         "Puedes volver a este menú desde las opciones de navegación de cada módulo."
     )
 
@@ -8495,12 +8536,32 @@ class HeraldoUserReportsSetupView(discord.ui.View):
     async def edit_condemn_emoji(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(ModerationCondemnEmojiModal(self))
 
+    @discord.ui.button(label="Acción", style=discord.ButtonStyle.primary, row=4)
+    async def choose_action(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.selected_reaction_index is None:
+            await interaction.response.send_message(
+                "Selecciona primero una reacción.", ephemeral=True)
+            return
+        view = ModerationReportActionPicker(self)
+        await interaction.response.edit_message(
+            content=self._content(interaction.guild) +
+                    "\n\n**Elegir acción:** la selección es un borrador. "
+                    "Configura la duración y el umbral en «Regla» antes de guardar.",
+            view=view,
+        )
+
     @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=3)
     async def save_changes(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.pending_channel_id is None and self.pending_reactions is None and self.pending_condemn_emoji is None:
             await interaction.response.send_message("No hay cambios pendientes.", ephemeral=True)
             return
         if self.pending_reactions is not None:
+            if any(row.get("action") == "timeout" and not row.get("duration_minutes")
+                   for row in self.pending_reactions):
+                await interaction.response.send_message(
+                    "Configura una duración para los reportes con acción Timeout antes de guardar.",
+                    ephemeral=True)
+                return
             condemn_key = _moderation_emoji_key(self.pending_condemn_emoji or get_condemnation_emoji(self.guild_id))
             if any(_moderation_emoji_key(str(item["emoji"])) == condemn_key for item in self.pending_reactions):
                 await interaction.response.send_message("El emoji de condena no puede coincidir con una reacción de reporte.", ephemeral=True)
@@ -8551,6 +8612,67 @@ class HeraldoUserReportsSetupView(discord.ui.View):
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(content="Panel de reportes cerrado.", view=None)
+
+
+class ModerationReportActionPicker(discord.ui.View):
+    """Single-action selector without affecting the five-row reports editor."""
+    def __init__(self, parent: HeraldoUserReportsSetupView):
+        super().__init__(timeout=300)
+        self.parent = parent
+        self.guild_id, self.owner_id = parent.guild_id, parent.owner_id
+        index = parent.selected_reaction_index
+        chosen = parent._working_reactions()[index] if index is not None else {}
+        selected = str(chosen.get("action", "report"))
+        self.selector = discord.ui.Select(
+            placeholder="Selecciona la acción del reporte", row=0,
+            options=[
+                discord.SelectOption(label=moderation_action_label(value),
+                                     value=value, default=value == selected)
+                for value in ("report", "timeout", "kick", "ban", "condemn")
+            ],
+        )
+        self.selector.callback = self.select_action
+        self.add_item(self.selector)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    async def select_action(self, interaction: discord.Interaction) -> None:
+        values = (interaction.data or {}).get("values", [])
+        index = self.parent.selected_reaction_index
+        if (index is None or len(values) != 1
+                or values[0] not in MODERATION_REPORT_ACTIONS
+                or index >= len(self.parent._working_reactions())):
+            await interaction.response.send_message(
+                "Selección de acción caducada.", ephemeral=True)
+            return
+        updated = [dict(row) for row in self.parent._working_reactions()]
+        updated[index]["action"] = values[0]
+        if values[0] != "timeout":
+            updated[index]["duration_minutes"] = (
+                None if values[0] in {"report", "kick"} else
+                updated[index].get("duration_minutes"))
+        if values[0] == "report":
+            updated[index]["purge_minutes"] = None
+        self.parent.pending_reactions = updated
+        self.parent._rebuild_reaction_select()
+        self.stop()
+        await interaction.response.edit_message(
+            content=self.parent._content(interaction.guild) +
+                    "\n\nAcción elegida en el borrador. "
+                    "Usa «Regla» para ajustar duración y umbral; "
+                    "pulsa «Guardar cambios» cuando esté listo.",
+            embed=None, view=self.parent,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content=self.parent._content(interaction.guild), embed=None,
+            view=self.parent,
+        )
+
 
 MODERATION_WARN_MAX_ALLOWED = 5
 
@@ -8998,6 +9120,11 @@ class HeraldoCasesSetupView(discord.ui.View):
         await interaction.response.send_modal(
             HeraldoWarningDeleteModal(self.guild_id, self.selected_case, self.owner_id))
 
+    @discord.ui.button(label="Gestionar casos", style=discord.ButtonStyle.primary, row=3)
+    async def manage_cases(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoCaseManagerSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view.summary(), embed=None, view=view)
+
     @discord.ui.button(label="Actualizar", style=discord.ButtonStyle.secondary, row=2)
     async def refresh(self, interaction, button):
         self._rebuild()
@@ -9015,6 +9142,309 @@ class HeraldoCasesSetupView(discord.ui.View):
         from panel_navigation import dismiss_panel
         await dismiss_panel(interaction)
 
+
+class HeraldoCaseManagementConfirm(discord.ui.Modal):
+    """Confirmation for irreversible operations, including explicit full clearing."""
+    confirmation = discord.ui.TextInput(
+        label="Confirmación", placeholder="Código del caso o LIMPIAR",
+        required=True, max_length=90)
+
+    def __init__(self, guild_id: int, owner_id: int, case_number: int | None,
+                 operation: str, filter_key: str = "all", page: int = 0):
+        super().__init__(title="Confirmar eliminación")
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.case_number, self.operation = case_number, operation
+        self.filter_key, self.page = filter_key, page
+        if case_number is not None:
+            self.confirmation.placeholder = moderation_case_code(case_number, guild_id)
+        elif operation == "cleanup_all":
+            self.title = "Eliminar todos los casos"
+            self.confirmation.label = "Escribe LIMPIAR TODO"
+            self.confirmation.placeholder = "LIMPIAR TODO"
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if (interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.administrator
+                or not await configuration_access(interaction, self.guild_id, self.owner_id)):
+            return
+        if self.operation == "delete":
+            expected = moderation_case_code(self.case_number, self.guild_id)
+            if str(self.confirmation).strip() != expected:
+                await interaction.response.send_message("El código no coincide.", ephemeral=True)
+                return
+            row = moderation_case_get(self.guild_id, self.case_number)
+            if row is None or row["open"]:
+                await interaction.response.send_message(
+                    "Solo puedes eliminar casos cerrados. Cierra o descarta el caso primero.",
+                    ephemeral=True)
+                return
+            success = moderation_case_delete(self.guild_id, self.case_number)
+            label = f"Caso {expected} eliminado." if success else "El caso ya no existe."
+        elif self.operation == "cleanup_all":
+            if str(self.confirmation).strip().upper() != "LIMPIAR TODO":
+                await interaction.response.send_message(
+                    "Confirmación incorrecta. Escribe LIMPIAR TODO.", ephemeral=True)
+                return
+            # Solo elimina registros de casos de este servidor. No ejecuta
+            # cambios en sanciones activas ni borra hilos o registros de Discord.
+            with closing(db_connect()) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    counts = conn.execute(
+                        "SELECT COUNT(*), COALESCE(SUM(open), 0) "
+                        "FROM moderation_cases WHERE guild_id=?",
+                        (self.guild_id,)).fetchone()
+                    conn.execute(
+                        "DELETE FROM moderation_cases WHERE guild_id=?", (self.guild_id,))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+            label = (f"Limpieza total completada: {counts[0]} expedientes eliminados "
+                     f"({counts[1]} abiertos). Las sanciones de Discord no se han modificado.")
+        else:
+            if str(self.confirmation).strip().upper() != "LIMPIAR":
+                await interaction.response.send_message("Escribe LIMPIAR para confirmar.", ephemeral=True)
+                return
+            with closing(db_connect()) as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM moderation_cases WHERE guild_id=? AND open=0",
+                    (self.guild_id,)).fetchone()[0]
+                conn.execute(
+                    "DELETE FROM moderation_cases WHERE guild_id=? AND open=0",
+                    (self.guild_id,))
+            label = f"Limpieza completada: {count} casos cerrados eliminados. Los abiertos siguen intactos."
+        print(f"CASE_MANAGEMENT action={self.operation} guild={self.guild_id} moderator={interaction.user.id} case={self.case_number} result={label}")
+        await interaction.response.send_message(label, ephemeral=True)
+
+
+class HeraldoCaseCleanupAllConfirmView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=120)
+        self.guild_id, self.owner_id = guild_id, owner_id
+
+    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction, button):
+        if (interaction.guild_id != self.guild_id
+                or interaction.user.id != self.owner_id
+                or not interaction.user.guild_permissions.administrator
+                or not await configuration_access(interaction, self.guild_id, self.owner_id)):
+            return
+        await interaction.response.send_modal(HeraldoCaseManagementConfirm(
+            self.guild_id, self.owner_id, None, "cleanup_all"))
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction, button):
+        self.stop()
+        await interaction.response.edit_message(
+            content="Limpieza total cancelada.", view=None)
+
+
+class HeraldoCaseManagerSetupView(discord.ui.View):
+    """Private, paginated review of moderation cases; does not change sanctions on 'omit'."""
+    def __init__(self, guild_id: int, owner_id: int,
+                 filter_key: str = "open", page: int = 0,
+                 selected: int | None = None):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.filter_key, self.page, self.selected = filter_key, page, selected
+        status = discord.ui.Select(
+            placeholder="Filtrar casos", row=0,
+            options=[
+                discord.SelectOption(label=name, value=value, default=value == filter_key)
+                for value, name in (("open", "Abiertos"), ("closed", "Cerrados"), ("all", "Todos"))
+            ])
+        status.callback = self.change_filter
+        self.add_item(status)
+        self.case_select = discord.ui.Select(
+            placeholder="Seleccionar expediente", row=1,
+            options=[discord.SelectOption(label="Sin casos", value="none")],
+            disabled=True)
+        self.case_select.callback = self.choose_case
+        self.add_item(self.case_select)
+        self.rebuild()
+
+    def rows(self):
+        with closing(db_connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            where = "guild_id=?"
+            params = [self.guild_id]
+            if self.filter_key != "all":
+                where += " AND open=?"
+                params.append(1 if self.filter_key == "open" else 0)
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM moderation_cases WHERE {where}", params
+            ).fetchone()[0]
+            self.page = min(self.page, max(0, (total - 1) // 25))
+            rows = conn.execute(
+                f"SELECT * FROM moderation_cases WHERE {where} "
+                "ORDER BY case_number DESC LIMIT 25 OFFSET ?",
+                [*params, self.page * 25]).fetchall()
+        return rows, total
+
+    def rebuild(self):
+        rows, total = self.rows()
+        self.case_select.options = [
+            discord.SelectOption(
+                label=f"{moderation_case_code(int(r['case_number']), self.guild_id)} · {r['type']}"[:100],
+                value=str(r["case_number"]),
+                description=(("Abierto" if r["open"] else "Cerrado") +
+                             " · " + str(r["reason"] or ""))[:100],
+                default=int(r["case_number"]) == self.selected)
+            for r in rows
+        ] or [discord.SelectOption(label="Sin casos", value="none")]
+        self.case_select.disabled = not bool(rows)
+        if self.selected not in {int(r["case_number"]) for r in rows}:
+            self.selected = None
+        current = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        self.inspect.disabled = current is None
+        self.finish.disabled = current is None or not current["open"]
+        self.omit.disabled = current is None or not current["open"]
+        self.delete_one.disabled = current is None or bool(current["open"])
+        self.previous.disabled = self.page == 0
+        self.next_page.disabled = (self.page + 1) * 25 >= total
+        self.cleanup.disabled = not bool(moderation_case_list(
+            self.guild_id, open_only=False, limit=1))
+        self.cleanup_all.disabled = not bool(moderation_case_list(
+            self.guild_id, limit=1))
+        return rows, total, current
+
+    def summary(self):
+        rows, total, current = self.rebuild()
+        count_pages = max(1, (total + 24) // 25)
+        lines = [f"**Gestión de expedientes · {self.filter_key}**",
+                 f"Página {self.page + 1}/{count_pages} · {total} casos · Selecciona uno para revisarlo."]
+        if current is not None:
+            lines.append(
+                f"**{moderation_case_code(int(current['case_number']), self.guild_id)}** "
+                f"· {current['type']} · <@{current['user_id']}> "
+                f"· {'Abierto' if current['open'] else 'Cerrado'}"
+                f"\nMotivo: {discord.utils.escape_mentions(str(current['reason'] or 'Sin motivo'))[:300]}")
+        else:
+            lines.append("Sin expediente seleccionado.")
+        lines.append("**Cerrar** resuelve el caso (y puede revertir su sanción). "
+                     "**Omitir** descarta la revisión sin cambiar sanciones. "
+                     "**Limpiar cerrados** borra solo casos resueltos. "
+                     "**Limpiar todo** borra los expedientes abiertos y cerrados, "
+                     "pero no revierte sanciones de Discord. Ambas requieren confirmación.")
+        return "\n\n".join(lines)[:1900]
+
+    async def interaction_check(self, interaction):
+        if not await configuration_access(interaction, self.guild_id, self.owner_id):
+            return False
+        if interaction.guild_id != self.guild_id or interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Este panel pertenece a otro moderador.", ephemeral=True)
+            return False
+        return True
+
+    async def change_filter(self, interaction):
+        value = (interaction.data or {}).get("values", ["open"])[0]
+        if value in {"open", "closed", "all"}:
+            self.filter_key, self.page, self.selected = value, 0, None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    async def choose_case(self, interaction):
+        value = (interaction.data or {}).get("values", ["none"])[0]
+        if value != "none":
+            try:
+                number = int(value)
+                if number in {int(r["case_number"]) for r in self.rows()[0]}:
+                    self.selected = number
+            except ValueError:
+                pass
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Abrir caso", style=discord.ButtonStyle.primary, row=2)
+    async def inspect(self, interaction, button):
+        row = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        if row is None:
+            await interaction.response.send_message("Caso no encontrado.", ephemeral=True)
+            return
+        embed = moderation_case_embed(interaction.guild, row)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="Cerrar caso", style=discord.ButtonStyle.success, row=2)
+    async def finish(self, interaction, button):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("Permisos insuficientes.", ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        if row is None or not row["open"]:
+            await interaction.response.send_message("El caso ya está cerrado.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        effect = await moderation_close_case_effect(interaction.guild, row, interaction.user)
+        moderation_case_close(self.guild_id, self.selected, closed_by=interaction.user.id,
+                              resolution="Cerrado mediante gestión de casos")
+        self.selected = None
+        await interaction.edit_original_response(
+            content=f"Caso cerrado. {effect}\n\n{self.summary()}", view=self)
+
+    @discord.ui.button(label="Omitir caso", style=discord.ButtonStyle.secondary, row=2)
+    async def omit(self, interaction, button):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("Permisos insuficientes.", ephemeral=True)
+            return
+        row = moderation_case_get(self.guild_id, self.selected) if self.selected else None
+        if row is None or not row["open"]:
+            await interaction.response.send_message("Caso no disponible.", ephemeral=True)
+            return
+        moderation_case_close(self.guild_id, self.selected, closed_by=interaction.user.id,
+                              resolution="Omitido por moderación; no modifica sanciones")
+        self.selected = None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Eliminar cerrado", style=discord.ButtonStyle.danger, row=2)
+    async def delete_one(self, interaction, button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Solo administradores.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoCaseManagementConfirm(
+            self.guild_id, self.owner_id, self.selected, "delete", self.filter_key, self.page))
+
+    @discord.ui.button(label="Anterior", style=discord.ButtonStyle.secondary, row=3)
+    async def previous(self, interaction, button):
+        self.page = max(0, self.page - 1)
+        self.selected = None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Siguiente", style=discord.ButtonStyle.secondary, row=3)
+    async def next_page(self, interaction, button):
+        self.page += 1
+        self.selected = None
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Limpiar cerrados", style=discord.ButtonStyle.danger, row=3)
+    async def cleanup(self, interaction, button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Solo administradores.", ephemeral=True)
+            return
+        await interaction.response.send_modal(HeraldoCaseManagementConfirm(
+            self.guild_id, self.owner_id, None, "cleanup", self.filter_key, self.page))
+
+    @discord.ui.button(label="Limpiar todo", style=discord.ButtonStyle.danger, row=4)
+    async def cleanup_all(self, interaction, button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Solo administradores.", ephemeral=True)
+            return
+        with closing(db_connect()) as conn:
+            counts = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(open), 0) "
+                "FROM moderation_cases WHERE guild_id=?", (self.guild_id,)
+            ).fetchone()
+        await interaction.response.send_message(
+            f"**Confirmación de limpieza total**\n"
+            f"Se eliminarán {counts[0]} casos, incluidos {counts[1]} abiertos. "
+            "No se revertirán baneos, silenciamientos ni otras sanciones. "
+            "Esta acción es irreversible. Pulsa Confirmar para continuar.",
+            ephemeral=True,
+            view=HeraldoCaseCleanupAllConfirmView(self.guild_id, self.owner_id))
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=3)
+    async def back(self, interaction, button):
+        view = HeraldoCasesSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(content=view._content(interaction.guild),
+                                                embed=None, view=view)
 
 class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Duración predeterminada"):
     duration = discord.ui.TextInput(
@@ -9340,6 +9770,13 @@ class HeraldoVerificationHubView(discord.ui.View):
             view=HeraldoOrientationSetupView(self.guild_id, self.owner_id),
         )
 
+    @discord.ui.button(label="Restauración de roles", style=discord.ButtonStyle.primary, row=1)
+    async def rejoin_settings(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        panel = HeraldoRejoinSetupView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content=panel.summary(), embed=None, view=panel,
+        )
+
     @discord.ui.button(label="Tiempos", style=discord.ButtonStyle.secondary, row=1)
     async def times(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_modal(HeraldoGeneralConfigModal(self.guild_id))
@@ -9347,6 +9784,100 @@ class HeraldoVerificationHubView(discord.ui.View):
     @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await heraldo_setup_go_home(interaction, self.guild_id, self.owner_id)
+
+
+
+class HeraldoRejoinSetupView(discord.ui.View):
+    """Optional, opt-in restoration of verified personality roles after voluntary exit."""
+    def __init__(self, guild_id: int, owner_id: int):
+        super().__init__(timeout=900)
+        self.guild_id, self.owner_id = guild_id, owner_id
+        self.original = guild_config_get(guild_id, "verified_rejoin_restore_enabled") == "1"
+        self.draft = self.original
+        self._sync()
+
+    def _sync(self):
+        self.save.disabled = self.discard.disabled = self.draft == self.original
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    def summary(self) -> str:
+        state = "Activada" if self.draft else "Desactivada"
+        return (
+            "**Restauración de roles al reingresar**\n\n"
+            f"Estado: **{state}**\n\n"
+            "Si se activa, El Heraldo guarda temporalmente un rol de personalidad "
+            "o de verificación permitido al abandonar voluntariamente el servidor. "
+            "Solo lo recupera cuando la salida es comprobable y el rol sigue siendo seguro. "
+            "No restaura roles administrativos, expulsiones ni baneos. "
+            "Los cambios se aplican únicamente tras Guardar y Confirmar."
+        )
+
+    @discord.ui.button(label="Activar / Desactivar", style=discord.ButtonStyle.primary, row=0)
+    async def toggle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.draft = not self.draft
+        self._sync()
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Guardar cambios", style=discord.ButtonStyle.success, row=1)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self.draft == self.original:
+            await interaction.response.send_message("No hay cambios.", ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            content=self.summary() + "\n\n¿Confirmar los cambios?",
+            view=HeraldoRejoinConfirmView(self),
+        )
+
+    @discord.ui.button(label="Descartar cambios", style=discord.ButtonStyle.secondary, row=1)
+    async def discard(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.draft = self.original
+        self._sync()
+        await interaction.response.edit_message(content=self.summary(), view=self)
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        view = HeraldoVerificationHubView(self.guild_id, self.owner_id)
+        await interaction.response.edit_message(
+            content="**El Heraldo · Verificación**\n\nSelecciona una configuración.",
+            embed=None, view=view,
+        )
+
+
+class HeraldoRejoinConfirmView(discord.ui.View):
+    def __init__(self, editor: HeraldoRejoinSetupView):
+        super().__init__(timeout=180)
+        self.editor = editor
+        self.guild_id, self.owner_id = editor.guild_id, editor.owner_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await configuration_access(interaction, self.guild_id, self.owner_id)
+
+    @discord.ui.button(label="Confirmar cambios", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        editor = self.editor
+        current = guild_config_get(editor.guild_id, "verified_rejoin_restore_enabled") == "1"
+        if current != editor.original:
+            await interaction.response.send_message(
+                "La configuración cambió en otra sesión. Ábrela de nuevo.", ephemeral=True)
+            return
+        guild_config_set(editor.guild_id, "verified_rejoin_restore_enabled",
+                         "1" if editor.draft else "0")
+        editor.original = editor.draft
+        editor._sync()
+        self.stop()
+        await interaction.response.edit_message(
+            content=editor.summary() + "\n\nCambios guardados.",
+            view=editor,
+        )
+
+    @discord.ui.button(label="Volver", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content=self.editor.summary(), view=self.editor,
+        )
 
 
 class HeraldoLoggingSetupView(discord.ui.View):
@@ -10361,7 +10892,7 @@ class HeraldoSetupView(discord.ui.View):
         ("language", "Idioma", "Idioma manual del servidor (es-419, en-US, pt-BR)"),
         ("messages", "Mensajes", "Editores de mensajes del sistema"),
         ("suggestions", "Sugerencias", "Panel y revisores de sugerencias"),
-        ("announcements", "Anuncios", "Configuración del anuncio de Miembro de la Semana"),
+        ("announcements", "Anuncios", "Crear y gestionar anuncios y Miembro de la Semana"),
         ("server_structure", "Estructura del servidor", "Respaldo de roles, canales y permisos"),
         ("date_format", "Fecha y hora", "Formato del reloj de 12/24 horas y fecha"),
     )
@@ -10389,6 +10920,8 @@ class HeraldoSetupView(discord.ui.View):
         select.callback = self.select_module
         self.module_select = select
         self.add_item(select)
+        # Open modules directly on selection; no second configure button.
+        self.remove_item(self.configure)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
@@ -10416,7 +10949,7 @@ class HeraldoSetupView(discord.ui.View):
         # guarde correctamente la selección.
         for option in self.module_select.options:
             option.default = option.value == selected
-        await interaction.response.edit_message(view=self)
+        await self.open_module(interaction)
 
     @discord.ui.button(label="Configurar", style=discord.ButtonStyle.primary, row=1)
     async def configure(self, interaction: discord.Interaction, button: discord.ui.Button, *, direct: bool = False) -> None:
@@ -10492,8 +11025,8 @@ class HeraldoSetupView(discord.ui.View):
             view = SuggestionsSetupView(globals(), self.guild_id, self.owner_id)
             content = view.summary(interaction.guild)
         elif selected == "announcements":
-            view = HeraldoMotwSetupView(self.guild_id, self.owner_id)
-            content = view._content(interaction.guild)
+            from autofeed_setup import setup_panel
+            content, view = setup_panel(globals(), self.guild_id, self.owner_id)
         elif selected == "server_structure":
             view = ServerStructureSetupView(globals(), self.guild_id, self.owner_id)
             content = view.summary()
@@ -15203,6 +15736,26 @@ async def _condemn_member_inner(
     return True, role_note + ("; DM enviado" if dm_ok else "; DM no disponible" if dm_ok is not None else "")
 
 
+def condemnation_pending_roles_get(guild_id: int, user_id: int) -> list[int]:
+    """Role IDs left unrecoverable after a successful condemnation release."""
+    raw = guild_config_get(guild_id, f"condemnation_pending_roles:{user_id}")
+    if not raw:
+        return []
+    try:
+        values = json.loads(raw)
+        if not isinstance(values, list):
+            return []
+        return sorted({int(value) for value in values if int(value) > 0})
+    except (ValueError, TypeError, OverflowError):
+        return []
+
+
+def condemnation_pending_roles_set(guild_id: int, user_id: int, role_ids) -> None:
+    clean = sorted({int(value) for value in role_ids if int(value) > 0})
+    guild_config_set(guild_id, f"condemnation_pending_roles:{user_id}",
+                     json.dumps(clean))
+
+
 async def release_condemned_member(
     member: discord.Member, *, released_by: discord.abc.User | None = None,
     automatic: bool = False, pardon: bool = False,
@@ -15215,13 +15768,14 @@ async def release_condemned_member(
 
     saved = condemnation_parse_role_ids(row["role_ids"]) if row else (hp_get_punished(member.guild.id, member.id) or [])
     restore: list[discord.Role] = []
-    lost = 0
+    missing_role_ids: list[int] = []
     for rid in saved:
         role = member.guild.get_role(rid)
         if role is not None and role.is_assignable() and not role.managed:
             restore.append(role)
         else:
-            lost += 1
+            missing_role_ids.append(rid)
+    lost = len(missing_role_ids)
 
     current = [
         r for r in member.roles
@@ -15235,6 +15789,13 @@ async def release_condemned_member(
         return False, f"No pude cambiar sus roles: `{e}`"
     finally:
         _condemn_sync_busy.discard(member.id)
+
+    # Persist only unrecovered roles, after Discord confirms the release.
+    # No privilege or hierarchy bypass: a later explicit retry revalidates all roles.
+    previous = condemnation_pending_roles_get(member.guild.id, member.id)
+    already_assigned = {role.id for role in new_roles}
+    pending = sorted((set(previous) | set(missing_role_ids)) - already_assigned)
+    condemnation_pending_roles_set(member.guild.id, member.id, pending)
 
     linked_case_number = (
         int(row["moderation_case_number"])
@@ -15754,6 +16315,125 @@ async def condenar_error(interaction: discord.Interaction, error: discord.app_co
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
     else:
         await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+
+
+_PENDING_ROLE_RESTORES_ACTIVE: set[tuple[int, int]] = set()
+
+
+class PendingRoleRestoreView(discord.ui.View):
+    def __init__(self, guild_id: int, owner_id: int, target_id: int, pending_ids: list[int]):
+        super().__init__(timeout=300)
+        self.guild_id, self.owner_id, self.target_id = guild_id, owner_id, target_id
+        self.snapshot = tuple(pending_ids)
+        self.finished = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.finished or self.is_finished():
+            await interaction.response.send_message("Esta confirmación ya terminó.", ephemeral=True)
+            return False
+        return await configuration_access(interaction, self.guild_id, self.owner_id) and (
+            interaction.user.guild_permissions.manage_roles
+        )
+
+    @discord.ui.button(label="Confirmar restauración", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        guild = interaction.guild
+        key = (self.guild_id, self.target_id)
+        if key in _PENDING_ROLE_RESTORES_ACTIVE:
+            await interaction.response.send_message("Ya se está restaurando a este usuario.", ephemeral=True)
+            return
+        if condemnation_get(guild.id, self.target_id) is not None:
+            await interaction.response.send_message(
+                "No se pueden restaurar roles mientras exista una condena activa.", ephemeral=True)
+            return
+        pending = condemnation_pending_roles_get(guild.id, self.target_id)
+        if not pending or tuple(pending) != self.snapshot:
+            await interaction.response.send_message(
+                "Los roles pendientes cambiaron. Abre el comando otra vez.", ephemeral=True)
+            return
+        bot_member = guild.me
+        if bot_member is None or not bot_member.guild_permissions.manage_roles:
+            await interaction.response.send_message(
+                "El bot necesita Gestionar roles.", ephemeral=True)
+            return
+        self.finished = True
+        _PENDING_ROLE_RESTORES_ACTIVE.add(key)
+        await interaction.response.defer()
+        try:
+            member = guild.get_member(self.target_id)
+            if member is None:
+                member = await guild.fetch_member(self.target_id)
+            if condemnation_get(guild.id, self.target_id) is not None:
+                await interaction.edit_original_response(
+                    content="Se canceló: hay una nueva condena.", view=None)
+                return
+            allowable = []
+            for rid in pending:
+                role = guild.get_role(rid)
+                if role is None or role.managed or not role.is_assignable():
+                    continue
+                if (not interaction.user.guild_permissions.administrator
+                        and interaction.user.id != guild.owner_id
+                        and role >= interaction.user.top_role):
+                    continue
+                allowable.append(role)
+            if not allowable:
+                await interaction.edit_original_response(
+                    content="No hay roles asignables en este momento.", view=None)
+                return
+            await member.add_roles(*allowable, reason=f"Restauración pendiente por {interaction.user}")
+            still_pending = [rid for rid in pending if rid not in {role.id for role in allowable}]
+            condemnation_pending_roles_set(guild.id, self.target_id, still_pending)
+            await interaction.edit_original_response(
+                content=f"Se restauraron {len(allowable)} roles; quedan {len(still_pending)} pendientes.",
+                view=None)
+            await log_embed(
+                guild, "Roles pendientes restaurados",
+                f"{interaction.user.mention} restauró {len(allowable)} roles para <@{self.target_id}>. "
+                f"Pendientes: {len(still_pending)}.", discord.Color.blurple())
+        except discord.HTTPException:
+            await interaction.edit_original_response(
+                content="Discord impidió completar la restauración. Los roles pendientes se conservaron.",
+                view=None)
+        finally:
+            _PENDING_ROLE_RESTORES_ACTIVE.discard(key)
+            self.stop()
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self.interaction_check(interaction):
+            return
+        self.finished = True
+        self.stop()
+        await interaction.response.edit_message(content="Restauración cancelada.", view=None)
+
+
+@bot.tree.command(name="restaurar_roles_pendientes",
+                  description="Reintentar roles no recuperados al levantar una condena.")
+@discord.app_commands.checks.has_permissions(manage_guild=True, manage_roles=True)
+@discord.app_commands.guild_only()
+async def restaurar_roles_pendientes(interaction: discord.Interaction, miembro: discord.Member) -> None:
+    if not await configuration_access(interaction):
+        return
+    if not interaction.user.guild_permissions.manage_roles:
+        await interaction.response.send_message("Necesitas Gestionar roles.", ephemeral=True)
+        return
+    if condemnation_get(interaction.guild.id, miembro.id) is not None:
+        await interaction.response.send_message(
+            "No puedes restaurar roles mientras el miembro esté condenado.", ephemeral=True)
+        return
+    pending = condemnation_pending_roles_get(interaction.guild.id, miembro.id)
+    if not pending:
+        await interaction.response.send_message("No hay roles pendientes.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"**Restaurar {len(pending)} roles pendientes** para {miembro.mention}? "
+        "Solo se asignarán roles que respeten los permisos y la jerarquía actuales.",
+        view=PendingRoleRestoreView(interaction.guild.id, interaction.user.id, miembro.id, pending),
+        ephemeral=True,
+    )
 
 
 @bot.tree.command(name="liberar", description="Levantar una condena y devolver los roles guardados.")
@@ -21193,6 +21873,11 @@ def guild_language(guild_id):
 
 locale_runtime.set_locale_resolver(guild_language)
 locale_runtime.install_discord(discord)
+
+
+# Install only the confirmed /anuncios scheduler. No legacy programar commands.
+import main_announcement_scheduler
+_main_announcement_engine = main_announcement_scheduler.AnnouncementScheduler(globals())
 
 
 async def _production_return_reports(interaction, guild_id, owner_id):
