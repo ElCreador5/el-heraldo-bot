@@ -102,7 +102,7 @@
   "command.adbb859f8c3965c0": "Open AutoMod settings.",
   "command.adfaa02333927d4d": "Create #honeypot configured, visible, and with a pinned notice.",
   "command.afda2ef5af478a3d": "daily",
-  "command.b1472b1450e6f9ef": "Test the Member of the Week announcement now without resetting real counters.",
+  "command.b1472b1450e6f9ef": "Private preview of the weekly announcement without posting or resetting the count.",
   "command.b2c9845124e46492": "View upcoming scheduled runs and errors.",
   "command.b315d337eab13a95": "Apply a timeout and create a moderation case.",
   "command.b9589f96afd0fba2": "View or change the server template synchronization schedule (backup).",
