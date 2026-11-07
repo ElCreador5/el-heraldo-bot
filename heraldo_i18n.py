@@ -27,6 +27,7 @@ class Catalog:
 
 CATALOGS = {
     "es-419": Catalog("es-419", {
+        "motw.preview_button": "Vista previa",
         "motw.podium_title": "Clasificación semanal",
         "motw.first_place": "🥇 Primer lugar",
         "motw.second_place": "🥈 Segundo lugar",
@@ -49,6 +50,7 @@ CATALOGS = {
         "language.back": "Volver",
     }),
     "en-US": Catalog("en-US", {
+        "motw.preview_button": "Preview",
         "motw.podium_title": "Weekly ranking",
         "motw.first_place": "🥇 First place",
         "motw.second_place": "🥈 Second place",
@@ -71,6 +73,7 @@ CATALOGS = {
         "language.back": "Back",
     }),
     "pt-BR": Catalog("pt-BR", {
+        "motw.preview_button": "Prévia",
         "motw.podium_title": "Classificação semanal",
         "motw.first_place": "🥇 Primeiro lugar",
         "motw.second_place": "🥈 Segundo lugar",
