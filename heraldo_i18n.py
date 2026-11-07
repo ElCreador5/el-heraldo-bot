@@ -27,6 +27,10 @@ class Catalog:
 
 CATALOGS = {
     "es-419": Catalog("es-419", {
+        "motw.podium_title": "Clasificación semanal",
+        "motw.first_place": "🥇 Primer lugar",
+        "motw.second_place": "🥈 Segundo lugar",
+        "motw.third_place": "🥉 Tercer lugar",
         "setup.home": "**El Heraldo · Configuración**\n\nSelecciona una sección y se abrirá directamente. Guarda los cambios solo cuando estés conforme.\nPuedes volver a este menú desde las opciones de navegación de cada módulo.",
         "setup.access_denied": "Acceso denegado. Se requiere Gestionar servidor y una sesión propia en este servidor.",
         "language.title": "El Heraldo · Idioma",
@@ -45,6 +49,10 @@ CATALOGS = {
         "language.back": "Volver",
     }),
     "en-US": Catalog("en-US", {
+        "motw.podium_title": "Weekly ranking",
+        "motw.first_place": "🥇 First place",
+        "motw.second_place": "🥈 Second place",
+        "motw.third_place": "🥉 Third place",
         "setup.home": "**El Heraldo · Settings**\n\nSelect a section to open it directly. Save changes only when you are satisfied.\nYou can return to this menu from each module's navigation options.",
         "setup.access_denied": "Access denied. You need Manage Server permission and must use your own session in this server.",
         "language.title": "El Heraldo · Language",
@@ -63,6 +71,10 @@ CATALOGS = {
         "language.back": "Back",
     }),
     "pt-BR": Catalog("pt-BR", {
+        "motw.podium_title": "Classificação semanal",
+        "motw.first_place": "🥇 Primeiro lugar",
+        "motw.second_place": "🥈 Segundo lugar",
+        "motw.third_place": "🥉 Terceiro lugar",
         "setup.home": "**El Heraldo · Configurações**\n\nSelecione uma seção para abri-la diretamente. Salve as alterações somente quando estiver satisfeito.\nVocê pode voltar a este menu pelas opções de navegação de cada módulo.",
         "setup.access_denied": "Acesso negado. É necessário ter a permissão Gerenciar Servidor e usar sua própria sessão neste servidor.",
         "language.title": "El Heraldo · Idioma",
