@@ -102,7 +102,7 @@
   "command.adbb859f8c3965c0": "Abre la configuración de AutoMod.",
   "command.adfaa02333927d4d": "Crear #honeypot ya configurado (visible, con aviso fijado).",
   "command.afda2ef5af478a3d": "diaria",
-  "command.b1472b1450e6f9ef": "Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.",
+  "command.b1472b1450e6f9ef": "Vista previa privada del anuncio semanal, sin publicarlo ni reiniciar el conteo.",
   "command.b2c9845124e46492": "Consulta próximas ejecuciones y errores de las programaciones.",
   "command.b315d337eab13a95": "Aplica timeout y crea un caso de Moderación.",
   "command.b9589f96afd0fba2": "Ver o cambiar cuándo se sincroniza la plantilla del servidor (copia de seguridad).",
