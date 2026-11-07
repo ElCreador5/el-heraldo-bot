@@ -5660,20 +5660,19 @@ class HeraldoMotwSetupView(_SetupDirtySaveView):
         await interaction.response.edit_message(
             content=self._content(interaction.guild), view=self)
 
-    @discord.ui.button(label=_t('text.4fe0a93ea1c59f'), style=discord.ButtonStyle.secondary, row=3)
+    @discord.ui.button(label=_t('motw.preview_button'), style=discord.ButtonStyle.secondary, row=3)
     @_i18n_context
     async def test(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self._has_pending_changes():
             await interaction.response.send_message(
                 _t('text.1b7a432fce1c79'), ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        error = await announce_member_of_the_week(self.guild_id, reset=False)
-        await interaction.followup.send(
-            _t('text.28816644e2bd31') if not error else
-            _t('text.5e410cf97ba23c', p0=f'{error}'),
-            ephemeral=True,
-        )
+        preview = build_member_of_the_week_embed(interaction.guild)
+        if preview is None:
+            await interaction.response.send_message(
+                _t('text.470e4c66cfb084'), ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=preview, ephemeral=True)
 
     @discord.ui.button(label=_t('text.14bdfaf2face3a'), style=discord.ButtonStyle.success, row=4)
     @_i18n_context
@@ -15890,17 +15889,8 @@ async def member_of_the_week_loop() -> None:
 
 
 @_i18n_context
-async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str | None:
-    """reset=False es para /motw_test: anuncia con los datos reales pero no
-    toca los contadores, para poder probar sin afectar la semana en curso.
-    Devuelve None si se publicó bien, o el texto del error si Discord lo rechazó
-    (en ese caso NO se reinician los contadores, para no perder la semana)."""
-    channel = bot.get_channel(get_motw_channel_id(guild_id))
-    if channel is None:
-        print("Advertencia: Miembro de la Semana: no encontré el canal de anuncios configurado.")
-        return _t('text.36ca143f0cf269')
-    guild = channel.guild
-
+def build_member_of_the_week_embed(guild: discord.Guild) -> discord.Embed | None:
+    """Construye el anuncio real sin publicar ni modificar los contadores."""
     # Top 3 entre quienes siguen en el servidor, según sus mensajes semanales.
     ranking: list[tuple[discord.Member, int]] = []
     for user_id, count in db_week_ranking(guild.id):
@@ -15916,13 +15906,6 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
                 break
 
     if not ranking:
-        try:
-            await channel.send(_t('text.470e4c66cfb084'))
-        except discord.HTTPException as e:
-            print(f"No se pudo escribir en el canal de Miembro de la Semana: {e}")
-            return str(e)
-        if reset:
-            db_reset_week(guild.id)
         return None
 
     winner, winner_count = ranking[0]
@@ -15939,7 +15922,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
             description += _t('text.93e36f506d4e4e')
 
     embed = discord.Embed(
-        title=_t('text.ed6277b830bc84') if reset else _t('text.22c914c157d4f2'),
+        title=_t('text.ed6277b830bc84'),
         description=description,
         color=discord.Color.gold(),
         timestamp=datetime.now(timezone.utc),
@@ -15953,6 +15936,30 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
     embed.add_field(name=_t("motw.podium_title"), value="\n".join(podium), inline=False)
     embed.set_thumbnail(url=winner.display_avatar.url)
     embed.set_footer(text=_t('text.270cbae6be9b8a', p0=f'{guild.name}'))
+    return embed
+
+
+@_i18n_context
+async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str | None:
+    """Publica el anuncio programado; reset=False conserva contadores.
+    Devuelve None en éxito o error de Discord, sin reiniciar si falla."""
+    channel = bot.get_channel(get_motw_channel_id(guild_id))
+    if channel is None:
+        print("Advertencia: Miembro de la Semana: no encontré el canal de anuncios configurado.")
+        return _t('text.36ca143f0cf269')
+    guild = channel.guild
+
+    embed = build_member_of_the_week_embed(guild)
+    if embed is None:
+        try:
+            await channel.send(_t('text.470e4c66cfb084'))
+        except discord.HTTPException as e:
+            print(f"No se pudo escribir en el canal de Miembro de la Semana: {e}")
+            return str(e)
+        if reset:
+            db_reset_week(guild.id)
+        return None
+
     try:
         await channel.send(embed=embed)
     except discord.HTTPException as e:
@@ -16020,7 +16027,7 @@ async def motw_set_channel_error(interaction: discord.Interaction, error: discor
         await interaction.response.send_message(_t('text.8904a29c5dcf0c', p0=f'{error}'), ephemeral=True)
 
 
-@bot.tree.command(name="motw_test", description="Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales.")
+@bot.tree.command(name="motw_test", description="Vista previa privada del anuncio semanal, sin publicarlo ni reiniciar el conteo.")
 @discord.app_commands.checks.has_permissions(kick_members=True)
 @discord.app_commands.guild_only()
 @_i18n_context
@@ -16028,15 +16035,12 @@ async def motw_test(interaction: discord.Interaction) -> None:
     if bot.get_channel(get_motw_channel_id(interaction.guild.id)) is None:
         await interaction.response.send_message(_t('text.9d7fe7b69eaa51'), ephemeral=True)
         return
-    await interaction.response.send_message(_t('text.2dded9e33cd2dc'), ephemeral=True)
-    error = await announce_member_of_the_week(interaction.guild.id, reset=False)
-    if error:
-        await interaction.followup.send(
-            _t('text.01e9a63b2d41fb', p0=f'{error}'),
-            ephemeral=True,
-        )
+    preview = build_member_of_the_week_embed(interaction.guild)
+    if preview is None:
+        await interaction.response.send_message(
+            _t('text.470e4c66cfb084'), ephemeral=True)
     else:
-        await interaction.followup.send(_t('text.28816644e2bd31'), ephemeral=True)
+        await interaction.response.send_message(embed=preview, ephemeral=True)
 
 
 @motw_test.error
