@@ -33,7 +33,7 @@ class MemberOfTheWeekPodiumTests(unittest.TestCase):
 
     def test_preview_remains_in_panel_without_standalone_command(self):
         source = ast.unparse(function("announce_member_of_the_week"))
-        self.assertIn("if reset:\\n        db_reset_week(guild.id)", source)
+        self.assertIn("if reset:\n        db_reset_week(guild.id)", source)
         self.assertIn("build_member_of_the_week_embed", source)
         editor = next(node for node in TREE.body
                       if isinstance(node, ast.ClassDef)
