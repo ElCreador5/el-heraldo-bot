@@ -118,7 +118,10 @@ class MotwSinglePanelTests(unittest.TestCase):
         self.assertIn("self.hour = self.original_hour", discard)
         testing = ast.unparse(method(editor, "test"))
         self.assertIn("_has_pending_changes", testing)
-        self.assertIn("announce_member_of_the_week", testing)
+        self.assertIn("build_member_of_the_week_embed", testing)
+        self.assertIn("ephemeral=True", testing)
+        self.assertNotIn("announce_member_of_the_week", testing)
+        self.assertNotIn("db_reset_week", testing)
 
 
 if __name__ == "__main__":
