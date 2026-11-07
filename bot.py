@@ -25446,7 +25446,7 @@ def server_footer_text(server_name: str, detail: str = "") -> str:
     old_name = str(server_name or "").strip()
     # Los pies históricos usan tanto " · " como "|" como separadores.
     # Normalizamos ambos para no conservar nombres de bot/servidor duplicados.
-    parts = [part.strip() for part in re.split(r"\\s*(?:·|\\|)\\s*", str(detail or ""))]
+    parts = [part.strip() for part in re.split(r"\s*(?:·|\|)\s*", str(detail or ""))]
     excluded = {
         name.casefold(), "{servidor}", "{botname}", "El Heraldo".casefold(),
         "El Heraldo - Beta".casefold(), "El Heraldo's Lab 🧪".casefold(),
