@@ -233,7 +233,7 @@
   },
   "motw_test.description": {
     "key": "command.b1472b1450e6f9ef",
-    "source": "Probar el anuncio de Miembro de la Semana ahora mismo, sin resetear los contadores reales."
+    "source": "Vista previa privada del anuncio semanal, sin publicarlo ni reiniciar el conteo."
   },
   "mute.description": {
     "key": "command.b315d337eab13a95",
