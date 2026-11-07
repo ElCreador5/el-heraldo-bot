@@ -25444,9 +25444,12 @@ def server_footer_text(server_name: str, detail: str = "") -> str:
     """Elimina las antiguas marcas de identidad y conserva los datos del pie."""
     name = bot_footer_name()
     old_name = str(server_name or "").strip()
-    parts = [part.strip() for part in str(detail or "").split(" · ")]
+    # Los pies históricos usan tanto " · " como "|" como separadores.
+    # Normalizamos ambos para no conservar nombres de bot/servidor duplicados.
+    parts = [part.strip() for part in re.split(r"\\s*(?:·|\\|)\\s*", str(detail or ""))]
     excluded = {
         name.casefold(), "{servidor}", "{botname}", "El Heraldo".casefold(),
+        "El Heraldo - Beta".casefold(), "El Heraldo's Lab 🧪".casefold(),
         "El Heraldo's Labs 🧪".casefold(), "El Heraldo Labs 🧪".casefold(),
     }
     if old_name:
