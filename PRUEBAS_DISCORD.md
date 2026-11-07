@@ -129,3 +129,17 @@ El cambio no despliega el sistema completo de traducción histórica: no traslad
 - [ ] Verificar Railway cuando los despliegues de producción se autoricen de nuevo, sin reactivarlo.
 
 No se habilitan mensajes por defecto ni se modifican los esquemas SQLite. Las regresiones offline no prueban Discord real ni el estado activo del servicio.
+
+
+## 2026-11-06 — Aceptación en Discord de siete configuraciones de main
+
+- [ ] /setup: seleccionar Anuncios, Moderación o Verificación abre su módulo inmediatamente, sin botón «Configurar»; Cerrar y Volver siguen funcionando.
+- [ ] /anuncios y Setup → Anuncios: abrir el mismo panel, crear un anuncio con nombre/canal/mensaje/embed (miniatura e imagen), vista previa y confirmación; sin publicar antes de confirmar.
+- [ ] Anuncios: probar fecha futura, repetición diaria/semanal/mensual/personalizada en zona Santo Domingo, mínimo de 1 hora, edición y pausa; no duplicar ni reenviar automáticamente si el resultado del envío es incierto.
+- [ ] Moderación → Cases → Gestionar casos: filtrar Abiertos/Cerrados/Todos, paginar, abrir y cerrar un expediente; «Omitir» no revierte sanciones.
+- [ ] «Limpiar cerrados» solo elimina expedientes cerrados; «Limpiar todo» requiere administrador, confirmación explícita y texto LIMPIAR TODO, y nunca deshace sanciones existentes.
+- [ ] Verificación → Restauración de roles: desactivada inicialmente; activar con Guardar y Confirmar. Comprobar salida voluntaria y reingreso con rol de personalidad recuperado, y que una expulsión/ban no restaure nada.
+- [ ] Tras liberar una condena con algún rol inaccesible, ejecutar /restaurar_roles_pendientes, confirmar solo cuando permisos/jerarquía lo permitan; no restaurar roles con condena activa.
+- [ ] Reportes: seleccionar reacción → Acción → escoger acción → Regla (duración/umbral) → Guardar; antes de Guardar no debe modificarse la configuración guardada.
+- [ ] Comprobar es-419/en-US/pt-BR, presencia de pie del servidor, navegación sin duplicados y ausencia de comandos /programar antiguos.
+- [ ] Arrancar main solo tras autorización de despliegue y con respaldo SQLite verificable; no reactivar Railway ni iniciar desplegar automáticamente durante la revisión.

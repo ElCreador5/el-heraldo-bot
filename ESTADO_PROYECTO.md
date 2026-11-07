@@ -71,3 +71,10 @@ Implementación: `heraldo_i18n.py`, `locales/{es-419,en-US,pt-BR}.json`, adaptad
 Accesos: `/language` y `/setup → Idioma`; `/setup → Moderación → Reportes → Recordatorios`. Guardado confirmado, idiomas es-419/en-US/pt-BR por servidor, opción persistente durante edición, historial de recordatorios identificado por referencias/plantilla propia y reconstrucción con contenido localizado. El programador no publica por defecto. Sus tablas SQLite siguen iguales, usa claves actuales de guild_settings y no modifica expedientes ni anuncios personales.
 
 Cobertura limitada: las cadenas españolas originales en main que no están etiquetadas por catálogo no se traducen de forma general ni retroactiva. El escaneo histórico del sistema es conservador (hasta 300 mensajes por canal, 40 canales); el de recordatorios hasta 500 del canal configurado, y hasta 100 referencias guardadas. No declarar éxito de despliegue en Railway ni pruebas reales Discord si solo se observa CI.
+
+
+## 2026-11-06 — Actualización selectiva de main: siete configuraciones
+
+Se integra en main el módulo de Anuncios y su worker de publicaciones confirmadas, el administrador avanzado y limpieza total de casos, el panel de restauración segura de personalidad al reingresar, el nuevo comando /restaurar_roles_pendientes, el selector de acciones de reportes y la entrada directa desde el desplegable de Setup. Se incorporan nuevos archivos: autofeed_setup.py, message_autofeeds.py, message_payload.py, message_publish.py, main_announcement_scheduler.py y member_rejoin_restore.py. También pruebas específicas sin Gateway y un workflow de CI dedicado. No se importan Modo Custodio, Conexiones de roles ni automatizaciones experimentales de Pruebas.
+
+Resguardos: nuevas opciones de publicación se guardan manualmente y requieren confirmación; reingresos desactivados por defecto; revisiones de jerarquía de roles y permisos antes de restaurar; «Limpiar todo» exige administrador y texto de confirmación, no modifica sanciones; scheduler no reenvía ante un estado incierto. La validación de código y pruebas de CI no sustituye las pruebas de uso real en Discord. Railway producción permanece sin reactivar.

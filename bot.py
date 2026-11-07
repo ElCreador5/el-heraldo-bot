@@ -16369,6 +16369,15 @@ class PendingRoleRestoreView(discord.ui.View):
                 await interaction.edit_original_response(
                     content="Se canceló: hay una nueva condena.", view=None)
                 return
+            if tuple(condemnation_pending_roles_get(guild.id, self.target_id)) != self.snapshot:
+                await interaction.edit_original_response(
+                    content="Los roles pendientes cambiaron. Revisa el caso antes de reintentar.",
+                    view=None)
+                return
+            if not interaction.user.guild_permissions.manage_roles:
+                await interaction.edit_original_response(
+                    content="Se revocó el permiso de Gestionar roles.", view=None)
+                return
             allowable = []
             for rid in pending:
                 role = guild.get_role(rid)

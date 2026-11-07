@@ -45,3 +45,4 @@ jobs:
           python -m unittest discover -s tests -p test_main_navigation_order.py -v
           python -m unittest discover -s tests -p test_purge_panel.py -v
           python -m unittest discover -s tests -p test_main_operation_progress.py -v
+          python -m unittest test_command_panels_main -v
