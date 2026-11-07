@@ -9446,6 +9446,12 @@ class HeraldoCaseManagerSetupView(discord.ui.View):
         await interaction.response.edit_message(content=view._content(interaction.guild),
                                                 embed=None, view=view)
 
+    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.secondary, row=4)
+    async def close(self, interaction, button):
+        self.stop()
+        from panel_navigation import dismiss_panel
+        await dismiss_panel(interaction)
+
 class HeraldoCondemnationDurationModal(discord.ui.Modal, title="Condenas · Duración predeterminada"):
     duration = discord.ui.TextInput(
         label="Duración (0 = indefinida)",
