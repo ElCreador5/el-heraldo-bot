@@ -127,5 +127,38 @@ class SelectiveMainConfigurationTests(unittest.IsolatedAsyncioTestCase):
             next_occurrence(too_short, now)
 
 
+    def test_announcement_embed_date_accepts_both_clock_styles(self):
+        from heraldo_datetime import format_date_time, parse_date_time
+        source = (Path(__file__).resolve().parents[1] /
+                  "autofeed_embed_builder.py").read_text(encoding="utf-8")
+        self.assertIn("format_date_time(", source)
+        self.assertIn("parse_date_time(", source)
+        stamp = datetime(2027, 3, 5, 18, 30, tzinfo=timezone.utc)
+        for locale in ("es-419", "en-US", "pt-BR"):
+            for mode in ("12h", "24h"):
+                with self.subTest(locale=locale, mode=mode):
+                    formatted = format_date_time(
+                        stamp, date_mode="iso", time_mode=mode, locale=locale
+                    )
+                    restored = parse_date_time(
+                        formatted, date_mode="iso", locale=locale
+                    )
+                    self.assertEqual(restored, stamp)
+        self.assertIn('date_input": "Fecha del embed (12/24 h)"', source)
+
+    def test_announcements_keep_existing_start_and_unique_job_ids(self):
+        from main_announcement_scheduler import next_occurrence
+        start = datetime(2027, 1, 31, 14, tzinfo=timezone.utc)
+        monthly = {"id": "existing-job", "start": start.isoformat(),
+                   "repeat": "mensual", "zone": "America/Santo_Domingo"}
+        next_run = datetime.fromisoformat(
+            next_occurrence(monthly, start + timedelta(minutes=1))
+        )
+        self.assertEqual((next_run.year, next_run.month, next_run.day),
+                         (2027, 2, 28))
+        self.assertEqual(monthly["id"], "existing-job")
+        self.assertEqual(monthly["start"], start.isoformat())
+
+
 if __name__ == "__main__":
     unittest.main()
