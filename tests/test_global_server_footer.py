@@ -96,6 +96,14 @@ class ServerFooterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "2048"):
             f("Comunidad", "a" * 2048)
         self.assertEqual(f("Lab", "Colaboradores activos"), LAB_NAME + " · Colaboradores activos")
+        self.assertEqual(
+            f("Paraíso Morboso", "El Heraldo - Beta | 🍑 | Paraíso Morboso | El Heraldo"),
+            LAB_NAME + " · 🍑",
+        )
+        self.assertEqual(
+            f("Paraíso Morboso", "El Heraldo - Beta | Paraíso Morboso · El Heraldo's Labs 🧪"),
+            LAB_NAME,
+        )
 
     def test_unknown_dm_does_not_borrow_even_the_only_cached_guild(self):
         env = isolate("heraldo_footer", env={
