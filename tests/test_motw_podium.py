@@ -21,7 +21,7 @@ class MemberOfTheWeekPodiumTests(unittest.TestCase):
         self.assertIn("week_messages DESC", source)
 
     def test_podium_keeps_three_eligible_members(self):
-        source = ast.unparse(function("announce_member_of_the_week"))
+        source = ast.unparse(function("build_member_of_the_week_embed"))
         self.assertIn("len(ranking) == 3", source)
         self.assertIn("not member.bot", source)
         self.assertIn("condemnation_get", source)
@@ -31,18 +31,23 @@ class MemberOfTheWeekPodiumTests(unittest.TestCase):
         self.assertIn("count:,", source)
         self.assertIn("motw.podium_title", source)
 
-    def test_test_announcement_does_not_reset_week(self):
+    def test_preview_and_test_command_do_not_publish_or_reset_week(self):
         source = ast.unparse(function("announce_member_of_the_week"))
         self.assertIn("if reset:\n        db_reset_week(guild.id)", source)
+        self.assertIn("build_member_of_the_week_embed", source)
         test_source = ast.unparse(function("motw_test"))
-        self.assertIn("reset=False", test_source)
+        self.assertIn("build_member_of_the_week_embed", test_source)
+        self.assertIn("ephemeral=True", test_source)
+        self.assertNotIn("announce_member_of_the_week", test_source)
+        self.assertNotIn("db_reset_week", test_source)
 
     def test_ranking_labels_translated_for_every_supported_locale(self):
         import heraldo_i18n
         for locale in heraldo_i18n.TARGET_LOCALES:
             messages = heraldo_i18n.CATALOGS[locale].messages
             for key in ("motw.podium_title", "motw.first_place",
-                        "motw.second_place", "motw.third_place"):
+                        "motw.second_place", "motw.third_place",
+                        "motw.preview_button"):
                 with self.subTest(locale=locale, key=key):
                     self.assertTrue(messages.get(key))
 
