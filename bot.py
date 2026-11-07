@@ -16027,31 +16027,6 @@ async def motw_set_channel_error(interaction: discord.Interaction, error: discor
         await interaction.response.send_message(_t('text.8904a29c5dcf0c', p0=f'{error}'), ephemeral=True)
 
 
-@bot.tree.command(name="motw_test", description="Vista previa privada del anuncio semanal, sin publicarlo ni reiniciar el conteo.")
-@discord.app_commands.checks.has_permissions(kick_members=True)
-@discord.app_commands.guild_only()
-@_i18n_context
-async def motw_test(interaction: discord.Interaction) -> None:
-    if bot.get_channel(get_motw_channel_id(interaction.guild.id)) is None:
-        await interaction.response.send_message(_t('text.9d7fe7b69eaa51'), ephemeral=True)
-        return
-    preview = build_member_of_the_week_embed(interaction.guild)
-    if preview is None:
-        await interaction.response.send_message(
-            _t('text.470e4c66cfb084'), ephemeral=True)
-    else:
-        await interaction.response.send_message(embed=preview, ephemeral=True)
-
-
-@motw_test.error
-@_i18n_context
-async def motw_test_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
-    if isinstance(error, discord.app_commands.MissingPermissions):
-        await interaction.response.send_message(_t('text.04ca1828a4d8b5'), ephemeral=True)
-    else:
-        await interaction.response.send_message(_t('text.8904a29c5dcf0c', p0=f'{error}'), ephemeral=True)
-
-
 # ---------------------------------------------------------------------------
 # 7. HONEYPOT (canales trampa para bots de spam)
 # ---------------------------------------------------------------------------
@@ -25239,7 +25214,7 @@ def _heraldo_command_module(path: str) -> str:
         "verification": {"verificacion", "verify", "verify_dm_preview", "heraldo_check", "heraldo_check_all"},
         "roles": {"roles_ingreso", "roles_reaccion", "conexiones"},
         "automod": {"automod", "honeypot", "raid"},
-        "announcements": {"anuncios", "miembro_semana", "motw_test"},
+        "announcements": {"anuncios", "miembro_semana"},
         "messages": {"mensajes", "embed", "variables"},
         "logging": {"registros"},
         "structure": {"estructura_servidor", "fusionar_canales"},
@@ -28182,7 +28157,6 @@ def _heraldo_apply_command_visibility():
         "heraldo_check_all": "manage_roles",
         "verify": "manage_roles",
         "verify_dm_preview": "manage_guild",
-        "motw_test": "manage_guild",
     }
     for command in bot.tree.get_commands():
         if command.name in public:
