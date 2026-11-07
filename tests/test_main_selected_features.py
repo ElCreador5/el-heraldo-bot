@@ -37,6 +37,15 @@ class SelectiveMainConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("await self.open_module(interaction)", source_of("select_module"))
         self.assertIn("autofeed_setup", source_of("HeraldoSetupView"))
 
+    def test_case_manager_has_back_and_close_without_duplicate_buttons(self):
+        manager = source_of("HeraldoCaseManagerSetupView")
+        self.assertIn('label="Volver"', manager)
+        self.assertIn('label="Cerrar"', manager)
+        self.assertEqual(manager.count('label="Cerrar"'), 1)
+        self.assertIn("await dismiss_panel(interaction)", manager)
+        self.assertIn('label="Limpiar todo"', manager)
+        self.assertIn("row=4", manager)
+
     def test_cases_can_be_inspected_and_cleanup_requires_two_confirmations(self):
         self.assertIn("HeraldoCaseManagerSetupView", source_of("HeraldoCasesSetupView"))
         manager = source_of("HeraldoCaseManagerSetupView")
