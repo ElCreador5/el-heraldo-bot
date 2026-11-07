@@ -15901,7 +15901,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         return _t('text.36ca143f0cf269')
     guild = channel.guild
 
-    # Top 2 entre quienes siguen en el servidor.
+    # Top 3 entre quienes siguen en el servidor, según sus mensajes semanales.
     ranking: list[tuple[discord.Member, int]] = []
     for user_id, count in db_week_ranking(guild.id):
         member = guild.get_member(user_id)
@@ -15912,7 +15912,7 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
             continue  # condenado: no puede ganar
         if member is not None and not member.bot:
             ranking.append((member, count))
-            if len(ranking) == 2:
+            if len(ranking) == 3:
                 break
 
     if not ranking:
@@ -15944,6 +15944,13 @@ async def announce_member_of_the_week(guild_id: int, reset: bool = True) -> str 
         color=discord.Color.gold(),
         timestamp=datetime.now(timezone.utc),
     )
+    # El podio comparte las mismas exclusiones y el mismo periodo que el ganador.
+    podium = []
+    for position, (member, count) in enumerate(ranking):
+        position_label = _t(("motw.first_place", "motw.second_place", "motw.third_place")[position])
+        noun = _t("noun.message.one") if count == 1 else _t("noun.message.many")
+        podium.append(f"{position_label} · {member.mention} — {count:,} {noun}")
+    embed.add_field(name=_t("motw.podium_title"), value="\\n".join(podium), inline=False)
     embed.set_thumbnail(url=winner.display_avatar.url)
     embed.set_footer(text=_t('text.270cbae6be9b8a', p0=f'{guild.name}'))
     try:
