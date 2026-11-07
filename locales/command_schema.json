@@ -231,10 +231,6 @@
     "key": "command.365857e0dd4eb930",
     "source": "Abre el panel de Moderación."
   },
-  "motw_test.description": {
-    "key": "command.b1472b1450e6f9ef",
-    "source": "Vista previa privada del anuncio semanal, sin publicarlo ni reiniciar el conteo."
-  },
   "mute.description": {
     "key": "command.b315d337eab13a95",
     "source": "Aplica timeout y crea un caso de Moderation."
