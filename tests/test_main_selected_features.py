@@ -61,6 +61,22 @@ class SelectiveMainConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("guild.ban(", confirmation)
         self.assertNotIn("member.kick(", confirmation)
 
+    def test_cleanup_all_is_guild_scoped_admin_confirmed_and_cancellable(self):
+        confirmation = source_of("HeraldoCaseManagementConfirm")
+        self.assertIn('self.operation == "cleanup_all"', confirmation)
+        self.assertIn('!= "LIMPIAR TODO"', confirmation)
+        self.assertIn("BEGIN IMMEDIATE", confirmation)
+        self.assertIn("conn.rollback()", confirmation)
+        self.assertIn("WHERE guild_id=?", confirmation)
+        self.assertIn("COALESCE(SUM(open), 0)", confirmation)
+        cleanup_view = source_of("HeraldoCaseCleanupAllConfirmView")
+        self.assertIn("guild_permissions.administrator", cleanup_view)
+        self.assertIn("configuration_access", cleanup_view)
+        self.assertIn("send_modal(HeraldoCaseManagementConfirm", cleanup_view)
+        self.assertIn('label="Cancelar"', cleanup_view)
+        self.assertIn("Limpieza total cancelada", cleanup_view)
+        self.assertIn("Las sanciones de Discord no se han modificado", confirmation)
+
     def test_rejoin_restoration_opt_in_and_protected(self):
         with patch.object(b, "guild_config_get", return_value=None):
             panel = b.HeraldoRejoinSetupView(101, 42)
