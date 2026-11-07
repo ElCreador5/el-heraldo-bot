@@ -31,15 +31,23 @@ class MemberOfTheWeekPodiumTests(unittest.TestCase):
         self.assertIn("count:,", source)
         self.assertIn("motw.podium_title", source)
 
-    def test_preview_and_test_command_do_not_publish_or_reset_week(self):
+    def test_preview_remains_in_panel_without_standalone_command(self):
         source = ast.unparse(function("announce_member_of_the_week"))
-        self.assertIn("if reset:\n        db_reset_week(guild.id)", source)
+        self.assertIn("if reset:\\n        db_reset_week(guild.id)", source)
         self.assertIn("build_member_of_the_week_embed", source)
-        test_source = ast.unparse(function("motw_test"))
-        self.assertIn("build_member_of_the_week_embed", test_source)
-        self.assertIn("ephemeral=True", test_source)
-        self.assertNotIn("announce_member_of_the_week", test_source)
-        self.assertNotIn("db_reset_week", test_source)
+        editor = next(node for node in TREE.body
+                      if isinstance(node, ast.ClassDef)
+                      and node.name == "HeraldoMotwSetupView")
+        preview = next(node for node in editor.body
+                       if isinstance(node, ast.AsyncFunctionDef)
+                       and node.name == "test")
+        preview_source = ast.unparse(preview)
+        self.assertIn("build_member_of_the_week_embed", preview_source)
+        self.assertIn("ephemeral=True", preview_source)
+        self.assertNotIn("announce_member_of_the_week", preview_source)
+        self.assertNotIn("db_reset_week", preview_source)
+        self.assertNotIn('name="motw_test"', SOURCE)
+        self.assertNotIn('name="motw"', SOURCE)
 
     def test_ranking_labels_translated_for_every_supported_locale(self):
         import heraldo_i18n
