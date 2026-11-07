@@ -185,5 +185,30 @@ class SelectiveMainConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(monthly["start"], start.isoformat())
 
 
+    def test_rejoin_restore_is_opt_in_audited_limited_and_one_time(self):
+        from member_rejoin_restore import (
+            TABLE_SQL, capture_departure, restore_join, saved_role, forget,
+        )
+        self.assertIn("verified_rejoin_snapshots", TABLE_SQL)
+        self.assertIn("timedelta(days=30)", __import__(
+            "inspect").getsource(saved_role))
+        capture = __import__("inspect").getsource(capture_departure)
+        restore = __import__("inspect").getsource(restore_join)
+        self.assertIn("audit_logs(", capture)
+        self.assertIn("audit_action.kick", capture)
+        self.assertIn("audit_action.ban", capture)
+        self.assertIn("view_audit_log", capture)
+        self.assertIn("guild.get_member(member.id) is not None", capture)
+        self.assertIn("forget(connect, guild.id, member.id)", capture)
+        self.assertIn("personality_ids(guild.id)", restore)
+        self.assertIn("verify_role_id(guild.id)", restore)
+        self.assertIn("forget(connect, guild.id, member.id)", restore)
+        self.assertIn("member.add_roles(role", restore)
+        self.assertIn("restore_join", source_of("on_member_join"))
+        self.assertIn('guild_config_get(gid, "verified_rejoin_restore_enabled") == "1"',
+                      source_of("on_member_join"))
+        self.assertIn("condemnation is not None", source_of("on_member_join"))
+
+
 if __name__ == "__main__":
     unittest.main()
